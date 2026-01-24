@@ -337,7 +337,7 @@ const StatCard = ({ icon: Icon, value, label, trend, color, delay }: {
 
 // --- Dashboard View ---
 
-const DashboardView = ({ data, logs, logEndRef, stats }: { data: any[], logs: any[], logEndRef: any, stats: any }) => (
+const DashboardView = ({ data, logs, logsContainerRef, stats }: { data: any[], logs: any[], logsContainerRef: any, stats: any }) => (
   <div className="flex-1 p-6 overflow-hidden flex flex-col gap-6 animate-in fade-in duration-300">
     {/* Top Stats */}
     <div className="grid grid-cols-3 gap-4">
@@ -424,11 +424,10 @@ const DashboardView = ({ data, logs, logEndRef, stats }: { data: any[], logs: an
             </span>
             <MoreHorizontal className="w-3 h-3 cursor-pointer hover:text-white transition-colors" />
           </div>
-          <div className="flex-1 overflow-y-auto space-y-1 font-mono text-[10px] scrollbar-thin scrollbar-thumb-white/10 pr-1">
+          <div ref={logsContainerRef} className="flex-1 overflow-y-auto space-y-1 font-mono text-[10px] scrollbar-thin scrollbar-thumb-white/10 pr-1">
             {logs.map((log: any, i: number) => (
               <ActivityItem key={log.id} log={log} isNew={i === logs.length - 1} />
             ))}
-            <div ref={logEndRef} />
           </div>
         </div>
       </div>
@@ -646,7 +645,7 @@ export const InteractiveHeroWidget = () => {
   ]);
   const [stats, setStats] = useState({ efficiency: 98.2, latency: 12, operations: 1284 });
   const [toast, setToast] = useState<{ message: string, type: 'success' | 'warning' | 'info' } | null>(null);
-  const logEndRef = useRef<HTMLDivElement>(null);
+  const logsContainerRef = useRef<HTMLDivElement>(null);
 
   const addLog = useCallback((msg: string, type: string) => {
     const now = new Date().toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute:'2-digit', second:'2-digit' });
@@ -709,9 +708,11 @@ export const InteractiveHeroWidget = () => {
     return () => clearInterval(interval);
   }, [showToast]);
 
-  // Auto-scroll logs
+  // Auto-scroll logs within container only
   useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    if (logsContainerRef.current) {
+      logsContainerRef.current.scrollTop = logsContainerRef.current.scrollHeight;
+    }
   }, [logs]);
 
   return (
@@ -803,7 +804,7 @@ export const InteractiveHeroWidget = () => {
         </div>
 
         {/* Dynamic Content */}
-        {activeTab === 'dashboard' && <DashboardView data={data} logs={logs} logEndRef={logEndRef} stats={stats} />}
+        {activeTab === 'dashboard' && <DashboardView data={data} logs={logs} logsContainerRef={logsContainerRef} stats={stats} />}
         {activeTab === 'workflows' && <WorkflowsView addLog={addLog} />}
         {activeTab === 'database' && <DatabaseView />}
 
