@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 
 import { InteractiveHeroWidget } from "@/components/InteractiveHeroWidget";
+import { LivingSystemHero } from "@/components/LivingSystemHero";
 
 // --- Components ---
 
@@ -642,7 +643,7 @@ export default function Home() {
     <div className="min-h-screen font-sans bg-[hsl(var(--paper))] selection:bg-[hsl(var(--teal))] selection:text-white">
       <Header />
       <main>
-        <Hero />
+        <LivingSystemHero />
         <LogoStrip />
         <Services />
         <LeadMagnet />
