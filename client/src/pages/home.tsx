@@ -1,0 +1,664 @@
+import { useEffect, useRef, useState } from "react";
+import { Link } from "wouter";
+import { cn } from "@/lib/utils";
+import { 
+  ArrowRight, 
+  Check, 
+  ChevronRight, 
+  Menu, 
+  X, 
+  Activity, 
+  Cpu, 
+  ShieldCheck, 
+  BarChart3, 
+  Clock, 
+  Layout, 
+  Users, 
+  Zap, 
+  FileText, 
+  ArrowUpRight 
+} from "lucide-react";
+
+// --- Components ---
+
+const Reveal = ({ children, className, delay = 0 }: { children: React.ReactNode, className?: string, delay?: number }) => {
+  const ref = useRef<HTMLDivElement>(null);
+  const [isVisible, setIsVisible] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.1 }
+    );
+
+    if (ref.current) {
+      observer.observe(ref.current);
+    }
+
+    return () => observer.disconnect();
+  }, []);
+
+  return (
+    <div
+      ref={ref}
+      className={cn(
+        "transition-all duration-1000 ease-out transform",
+        isVisible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-12",
+        className
+      )}
+      style={{ transitionDelay: `${delay}ms` }}
+    >
+      {children}
+    </div>
+  );
+};
+
+const Header = () => {
+  const [isScrolled, setIsScrolled] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 20);
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
+
+  const scrollToSection = (id: string) => {
+    setMobileMenuOpen(false);
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
+  return (
+    <header 
+      className={cn(
+        "fixed top-0 left-0 right-0 z-50 transition-all duration-300 px-4 md:px-8",
+        isScrolled ? "py-3" : "py-5"
+      )}
+    >
+      <div className="max-w-7xl mx-auto">
+        <div className={cn(
+          "flex items-center justify-between rounded-2xl px-6 py-3 transition-all duration-300",
+          isScrolled ? "bg-white/80 backdrop-blur-md shadow-sm border border-white/20" : "bg-transparent"
+        )}>
+          {/* Logo */}
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[hsl(var(--ink))] to-[hsl(var(--teal))] flex items-center justify-center text-white font-bold text-lg shadow-lg">
+              <img src="/assets/im3-logo.png" alt="IM3 Logo" className="w-full h-full object-cover rounded-lg opacity-90" />
+            </div>
+            <div className="hidden md:block">
+              <span className="block font-display font-bold text-lg leading-none tracking-tight">IM3</span>
+              <span className="block text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Systems Thinking</span>
+            </div>
+          </div>
+
+          {/* Desktop Nav */}
+          <nav className="hidden md:flex items-center gap-8">
+            <button className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" onClick={() => alert('English version coming next.')}>EN</button>
+            <button onClick={() => scrollToSection('que')} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Qué hacemos</button>
+            <button onClick={() => scrollToSection('como')} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Cómo trabajamos</button>
+            <button onClick={() => scrollToSection('para')} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Para quién</button>
+            <button onClick={() => scrollToSection('por')} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Por qué IM3</button>
+          </nav>
+
+          {/* CTA */}
+          <div className="hidden md:flex items-center gap-4">
+            <button 
+              onClick={() => scrollToSection('contacto')}
+              className="bg-[hsl(var(--ink))] text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:translate-y-[-2px] hover:shadow-lg transition-all duration-300 flex items-center gap-2"
+            >
+              Solicitar diagnóstico <ArrowRight className="w-4 h-4" />
+            </button>
+          </div>
+
+          {/* Mobile Toggle */}
+          <button className="md:hidden p-2" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+            {mobileMenuOpen ? <X /> : <Menu />}
+          </button>
+        </div>
+      </div>
+
+      {/* Mobile Menu */}
+      {mobileMenuOpen && (
+        <div className="absolute top-full left-4 right-4 mt-2 p-6 bg-white rounded-2xl shadow-xl border border-border md:hidden flex flex-col gap-4 animate-in slide-in-from-top-4 fade-in duration-200">
+          <button onClick={() => scrollToSection('que')} className="text-left text-lg font-medium py-2 border-b border-border/50">Qué hacemos</button>
+          <button onClick={() => scrollToSection('como')} className="text-left text-lg font-medium py-2 border-b border-border/50">Cómo trabajamos</button>
+          <button onClick={() => scrollToSection('para')} className="text-left text-lg font-medium py-2 border-b border-border/50">Para quién</button>
+          <button onClick={() => scrollToSection('por')} className="text-left text-lg font-medium py-2 border-b border-border/50">Por qué IM3</button>
+          <button 
+            onClick={() => scrollToSection('contacto')}
+            className="bg-[hsl(var(--ink))] text-white px-5 py-3 rounded-xl text-center font-medium mt-2"
+          >
+            Solicitar diagnóstico
+          </button>
+        </div>
+      )}
+    </header>
+  );
+};
+
+const Hero = () => {
+  return (
+    <section className="pt-32 pb-12 px-4 md:px-8">
+      <div className="max-w-7xl mx-auto bg-[hsl(var(--ink))] rounded-[32px] overflow-hidden text-white relative shadow-2xl">
+        {/* Abstract Background Elements */}
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[hsl(var(--teal))] opacity-10 blur-[120px] rounded-full pointer-events-none -translate-y-1/2 translate-x-1/4"></div>
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-600 opacity-10 blur-[100px] rounded-full pointer-events-none translate-y-1/4 -translate-x-1/4"></div>
+
+        <div className="grid md:grid-cols-2 gap-12 p-8 md:p-16 relative z-10 items-center">
+          <div className="space-y-8">
+            <Reveal>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-xs font-medium tracking-wide text-[hsl(var(--teal))]">
+                <span className="w-2 h-2 rounded-full bg-[hsl(var(--teal))]"></span>
+                IM3 · SISTEMAS OPERATIVOS
+              </div>
+            </Reveal>
+            
+            <Reveal delay={100}>
+              <h1 className="text-4xl md:text-5xl lg:text-6xl font-display font-bold leading-[1.1] tracking-tight">
+                Sistemas confiables para operar sin fricción
+              </h1>
+            </Reveal>
+
+            <Reveal delay={200}>
+              <p className="text-lg text-gray-300 leading-relaxed max-w-xl">
+                Diseñamos sistemas digitales, aplicaciones internas y automatizaciones que ordenan la operación,
+                reducen errores y devuelven visibilidad para decidir mejor, incluso cuando el equipo crece.
+              </p>
+            </Reveal>
+
+            <Reveal delay={300}>
+              <div className="flex flex-wrap gap-4">
+                <button 
+                  onClick={() => document.getElementById('contacto')?.scrollIntoView({ behavior: 'smooth' })}
+                  className="bg-[hsl(var(--teal))] text-white px-6 py-3.5 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:translate-y-[-2px] shadow-[0_10px_20px_-10px_rgba(47,164,169,0.5)]"
+                >
+                  Agendar conversación
+                </button>
+                <button 
+                  onClick={() => document.getElementById('que')?.scrollIntoView({ behavior: 'smooth' })}
+                  className="bg-white/5 border border-white/10 text-white px-6 py-3.5 rounded-xl font-medium hover:bg-white/10 transition-all backdrop-blur-sm"
+                >
+                  Ver qué hacemos
+                </button>
+              </div>
+            </Reveal>
+
+            <Reveal delay={400}>
+              <div className="flex flex-wrap gap-3 pt-4">
+                {["Apps internas", "Automatización con criterio", "Sistemas mantenibles"].map((badge, i) => (
+                  <span key={i} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/5 text-xs text-gray-400 font-mono">
+                    {badge}
+                  </span>
+                ))}
+              </div>
+            </Reveal>
+          </div>
+
+          <Reveal delay={200} className="relative">
+             <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-[#0F2438]">
+                {/* Mock Browser/Dashboard Header */}
+                <div className="h-8 bg-[#152e46] flex items-center px-4 gap-2 border-b border-white/5">
+                  <div className="flex gap-1.5">
+                    <div className="w-2.5 h-2.5 rounded-full bg-red-500/50"></div>
+                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500/50"></div>
+                    <div className="w-2.5 h-2.5 rounded-full bg-green-500/50"></div>
+                  </div>
+                  <div className="ml-4 text-[10px] text-gray-500 font-mono">IM3 — Ops Dashboard</div>
+                </div>
+                {/* Image Placeholder */}
+                <div className="aspect-[4/3] bg-[#0B1C2D] relative group">
+                  <img 
+                    src="/assets/im3-dashboard.png" 
+                    alt="Dashboard Preview" 
+                    className="w-full h-full object-cover opacity-90 transition-transform duration-700 group-hover:scale-[1.02]"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#0B1C2D] to-transparent opacity-20"></div>
+                  <div className="absolute bottom-4 left-4 right-4 bg-black/50 backdrop-blur-sm p-2 rounded text-[10px] text-gray-400 text-center border border-white/10">
+                    Dashboard operativo centralizado
+                  </div>
+                </div>
+             </div>
+          </Reveal>
+        </div>
+      </div>
+      
+      {/* "Lo que priorizamos" Card below hero */}
+      <div className="max-w-4xl mx-auto -mt-12 relative z-20 px-4">
+        <Reveal delay={600}>
+          <div className="bg-white rounded-2xl p-8 shadow-xl border border-border/50">
+            <div className="flex flex-col md:flex-row gap-8 items-start md:items-center">
+              <div className="md:w-1/3 border-b md:border-b-0 md:border-r border-border pb-6 md:pb-0 md:pr-8">
+                <h3 className="text-xl font-bold text-[hsl(var(--ink))] mb-2">Lo que priorizamos</h3>
+                <p className="text-sm text-muted-foreground">Orden → claridad → ejecución. Tecnología al servicio de la operación, no al revés.</p>
+              </div>
+              <div className="md:w-2/3 grid grid-cols-1 sm:grid-cols-3 gap-6">
+                <div>
+                  <div className="w-8 h-8 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center mb-3 text-[hsl(var(--teal))]">
+                    <Check className="w-4 h-4" />
+                  </div>
+                  <h4 className="font-semibold text-sm mb-1">Ejecución clara</h4>
+                  <p className="text-xs text-muted-foreground">Alcance, entregables y criterios definidos.</p>
+                </div>
+                <div>
+                  <div className="w-8 h-8 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center mb-3 text-[hsl(var(--teal))]">
+                    <Layout className="w-4 h-4" />
+                  </div>
+                  <h4 className="font-semibold text-sm mb-1">Estructura</h4>
+                  <p className="text-xs text-muted-foreground">Diseño del sistema antes del código.</p>
+                </div>
+                <div>
+                  <div className="w-8 h-8 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center mb-3 text-[hsl(var(--teal))]">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <h4 className="font-semibold text-sm mb-1">Mantenible</h4>
+                  <p className="text-xs text-muted-foreground">Documentación y handoff para operar.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+};
+
+const LogoStrip = () => {
+  const logos = ["Northway", "CasaMesa", "Quanta", "Bodega 72", "Solaria", "Atlasline", "Mercado Uno", "NovaField", "Río & Co", "Firme"];
+  
+  return (
+    <section className="py-12 overflow-hidden bg-[hsl(var(--paper))]">
+      <div className="max-w-7xl mx-auto px-8 mb-8 text-center">
+        <p className="text-sm text-muted-foreground font-medium uppercase tracking-wider">Empresas que confían en sistemas IM3</p>
+      </div>
+      <div className="relative flex overflow-x-hidden group">
+        <div className="flex animate-marquee whitespace-nowrap gap-12 px-12">
+          {[...logos, ...logos, ...logos].map((logo, i) => (
+            <span key={i} className="text-2xl font-display font-bold text-gray-300 hover:text-[hsl(var(--ink))] transition-colors cursor-default select-none">
+              {logo}
+            </span>
+          ))}
+        </div>
+      </div>
+      {/* Inline styles for marquee if not in tailwind config */}
+      <style>{`
+        @keyframes marquee {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-100%); }
+        }
+        .animate-marquee {
+          animation: marquee 40s linear infinite;
+        }
+      `}</style>
+    </section>
+  );
+};
+
+const Services = () => {
+  return (
+    <section id="que" className="py-24 px-4 md:px-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="max-w-3xl mb-16">
+          <Reveal>
+            <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-6">Sistemas internos que ordenan la operación</h2>
+            <p className="text-xl text-muted-foreground">Construimos soluciones a medida para reducir fricción, centralizar información y ejecutar mejor.</p>
+          </Reveal>
+        </div>
+
+        <div className="grid md:grid-cols-3 gap-8">
+          {[
+            {
+              icon: <Layout className="w-6 h-6" />,
+              title: "Aplicaciones internas",
+              text: "Herramientas a medida para control operativo, reportes, checklists, registros y flujos internos.",
+              color: "bg-blue-50 text-blue-600"
+            },
+            {
+              icon: <Zap className="w-6 h-6" />,
+              title: "Automatización",
+              text: "Conectamos tus apps y datos para eliminar tareas repetitivas y reducir errores en el día a día.",
+              color: "bg-amber-50 text-amber-600"
+            },
+            {
+              icon: <Activity className="w-6 h-6" />,
+              title: "Sistemas de control",
+              text: "Dashboards, conciliaciones, alertas y auditoría: visibilidad real para decisiones mejores.",
+              color: "bg-emerald-50 text-emerald-600"
+            }
+          ].map((card, i) => (
+            <Reveal key={i} delay={i * 100}>
+              <div className="bg-white p-8 rounded-2xl border border-border hover:shadow-lg transition-all duration-300 hover:border-[hsl(var(--teal))] group h-full">
+                <div className={`w-12 h-12 rounded-xl ${card.color} flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
+                  {card.icon}
+                </div>
+                <h3 className="text-xl font-bold mb-4 text-[hsl(var(--ink))]">{card.title}</h3>
+                <p className="text-muted-foreground leading-relaxed">{card.text}</p>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const LeadMagnet = () => {
+  return (
+    <section id="diagnostico" className="py-12 px-4 md:px-8">
+      <Reveal>
+        <div className="max-w-5xl mx-auto bg-gradient-to-r from-teal-50 to-blue-50 rounded-3xl p-8 md:p-12 border border-teal-100 flex flex-col md:flex-row items-center justify-between gap-8 shadow-sm">
+          <div className="md:w-2/3">
+            <div className="inline-block px-3 py-1 bg-white text-[hsl(var(--teal))] text-xs font-bold rounded-full mb-4 shadow-sm">SIN COSTO</div>
+            <h3 className="text-2xl md:text-3xl font-bold text-[hsl(var(--ink))] mb-4">Diagnóstico operativo inicial</h3>
+            <p className="text-[hsl(var(--coal))] opacity-80 text-lg">
+              Analizamos tu operación, detectamos cuellos de botella y te entregamos un mapa claro de qué sistema implementar, por qué y en qué orden.
+            </p>
+          </div>
+          <div className="md:w-1/3 flex justify-center md:justify-end">
+             <button 
+                onClick={() => document.getElementById('contacto')?.scrollIntoView({ behavior: 'smooth' })}
+                className="bg-[hsl(var(--teal))] text-white px-8 py-4 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:shadow-lg whitespace-nowrap"
+             >
+                Solicitar diagnóstico
+             </button>
+          </div>
+        </div>
+      </Reveal>
+    </section>
+  );
+};
+
+const Process = () => {
+  const steps = [
+    { num: "01", title: "Diagnóstico", text: "Entendemos tu operación y dónde se pierde tiempo o dinero." },
+    { num: "02", title: "Diseño", text: "Definimos estructura de datos, flujo, roles y métricas." },
+    { num: "03", title: "Construcción", text: "Desarrollamos un MVP funcional con foco en uso real." },
+    { num: "04", title: "Automatización", text: "Conectamos lo necesario para eliminar tareas repetitivas." },
+    { num: "05", title: "Transferencia", text: "Documentación + handoff para que el sistema se mantenga." },
+  ];
+
+  return (
+    <section id="como" className="py-24 px-4 md:px-8 bg-[hsl(var(--paper))]">
+      <div className="max-w-7xl mx-auto">
+        <div className="text-center max-w-2xl mx-auto mb-16">
+          <Reveal>
+            <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4">Estructura antes de velocidad</h2>
+            <p className="text-lg text-muted-foreground">Un método simple para construir rápido sin romper la operación (y dejarlo mantenible).</p>
+          </Reveal>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
+          {steps.map((step, i) => (
+            <Reveal key={i} delay={i * 100}>
+              <div className="bg-white p-6 rounded-2xl border border-border h-full relative overflow-hidden group hover:shadow-md transition-all">
+                <div className="text-6xl font-display font-bold text-gray-100 absolute -right-4 -top-4 group-hover:text-teal-50 transition-colors">{step.num}</div>
+                <div className="relative z-10">
+                  <div className="w-8 h-8 rounded-full bg-[hsl(var(--ink))] text-white flex items-center justify-center text-xs font-bold mb-4">
+                    {i + 1}
+                  </div>
+                  <h4 className="font-bold text-[hsl(var(--ink))] mb-2">{step.title}</h4>
+                  <p className="text-sm text-muted-foreground">{step.text}</p>
+                </div>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const TargetAudience = () => {
+  return (
+    <section id="para" className="py-24 px-4 md:px-8">
+      <div className="max-w-7xl mx-auto">
+        <div className="mb-16">
+          <Reveal>
+            <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4">PYMEs con operación real</h2>
+            <p className="text-xl text-muted-foreground">Especialmente equipos que necesitan orden y control, no más herramientas sueltas.</p>
+          </Reveal>
+        </div>
+
+        <div className="grid md:grid-cols-2 gap-8">
+          <Reveal>
+            <div className="bg-[hsl(var(--ink))] text-white p-8 md:p-12 rounded-[2rem] shadow-xl relative overflow-hidden">
+               <div className="absolute top-0 right-0 w-64 h-64 bg-[hsl(var(--teal))] opacity-20 blur-[80px] rounded-full"></div>
+               <h3 className="text-2xl font-bold mb-8 flex items-center gap-3">
+                 <Check className="text-[hsl(var(--teal))]" /> Encaja contigo si...
+               </h3>
+               <ul className="space-y-4 relative z-10">
+                 {[
+                   "Tu operación depende de personas y WhatsApp, pero necesitas estructura.",
+                   "Hay reportes manuales, cierres, conciliaciones o auditorías que toman horas.",
+                   "Tienes varias apps, pero no están conectadas (Sheets, POS, CRM, etc.).",
+                   "Quieres un sistema mantenible, no un proyecto eterno."
+                 ].map((item, i) => (
+                   <li key={i} className="flex gap-3 items-start">
+                     <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--teal))] mt-2.5"></span>
+                     <span className="text-gray-300 leading-relaxed">{item}</span>
+                   </li>
+                 ))}
+               </ul>
+            </div>
+          </Reveal>
+
+          <Reveal delay={200}>
+            <div className="bg-white p-8 md:p-12 rounded-[2rem] border border-border shadow-sm h-full">
+               <h3 className="text-2xl font-bold mb-8 text-gray-400 flex items-center gap-3">
+                 <X /> No somos para...
+               </h3>
+               <ul className="space-y-4">
+                 {[
+                   "Empresas que buscan una solución genérica sin entender su operación.",
+                   "Proyectos sin dueño interno o sin intención de usar el sistema.",
+                   "Implementaciones genéricas tipo “copia y pega”.",
+                   "Soluciones que se rompen por no documentar procesos."
+                 ].map((item, i) => (
+                   <li key={i} className="flex gap-3 items-start">
+                     <span className="w-1.5 h-1.5 rounded-full bg-red-200 mt-2.5"></span>
+                     <span className="text-muted-foreground leading-relaxed">{item}</span>
+                   </li>
+                 ))}
+               </ul>
+            </div>
+          </Reveal>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const Testimonials = () => {
+  const reviews = [
+    { quote: "Logramos reducir el tiempo de cierre de 4 días a 4 horas.", author: "Laura Méndez", role: "Operaciones · Bodega 72" },
+    { quote: "Por fin tenemos visibilidad real del inventario en tiempo real.", author: "Carlos Rojas", role: "Admin · CasaMesa" },
+    { quote: "La implementación fue ordenada y el equipo adoptó la herramienta rápido.", author: "Paula Andrade", role: "Dirección · Quanta" }
+  ];
+
+  return (
+    <section className="py-24 px-4 md:px-8 bg-[hsl(var(--paper))]">
+      <div className="max-w-7xl mx-auto">
+        <Reveal>
+          <h2 className="text-3xl font-display font-bold text-[hsl(var(--ink))] mb-2">Lo que dicen cuando el sistema queda andando</h2>
+          <p className="text-muted-foreground mb-12">Casos reales de impacto operativo.</p>
+        </Reveal>
+
+        <div className="grid md:grid-cols-3 gap-6">
+          {reviews.map((review, i) => (
+            <Reveal key={i} delay={i * 100}>
+              <div className="bg-white p-8 rounded-2xl border border-border shadow-sm h-full flex flex-col justify-between">
+                <p className="text-lg text-[hsl(var(--coal))] mb-8 font-medium">"{review.quote}"</p>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-500 text-sm">
+                    {review.author.split(' ').map(n => n[0]).join('')}
+                  </div>
+                  <div>
+                    <div className="font-bold text-sm text-[hsl(var(--ink))]">{review.author}</div>
+                    <div className="text-xs text-muted-foreground">{review.role}</div>
+                  </div>
+                </div>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const Offer = () => {
+  return (
+    <section id="oferta" className="py-24 px-4 md:px-8">
+      <div className="max-w-4xl mx-auto text-center mb-16">
+         <Reveal>
+            <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4">Sistema operativo base (Entry Offer)</h2>
+            <p className="text-lg text-muted-foreground">Una primera implementación clara para ordenar tu operación y generar valor rápido.</p>
+         </Reveal>
+      </div>
+
+      <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-6 mb-12">
+        {[
+          { title: "Diagnóstico + diseño", text: "Entrega: Documento de sistema + roadmap técnico." },
+          { title: "App interna inicial", text: "Entrega: MVP usable por el equipo." },
+          { title: "Automatización mínima", text: "Entrega: Flujo automático documentado." }
+        ].map((card, i) => (
+          <Reveal key={i} delay={i * 100}>
+            <div className="bg-white p-6 rounded-2xl border border-border text-center h-full hover:border-[hsl(var(--teal))] transition-colors">
+              <div className="w-10 h-10 mx-auto bg-[hsl(var(--paper))] rounded-full flex items-center justify-center text-[hsl(var(--teal))] mb-4">
+                <Check className="w-5 h-5" />
+              </div>
+              <h3 className="font-bold text-[hsl(var(--ink))] mb-2">{card.title}</h3>
+              <p className="text-sm text-muted-foreground">{card.text}</p>
+            </div>
+          </Reveal>
+        ))}
+      </div>
+
+      <Reveal delay={300}>
+        <div className="max-w-3xl mx-auto bg-[hsl(var(--ink))] text-white rounded-2xl p-8 text-center relative overflow-hidden">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[hsl(var(--teal))] to-transparent"></div>
+          <h3 className="text-xl font-bold mb-2">Inversión orientativa</h3>
+          <p className="text-gray-300 mb-6 max-w-lg mx-auto">
+            Desde USD 1.500 para la implementación inicial. A partir de ahí, el sistema puede crecer por fases según impacto y complejidad.
+          </p>
+          <button 
+            onClick={() => document.getElementById('contacto')?.scrollIntoView({ behavior: 'smooth' })}
+            className="bg-white text-[hsl(var(--ink))] px-8 py-3 rounded-xl font-bold hover:bg-gray-100 transition-colors"
+          >
+            Evaluar mi caso
+          </button>
+        </div>
+      </Reveal>
+    </section>
+  );
+};
+
+const WhyUs = () => {
+  return (
+    <section id="por" className="py-24 px-4 md:px-8 bg-[hsl(var(--paper))]">
+      <div className="max-w-7xl mx-auto">
+        <div className="text-center mb-16">
+          <Reveal>
+            <h2 className="text-3xl font-display font-bold text-[hsl(var(--ink))] mb-4">Criterio + estructura + ejecución</h2>
+            <p className="text-muted-foreground">Construimos como una firma de sistemas: enfoque práctico, mantenible y orientado a operación.</p>
+          </Reveal>
+        </div>
+        <div className="grid md:grid-cols-3 gap-8">
+           {[
+             { title: "Ejecución medible", text: "No vendemos horas, vendemos sistemas funcionando." },
+             { title: "Diseño de sistemas", text: "Pensamos en la arquitectura de datos para que escale." },
+             { title: "Para durar", text: "Código limpio y documentación para que no dependas de nosotros siempre." }
+           ].map((item, i) => (
+             <Reveal key={i} delay={i * 100}>
+                <div className="text-center p-6">
+                   <div className="w-16 h-1 bg-[hsl(var(--teal))] mx-auto mb-6 rounded-full"></div>
+                   <h3 className="text-xl font-bold text-[hsl(var(--ink))] mb-3">{item.title}</h3>
+                   <p className="text-muted-foreground">{item.text}</p>
+                </div>
+             </Reveal>
+           ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const Contact = () => {
+  return (
+    <section id="contacto" className="py-24 px-4 md:px-8">
+      <div className="max-w-3xl mx-auto text-center">
+        <Reveal>
+          <h2 className="text-3xl md:text-5xl font-display font-bold text-[hsl(var(--ink))] mb-6">
+            ¿Dónde se está perdiendo tiempo o control en tu operación?
+          </h2>
+          <p className="text-xl text-muted-foreground mb-10">
+            Una conversación corta para entender tu caso y proponer el siguiente paso.
+          </p>
+          <div className="flex flex-col sm:flex-row justify-center gap-4">
+            <a 
+              href="mailto:contacto@im3systems.com"
+              className="bg-[hsl(var(--ink))] text-white px-8 py-4 rounded-xl font-bold hover:bg-[hsl(var(--coal))] transition-all flex items-center justify-center gap-2"
+            >
+              <FileText className="w-5 h-5" /> Escribir correo
+            </a>
+            <button 
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              className="bg-white border border-border text-[hsl(var(--ink))] px-8 py-4 rounded-xl font-bold hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
+            >
+              Volver arriba <ArrowUpRight className="w-5 h-5" />
+            </button>
+          </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+};
+
+const Footer = () => {
+  const year = new Date().getFullYear();
+  return (
+    <footer className="py-12 px-4 md:px-8 border-t border-border bg-white">
+      <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 rounded bg-[hsl(var(--ink))] flex items-center justify-center text-white text-xs font-bold">IM3</div>
+          <span className="font-bold text-[hsl(var(--ink))]">IM3 Systems</span>
+        </div>
+        <div className="text-sm text-muted-foreground">
+          © <span id="y">{year}</span> IM3. im3systems.com
+        </div>
+      </div>
+    </footer>
+  );
+};
+
+// --- Main Page Component ---
+
+export default function Home() {
+  return (
+    <div className="min-h-screen font-sans bg-[hsl(var(--paper))] selection:bg-[hsl(var(--teal))] selection:text-white">
+      <Header />
+      <main>
+        <Hero />
+        <LogoStrip />
+        <Services />
+        <LeadMagnet />
+        <Process />
+        <TargetAudience />
+        <Testimonials />
+        <Offer />
+        <WhyUs />
+        <Contact />
+      </main>
+      <Footer />
+    </div>
+  );
+}
