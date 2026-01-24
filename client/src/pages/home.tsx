@@ -527,7 +527,7 @@ const Testimonials = () => {
     <section className="py-12 px-4 md:px-8 bg-[hsl(var(--paper))]">
       <div className="max-w-7xl mx-auto">
         <Reveal>
-          <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">Lo que dicen cuando el sistema queda andando</h2>
+          <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">Resultados que hablan por sí solos</h2>
           <p className="text-muted-foreground mb-8">Casos reales de impacto operativo.</p>
         </Reveal>
 
