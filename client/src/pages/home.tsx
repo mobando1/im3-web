@@ -288,7 +288,7 @@ const LogoStrip = () => {
   ];
 
   const LogoItem = ({ logo }: { logo: { name: string; src: string } }) => (
-    <div className="flex-shrink-0 opacity-80 hover:opacity-100 transition-opacity duration-300 mix-blend-multiply flex items-center">
+    <div className="flex-shrink-0 opacity-80 hover:opacity-100 transition-opacity duration-300 mix-blend-multiply flex items-center mx-8">
       <img 
         src={logo.src} 
         alt={logo.name} 
@@ -305,24 +305,21 @@ const LogoStrip = () => {
       <div className="max-w-7xl mx-auto px-8 mb-8 text-center">
         <p className="text-sm text-muted-foreground font-medium uppercase tracking-wider">Empresas que confían en sistemas IM3</p>
       </div>
-      <div className="relative flex overflow-x-hidden">
-        {/* First set */}
-        <div className="flex animate-marquee-infinite items-center gap-16 shrink-0">
-          {logos.map((logo, i) => <LogoItem key={`a-${i}`} logo={logo} />)}
-        </div>
-        {/* Second set (duplicate for seamless loop) */}
-        <div className="flex animate-marquee-infinite items-center gap-16 shrink-0" aria-hidden="true">
-          {logos.map((logo, i) => <LogoItem key={`b-${i}`} logo={logo} />)}
+      <div className="relative overflow-hidden">
+        <div className="flex w-max animate-scroll">
+          {/* Triple the logos for seamless infinite scroll */}
+          {[...logos, ...logos, ...logos, ...logos].map((logo, i) => (
+            <LogoItem key={i} logo={logo} />
+          ))}
         </div>
       </div>
       <style>{`
-        @keyframes marquee-infinite {
+        @keyframes scroll {
           0% { transform: translateX(0); }
-          100% { transform: translateX(calc(-100% - 4rem)); }
+          100% { transform: translateX(-50%); }
         }
-        .animate-marquee-infinite {
-          animation: marquee-infinite 20s linear infinite;
-          padding-right: 4rem;
+        .animate-scroll {
+          animation: scroll 30s linear infinite;
         }
       `}</style>
     </section>
