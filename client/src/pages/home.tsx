@@ -292,11 +292,14 @@ const LogoStrip = () => {
       <div className="relative flex overflow-x-hidden group">
         <div className="flex animate-marquee items-center gap-16 px-12">
           {[...logos, ...logos, ...logos, ...logos].map((logo, i) => (
-            <div key={i} className="flex-shrink-0 opacity-80 hover:opacity-100 transition-opacity duration-300 mix-blend-multiply">
+            <div key={i} className="flex-shrink-0 opacity-80 hover:opacity-100 transition-opacity duration-300 mix-blend-multiply flex items-center">
               <img 
                 src={logo.src} 
                 alt={logo.name} 
-                className="h-16 w-auto object-contain max-w-[150px] rounded-xl"
+                className={cn(
+                  "w-auto object-contain rounded-xl",
+                  logo.name === "AMJ Solutions" ? "h-24 max-w-[180px]" : "h-16 max-w-[150px]"
+                )}
               />
             </div>
           ))}
