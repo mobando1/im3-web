@@ -153,26 +153,29 @@ const Hero = () => {
     <section className="pt-32 pb-12 px-4 md:px-8">
       <div className="max-w-7xl mx-auto bg-[hsl(var(--ink))] rounded-[32px] overflow-hidden text-white relative shadow-2xl">
         {/* Abstract Background Elements */}
+        <div className="absolute inset-0 bg-[url('https://grainy-gradients.vercel.app/noise.svg')] opacity-20 mix-blend-soft-light"></div>
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]"></div>
+        
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[hsl(var(--teal))] opacity-10 blur-[120px] rounded-full pointer-events-none -translate-y-1/2 translate-x-1/4"></div>
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-600 opacity-10 blur-[100px] rounded-full pointer-events-none translate-y-1/4 -translate-x-1/4"></div>
 
         <div className="grid md:grid-cols-2 gap-12 p-8 md:p-16 relative z-10 items-center">
           <div className="space-y-8">
             <Reveal>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-xs font-medium tracking-wide text-[hsl(var(--teal))]">
-                <span className="w-2 h-2 rounded-full bg-[hsl(var(--teal))]"></span>
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-xs font-medium tracking-wide text-[hsl(var(--teal))] shadow-lg shadow-teal-900/20 backdrop-blur-md">
+                <span className="w-2 h-2 rounded-full bg-[hsl(var(--teal))] animate-pulse"></span>
                 IM3 · SISTEMAS OPERATIVOS
               </div>
             </Reveal>
             
             <Reveal delay={100}>
-              <h1 className="text-4xl md:text-5xl lg:text-6xl font-display font-bold leading-[1.1] tracking-tight">
+              <h1 className="text-4xl md:text-5xl lg:text-7xl font-display font-bold leading-[1.1] tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-white to-gray-400">
                 Sistemas confiables para operar sin fricción
               </h1>
             </Reveal>
 
             <Reveal delay={200}>
-              <p className="text-lg text-gray-300 leading-relaxed max-w-xl">
+              <p className="text-lg text-gray-300 leading-relaxed max-w-xl font-light">
                 Construimos aplicaciones internas y automatizaciones conectadas que ordenan la operación diaria de una empresa.
               </p>
             </Reveal>
@@ -181,7 +184,7 @@ const Hero = () => {
               <div className="flex flex-wrap gap-4">
                 <button 
                   onClick={() => window.open("https://api.leadconnectorhq.com/widget/booking/e1UKFLu5HkQcVg5aZdei", "_blank")}
-                  className="bg-[hsl(var(--teal))] text-white px-6 py-3.5 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:translate-y-[-2px] shadow-[0_10px_20px_-10px_rgba(47,164,169,0.5)]"
+                  className="bg-[hsl(var(--teal))] text-white px-6 py-3.5 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:translate-y-[-2px] shadow-[0_10px_20px_-10px_rgba(47,164,169,0.3)] hover:shadow-[0_20px_40px_-15px_rgba(47,164,169,0.5)] ring-offset-2 ring-offset-[hsl(var(--ink))] focus:ring-2 focus:ring-[hsl(var(--teal))]"
                 >
                   Agendar conversación
                 </button>
@@ -195,9 +198,9 @@ const Hero = () => {
             </Reveal>
 
             <Reveal delay={400}>
-              <div className="flex flex-wrap gap-3 pt-4">
-                {["Apps internas", "Automatización con criterio", "Sistemas mantenibles"].map((badge, i) => (
-                  <span key={i} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/5 text-xs text-gray-400 font-mono">
+              <div className="flex flex-wrap gap-3 pt-4 border-t border-white/5 mt-8">
+                {["Apps internas", "Automatización", "Sistemas mantenibles"].map((badge, i) => (
+                  <span key={i} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-gray-400 font-mono hover:bg-white/10 transition-colors cursor-default">
                     {badge}
                   </span>
                 ))}
@@ -205,30 +208,51 @@ const Hero = () => {
             </Reveal>
           </div>
 
-          <Reveal delay={200} className="relative">
-             <div className="relative rounded-2xl overflow-hidden border border-white/10 shadow-2xl bg-[#0F2438]">
+          <Reveal delay={200} className="relative hidden md:block">
+             <div className="relative rounded-xl overflow-hidden border border-white/10 shadow-2xl bg-[#0F2438] transform rotate-1 hover:rotate-0 transition-transform duration-700 ease-out group perspective-1000">
                 {/* Mock Browser/Dashboard Header */}
-                <div className="h-8 bg-[#152e46] flex items-center px-4 gap-2 border-b border-white/5">
+                <div className="h-9 bg-[#152e46] flex items-center px-4 gap-2 border-b border-white/5 justify-between">
                   <div className="flex gap-1.5">
                     <div className="w-2.5 h-2.5 rounded-full bg-red-500/50"></div>
                     <div className="w-2.5 h-2.5 rounded-full bg-amber-500/50"></div>
                     <div className="w-2.5 h-2.5 rounded-full bg-green-500/50"></div>
                   </div>
-                  <div className="ml-4 text-[10px] text-gray-500 font-mono">IM3 — Ops Dashboard</div>
+                  <div className="flex bg-[#0B1C2D] px-8 py-1 rounded text-[10px] text-gray-400 font-mono border border-white/5 shadow-inner">
+                    app.im3systems.com/dashboard
+                  </div>
+                  <div className="w-4"></div>
                 </div>
                 {/* Image Placeholder */}
-                <div className="aspect-[4/3] bg-[#0B1C2D] relative group">
+                <div className="aspect-[4/3] bg-[#0B1C2D] relative">
                   <img 
                     src="/assets/im3-dashboard.png" 
                     alt="Dashboard Preview" 
                     className="w-full h-full object-cover opacity-90 transition-transform duration-700 group-hover:scale-[1.02]"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#0B1C2D] to-transparent opacity-20"></div>
-                  <div className="absolute bottom-4 left-4 right-4 bg-black/50 backdrop-blur-sm p-2 rounded text-[10px] text-gray-400 text-center border border-white/10">
-                    Dashboard operativo centralizado
+                  <div className="absolute inset-0 bg-gradient-to-t from-[#0B1C2D] via-transparent to-transparent opacity-40"></div>
+                  
+                  {/* Floating Elements */}
+                  <div className="absolute top-8 right-8 bg-[hsl(var(--ink))]/90 backdrop-blur-md border border-white/10 p-4 rounded-xl shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-500 fill-mode-forwards opacity-0">
+                    <div className="flex items-center gap-3 mb-2">
+                       <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center text-green-400">
+                          <Activity className="w-4 h-4" />
+                       </div>
+                       <div>
+                          <div className="text-[10px] text-gray-400 uppercase tracking-wider">Eficiencia Operativa</div>
+                          <div className="text-lg font-bold text-white leading-none">+42%</div>
+                       </div>
+                    </div>
+                  </div>
+
+                  <div className="absolute bottom-8 left-8 bg-[hsl(var(--ink))]/90 backdrop-blur-md border border-white/10 p-3 rounded-xl shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-700 fill-mode-forwards opacity-0 flex items-center gap-3">
+                     <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
+                     <span className="text-xs font-mono text-gray-300">Sistema en línea · v2.4.0</span>
                   </div>
                 </div>
              </div>
+             
+             {/* Decorative blurry glow behind image */}
+             <div className="absolute -inset-4 bg-gradient-to-tr from-[hsl(var(--teal))] to-blue-600 rounded-3xl blur-2xl opacity-20 -z-10 animate-pulse duration-3000"></div>
           </Reveal>
         </div>
       </div>
