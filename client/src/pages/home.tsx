@@ -348,7 +348,7 @@ const Services = () => {
       <div className="max-w-7xl mx-auto">
         <div className="max-w-3xl mb-8">
           <Reveal>
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-6">Sistemas internos que ordenan la operación</h2>
+            <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-6 leading-tight">Sistemas internos que ordenan la operación</h2>
             <p className="text-xl text-muted-foreground">Construimos soluciones a medida para reducir fricción, centralizar información y ejecutar mejor.</p>
           </Reveal>
         </div>
@@ -430,7 +430,7 @@ const Process = () => {
       <div className="max-w-7xl mx-auto">
         <div className="text-center max-w-2xl mx-auto mb-8">
           <Reveal>
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4">Estructura antes de velocidad</h2>
+            <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">Estructura antes de velocidad</h2>
             <p className="text-lg text-muted-foreground">Un método simple para construir rápido sin romper la operación (y dejarlo mantenible).</p>
           </Reveal>
         </div>
@@ -462,7 +462,7 @@ const TargetAudience = () => {
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <Reveal>
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4">PYMEs con operación real</h2>
+            <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">PYMEs con operación real</h2>
             <p className="text-xl text-muted-foreground">Especialmente equipos que necesitan orden y control, no más herramientas sueltas.</p>
           </Reveal>
         </div>
@@ -527,7 +527,7 @@ const Testimonials = () => {
     <section className="py-12 px-4 md:px-8 bg-[hsl(var(--paper))]">
       <div className="max-w-7xl mx-auto">
         <Reveal>
-          <h2 className="text-3xl font-display font-bold text-[hsl(var(--ink))] mb-2">Lo que dicen cuando el sistema queda andando</h2>
+          <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">Lo que dicen cuando el sistema queda andando</h2>
           <p className="text-muted-foreground mb-8">Casos reales de impacto operativo.</p>
         </Reveal>
 
@@ -559,7 +559,7 @@ const Offer = () => {
     <section id="oferta" className="py-12 px-4 md:px-8">
       <div className="max-w-4xl mx-auto text-center mb-8">
          <Reveal>
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4">Modelos de Trabajo</h2>
+            <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">Modelos de Trabajo</h2>
             <p className="text-lg text-muted-foreground">Después del diagnóstico, definimos juntos la mejor forma de avanzar.</p>
          </Reveal>
       </div>
@@ -626,7 +626,7 @@ const Contact = () => {
     <section id="contacto" className="py-16 px-4 md:px-8">
       <div className="max-w-3xl mx-auto text-center">
         <Reveal>
-          <h2 className="text-3xl md:text-5xl font-display font-bold text-[hsl(var(--ink))] mb-6">
+          <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-6 leading-tight">
             ¿Dónde se está perdiendo tiempo o control en tu operación?
           </h2>
           <p className="text-xl text-muted-foreground mb-10">
