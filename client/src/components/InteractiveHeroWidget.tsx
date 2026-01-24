@@ -1,15 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { 
   Activity, 
-  Check, 
-  Clock, 
-  AlertCircle, 
   ArrowUpRight, 
-  Shield, 
   Zap,
   BarChart2,
   Database,
-  Users,
   Box,
   LayoutDashboard,
   Search,
@@ -17,22 +12,11 @@ import {
   MoreHorizontal,
   Plus,
   Trash2,
-  Play,
   Settings,
   GitBranch,
   Filter
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { 
-  LineChart, 
-  Line, 
-  ResponsiveContainer, 
-  XAxis, 
-  YAxis, 
-  Tooltip,
-  AreaChart,
-  Area
-} from "recharts";
 
 // --- Mock Data Generators ---
 
@@ -42,6 +26,72 @@ const generateInitialData = (points = 20) => {
     value: 85 + Math.random() * 15,
     traffic: 100 + Math.random() * 50
   }));
+};
+
+// --- Custom Chart Component ---
+
+const LiveChart = ({ data }: { data: any[] }) => {
+  const width = 100;
+  const height = 100;
+  const padding = 5;
+  
+  const minValue = Math.min(...data.map(d => Math.min(d.value, d.traffic))) - 10;
+  const maxValue = Math.max(...data.map(d => Math.max(d.value, d.traffic))) + 10;
+  
+  const scaleY = (value: number) => {
+    return height - padding - ((value - minValue) / (maxValue - minValue)) * (height - 2 * padding);
+  };
+  
+  const scaleX = (index: number) => {
+    return padding + (index / (data.length - 1)) * (width - 2 * padding);
+  };
+  
+  const valuePath = data.map((d, i) => 
+    `${i === 0 ? 'M' : 'L'} ${scaleX(i)} ${scaleY(d.value)}`
+  ).join(' ');
+  
+  const trafficPath = data.map((d, i) => 
+    `${i === 0 ? 'M' : 'L'} ${scaleX(i)} ${scaleY(d.traffic)}`
+  ).join(' ');
+  
+  const areaPath = `M ${scaleX(0)} ${height - padding} L ${valuePath.slice(2)} L ${scaleX(data.length - 1)} ${height - padding} Z`;
+  
+  return (
+    <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full" preserveAspectRatio="none">
+      <defs>
+        <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor="#10B981" stopOpacity="0.3" />
+          <stop offset="100%" stopColor="#10B981" stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      
+      {/* Area fill */}
+      <path
+        d={areaPath}
+        fill="url(#areaGradient)"
+        stroke="none"
+      />
+      
+      {/* Value line */}
+      <path
+        d={valuePath}
+        fill="none"
+        stroke="#10B981"
+        strokeWidth="0.5"
+        vectorEffect="non-scaling-stroke"
+      />
+      
+      {/* Traffic line (dashed) */}
+      <path
+        d={trafficPath}
+        fill="none"
+        stroke="#3B82F6"
+        strokeWidth="0.5"
+        strokeDasharray="2 2"
+        vectorEffect="non-scaling-stroke"
+      />
+    </svg>
+  );
 };
 
 // --- Components ---
@@ -134,46 +184,19 @@ const DashboardView = ({ data, logs, logEndRef }: { data: any[], logs: any[], lo
        <div className="col-span-2 bg-[#1E293B]/30 border border-white/5 rounded-xl p-4 flex flex-col">
           <div className="flex justify-between items-center mb-4">
              <h3 className="font-semibold text-slate-200 text-xs">Real-time Throughput</h3>
-             <div className="flex gap-2">
-                <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
-                <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+             <div className="flex gap-2 items-center">
+                <div className="flex items-center gap-1">
+                  <span className="w-2 h-2 bg-emerald-500 rounded-full"></span>
+                  <span className="text-[10px] text-slate-500">Efficiency</span>
+                </div>
+                <div className="flex items-center gap-1">
+                  <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                  <span className="text-[10px] text-slate-500">Traffic</span>
+                </div>
              </div>
           </div>
           <div className="flex-1 min-h-0 w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={data}>
-                <defs>
-                  <linearGradient id="colorValue" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10B981" stopOpacity={0.3}/>
-                    <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
-                  </linearGradient>
-                </defs>
-                <XAxis dataKey="time" hide />
-                <YAxis hide domain={['auto', 'auto']} />
-                <Tooltip 
-                  contentStyle={{ backgroundColor: '#1E293B', borderColor: '#334155', fontSize: '12px' }} 
-                  itemStyle={{ color: '#E2E8F0' }}
-                />
-                <Area 
-                  type="monotone" 
-                  dataKey="value" 
-                  stroke="#10B981" 
-                  strokeWidth={2}
-                  fillOpacity={1} 
-                  fill="url(#colorValue)" 
-                  isAnimationActive={false}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="traffic" 
-                  stroke="#3B82F6" 
-                  strokeWidth={2} 
-                  dot={false}
-                  isAnimationActive={false}
-                  strokeDasharray="4 4"
-                />
-              </AreaChart>
-            </ResponsiveContainer>
+            <LiveChart data={data} />
           </div>
        </div>
 
@@ -189,7 +212,7 @@ const DashboardView = ({ data, logs, logEndRef }: { data: any[], logs: any[], lo
                 <MoreHorizontal className="w-3 h-3" />
              </div>
              <div className="flex-1 overflow-y-auto space-y-2 font-mono text-[10px] scrollbar-thin scrollbar-thumb-white/10 pr-1">
-                {logs.map((log) => (
+                {logs.map((log: any) => (
                    <div key={log.id} className="flex gap-2 animate-in slide-in-from-left-2 duration-300">
                       <span className="text-slate-600 shrink-0">{log.time}</span>
                       <span className={cn(
@@ -238,6 +261,7 @@ const WorkflowsView = ({ addLog }: { addLog: (msg: string, type: string) => void
         <button 
            onClick={() => setIsAdding(true)}
            className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-lg text-xs font-bold flex items-center gap-2 transition-colors"
+           data-testid="button-add-rule"
         >
            <Plus className="w-3 h-3" /> New Rule
         </button>
@@ -258,6 +282,7 @@ const WorkflowsView = ({ addLog }: { addLog: (msg: string, type: string) => void
                        onChange={e => setNewRule(p => ({ ...p, trigger: e.target.value }))}
                        placeholder="e.g. Daily Close > 5PM"
                        className="w-full bg-[#0F172A] border border-white/10 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500/50"
+                       data-testid="input-trigger"
                     />
                  </div>
                  <div>
@@ -267,12 +292,13 @@ const WorkflowsView = ({ addLog }: { addLog: (msg: string, type: string) => void
                        onChange={e => setNewRule(p => ({ ...p, action: e.target.value }))}
                        placeholder="e.g. Generate PDF Report"
                        className="w-full bg-[#0F172A] border border-white/10 rounded px-3 py-2 text-xs text-white focus:outline-none focus:border-emerald-500/50"
+                       data-testid="input-action"
                     />
                  </div>
               </div>
               <div className="flex justify-end gap-2 mt-2">
-                 <button onClick={() => setIsAdding(false)} className="text-xs text-slate-400 hover:text-white px-3 py-1">Cancel</button>
-                 <button onClick={handleAddRule} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold">Deploy Rule</button>
+                 <button onClick={() => setIsAdding(false)} className="text-xs text-slate-400 hover:text-white px-3 py-1" data-testid="button-cancel">Cancel</button>
+                 <button onClick={handleAddRule} className="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 rounded-lg text-xs font-bold" data-testid="button-deploy">Deploy Rule</button>
               </div>
            </div>
         )}
@@ -297,6 +323,7 @@ const WorkflowsView = ({ addLog }: { addLog: (msg: string, type: string) => void
                      addLog(`Rule deactivated: ${rule.trigger}`, "warning");
                   }}
                   className="p-1.5 text-slate-400 hover:text-red-400 rounded hover:bg-red-500/10"
+                  data-testid={`button-delete-rule-${rule.id}`}
                 >
                    <Trash2 className="w-3 h-3" />
                 </button>
@@ -346,7 +373,7 @@ const DatabaseView = () => {
             </thead>
             <tbody className="divide-y divide-white/5 text-slate-300">
                {data.map(row => (
-                  <tr key={row.id} className="hover:bg-white/5 transition-colors cursor-default">
+                  <tr key={row.id} className="hover:bg-white/5 transition-colors cursor-default" data-testid={`row-inventory-${row.id}`}>
                      <td className="px-4 py-3 font-mono text-slate-500">{row.id}</td>
                      <td className="px-4 py-3 font-medium">{row.name}</td>
                      <td className="px-4 py-3">
@@ -456,6 +483,7 @@ export const InteractiveHeroWidget = () => {
                 "w-10 h-10 rounded-lg flex items-center justify-center transition-all duration-200 relative group",
                 activeTab === tab.id ? "bg-white/10 text-white" : "text-slate-500 hover:text-slate-300 hover:bg-white/5"
               )}
+              data-testid={`button-tab-${tab.id}`}
             >
               <tab.icon className="w-5 h-5" />
               {/* Tooltip */}
