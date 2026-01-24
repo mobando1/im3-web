@@ -20,7 +20,8 @@ import {
   Layers,
   Sparkles,
   Gauge,
-  Link2
+  Link2,
+  Calendar
 } from "lucide-react";
 import { InteractiveHeroWidget } from "@/components/InteractiveHeroWidget";
 
@@ -632,12 +633,12 @@ const Contact = () => {
             Una conversación corta para entender tu caso y proponer el siguiente paso.
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
-            <a 
-              href="mailto:info@im3systems.com"
+            <button 
+              onClick={() => window.open("https://api.leadconnectorhq.com/widget/booking/e1UKFLu5HkQcVg5aZdei", "_blank")}
               className="bg-[hsl(var(--ink))] text-white px-8 py-4 rounded-xl font-bold hover:bg-[hsl(var(--coal))] transition-all flex items-center justify-center gap-2"
             >
-              <FileText className="w-5 h-5" /> Escribir correo
-            </a>
+              <Calendar className="w-5 h-5" /> Agendar una llamada
+            </button>
             <button 
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
               className="bg-white border border-border text-[hsl(var(--ink))] px-8 py-4 rounded-xl font-bold hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
