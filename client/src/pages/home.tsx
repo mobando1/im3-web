@@ -96,8 +96,8 @@ const Header = () => {
         )}>
           {/* Logo */}
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-[hsl(var(--ink))] to-[hsl(var(--teal))] flex items-center justify-center text-white font-bold text-lg shadow-lg">
-              <img src="/assets/im3-logo.png" alt="IM3 Logo" className="w-full h-full object-cover rounded-lg opacity-90" />
+            <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ink))] flex items-center justify-center text-white font-bold text-sm shadow-md">
+              IM3
             </div>
             <div className="hidden md:block">
               <span className="block font-display font-bold text-lg leading-none tracking-tight">IM3</span>
