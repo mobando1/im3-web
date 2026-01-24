@@ -200,7 +200,7 @@ const Hero = () => {
 
             <Reveal delay={400}>
               <div className="flex flex-wrap gap-3 pt-4 border-t border-white/5 mt-8">
-                {["Apps internas", "Automatización", "Sistemas mantenibles"].map((badge, i) => (
+                {["Apps internas", "Automatización", "Inteligencia artificial", "Sistemas mantenibles"].map((badge, i) => (
                   <span key={i} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-gray-400 font-mono hover:bg-white/10 transition-colors cursor-default">
                     {badge}
                   </span>
