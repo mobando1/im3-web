@@ -78,6 +78,10 @@ const Header = () => {
     }
   };
 
+  const openBooking = () => {
+    window.open("https://api.leadconnectorhq.com/widget/booking/e1UKFLu5HkQcVg5aZdei", "_blank");
+  };
+
   return (
     <header 
       className={cn(
@@ -113,7 +117,7 @@ const Header = () => {
           {/* CTA */}
           <div className="hidden md:flex items-center gap-4">
             <button 
-              onClick={() => scrollToSection('contacto')}
+              onClick={openBooking}
               className="bg-[hsl(var(--ink))] text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:translate-y-[-2px] hover:shadow-lg transition-all duration-300 flex items-center gap-2"
             >
               Solicitar diagnóstico <ArrowRight className="w-4 h-4" />
@@ -135,7 +139,7 @@ const Header = () => {
           <button onClick={() => scrollToSection('para')} className="text-left text-lg font-medium py-2 border-b border-border/50">Para quién</button>
           <button onClick={() => scrollToSection('por')} className="text-left text-lg font-medium py-2 border-b border-border/50">Por qué IM3</button>
           <button 
-            onClick={() => scrollToSection('contacto')}
+            onClick={openBooking}
             className="bg-[hsl(var(--ink))] text-white px-5 py-3 rounded-xl text-center font-medium mt-2"
           >
             Solicitar diagnóstico
@@ -178,7 +182,7 @@ const Hero = () => {
             <Reveal delay={300}>
               <div className="flex flex-wrap gap-4">
                 <button 
-                  onClick={() => document.getElementById('contacto')?.scrollIntoView({ behavior: 'smooth' })}
+                  onClick={() => window.open("https://api.leadconnectorhq.com/widget/booking/e1UKFLu5HkQcVg5aZdei", "_blank")}
                   className="bg-[hsl(var(--teal))] text-white px-6 py-3.5 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:translate-y-[-2px] shadow-[0_10px_20px_-10px_rgba(47,164,169,0.5)]"
                 >
                   Agendar conversación
@@ -364,7 +368,7 @@ const LeadMagnet = () => {
           </div>
           <div className="md:w-1/3 flex justify-center md:justify-end">
              <button 
-                onClick={() => document.getElementById('contacto')?.scrollIntoView({ behavior: 'smooth' })}
+                onClick={() => window.open("https://api.leadconnectorhq.com/widget/booking/e1UKFLu5HkQcVg5aZdei", "_blank")}
                 className="bg-[hsl(var(--teal))] text-white px-8 py-4 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:shadow-lg whitespace-nowrap"
              >
                 Solicitar diagnóstico
@@ -569,7 +573,7 @@ const Offer = () => {
             El objetivo del diagnóstico es entender tu operación. Si podemos ayudar, te presentaremos estas opciones. Si no, te daremos una recomendación honesta.
           </p>
           <button 
-            onClick={() => document.getElementById('contacto')?.scrollIntoView({ behavior: 'smooth' })}
+            onClick={() => window.open("https://api.leadconnectorhq.com/widget/booking/e1UKFLu5HkQcVg5aZdei", "_blank")}
             className="text-[hsl(var(--teal))] font-bold hover:text-[hsl(var(--ink))] transition-colors flex items-center justify-center gap-2 mx-auto"
           >
             Agendar conversación <ArrowRight className="w-4 h-4" />
