@@ -180,7 +180,7 @@ const Hero = () => {
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[hsl(var(--teal))] opacity-10 blur-[120px] rounded-full pointer-events-none -translate-y-1/2 translate-x-1/4"></div>
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-600 opacity-10 blur-[100px] rounded-full pointer-events-none translate-y-1/4 -translate-x-1/4"></div>
 
-        <div className="grid md:grid-cols-2 gap-12 p-8 md:p-16 relative z-10 items-center">
+        <div className="grid md:grid-cols-2 gap-8 md:gap-12 p-6 sm:p-8 md:p-16 relative z-10 items-center">
           <div className="space-y-8">
             <Reveal>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-xs font-medium tracking-wide text-[hsl(var(--teal))] shadow-lg shadow-teal-900/20 backdrop-blur-md">
@@ -190,28 +190,28 @@ const Hero = () => {
             </Reveal>
             
             <Reveal delay={100}>
-              <h1 className="text-4xl md:text-5xl lg:text-7xl font-display font-bold leading-[1.1] tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-white to-gray-400">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-display font-bold leading-[1.15] tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-white to-gray-400">
                 Sistemas confiables para operar sin fricción
               </h1>
             </Reveal>
 
             <Reveal delay={200}>
-              <p className="text-lg text-gray-300 leading-relaxed max-w-xl font-light">
+              <p className="text-base sm:text-lg text-gray-300 leading-relaxed max-w-xl font-light">
                 Construimos aplicaciones internas y automatizaciones conectadas que ordenan la operación diaria de una empresa.
               </p>
             </Reveal>
 
             <Reveal delay={300}>
-              <div className="flex flex-wrap gap-4">
+              <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button 
                   onClick={() => window.open("https://api.leadconnectorhq.com/widget/booking/e1UKFLu5HkQcVg5aZdei", "_blank")}
-                  className="bg-[hsl(var(--teal))] text-white px-6 py-3.5 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:translate-y-[-2px] shadow-[0_10px_20px_-10px_rgba(47,164,169,0.3)] hover:shadow-[0_20px_40px_-15px_rgba(47,164,169,0.5)] ring-offset-2 ring-offset-[hsl(var(--ink))] focus:ring-2 focus:ring-[hsl(var(--teal))]"
+                  className="bg-[hsl(var(--teal))] text-white px-6 py-3.5 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:translate-y-[-2px] shadow-[0_10px_20px_-10px_rgba(47,164,169,0.3)] hover:shadow-[0_20px_40px_-15px_rgba(47,164,169,0.5)] ring-offset-2 ring-offset-[hsl(var(--ink))] focus:ring-2 focus:ring-[hsl(var(--teal))] text-center"
                 >
                   Agendar conversación
                 </button>
                 <button 
                   onClick={() => document.getElementById('que')?.scrollIntoView({ behavior: 'smooth' })}
-                  className="bg-white/5 border border-white/10 text-white px-6 py-3.5 rounded-xl font-medium hover:bg-white/10 transition-all backdrop-blur-sm"
+                  className="bg-white/5 border border-white/10 text-white px-6 py-3.5 rounded-xl font-medium hover:bg-white/10 transition-all backdrop-blur-sm text-center"
                 >
                   Ver qué hacemos
                 </button>
@@ -219,7 +219,7 @@ const Hero = () => {
             </Reveal>
 
             <Reveal delay={400}>
-              <div className="flex flex-wrap gap-3 pt-4 border-t border-white/5 mt-8">
+              <div className="flex flex-wrap gap-2 sm:gap-3 pt-4 border-t border-white/5 mt-6 sm:mt-8">
                 {[
                   { label: "Apps internas", icon: Layout },
                   { label: "Automatización", icon: Zap },
@@ -255,9 +255,9 @@ const Hero = () => {
       </div>
       
       {/* "Lo que priorizamos" Card below hero */}
-      <div className="max-w-4xl mx-auto -mt-12 relative z-20 px-4">
+      <div className="max-w-4xl mx-auto -mt-6 md:-mt-12 relative z-20 px-4">
         <Reveal delay={600}>
-          <div className="bg-white rounded-2xl p-8 shadow-xl border border-border/50">
+          <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-xl border border-border/50">
             <div className="flex flex-col md:flex-row gap-8 items-start md:items-center">
               <div className="md:w-1/3 border-b md:border-b-0 md:border-r border-border pb-6 md:pb-0 md:pr-8">
                 <h3 className="text-xl font-bold text-[hsl(var(--ink))] mb-2">Lo que priorizamos</h3>
@@ -344,11 +344,11 @@ const LogoStrip = () => {
 
 const Services = () => {
   return (
-    <section id="que" className="py-12 px-4 md:px-8">
+    <section id="que" className="py-10 sm:py-12 px-4 md:px-8">
       <div className="max-w-7xl mx-auto">
         <div className="max-w-3xl mb-8">
           <Reveal>
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-6 leading-tight">Sistemas internos que ordenan la operación</h2>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 sm:mb-6 leading-tight">Sistemas internos que ordenan la operación</h2>
             <p className="text-xl text-muted-foreground">Construimos soluciones a medida para reducir fricción, centralizar información y ejecutar mejor.</p>
           </Reveal>
         </div>
@@ -426,11 +426,11 @@ const Process = () => {
   ];
 
   return (
-    <section id="como" className="py-12 px-4 md:px-8 bg-[hsl(var(--paper))]">
+    <section id="como" className="py-10 sm:py-12 px-4 md:px-8 bg-[hsl(var(--paper))]">
       <div className="max-w-7xl mx-auto">
         <div className="text-center max-w-2xl mx-auto mb-8">
           <Reveal>
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">Estructura antes de velocidad</h2>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">Estructura antes de velocidad</h2>
             <p className="text-lg text-muted-foreground">Un método simple para construir rápido sin romper la operación (y dejarlo mantenible).</p>
           </Reveal>
         </div>
@@ -458,11 +458,11 @@ const Process = () => {
 
 const TargetAudience = () => {
   return (
-    <section id="para" className="py-12 px-4 md:px-8">
+    <section id="para" className="py-10 sm:py-12 px-4 md:px-8">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <Reveal>
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">PYMEs con operación real</h2>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">PYMEs con operación real</h2>
             <p className="text-xl text-muted-foreground">Especialmente equipos que necesitan orden y control, no más herramientas sueltas.</p>
           </Reveal>
         </div>
@@ -527,7 +527,7 @@ const Testimonials = () => {
     <section className="py-12 px-4 md:px-8 bg-[hsl(var(--paper))]">
       <div className="max-w-7xl mx-auto">
         <Reveal>
-          <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">Resultados que hablan por sí solos</h2>
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">Resultados que hablan por sí solos</h2>
           <p className="text-muted-foreground mb-8">Casos reales de impacto operativo.</p>
         </Reveal>
 
@@ -559,7 +559,7 @@ const Offer = () => {
     <section id="oferta" className="py-12 px-4 md:px-8">
       <div className="max-w-4xl mx-auto text-center mb-8">
          <Reveal>
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">Modelos de Trabajo</h2>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">Modelos de Trabajo</h2>
             <p className="text-lg text-muted-foreground">Después del diagnóstico, definimos juntos la mejor forma de avanzar.</p>
          </Reveal>
       </div>
@@ -626,7 +626,7 @@ const Contact = () => {
     <section id="contacto" className="py-16 px-4 md:px-8">
       <div className="max-w-3xl mx-auto text-center">
         <Reveal>
-          <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-6 leading-tight">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-6 leading-tight">
             ¿Dónde se está perdiendo tiempo o control en tu operación?
           </h2>
           <p className="text-xl text-muted-foreground mb-10">
