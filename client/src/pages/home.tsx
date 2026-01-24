@@ -520,41 +520,60 @@ const Offer = () => {
     <section id="oferta" className="py-24 px-4 md:px-8">
       <div className="max-w-4xl mx-auto text-center mb-16">
          <Reveal>
-            <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4">Sistema operativo base (Entry Offer)</h2>
-            <p className="text-lg text-muted-foreground">Una primera implementación clara para ordenar tu operación y generar valor rápido.</p>
+            <h2 className="text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4">Modelos de Trabajo</h2>
+            <p className="text-lg text-muted-foreground">Después del diagnóstico, definimos juntos la mejor forma de avanzar.</p>
          </Reveal>
       </div>
 
-      <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-6 mb-12">
-        {[
-          { title: "Diagnóstico + diseño", text: "Entrega: Documento de sistema + roadmap técnico." },
-          { title: "App interna inicial", text: "Entrega: MVP usable por el equipo." },
-          { title: "Automatización mínima", text: "Entrega: Flujo automático documentado." }
-        ].map((card, i) => (
-          <Reveal key={i} delay={i * 100}>
-            <div className="bg-white p-6 rounded-2xl border border-border text-center h-full hover:border-[hsl(var(--teal))] transition-colors">
-              <div className="w-10 h-10 mx-auto bg-[hsl(var(--paper))] rounded-full flex items-center justify-center text-[hsl(var(--teal))] mb-4">
-                <Check className="w-5 h-5" />
-              </div>
-              <h3 className="font-bold text-[hsl(var(--ink))] mb-2">{card.title}</h3>
-              <p className="text-sm text-muted-foreground">{card.text}</p>
+      <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-8 mb-12">
+        <Reveal delay={100}>
+          <div className="bg-white p-8 rounded-2xl border border-border h-full hover:border-[hsl(var(--teal))] transition-all hover:shadow-lg flex flex-col">
+            <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 mb-6">
+              <Zap className="w-6 h-6" />
             </div>
-          </Reveal>
-        ))}
+            <h3 className="text-xl font-bold text-[hsl(var(--ink))] mb-4">Implementación completa <span className="block text-sm font-normal text-muted-foreground mt-1">(Done For You)</span></h3>
+            <p className="text-muted-foreground mb-6 flex-grow">
+              Nos encargamos de todo. Diseñamos, construimos y te entregamos el sistema funcionando, llave en mano. Tu equipo solo se preocupa de usarlo.
+            </p>
+            <div className="pt-6 border-t border-border mt-auto">
+              <div className="flex items-center gap-2 text-sm font-medium text-[hsl(var(--ink))]">
+                <Check className="w-4 h-4 text-[hsl(var(--teal))]" />
+                Ideal si buscas velocidad y garantía de ejecución.
+              </div>
+            </div>
+          </div>
+        </Reveal>
+
+        <Reveal delay={200}>
+          <div className="bg-white p-8 rounded-2xl border border-border h-full hover:border-[hsl(var(--teal))] transition-all hover:shadow-lg flex flex-col">
+            <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 mb-6">
+              <Users className="w-6 h-6" />
+            </div>
+            <h3 className="text-xl font-bold text-[hsl(var(--ink))] mb-4">Acompañamiento estratégico <span className="block text-sm font-normal text-muted-foreground mt-1">(Consultoría + Diseño)</span></h3>
+            <p className="text-muted-foreground mb-6 flex-grow">
+              Diseñamos la arquitectura y guiamos a tu equipo técnico (o externo) para que ellos construyan con nuestro mapa y supervisión de calidad.
+            </p>
+            <div className="pt-6 border-t border-border mt-auto">
+              <div className="flex items-center gap-2 text-sm font-medium text-[hsl(var(--ink))]">
+                <Check className="w-4 h-4 text-[hsl(var(--teal))]" />
+                Ideal si ya tienes capacidad técnica pero te falta dirección.
+              </div>
+            </div>
+          </div>
+        </Reveal>
       </div>
 
       <Reveal delay={300}>
-        <div className="max-w-3xl mx-auto bg-[hsl(var(--ink))] text-white rounded-2xl p-8 text-center relative overflow-hidden">
-          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-[hsl(var(--teal))] to-transparent"></div>
-          <h3 className="text-xl font-bold mb-2">Inversión orientativa</h3>
-          <p className="text-gray-300 mb-6 max-w-lg mx-auto">
-            Desde USD 1.500 para la implementación inicial. A partir de ahí, el sistema puede crecer por fases según impacto y complejidad.
+        <div className="max-w-3xl mx-auto bg-[hsl(var(--paper))] rounded-2xl p-8 text-center border border-border">
+          <h3 className="text-lg font-bold mb-2 text-[hsl(var(--ink))]">Sin presión de venta</h3>
+          <p className="text-muted-foreground mb-6 max-w-lg mx-auto">
+            El objetivo del diagnóstico es entender tu operación. Si podemos ayudar, te presentaremos estas opciones. Si no, te daremos una recomendación honesta.
           </p>
           <button 
             onClick={() => document.getElementById('contacto')?.scrollIntoView({ behavior: 'smooth' })}
-            className="bg-white text-[hsl(var(--ink))] px-8 py-3 rounded-xl font-bold hover:bg-gray-100 transition-colors"
+            className="text-[hsl(var(--teal))] font-bold hover:text-[hsl(var(--ink))] transition-colors flex items-center justify-center gap-2 mx-auto"
           >
-            Evaluar mi caso
+            Agendar conversación <ArrowRight className="w-4 h-4" />
           </button>
         </div>
       </Reveal>
