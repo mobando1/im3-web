@@ -457,9 +457,9 @@ export const InteractiveHeroWidget = () => {
     return () => clearInterval(interval);
   }, []);
 
-  // Auto-scroll logs
+  // Auto-scroll logs (only within the log container, not the page)
   useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    logEndRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }, [logs]);
 
   return (
