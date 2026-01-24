@@ -112,7 +112,17 @@ const Header = () => {
 
           {/* Desktop Nav */}
           <nav className="hidden md:flex items-center gap-8">
-            <button className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors" onClick={() => alert('English version coming next.')}>EN</button>
+            <div className="flex items-center gap-1 border border-border rounded-lg p-1 bg-white/50">
+              <button className="flex items-center gap-1 px-2 py-1 rounded bg-[hsl(var(--ink))]/10 text-[hsl(var(--ink))] text-xs font-medium">
+                <span className="text-base">🇪🇸</span> ES
+              </button>
+              <button 
+                className="flex items-center gap-1 px-2 py-1 rounded text-muted-foreground hover:bg-gray-100 text-xs font-medium transition-colors"
+                onClick={() => alert('English version coming soon!')}
+              >
+                <span className="text-base">🇺🇸</span> EN
+              </button>
+            </div>
             <button onClick={() => scrollToSection('que')} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Qué hacemos</button>
             <button onClick={() => scrollToSection('como')} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Cómo trabajamos</button>
             <button onClick={() => scrollToSection('para')} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Para quién</button>
@@ -138,6 +148,17 @@ const Header = () => {
       {/* Mobile Menu */}
       {mobileMenuOpen && (
         <div className="absolute top-full left-4 right-4 mt-2 p-6 bg-white rounded-2xl shadow-xl border border-border md:hidden flex flex-col gap-4 animate-in slide-in-from-top-4 fade-in duration-200">
+          <div className="flex items-center justify-center gap-2 pb-4 border-b border-border/50">
+            <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[hsl(var(--ink))]/10 text-[hsl(var(--ink))] font-medium">
+              <span className="text-xl">🇪🇸</span> Español
+            </button>
+            <button 
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-muted-foreground hover:bg-gray-100 font-medium transition-colors"
+              onClick={() => alert('English version coming soon!')}
+            >
+              <span className="text-xl">🇺🇸</span> English
+            </button>
+          </div>
           <button onClick={() => scrollToSection('que')} className="text-left text-lg font-medium py-2 border-b border-border/50">Qué hacemos</button>
           <button onClick={() => scrollToSection('como')} className="text-left text-lg font-medium py-2 border-b border-border/50">Cómo trabajamos</button>
           <button onClick={() => scrollToSection('para')} className="text-left text-lg font-medium py-2 border-b border-border/50">Para quién</button>
