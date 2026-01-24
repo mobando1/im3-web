@@ -271,36 +271,43 @@ const LogoStrip = () => {
     { name: "Salomé Momentos", src: "/assets/logos/salome.jpg" },
     { name: "AMJ Solutions", src: "/assets/logos/amj-solutions.png" },
   ];
+
+  const LogoItem = ({ logo }: { logo: { name: string; src: string } }) => (
+    <div className="flex-shrink-0 opacity-80 hover:opacity-100 transition-opacity duration-300 mix-blend-multiply flex items-center">
+      <img 
+        src={logo.src} 
+        alt={logo.name} 
+        className={cn(
+          "w-auto object-contain rounded-xl",
+          logo.name === "AMJ Solutions" ? "h-24 max-w-[180px]" : "h-16 max-w-[150px]"
+        )}
+      />
+    </div>
+  );
   
   return (
     <section className="py-8 overflow-hidden bg-[hsl(var(--paper))]">
       <div className="max-w-7xl mx-auto px-8 mb-8 text-center">
         <p className="text-sm text-muted-foreground font-medium uppercase tracking-wider">Empresas que confían en sistemas IM3</p>
       </div>
-      <div className="relative flex overflow-x-hidden group">
-        <div className="flex animate-marquee items-center gap-16 px-12">
-          {[...logos, ...logos, ...logos, ...logos].map((logo, i) => (
-            <div key={i} className="flex-shrink-0 opacity-80 hover:opacity-100 transition-opacity duration-300 mix-blend-multiply flex items-center">
-              <img 
-                src={logo.src} 
-                alt={logo.name} 
-                className={cn(
-                  "w-auto object-contain rounded-xl",
-                  logo.name === "AMJ Solutions" ? "h-24 max-w-[180px]" : "h-16 max-w-[150px]"
-                )}
-              />
-            </div>
-          ))}
+      <div className="relative flex overflow-x-hidden">
+        {/* First set */}
+        <div className="flex animate-marquee-infinite items-center gap-16 shrink-0">
+          {logos.map((logo, i) => <LogoItem key={`a-${i}`} logo={logo} />)}
+        </div>
+        {/* Second set (duplicate for seamless loop) */}
+        <div className="flex animate-marquee-infinite items-center gap-16 shrink-0" aria-hidden="true">
+          {logos.map((logo, i) => <LogoItem key={`b-${i}`} logo={logo} />)}
         </div>
       </div>
-      {/* Inline styles for marquee if not in tailwind config */}
       <style>{`
-        @keyframes marquee {
+        @keyframes marquee-infinite {
           0% { transform: translateX(0); }
-          100% { transform: translateX(-100%); }
+          100% { transform: translateX(calc(-100% - 4rem)); }
         }
-        .animate-marquee {
-          animation: marquee 40s linear infinite;
+        .animate-marquee-infinite {
+          animation: marquee-infinite 20s linear infinite;
+          padding-right: 4rem;
         }
       `}</style>
     </section>
