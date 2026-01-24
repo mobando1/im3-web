@@ -171,8 +171,7 @@ const Hero = () => {
 
             <Reveal delay={200}>
               <p className="text-lg text-gray-300 leading-relaxed max-w-xl">
-                Diseñamos sistemas digitales, aplicaciones internas y automatizaciones que ordenan la operación,
-                reducen errores y devuelven visibilidad para decidir mejor, incluso cuando el equipo crece.
+                Construimos aplicaciones internas y automatizaciones conectadas que ordenan la operación diaria de una empresa.
               </p>
             </Reveal>
 
