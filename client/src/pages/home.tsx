@@ -111,7 +111,6 @@ const Header = () => {
             <button onClick={() => scrollToSection('que')} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Qué hacemos</button>
             <button onClick={() => scrollToSection('como')} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Cómo trabajamos</button>
             <button onClick={() => scrollToSection('para')} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Para quién</button>
-            <button onClick={() => scrollToSection('por')} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Por qué IM3</button>
           </nav>
 
           {/* CTA */}
@@ -137,7 +136,6 @@ const Header = () => {
           <button onClick={() => scrollToSection('que')} className="text-left text-lg font-medium py-2 border-b border-border/50">Qué hacemos</button>
           <button onClick={() => scrollToSection('como')} className="text-left text-lg font-medium py-2 border-b border-border/50">Cómo trabajamos</button>
           <button onClick={() => scrollToSection('para')} className="text-left text-lg font-medium py-2 border-b border-border/50">Para quién</button>
-          <button onClick={() => scrollToSection('por')} className="text-left text-lg font-medium py-2 border-b border-border/50">Por qué IM3</button>
           <button 
             onClick={openBooking}
             className="bg-[hsl(var(--ink))] text-white px-5 py-3 rounded-xl text-center font-medium mt-2"
@@ -597,35 +595,6 @@ const Offer = () => {
   );
 };
 
-const WhyUs = () => {
-  return (
-    <section id="por" className="py-24 px-4 md:px-8 bg-[hsl(var(--paper))]">
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center mb-16">
-          <Reveal>
-            <h2 className="text-3xl font-display font-bold text-[hsl(var(--ink))] mb-4">Criterio + estructura + ejecución</h2>
-            <p className="text-muted-foreground">Construimos como una firma de sistemas: enfoque práctico, mantenible y orientado a operación.</p>
-          </Reveal>
-        </div>
-        <div className="grid md:grid-cols-3 gap-8">
-           {[
-             { title: "Ejecución medible", text: "No vendemos horas, vendemos sistemas funcionando." },
-             { title: "Diseño de sistemas", text: "Pensamos en la arquitectura de datos para que escale." },
-             { title: "Para durar", text: "Código limpio y documentación para que no dependas de nosotros siempre." }
-           ].map((item, i) => (
-             <Reveal key={i} delay={i * 100}>
-                <div className="text-center p-6">
-                   <div className="w-16 h-1 bg-[hsl(var(--teal))] mx-auto mb-6 rounded-full"></div>
-                   <h3 className="text-xl font-bold text-[hsl(var(--ink))] mb-3">{item.title}</h3>
-                   <p className="text-muted-foreground">{item.text}</p>
-                </div>
-             </Reveal>
-           ))}
-        </div>
-      </div>
-    </section>
-  );
-};
 
 const Contact = () => {
   return (
@@ -690,7 +659,6 @@ export default function Home() {
         <TargetAudience />
         <Testimonials />
         <Offer />
-        <WhyUs />
         <Contact />
       </main>
       <Footer />
