@@ -279,7 +279,7 @@ const LogoStrip = () => {
         alt={logo.name} 
         className={cn(
           "w-auto object-contain rounded-xl",
-          logo.name === "AMJ Solutions" ? "h-24 max-w-[180px]" : "h-16 max-w-[150px]"
+          logo.name === "AMJ Solutions" ? "h-32 max-w-[220px]" : "h-16 max-w-[150px]"
         )}
       />
     </div>
