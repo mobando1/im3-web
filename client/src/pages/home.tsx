@@ -16,7 +16,11 @@ import {
   Users, 
   Zap, 
   FileText, 
-  ArrowUpRight 
+  ArrowUpRight,
+  Layers,
+  Sparkles,
+  Gauge,
+  Link2
 } from "lucide-react";
 import { InteractiveHeroWidget } from "@/components/InteractiveHeroWidget";
 
@@ -200,9 +204,20 @@ const Hero = () => {
 
             <Reveal delay={400}>
               <div className="flex flex-wrap gap-3 pt-4 border-t border-white/5 mt-8">
-                {["Apps internas", "Automatización", "Inteligencia artificial", "Sistemas mantenibles"].map((badge, i) => (
-                  <span key={i} className="px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-gray-400 font-mono hover:bg-white/10 transition-colors cursor-default">
-                    {badge}
+                {[
+                  { label: "Apps internas", icon: Layout },
+                  { label: "Automatización", icon: Zap },
+                  { label: "Integraciones", icon: Link2 },
+                  { label: "Dashboards", icon: Gauge },
+                  { label: "IA aplicada", icon: Sparkles },
+                  { label: "Sistemas mantenibles", icon: Layers },
+                ].map((badge, i) => (
+                  <span 
+                    key={i} 
+                    className="group px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-gray-400 font-mono hover:bg-[hsl(var(--teal))]/10 hover:border-[hsl(var(--teal))]/30 hover:text-[hsl(var(--teal))] transition-all duration-300 cursor-default flex items-center gap-2"
+                  >
+                    <badge.icon className="w-3 h-3 opacity-60 group-hover:opacity-100 transition-opacity" />
+                    {badge.label}
                   </span>
                 ))}
               </div>
