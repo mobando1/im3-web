@@ -276,7 +276,13 @@ const Hero = () => {
 };
 
 const LogoStrip = () => {
-  const logos = ["Northway", "CasaMesa", "Quanta", "Bodega 72", "Solaria", "Atlasline", "Mercado Uno", "NovaField", "Río & Co", "Firme"];
+  const logos = [
+    { name: "La Glorieta", src: "/assets/logos/la-glorieta.jpg" },
+    { name: "Xtremcol", src: "/assets/logos/xtremcol.png" },
+    { name: "Passport Fluency", src: "/assets/logos/passport-fluency.png" },
+    { name: "Salomé Momentos", src: "/assets/logos/salome.jpg" },
+    { name: "AMJ Solutions", src: "/assets/logos/amj-solutions.png" },
+  ];
   
   return (
     <section className="py-12 overflow-hidden bg-[hsl(var(--paper))]">
@@ -284,11 +290,15 @@ const LogoStrip = () => {
         <p className="text-sm text-muted-foreground font-medium uppercase tracking-wider">Empresas que confían en sistemas IM3</p>
       </div>
       <div className="relative flex overflow-x-hidden group">
-        <div className="flex animate-marquee whitespace-nowrap gap-12 px-12">
-          {[...logos, ...logos, ...logos].map((logo, i) => (
-            <span key={i} className="text-2xl font-display font-bold text-gray-300 hover:text-[hsl(var(--ink))] transition-colors cursor-default select-none">
-              {logo}
-            </span>
+        <div className="flex animate-marquee items-center gap-16 px-12">
+          {[...logos, ...logos, ...logos, ...logos].map((logo, i) => (
+            <div key={i} className="flex-shrink-0 grayscale hover:grayscale-0 transition-all duration-300 opacity-60 hover:opacity-100 mix-blend-multiply">
+              <img 
+                src={logo.src} 
+                alt={logo.name} 
+                className="h-16 w-auto object-contain max-w-[150px]"
+              />
+            </div>
           ))}
         </div>
       </div>
