@@ -623,7 +623,7 @@ const Contact = () => {
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <a 
-              href="mailto:contacto@im3systems.com"
+              href="mailto:info@im3systems.com"
               className="bg-[hsl(var(--ink))] text-white px-8 py-4 rounded-xl font-bold hover:bg-[hsl(var(--coal))] transition-all flex items-center justify-center gap-2"
             >
               <FileText className="w-5 h-5" /> Escribir correo
