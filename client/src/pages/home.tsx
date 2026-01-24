@@ -100,14 +100,8 @@ const Header = () => {
           isScrolled ? "bg-white/80 backdrop-blur-md shadow-sm border border-white/20" : "bg-transparent"
         )}>
           {/* Logo */}
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-[hsl(var(--ink))] flex items-center justify-center text-white font-bold text-sm shadow-md">
-              IM3
-            </div>
-            <div className="hidden md:block">
-              <span className="block font-display font-bold text-lg leading-none tracking-tight">IM3</span>
-              <span className="block text-[10px] uppercase tracking-wider text-muted-foreground font-medium">Systems Thinking</span>
-            </div>
+          <div className="flex items-center gap-2">
+            <img src="/assets/im3-logo.jpg" alt="IM3 Systems" className="h-10 w-auto object-contain" />
           </div>
 
           {/* Desktop Nav */}
@@ -662,12 +656,13 @@ const Footer = () => {
   return (
     <footer className="py-12 px-4 md:px-8 border-t border-border bg-white">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 rounded bg-[hsl(var(--ink))] flex items-center justify-center text-white text-xs font-bold">IM3</div>
-          <span className="font-bold text-[hsl(var(--ink))]">IM3 Systems</span>
+        <div className="flex items-center gap-3">
+          <img src="/assets/im3-logo.jpg" alt="IM3 Systems" className="h-8 w-auto object-contain" />
         </div>
-        <div className="text-sm text-muted-foreground">
-          © <span id="y">{year}</span> IM3. im3systems.com
+        <div className="flex flex-col md:flex-row items-center gap-4 text-sm text-muted-foreground">
+          <a href="mailto:info@im3systems.com" className="hover:text-[hsl(var(--teal))] transition-colors">info@im3systems.com</a>
+          <span className="hidden md:inline">•</span>
+          <span>© {year} IM3 Systems</span>
         </div>
       </div>
     </footer>
