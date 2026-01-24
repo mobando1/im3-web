@@ -211,42 +211,42 @@ const Hero = () => {
           <Reveal delay={200} className="relative hidden md:block">
              <div className="relative rounded-xl overflow-hidden border border-white/10 shadow-2xl bg-[#0F2438] transform rotate-1 hover:rotate-0 transition-transform duration-700 ease-out group perspective-1000">
                 {/* Mock Browser/Dashboard Header */}
-                <div className="h-9 bg-[#152e46] flex items-center px-4 gap-2 border-b border-white/5 justify-between">
+                <div className="h-9 bg-[#0F2438] flex items-center px-4 gap-2 border-b border-white/5 justify-between">
                   <div className="flex gap-1.5">
-                    <div className="w-2.5 h-2.5 rounded-full bg-red-500/50"></div>
-                    <div className="w-2.5 h-2.5 rounded-full bg-amber-500/50"></div>
-                    <div className="w-2.5 h-2.5 rounded-full bg-green-500/50"></div>
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#FF5F56]"></div>
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#FFBD2E]"></div>
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#27C93F]"></div>
                   </div>
-                  <div className="flex bg-[#0B1C2D] px-8 py-1 rounded text-[10px] text-gray-400 font-mono border border-white/5 shadow-inner">
-                    app.im3systems.com/dashboard
+                  <div className="flex bg-[#1a3048] px-3 py-1 rounded-md text-[10px] text-gray-400 font-mono border border-white/5 shadow-inner items-center gap-2 w-full max-w-[200px] justify-center opacity-50 group-hover:opacity-100 transition-opacity">
+                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                    app.im3systems.com
                   </div>
-                  <div className="w-4"></div>
+                  <div className="w-10"></div>
                 </div>
                 {/* Image Placeholder */}
-                <div className="aspect-[4/3] bg-[#0B1C2D] relative">
+                <div className="aspect-[16/10] bg-[#0B1C2D] relative overflow-hidden">
                   <img 
-                    src="/assets/im3-dashboard.png" 
+                    src="/assets/im3-dashboard-v2.png" 
                     alt="Dashboard Preview" 
-                    className="w-full h-full object-cover opacity-90 transition-transform duration-700 group-hover:scale-[1.02]"
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-[1.02]"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-[#0B1C2D] via-transparent to-transparent opacity-40"></div>
                   
-                  {/* Floating Elements */}
-                  <div className="absolute top-8 right-8 bg-[hsl(var(--ink))]/90 backdrop-blur-md border border-white/10 p-4 rounded-xl shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-500 fill-mode-forwards opacity-0">
-                    <div className="flex items-center gap-3 mb-2">
-                       <div className="w-8 h-8 rounded-lg bg-green-500/20 flex items-center justify-center text-green-400">
+                  {/* Floating Elements - More subtle now */}
+                  <div className="absolute top-12 right-8 bg-[hsl(var(--ink))]/90 backdrop-blur-md border border-white/10 p-3 rounded-lg shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-1000 delay-500 fill-mode-forwards opacity-0">
+                    <div className="flex items-center gap-3">
+                       <div className="w-8 h-8 rounded-md bg-teal-500/10 flex items-center justify-center text-teal-400 border border-teal-500/20">
                           <Activity className="w-4 h-4" />
                        </div>
                        <div>
-                          <div className="text-[10px] text-gray-400 uppercase tracking-wider">Eficiencia Operativa</div>
-                          <div className="text-lg font-bold text-white leading-none">+42%</div>
+                          <div className="text-[9px] text-gray-400 uppercase tracking-wider font-medium">Eficiencia</div>
+                          <div className="text-sm font-bold text-white leading-none mt-0.5">+42%</div>
                        </div>
                     </div>
                   </div>
 
-                  <div className="absolute bottom-8 left-8 bg-[hsl(var(--ink))]/90 backdrop-blur-md border border-white/10 p-3 rounded-xl shadow-2xl animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-700 fill-mode-forwards opacity-0 flex items-center gap-3">
-                     <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                     <span className="text-xs font-mono text-gray-300">Sistema en línea · v2.4.0</span>
+                  <div className="absolute bottom-6 left-6 bg-[hsl(var(--ink))]/90 backdrop-blur-md border border-white/10 p-2 px-3 rounded-full shadow-2xl animate-in fade-in slide-in-from-bottom-2 duration-1000 delay-700 fill-mode-forwards opacity-0 flex items-center gap-2">
+                     <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse"></div>
+                     <span className="text-[10px] font-mono text-gray-300">Sistemas Operativos</span>
                   </div>
                 </div>
              </div>
