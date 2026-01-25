@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
+import { useI18n } from "@/lib/i18n";
 import { 
   ArrowRight, 
   Check, 
@@ -65,6 +66,7 @@ const Reveal = ({ children, className, delay = 0 }: { children: React.ReactNode,
 };
 
 const Header = () => {
+  const { t, language, setLanguage } = useI18n();
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -108,19 +110,28 @@ const Header = () => {
           {/* Desktop Nav */}
           <nav className="hidden md:flex items-center gap-8">
             <div className="flex items-center gap-1 border border-border rounded-lg p-1 bg-white/50">
-              <button className="flex items-center gap-1 px-2 py-1 rounded bg-[hsl(var(--ink))]/10 text-[hsl(var(--ink))] text-xs font-medium">
+              <button 
+                className={cn(
+                  "flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors",
+                  language === 'es' ? "bg-[hsl(var(--ink))]/10 text-[hsl(var(--ink))]" : "text-muted-foreground hover:bg-gray-100"
+                )}
+                onClick={() => setLanguage('es')}
+              >
                 <span className="text-base">🇪🇸</span> ES
               </button>
               <button 
-                className="flex items-center gap-1 px-2 py-1 rounded text-muted-foreground hover:bg-gray-100 text-xs font-medium transition-colors"
-                onClick={() => alert('English version coming soon!')}
+                className={cn(
+                  "flex items-center gap-1 px-2 py-1 rounded text-xs font-medium transition-colors",
+                  language === 'en' ? "bg-[hsl(var(--ink))]/10 text-[hsl(var(--ink))]" : "text-muted-foreground hover:bg-gray-100"
+                )}
+                onClick={() => setLanguage('en')}
               >
                 <span className="text-base">🇺🇸</span> EN
               </button>
             </div>
-            <button onClick={() => scrollToSection('que')} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Qué hacemos</button>
-            <button onClick={() => scrollToSection('como')} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Cómo trabajamos</button>
-            <button onClick={() => scrollToSection('para')} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">Para quién</button>
+            <button onClick={() => scrollToSection('que')} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">{t.nav.whatWeDo}</button>
+            <button onClick={() => scrollToSection('como')} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">{t.nav.howWeWork}</button>
+            <button onClick={() => scrollToSection('para')} className="text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">{t.nav.forWhom}</button>
           </nav>
 
           {/* CTA */}
@@ -129,7 +140,7 @@ const Header = () => {
               onClick={openBooking}
               className="bg-[hsl(var(--ink))] text-white px-5 py-2.5 rounded-xl text-sm font-medium hover:translate-y-[-2px] hover:shadow-lg transition-all duration-300 flex items-center gap-2"
             >
-              Solicitar diagnóstico <ArrowRight className="w-4 h-4" />
+              {t.nav.requestDiagnosis} <ArrowRight className="w-4 h-4" />
             </button>
           </div>
 
@@ -144,24 +155,33 @@ const Header = () => {
       {mobileMenuOpen && (
         <div className="absolute top-full left-4 right-4 mt-2 p-6 bg-white rounded-2xl shadow-xl border border-border md:hidden flex flex-col gap-4 animate-in slide-in-from-top-4 fade-in duration-200">
           <div className="flex items-center justify-center gap-2 pb-4 border-b border-border/50">
-            <button className="flex items-center gap-2 px-4 py-2 rounded-lg bg-[hsl(var(--ink))]/10 text-[hsl(var(--ink))] font-medium">
-              <span className="text-xl">🇪🇸</span> Español
+            <button 
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors",
+                language === 'es' ? "bg-[hsl(var(--ink))]/10 text-[hsl(var(--ink))]" : "text-muted-foreground hover:bg-gray-100"
+              )}
+              onClick={() => setLanguage('es')}
+            >
+              <span className="text-xl">🇪🇸</span> {t.nav.spanish}
             </button>
             <button 
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-muted-foreground hover:bg-gray-100 font-medium transition-colors"
-              onClick={() => alert('English version coming soon!')}
+              className={cn(
+                "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors",
+                language === 'en' ? "bg-[hsl(var(--ink))]/10 text-[hsl(var(--ink))]" : "text-muted-foreground hover:bg-gray-100"
+              )}
+              onClick={() => setLanguage('en')}
             >
-              <span className="text-xl">🇺🇸</span> English
+              <span className="text-xl">🇺🇸</span> {t.nav.english}
             </button>
           </div>
-          <button onClick={() => scrollToSection('que')} className="text-left text-lg font-medium py-2 border-b border-border/50">Qué hacemos</button>
-          <button onClick={() => scrollToSection('como')} className="text-left text-lg font-medium py-2 border-b border-border/50">Cómo trabajamos</button>
-          <button onClick={() => scrollToSection('para')} className="text-left text-lg font-medium py-2 border-b border-border/50">Para quién</button>
+          <button onClick={() => scrollToSection('que')} className="text-left text-lg font-medium py-2 border-b border-border/50">{t.nav.whatWeDo}</button>
+          <button onClick={() => scrollToSection('como')} className="text-left text-lg font-medium py-2 border-b border-border/50">{t.nav.howWeWork}</button>
+          <button onClick={() => scrollToSection('para')} className="text-left text-lg font-medium py-2 border-b border-border/50">{t.nav.forWhom}</button>
           <button 
             onClick={openBooking}
             className="bg-[hsl(var(--ink))] text-white px-5 py-3 rounded-xl text-center font-medium mt-2"
           >
-            Solicitar diagnóstico
+            {t.nav.requestDiagnosis}
           </button>
         </div>
       )}
@@ -170,6 +190,17 @@ const Header = () => {
 };
 
 const Hero = () => {
+  const { t } = useI18n();
+  
+  const badges = [
+    { label: t.hero.badges.internalApps, icon: Layout },
+    { label: t.hero.badges.automation, icon: Zap },
+    { label: t.hero.badges.integrations, icon: Link2 },
+    { label: t.hero.badges.dashboards, icon: Gauge },
+    { label: t.hero.badges.appliedAI, icon: Sparkles },
+    { label: t.hero.badges.maintainableSystems, icon: Layers },
+  ];
+
   return (
     <section className="pt-32 pb-12 px-4 md:px-8">
       <div className="max-w-7xl mx-auto bg-[hsl(var(--ink))] rounded-[32px] overflow-hidden text-white relative shadow-2xl">
@@ -185,19 +216,19 @@ const Hero = () => {
             <Reveal>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-xs font-medium tracking-wide text-[hsl(var(--teal))] shadow-lg shadow-teal-900/20 backdrop-blur-md">
                 <span className="w-2 h-2 rounded-full bg-[hsl(var(--teal))] animate-pulse"></span>
-                IM3 · SISTEMAS OPERATIVOS
+                {t.hero.badge}
               </div>
             </Reveal>
             
             <Reveal delay={100}>
               <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-display font-bold leading-[1.15] tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-white to-gray-400">
-                Sistemas confiables para operar sin fricción
+                {t.hero.headline}
               </h1>
             </Reveal>
 
             <Reveal delay={200}>
               <p className="text-base sm:text-lg text-gray-300 leading-relaxed max-w-xl font-light">
-                Construimos aplicaciones internas y automatizaciones conectadas que ordenan la operación diaria de una empresa.
+                {t.hero.subheadline}
               </p>
             </Reveal>
 
@@ -207,27 +238,20 @@ const Hero = () => {
                   onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
                   className="bg-[hsl(var(--teal))] text-white px-6 py-3.5 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:translate-y-[-2px] shadow-[0_10px_20px_-10px_rgba(47,164,169,0.3)] hover:shadow-[0_20px_40px_-15px_rgba(47,164,169,0.5)] ring-offset-2 ring-offset-[hsl(var(--ink))] focus:ring-2 focus:ring-[hsl(var(--teal))] text-center"
                 >
-                  Agendar conversación
+                  {t.hero.cta}
                 </button>
                 <button 
                   onClick={() => document.getElementById('que')?.scrollIntoView({ behavior: 'smooth' })}
                   className="bg-white/5 border border-white/10 text-white px-6 py-3.5 rounded-xl font-medium hover:bg-white/10 transition-all backdrop-blur-sm text-center"
                 >
-                  Ver qué hacemos
+                  {t.hero.secondary}
                 </button>
               </div>
             </Reveal>
 
             <Reveal delay={400}>
               <div className="flex flex-wrap gap-2 sm:gap-3 pt-4 border-t border-white/5 mt-6 sm:mt-8">
-                {[
-                  { label: "Apps internas", icon: Layout },
-                  { label: "Automatización", icon: Zap },
-                  { label: "Integraciones", icon: Link2 },
-                  { label: "Dashboards", icon: Gauge },
-                  { label: "IA aplicada", icon: Sparkles },
-                  { label: "Sistemas mantenibles", icon: Layers },
-                ].map((badge, i) => (
+                {badges.map((badge, i) => (
                   <span 
                     key={i} 
                     className="group px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-gray-400 font-mono hover:bg-[hsl(var(--teal))]/10 hover:border-[hsl(var(--teal))]/30 hover:text-[hsl(var(--teal))] transition-all duration-300 cursor-default flex items-center gap-2"
@@ -260,30 +284,30 @@ const Hero = () => {
           <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-xl border border-border/50">
             <div className="flex flex-col md:flex-row gap-8 items-start md:items-center">
               <div className="md:w-1/3 border-b md:border-b-0 md:border-r border-border pb-6 md:pb-0 md:pr-8">
-                <h3 className="text-xl font-bold text-[hsl(var(--ink))] mb-2">Lo que priorizamos</h3>
-                <p className="text-sm text-muted-foreground">Orden → claridad → ejecución. Tecnología al servicio de la operación, no al revés.</p>
+                <h3 className="text-xl font-bold text-[hsl(var(--ink))] mb-2">{t.priorities.title}</h3>
+                <p className="text-sm text-muted-foreground">{t.priorities.subtitle}</p>
               </div>
               <div className="md:w-2/3 grid grid-cols-1 sm:grid-cols-3 gap-6">
                 <div>
                   <div className="w-8 h-8 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center mb-3 text-[hsl(var(--teal))]">
                     <Check className="w-4 h-4" />
                   </div>
-                  <h4 className="font-semibold text-sm mb-1">Ejecución clara</h4>
-                  <p className="text-xs text-muted-foreground">Alcance, entregables y criterios definidos.</p>
+                  <h4 className="font-semibold text-sm mb-1">{t.priorities.clearExecution}</h4>
+                  <p className="text-xs text-muted-foreground">{t.priorities.clearExecutionDesc}</p>
                 </div>
                 <div>
                   <div className="w-8 h-8 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center mb-3 text-[hsl(var(--teal))]">
                     <Layout className="w-4 h-4" />
                   </div>
-                  <h4 className="font-semibold text-sm mb-1">Estructura</h4>
-                  <p className="text-xs text-muted-foreground">Diseño del sistema antes del código.</p>
+                  <h4 className="font-semibold text-sm mb-1">{t.priorities.structure}</h4>
+                  <p className="text-xs text-muted-foreground">{t.priorities.structureDesc}</p>
                 </div>
                 <div>
                   <div className="w-8 h-8 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center mb-3 text-[hsl(var(--teal))]">
                     <ShieldCheck className="w-4 h-4" />
                   </div>
-                  <h4 className="font-semibold text-sm mb-1">Mantenible</h4>
-                  <p className="text-xs text-muted-foreground">Documentación y handoff para operar.</p>
+                  <h4 className="font-semibold text-sm mb-1">{t.priorities.maintainable}</h4>
+                  <p className="text-xs text-muted-foreground">{t.priorities.maintainableDesc}</p>
                 </div>
               </div>
             </div>
@@ -295,6 +319,7 @@ const Hero = () => {
 };
 
 const LogoStrip = () => {
+  const { t } = useI18n();
   const logos = [
     { name: "La Glorieta", src: "/assets/logos/la-glorieta.jpg" },
     { name: "Xtremcol", src: "/assets/logos/xtremcol.png" },
@@ -319,7 +344,7 @@ const LogoStrip = () => {
   return (
     <section className="py-8 overflow-hidden bg-[hsl(var(--paper))]">
       <div className="max-w-7xl mx-auto px-8 mb-8 text-center">
-        <p className="text-sm text-muted-foreground font-medium uppercase tracking-wider">Empresas que confían en sistemas IM3</p>
+        <p className="text-sm text-muted-foreground font-medium uppercase tracking-wider">{t.logoStrip.title}</p>
       </div>
       <div className="relative overflow-hidden">
         <div className="flex w-max animate-scroll">
@@ -343,37 +368,41 @@ const LogoStrip = () => {
 };
 
 const Services = () => {
+  const { t } = useI18n();
+  
+  const cards = [
+    {
+      icon: <Layout className="w-6 h-6" />,
+      title: t.services.internalApps,
+      text: t.services.internalAppsDesc,
+      color: "bg-blue-50 text-blue-600"
+    },
+    {
+      icon: <Zap className="w-6 h-6" />,
+      title: t.services.automation,
+      text: t.services.automationDesc,
+      color: "bg-amber-50 text-amber-600"
+    },
+    {
+      icon: <Activity className="w-6 h-6" />,
+      title: t.services.controlSystems,
+      text: t.services.controlSystemsDesc,
+      color: "bg-emerald-50 text-emerald-600"
+    }
+  ];
+
   return (
     <section id="que" className="py-10 sm:py-12 px-4 md:px-8">
       <div className="max-w-7xl mx-auto">
         <div className="max-w-3xl mb-8">
           <Reveal>
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 sm:mb-6 leading-tight">Sistemas internos que ordenan la operación</h2>
-            <p className="text-xl text-muted-foreground">Construimos soluciones a medida para reducir fricción, centralizar información y ejecutar mejor.</p>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 sm:mb-6 leading-tight">{t.services.title}</h2>
+            <p className="text-xl text-muted-foreground">{t.services.subtitle}</p>
           </Reveal>
         </div>
 
         <div className="grid md:grid-cols-3 gap-8">
-          {[
-            {
-              icon: <Layout className="w-6 h-6" />,
-              title: "Aplicaciones internas",
-              text: "Herramientas a medida para control operativo, reportes, checklists, registros y flujos internos.",
-              color: "bg-blue-50 text-blue-600"
-            },
-            {
-              icon: <Zap className="w-6 h-6" />,
-              title: "Automatización",
-              text: "Conectamos tus apps y datos para eliminar tareas repetitivas y reducir errores en el día a día.",
-              color: "bg-amber-50 text-amber-600"
-            },
-            {
-              icon: <Activity className="w-6 h-6" />,
-              title: "Sistemas de control",
-              text: "Dashboards, conciliaciones, alertas y auditoría: visibilidad real para decisiones mejores.",
-              color: "bg-emerald-50 text-emerald-600"
-            }
-          ].map((card, i) => (
+          {cards.map((card, i) => (
             <Reveal key={i} delay={i * 100}>
               <div className="bg-white p-8 rounded-2xl border border-border hover:shadow-lg transition-all duration-300 hover:border-[hsl(var(--teal))] group h-full">
                 <div className={`w-12 h-12 rounded-xl ${card.color} flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
@@ -391,15 +420,17 @@ const Services = () => {
 };
 
 const LeadMagnet = () => {
+  const { t } = useI18n();
+  
   return (
     <section id="diagnostico" className="py-12 px-4 md:px-8">
       <Reveal>
         <div className="max-w-5xl mx-auto bg-gradient-to-r from-teal-50 to-blue-50 rounded-3xl p-8 md:p-12 border border-teal-100 flex flex-col md:flex-row items-center justify-between gap-8 shadow-sm">
           <div className="md:w-2/3">
-            <div className="inline-block px-3 py-1 bg-white text-[hsl(var(--teal))] text-xs font-bold rounded-full mb-4 shadow-sm">SIN COSTO</div>
-            <h3 className="text-2xl md:text-3xl font-bold text-[hsl(var(--ink))] mb-4">Diagnóstico operativo inicial</h3>
+            <div className="inline-block px-3 py-1 bg-white text-[hsl(var(--teal))] text-xs font-bold rounded-full mb-4 shadow-sm">{t.leadMagnet.badge}</div>
+            <h3 className="text-2xl md:text-3xl font-bold text-[hsl(var(--ink))] mb-4">{t.leadMagnet.title}</h3>
             <p className="text-[hsl(var(--coal))] opacity-80 text-lg">
-              Analizamos tu operación, detectamos cuellos de botella y te entregamos un mapa claro de qué sistema implementar, por qué y en qué orden.
+              {t.leadMagnet.description}
             </p>
           </div>
           <div className="md:w-1/3 flex justify-center md:justify-end">
@@ -407,7 +438,7 @@ const LeadMagnet = () => {
                 onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
                 className="bg-[hsl(var(--teal))] text-white px-8 py-4 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:shadow-lg whitespace-nowrap"
              >
-                Solicitar diagnóstico
+                {t.leadMagnet.cta}
              </button>
           </div>
         </div>
@@ -417,26 +448,20 @@ const LeadMagnet = () => {
 };
 
 const Process = () => {
-  const steps = [
-    { num: "01", title: "Diagnóstico", text: "Entendemos tu operación y dónde se pierde tiempo o dinero." },
-    { num: "02", title: "Diseño", text: "Definimos estructura de datos, flujo, roles y métricas." },
-    { num: "03", title: "Construcción", text: "Desarrollamos un MVP funcional con foco en uso real." },
-    { num: "04", title: "Automatización", text: "Conectamos lo necesario para eliminar tareas repetitivas." },
-    { num: "05", title: "Transferencia", text: "Documentación + handoff para que el sistema se mantenga." },
-  ];
+  const { t } = useI18n();
 
   return (
     <section id="como" className="py-10 sm:py-12 px-4 md:px-8 bg-[hsl(var(--paper))]">
       <div className="max-w-7xl mx-auto">
         <div className="text-center max-w-2xl mx-auto mb-8">
           <Reveal>
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">Estructura antes de velocidad</h2>
-            <p className="text-lg text-muted-foreground">Un método simple para construir rápido sin romper la operación (y dejarlo mantenible).</p>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">{t.process.title}</h2>
+            <p className="text-lg text-muted-foreground">{t.process.subtitle}</p>
           </Reveal>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          {steps.map((step, i) => (
+          {t.process.steps.map((step, i) => (
             <Reveal key={i} delay={i * 100}>
               <div className="bg-white p-6 rounded-2xl border border-border h-full relative overflow-hidden group hover:shadow-md transition-all">
                 <div className="text-6xl font-display font-bold text-gray-100 absolute -right-4 -top-4 group-hover:text-teal-50 transition-colors">{step.num}</div>
@@ -457,13 +482,15 @@ const Process = () => {
 };
 
 const TargetAudience = () => {
+  const { t } = useI18n();
+  
   return (
     <section id="para" className="py-10 sm:py-12 px-4 md:px-8">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <Reveal>
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">PYMEs con operación real</h2>
-            <p className="text-xl text-muted-foreground">Especialmente equipos que necesitan orden y control, no más herramientas sueltas.</p>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">{t.targetAudience.title}</h2>
+            <p className="text-xl text-muted-foreground">{t.targetAudience.subtitle}</p>
           </Reveal>
         </div>
 
@@ -472,15 +499,10 @@ const TargetAudience = () => {
             <div className="bg-[hsl(var(--ink))] text-white p-8 md:p-12 rounded-[2rem] shadow-xl relative overflow-hidden">
                <div className="absolute top-0 right-0 w-64 h-64 bg-[hsl(var(--teal))] opacity-20 blur-[80px] rounded-full"></div>
                <h3 className="text-2xl font-bold mb-8 flex items-center gap-3">
-                 <Check className="text-[hsl(var(--teal))]" /> Encaja contigo si...
+                 <Check className="text-[hsl(var(--teal))]" /> {t.targetAudience.fitsYouIf}
                </h3>
                <ul className="space-y-4 relative z-10">
-                 {[
-                   "Tu operación depende de personas y WhatsApp, pero necesitas estructura.",
-                   "Hay reportes manuales, cierres, conciliaciones o auditorías que toman horas.",
-                   "Tienes varias apps, pero no están conectadas (Sheets, POS, CRM, etc.).",
-                   "Quieres un sistema mantenible, no un proyecto eterno."
-                 ].map((item, i) => (
+                 {t.targetAudience.fitsItems.map((item, i) => (
                    <li key={i} className="flex gap-3 items-start">
                      <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--teal))] mt-2.5"></span>
                      <span className="text-gray-300 leading-relaxed">{item}</span>
@@ -493,15 +515,10 @@ const TargetAudience = () => {
           <Reveal delay={200}>
             <div className="bg-white p-8 md:p-12 rounded-[2rem] border border-border shadow-sm h-full">
                <h3 className="text-2xl font-bold mb-8 text-gray-400 flex items-center gap-3">
-                 <X /> No somos para...
+                 <X /> {t.targetAudience.notForYou}
                </h3>
                <ul className="space-y-4">
-                 {[
-                   "Empresas que buscan una solución genérica sin entender su operación.",
-                   "Proyectos sin dueño interno o sin intención de usar el sistema.",
-                   "Implementaciones genéricas tipo “copia y pega”.",
-                   "Soluciones que se rompen por no documentar procesos."
-                 ].map((item, i) => (
+                 {t.targetAudience.notForItems.map((item, i) => (
                    <li key={i} className="flex gap-3 items-start">
                      <span className="w-1.5 h-1.5 rounded-full bg-red-200 mt-2.5"></span>
                      <span className="text-muted-foreground leading-relaxed">{item}</span>
@@ -517,22 +534,18 @@ const TargetAudience = () => {
 };
 
 const Testimonials = () => {
-  const reviews = [
-    { quote: "Logramos reducir el tiempo de cierre de 4 días a 4 horas.", author: "Laura Méndez", role: "Operaciones · Bodega 72" },
-    { quote: "Por fin tenemos visibilidad real del inventario en tiempo real.", author: "Carlos Rojas", role: "Admin · CasaMesa" },
-    { quote: "La implementación fue ordenada y el equipo adoptó la herramienta rápido.", author: "Paula Andrade", role: "Dirección · Quanta" }
-  ];
+  const { t } = useI18n();
 
   return (
     <section className="py-12 px-4 md:px-8 bg-[hsl(var(--paper))]">
       <div className="max-w-7xl mx-auto">
         <Reveal>
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">Resultados que hablan por sí solos</h2>
-          <p className="text-muted-foreground mb-8">Casos reales de impacto operativo.</p>
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">{t.testimonials.title}</h2>
+          <p className="text-muted-foreground mb-8">{t.testimonials.subtitle}</p>
         </Reveal>
 
         <div className="grid md:grid-cols-3 gap-6">
-          {reviews.map((review, i) => (
+          {t.testimonials.reviews.map((review, i) => (
             <Reveal key={i} delay={i * 100}>
               <div className="bg-white p-8 rounded-2xl border border-border shadow-sm h-full flex flex-col justify-between">
                 <p className="text-lg text-[hsl(var(--coal))] mb-8 font-medium">"{review.quote}"</p>
@@ -555,12 +568,14 @@ const Testimonials = () => {
 };
 
 const Offer = () => {
+  const { t } = useI18n();
+  
   return (
     <section id="oferta" className="py-12 px-4 md:px-8">
       <div className="max-w-4xl mx-auto text-center mb-8">
          <Reveal>
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">Modelos de Trabajo</h2>
-            <p className="text-lg text-muted-foreground">Después del diagnóstico, definimos juntos la mejor forma de avanzar.</p>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">{t.offer.title}</h2>
+            <p className="text-lg text-muted-foreground">{t.offer.subtitle}</p>
          </Reveal>
       </div>
 
@@ -570,14 +585,14 @@ const Offer = () => {
             <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 mb-6">
               <Zap className="w-6 h-6" />
             </div>
-            <h3 className="text-xl font-bold text-[hsl(var(--ink))] mb-4">Implementación completa <span className="block text-sm font-normal text-muted-foreground mt-1">(Done For You)</span></h3>
+            <h3 className="text-xl font-bold text-[hsl(var(--ink))] mb-4">{t.offer.fullImplementation} <span className="block text-sm font-normal text-muted-foreground mt-1">{t.offer.fullImplementationTag}</span></h3>
             <p className="text-muted-foreground mb-6 flex-grow">
-              Nos encargamos de todo. Diseñamos, construimos y te entregamos el sistema funcionando, llave en mano. Tu equipo solo se preocupa de usarlo.
+              {t.offer.fullImplementationDesc}
             </p>
             <div className="pt-6 border-t border-border mt-auto">
               <div className="flex items-center gap-2 text-sm font-medium text-[hsl(var(--ink))]">
                 <Check className="w-4 h-4 text-[hsl(var(--teal))]" />
-                Ideal si buscas velocidad y garantía de ejecución.
+                {t.offer.fullImplementationBenefit}
               </div>
             </div>
           </div>
@@ -588,14 +603,14 @@ const Offer = () => {
             <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 mb-6">
               <Users className="w-6 h-6" />
             </div>
-            <h3 className="text-xl font-bold text-[hsl(var(--ink))] mb-4">Acompañamiento estratégico <span className="block text-sm font-normal text-muted-foreground mt-1">(Consultoría + Diseño)</span></h3>
+            <h3 className="text-xl font-bold text-[hsl(var(--ink))] mb-4">{t.offer.strategicGuidance} <span className="block text-sm font-normal text-muted-foreground mt-1">{t.offer.strategicGuidanceTag}</span></h3>
             <p className="text-muted-foreground mb-6 flex-grow">
-              Diseñamos la arquitectura y guiamos a tu equipo técnico (o externo) para que ellos construyan con nuestro mapa y supervisión de calidad.
+              {t.offer.strategicGuidanceDesc}
             </p>
             <div className="pt-6 border-t border-border mt-auto">
               <div className="flex items-center gap-2 text-sm font-medium text-[hsl(var(--ink))]">
                 <Check className="w-4 h-4 text-[hsl(var(--teal))]" />
-                Ideal si ya tienes capacidad técnica pero te falta dirección.
+                {t.offer.strategicGuidanceBenefit}
               </div>
             </div>
           </div>
@@ -604,15 +619,15 @@ const Offer = () => {
 
       <Reveal delay={300}>
         <div className="max-w-3xl mx-auto bg-[hsl(var(--paper))] rounded-2xl p-8 text-center border border-border">
-          <h3 className="text-lg font-bold mb-2 text-[hsl(var(--ink))]">Sin presión de venta</h3>
+          <h3 className="text-lg font-bold mb-2 text-[hsl(var(--ink))]">{t.offer.noSalesPressure}</h3>
           <p className="text-muted-foreground mb-6 max-w-lg mx-auto">
-            El objetivo del diagnóstico es entender tu operación. Si podemos ayudar, te presentaremos estas opciones. Si no, te daremos una recomendación honesta.
+            {t.offer.noSalesPressureDesc}
           </p>
           <button 
             onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
             className="text-[hsl(var(--teal))] font-bold hover:text-[hsl(var(--ink))] transition-colors flex items-center justify-center gap-2 mx-auto"
           >
-            Agendar conversación <ArrowRight className="w-4 h-4" />
+            {t.offer.scheduleConversation} <ArrowRight className="w-4 h-4" />
           </button>
         </div>
       </Reveal>
@@ -622,28 +637,30 @@ const Offer = () => {
 
 
 const Contact = () => {
+  const { t } = useI18n();
+  
   return (
     <section id="contacto" className="py-16 px-4 md:px-8">
       <div className="max-w-3xl mx-auto text-center">
         <Reveal>
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-6 leading-tight">
-            ¿Dónde se está perdiendo tiempo o control en tu operación?
+            {t.contact.title}
           </h2>
           <p className="text-xl text-muted-foreground mb-10">
-            Una conversación corta para entender tu caso y proponer el siguiente paso.
+            {t.contact.subtitle}
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <button 
               onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
               className="bg-[hsl(var(--ink))] text-white px-8 py-4 rounded-xl font-bold hover:bg-[hsl(var(--coal))] transition-all flex items-center justify-center gap-2"
             >
-              <Calendar className="w-5 h-5" /> Agendar una llamada
+              <Calendar className="w-5 h-5" /> {t.contact.scheduleCall}
             </button>
             <button 
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
               className="bg-white border border-border text-[hsl(var(--ink))] px-8 py-4 rounded-xl font-bold hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
             >
-              Volver arriba <ArrowUpRight className="w-5 h-5" />
+              {t.contact.backToTop} <ArrowUpRight className="w-5 h-5" />
             </button>
           </div>
         </Reveal>
