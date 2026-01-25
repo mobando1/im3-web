@@ -104,7 +104,7 @@ const Header = () => {
         )}>
           {/* Logo */}
           <div className="flex items-center gap-2">
-            <img src="/assets/im3-logo.jpg" alt="IM3 Systems" className="h-10 w-auto object-contain" />
+            <img src="/assets/im3-logo.jpg" alt="IM3 Systems" className="h-10 w-auto object-contain rounded-lg" />
           </div>
 
           {/* Desktop Nav */}
@@ -675,7 +675,7 @@ const Footer = () => {
     <footer className="py-12 px-4 md:px-8 border-t border-border bg-white">
       <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
         <div className="flex items-center gap-3">
-          <img src="/assets/im3-logo.jpg" alt="IM3 Systems" className="h-8 w-auto object-contain" />
+          <img src="/assets/im3-logo.jpg" alt="IM3 Systems" className="h-8 w-auto object-contain rounded-lg" />
         </div>
         <div className="flex flex-col md:flex-row items-center gap-4 text-sm text-muted-foreground">
           <a href="mailto:info@im3systems.com" className="hover:text-[hsl(var(--teal))] transition-colors">info@im3systems.com</a>
