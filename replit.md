@@ -83,3 +83,21 @@ Preferred communication style: Simple, everyday language.
 
 ### Fonts
 - Google Fonts: Inter and Manrope loaded via CDN
+
+## Internationalization (i18n)
+
+### Architecture
+- **Context-based system**: React context in `client/src/lib/i18n.tsx`
+- **Languages supported**: Spanish (ES) - default, English (EN)
+- **Hook**: `useI18n()` returns `{ language, setLanguage, t }` where `t` is the translations object
+
+### Translation Structure
+- Translations are organized by section: nav, hero, priorities, services, process, targetAudience, testimonials, offer, contact, footer
+- Natural adaptations per language (not literal translations)
+
+### Design Decisions
+- **Widget remains in English**: The InteractiveHeroWidget uses English text intentionally. Technical dashboards and operational software interfaces typically use English even in Spanish-speaking markets, maintaining authenticity as a professional software demo.
+- **Language toggle**: Available in header navigation for desktop and mobile views
+
+### Calendar CTAs
+- All "schedule call" CTAs link to: https://calendar.im3systems.com
