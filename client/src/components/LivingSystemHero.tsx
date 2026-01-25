@@ -462,7 +462,7 @@ export const LivingSystemHero = () => {
 
             <div className="flex flex-wrap gap-4 items-center">
                 <button 
-                  onClick={() => window.open("https://api.leadconnectorhq.com/widget/booking/e1UKFLu5HkQcVg5aZdei", "_blank")}
+                  onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
                   className="bg-[hsl(var(--ink))] text-white px-6 py-3.5 rounded-xl font-semibold hover:bg-gray-800 transition-all hover:translate-y-[-2px] shadow-lg flex items-center gap-2"
                 >
                   Agendar diagnóstico operativo <ArrowRight className="w-4 h-4" />

@@ -85,7 +85,7 @@ const Header = () => {
   };
 
   const openBooking = () => {
-    window.open("https://api.leadconnectorhq.com/widget/booking/e1UKFLu5HkQcVg5aZdei", "_blank");
+    window.open("https://calendar.im3systems.com", "_blank");
   };
 
   return (
@@ -204,7 +204,7 @@ const Hero = () => {
             <Reveal delay={300}>
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button 
-                  onClick={() => window.open("https://api.leadconnectorhq.com/widget/booking/e1UKFLu5HkQcVg5aZdei", "_blank")}
+                  onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
                   className="bg-[hsl(var(--teal))] text-white px-6 py-3.5 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:translate-y-[-2px] shadow-[0_10px_20px_-10px_rgba(47,164,169,0.3)] hover:shadow-[0_20px_40px_-15px_rgba(47,164,169,0.5)] ring-offset-2 ring-offset-[hsl(var(--ink))] focus:ring-2 focus:ring-[hsl(var(--teal))] text-center"
                 >
                   Agendar conversación
@@ -404,7 +404,7 @@ const LeadMagnet = () => {
           </div>
           <div className="md:w-1/3 flex justify-center md:justify-end">
              <button 
-                onClick={() => window.open("https://api.leadconnectorhq.com/widget/booking/e1UKFLu5HkQcVg5aZdei", "_blank")}
+                onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
                 className="bg-[hsl(var(--teal))] text-white px-8 py-4 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:shadow-lg whitespace-nowrap"
              >
                 Solicitar diagnóstico
@@ -609,7 +609,7 @@ const Offer = () => {
             El objetivo del diagnóstico es entender tu operación. Si podemos ayudar, te presentaremos estas opciones. Si no, te daremos una recomendación honesta.
           </p>
           <button 
-            onClick={() => window.open("https://api.leadconnectorhq.com/widget/booking/e1UKFLu5HkQcVg5aZdei", "_blank")}
+            onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
             className="text-[hsl(var(--teal))] font-bold hover:text-[hsl(var(--ink))] transition-colors flex items-center justify-center gap-2 mx-auto"
           >
             Agendar conversación <ArrowRight className="w-4 h-4" />
@@ -634,7 +634,7 @@ const Contact = () => {
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <button 
-              onClick={() => window.open("https://api.leadconnectorhq.com/widget/booking/e1UKFLu5HkQcVg5aZdei", "_blank")}
+              onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
               className="bg-[hsl(var(--ink))] text-white px-8 py-4 rounded-xl font-bold hover:bg-[hsl(var(--coal))] transition-all flex items-center justify-center gap-2"
             >
               <Calendar className="w-5 h-5" /> Agendar una llamada
