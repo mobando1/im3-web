@@ -173,7 +173,7 @@ const MiniBarChart = () => {
   useEffect(() => {
     const interval = setInterval(() => {
       setBars(prev => prev.map(v => Math.max(30, Math.min(100, v + (Math.random() - 0.5) * 20))));
-    }, 1500);
+    }, 3000);
     return () => clearInterval(interval);
   }, []);
   
@@ -210,7 +210,7 @@ const OperationsMap = () => {
       // Animate a random connection
       setActiveConnection(Math.floor(Math.random() * 8));
       setTimeout(() => setActiveConnection(null), 800);
-    }, 2000);
+    }, 4000);
     return () => clearInterval(interval);
   }, []);
 
@@ -667,7 +667,7 @@ export const InteractiveHeroWidget = () => {
         }];
         return next;
       });
-    }, 1000);
+    }, 2000);
     return () => clearInterval(interval);
   }, []);
 
@@ -679,7 +679,7 @@ export const InteractiveHeroWidget = () => {
         latency: Math.max(8, Math.min(20, prev.latency + (Math.random() - 0.5) * 2)),
         operations: prev.operations + Math.floor(Math.random() * 5)
       }));
-    }, 3000);
+    }, 5000);
     return () => clearInterval(interval);
   }, []);
 
@@ -704,7 +704,7 @@ export const InteractiveHeroWidget = () => {
           showToast(randomMsg.msg, randomMsg.type as any);
         }
       }
-    }, 2500);
+    }, 4000);
     return () => clearInterval(interval);
   }, [showToast]);
 
