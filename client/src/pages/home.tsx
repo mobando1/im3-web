@@ -447,68 +447,63 @@ const PrioritiesDetail = () => {
   }, []);
 
   const steps = [
-    { phase: "Orden", pillar: t.priorities.clearExecution, desc: t.priorities.clearExecutionDesc, icon: Check, num: "01" },
-    { phase: "Claridad", pillar: t.priorities.structure, desc: t.priorities.structureDesc, icon: Layout, num: "02" },
-    { phase: "Resultados", pillar: t.priorities.maintainable, desc: t.priorities.maintainableDesc, icon: ShieldCheck, num: "03" },
+    { phase: "Orden", pillar: t.priorities.clearExecution, desc: t.priorities.clearExecutionDesc, icon: Check },
+    { phase: "Claridad", pillar: t.priorities.structure, desc: t.priorities.structureDesc, icon: Layout },
+    { phase: "Resultados", pillar: t.priorities.maintainable, desc: t.priorities.maintainableDesc, icon: ShieldCheck },
   ];
 
   return (
-    <section className="py-16 px-4 md:px-8" ref={sectionRef}>
+    <section className="py-12 px-4 md:px-8" ref={sectionRef}>
       <div className="max-w-5xl mx-auto">
-        <Reveal>
-          <p className="text-lg text-muted-foreground text-center max-w-2xl mx-auto mb-12">{t.priorities.subtitle}</p>
-        </Reveal>
+        <div className="bg-[hsl(var(--ink))] rounded-[24px] p-8 md:p-12 overflow-hidden relative">
+          <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-[hsl(var(--teal))] opacity-[0.07] blur-[100px] rounded-full pointer-events-none"></div>
 
-        <div className="relative">
-          <div className="hidden md:block absolute top-[28px] left-[16.66%] right-[16.66%] h-px overflow-hidden">
-            <div
-              className={cn(
-                "h-full bg-gradient-to-r from-[hsl(var(--teal))]/60 via-[hsl(var(--teal))] to-[hsl(var(--teal))]/60 transition-all duration-1500 ease-out origin-left",
-                isActive ? "scale-x-100" : "scale-x-0"
-              )}
-              style={{ transitionDelay: "400ms", transitionDuration: "1200ms" }}
-            />
-          </div>
-
-          <div className="grid md:grid-cols-3 gap-10 md:gap-8">
-            {steps.map((step, i) => (
-              <div key={i} className="flex flex-col items-center">
-                <div
-                  className={cn(
-                    "relative w-14 h-14 rounded-full flex items-center justify-center mb-8 transition-all duration-700 ease-out",
-                    isActive
-                      ? "bg-[hsl(var(--teal))] shadow-[0_0_20px_rgba(47,164,169,0.3)]"
-                      : "bg-gray-200"
-                  )}
-                  style={{ transitionDelay: `${i * 400}ms` }}
-                >
-                  <span className={cn(
-                    "text-sm font-mono font-bold transition-colors duration-700",
-                    isActive ? "text-white" : "text-gray-400"
-                  )} style={{ transitionDelay: `${i * 400}ms` }}>
+          <div className="relative z-10">
+            <div className="flex items-center gap-3 mb-8">
+              {steps.map((step, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  <span
+                    className={cn(
+                      "text-sm font-mono font-semibold tracking-wide transition-all duration-700",
+                      isActive ? "text-[hsl(var(--teal))]" : "text-gray-600"
+                    )}
+                    style={{ transitionDelay: `${i * 300}ms` }}
+                  >
                     {step.phase}
                   </span>
-                </div>
-
-                <div
-                  className={cn(
-                    "w-full bg-white rounded-2xl border border-border p-7 transition-all duration-700 ease-out hover:shadow-md hover:border-[hsl(var(--teal))]/30 group",
-                    isActive ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
+                  {i < steps.length - 1 && (
+                    <div className="w-8 h-px overflow-hidden">
+                      <div
+                        className={cn(
+                          "h-full bg-[hsl(var(--teal))]/50 transition-all duration-500 origin-left",
+                          isActive ? "scale-x-100" : "scale-x-0"
+                        )}
+                        style={{ transitionDelay: `${300 + i * 300}ms` }}
+                      />
+                    </div>
                   )}
-                  style={{ transitionDelay: `${200 + i * 400}ms` }}
-                >
-                  <div className="flex items-start gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-[hsl(var(--paper))] flex items-center justify-center text-[hsl(var(--teal))] shrink-0 group-hover:bg-[hsl(var(--teal))]/10 transition-colors">
-                      <step.icon className="w-5 h-5" />
-                    </div>
-                    <div>
-                      <h4 className="font-bold text-[hsl(var(--ink))] mb-1.5">{step.pillar}</h4>
-                      <p className="text-sm text-muted-foreground leading-relaxed">{step.desc}</p>
-                    </div>
-                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-6">
+              {steps.map((step, i) => (
+                <div
+                  key={i}
+                  className={cn(
+                    "bg-white/[0.06] border border-white/[0.08] rounded-xl p-6 transition-all duration-700 ease-out hover:bg-white/[0.1] hover:border-[hsl(var(--teal))]/20 group",
+                    isActive ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
+                  )}
+                  style={{ transitionDelay: `${400 + i * 200}ms` }}
+                >
+                  <div className="w-9 h-9 rounded-lg bg-[hsl(var(--teal))]/10 flex items-center justify-center text-[hsl(var(--teal))] mb-4 group-hover:bg-[hsl(var(--teal))]/20 transition-colors">
+                    <step.icon className="w-4 h-4" />
+                  </div>
+                  <h4 className="font-semibold text-white mb-2 text-[15px]">{step.pillar}</h4>
+                  <p className="text-sm text-gray-400 leading-relaxed">{step.desc}</p>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
