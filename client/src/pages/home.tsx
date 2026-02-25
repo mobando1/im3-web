@@ -397,7 +397,7 @@ const LogoStrip = () => {
           100% { transform: translateX(-50%); }
         }
         .animate-scroll {
-          animation: scroll 30s linear infinite;
+          animation: scroll 60s linear infinite;
         }
       `}</style>
     </section>
