@@ -379,12 +379,12 @@ const LogoStrip = () => {
   );
   
   return (
-    <section className="py-10 overflow-hidden bg-[hsl(var(--paper))]">
-      <div className="max-w-7xl mx-auto px-8 mb-6 text-center">
-        <div className="flex items-center justify-center gap-4">
-          <div className="h-px w-12 bg-gradient-to-r from-transparent to-border" />
-          <p className="text-xs text-muted-foreground/70 font-medium uppercase tracking-[0.2em] font-display">{t.logoStrip.title}</p>
-          <div className="h-px w-12 bg-gradient-to-l from-transparent to-border" />
+    <section className="py-12 overflow-hidden bg-[hsl(var(--paper))]">
+      <div className="max-w-7xl mx-auto px-8 mb-8 text-center">
+        <div className="flex items-center justify-center gap-6">
+          <div className="h-px flex-1 max-w-24 bg-gradient-to-r from-transparent to-[hsl(var(--teal))]/30" />
+          <p className="text-sm font-display font-semibold text-[hsl(var(--ink))]/60 tracking-wide">{t.logoStrip.title}</p>
+          <div className="h-px flex-1 max-w-24 bg-gradient-to-l from-transparent to-[hsl(var(--teal))]/30" />
         </div>
       </div>
       <div className="relative overflow-hidden">
