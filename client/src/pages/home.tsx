@@ -452,32 +452,30 @@ const AnimatedCounter = ({ value, suffix = "", prefix = "", duration = 1500 }: {
 const CredibilityStrip = () => {
   const { t } = useI18n();
   const stats = [
-    { num: 45, suffix: "+", label: t.credibility.systemsLabel, icon: Layout },
-    { num: 6, suffix: "", label: t.credibility.industriesLabel, icon: Layers },
-    { num: 100, suffix: "%", label: t.credibility.conversionLabel, icon: Check },
+    { num: 45, suffix: "+", label: t.credibility.systemsLabel },
+    { num: 6, suffix: "", label: t.credibility.industriesLabel },
+    { num: 100, suffix: "%", label: t.credibility.conversionLabel },
   ];
 
   return (
     <section className="py-4 px-4 md:px-8">
-      <div className="max-w-4xl mx-auto">
-        <div className="grid grid-cols-3 gap-3 md:gap-6">
-          {stats.map((stat, i) => {
-            const Icon = stat.icon;
-            return (
-              <Reveal key={i} delay={i * 150}>
-                <div className="relative bg-white rounded-xl border border-border p-4 sm:p-6 text-center group hover:border-[hsl(var(--teal))]/30 hover:shadow-md transition-all duration-300 overflow-hidden">
-                  <div className="absolute top-0 left-0 right-0 h-0.5 bg-gradient-to-r from-transparent via-[hsl(var(--teal))]/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-[hsl(var(--teal))]/10 flex items-center justify-center mx-auto mb-3">
-                    <Icon className="w-4 h-4 sm:w-5 sm:h-5 text-[hsl(var(--teal))]" />
-                  </div>
-                  <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))]">
+      <div className="max-w-3xl mx-auto">
+        <div className="flex items-center justify-center gap-6 sm:gap-10 md:gap-16">
+          {stats.map((stat, i) => (
+            <Reveal key={i} delay={i * 150}>
+              <div className="flex items-center gap-6 sm:gap-10 md:gap-16">
+                <div className="text-center">
+                  <div className="text-3xl sm:text-4xl md:text-5xl font-display font-bold text-[hsl(var(--teal))]">
                     <AnimatedCounter value={stat.num} suffix={stat.suffix} duration={1200 + i * 300} />
                   </div>
-                  <div className="text-[10px] sm:text-xs text-muted-foreground mt-1.5 font-medium uppercase tracking-wider">{stat.label}</div>
+                  <div className="text-[10px] sm:text-xs text-muted-foreground mt-1 font-medium tracking-wide">{stat.label}</div>
                 </div>
-              </Reveal>
-            );
-          })}
+                {i < stats.length - 1 && (
+                  <div className="h-8 w-px bg-border/60 hidden sm:block" />
+                )}
+              </div>
+            </Reveal>
+          ))}
         </div>
       </div>
     </section>
