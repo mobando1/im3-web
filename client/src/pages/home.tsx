@@ -283,38 +283,6 @@ const Hero = () => {
         </div>
       </div>
       
-      {/* "Lo que priorizamos" Card below hero */}
-      <div className="max-w-4xl mx-auto -mt-6 md:-mt-12 relative z-20 px-4">
-        <Reveal delay={600}>
-          <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-xl border border-border/50">
-            <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
-              <div className="md:w-1/3 border-b md:border-b-0 md:border-r border-border pb-4 md:pb-0 md:pr-8">
-                <h3 className="text-xl font-bold text-[hsl(var(--ink))]">{t.priorities.title}</h3>
-              </div>
-              <div className="md:w-2/3 flex flex-wrap gap-4">
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center text-[hsl(var(--teal))]">
-                    <Check className="w-3.5 h-3.5" />
-                  </div>
-                  <span className="font-semibold text-sm text-[hsl(var(--ink))]">{t.priorities.clearExecution}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center text-[hsl(var(--teal))]">
-                    <Layout className="w-3.5 h-3.5" />
-                  </div>
-                  <span className="font-semibold text-sm text-[hsl(var(--ink))]">{t.priorities.structure}</span>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="w-7 h-7 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center text-[hsl(var(--teal))]">
-                    <ShieldCheck className="w-3.5 h-3.5" />
-                  </div>
-                  <span className="font-semibold text-sm text-[hsl(var(--ink))]">{t.priorities.maintainable}</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </Reveal>
-      </div>
     </section>
   );
 };
@@ -456,50 +424,51 @@ const PrioritiesDetail = () => {
     <section className="py-12 px-4 md:px-8" ref={sectionRef}>
       <div className="max-w-5xl mx-auto">
         <div className="bg-[hsl(var(--ink))] rounded-[24px] p-8 md:p-12 overflow-hidden relative">
-          <div className="absolute top-0 right-0 w-[300px] h-[300px] bg-[hsl(var(--teal))] opacity-[0.07] blur-[100px] rounded-full pointer-events-none"></div>
+          <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-[hsl(var(--teal))] opacity-[0.06] blur-[120px] rounded-full pointer-events-none -translate-y-1/3 translate-x-1/4"></div>
 
           <div className="relative z-10">
-            <div className="flex items-center gap-3 mb-8">
-              {steps.map((step, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <span
-                    className={cn(
-                      "text-sm font-mono font-semibold tracking-wide transition-all duration-700",
-                      isActive ? "text-[hsl(var(--teal))]" : "text-gray-600"
-                    )}
-                    style={{ transitionDelay: `${i * 300}ms` }}
-                  >
-                    {step.phase}
-                  </span>
-                  {i < steps.length - 1 && (
-                    <div className="w-8 h-px overflow-hidden">
-                      <div
+            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-10">
+              <h3 className="text-2xl md:text-3xl font-display font-bold text-white">{t.priorities.title}</h3>
+              <div className="flex items-center gap-2">
+                {steps.map((step, i) => (
+                  <div key={i} className="flex items-center gap-2">
+                    <span
+                      className={cn(
+                        "text-xs font-mono font-medium tracking-wider uppercase transition-all duration-700",
+                        isActive ? "text-[hsl(var(--teal))]" : "text-gray-600"
+                      )}
+                      style={{ transitionDelay: `${i * 250}ms` }}
+                    >
+                      {step.phase}
+                    </span>
+                    {i < steps.length - 1 && (
+                      <ArrowRight
                         className={cn(
-                          "h-full bg-[hsl(var(--teal))]/50 transition-all duration-500 origin-left",
-                          isActive ? "scale-x-100" : "scale-x-0"
+                          "w-3 h-3 transition-all duration-500",
+                          isActive ? "text-[hsl(var(--teal))]/50" : "text-gray-700"
                         )}
-                        style={{ transitionDelay: `${300 + i * 300}ms` }}
+                        style={{ transitionDelay: `${200 + i * 250}ms` }}
                       />
-                    </div>
-                  )}
-                </div>
-              ))}
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-6">
+            <div className="grid md:grid-cols-3 gap-5">
               {steps.map((step, i) => (
                 <div
                   key={i}
                   className={cn(
-                    "bg-white/[0.06] border border-white/[0.08] rounded-xl p-6 transition-all duration-700 ease-out hover:bg-white/[0.1] hover:border-[hsl(var(--teal))]/20 group",
+                    "bg-white/[0.05] border border-white/[0.07] rounded-2xl p-6 transition-all duration-700 ease-out hover:bg-white/[0.09] hover:border-[hsl(var(--teal))]/20 group",
                     isActive ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
                   )}
-                  style={{ transitionDelay: `${400 + i * 200}ms` }}
+                  style={{ transitionDelay: `${300 + i * 150}ms` }}
                 >
-                  <div className="w-9 h-9 rounded-lg bg-[hsl(var(--teal))]/10 flex items-center justify-center text-[hsl(var(--teal))] mb-4 group-hover:bg-[hsl(var(--teal))]/20 transition-colors">
-                    <step.icon className="w-4 h-4" />
+                  <div className="w-10 h-10 rounded-xl bg-[hsl(var(--teal))]/10 flex items-center justify-center text-[hsl(var(--teal))] mb-5 group-hover:bg-[hsl(var(--teal))]/20 transition-colors">
+                    <step.icon className="w-5 h-5" />
                   </div>
-                  <h4 className="font-semibold text-white mb-2 text-[15px]">{step.pillar}</h4>
+                  <h4 className="font-semibold text-white mb-2">{step.pillar}</h4>
                   <p className="text-sm text-gray-400 leading-relaxed">{step.desc}</p>
                 </div>
               ))}
