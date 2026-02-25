@@ -5,6 +5,7 @@ import { useI18n } from "@/lib/i18n";
 import { 
   ArrowRight, 
   Check, 
+  ChevronDown,
   ChevronRight, 
   Menu, 
   X, 
@@ -22,7 +23,8 @@ import {
   Sparkles,
   Gauge,
   Link2,
-  Calendar
+  Calendar,
+  Linkedin
 } from "lucide-react";
 
 const InteractiveHeroWidget = lazy(() => import("@/components/InteractiveHeroWidget").then(m => ({ default: m.InteractiveHeroWidget })));
@@ -370,6 +372,32 @@ const LogoStrip = () => {
   );
 };
 
+const CredibilityStrip = () => {
+  const { t } = useI18n();
+  const stats = [
+    { value: t.credibility.systems, label: t.credibility.systemsLabel },
+    { value: t.credibility.industries, label: t.credibility.industriesLabel },
+    { value: t.credibility.conversion, label: t.credibility.conversionLabel },
+  ];
+
+  return (
+    <section className="py-8 px-4 md:px-8">
+      <div className="max-w-4xl mx-auto">
+        <Reveal>
+          <div className="grid grid-cols-3 gap-4 md:gap-8">
+            {stats.map((stat, i) => (
+              <div key={i} className="text-center">
+                <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--teal))]">{stat.value}</div>
+                <div className="text-xs sm:text-sm text-muted-foreground mt-1">{stat.label}</div>
+              </div>
+            ))}
+          </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+};
+
 const Services = () => {
   const { t } = useI18n();
   
@@ -672,17 +700,89 @@ const Contact = () => {
   );
 };
 
+const FAQ = () => {
+  const { t } = useI18n();
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+
+  return (
+    <section id="faq" className="py-12 px-4 md:px-8 bg-[hsl(var(--paper))]">
+      <div className="max-w-3xl mx-auto">
+        <Reveal>
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-2 leading-tight">{t.faq.title}</h2>
+          <p className="text-muted-foreground mb-8">{t.faq.subtitle}</p>
+        </Reveal>
+        <div className="space-y-3">
+          {t.faq.items.map((item, i) => (
+            <Reveal key={i} delay={i * 50}>
+              <div className="bg-white rounded-xl border border-border overflow-hidden">
+                <button
+                  data-testid={`faq-toggle-${i}`}
+                  onClick={() => setOpenIndex(openIndex === i ? null : i)}
+                  className="w-full flex items-center justify-between p-5 text-left hover:bg-gray-50 transition-colors"
+                >
+                  <span className="font-semibold text-[hsl(var(--ink))] pr-4">{item.question}</span>
+                  <ChevronDown className={cn("w-5 h-5 text-muted-foreground shrink-0 transition-transform duration-200", openIndex === i && "rotate-180")} />
+                </button>
+                <div className={cn("overflow-hidden transition-all duration-300", openIndex === i ? "max-h-60 opacity-100" : "max-h-0 opacity-0")}>
+                  <p className="px-5 pb-5 text-muted-foreground leading-relaxed">{item.answer}</p>
+                </div>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
 const Footer = () => {
+  const { t } = useI18n();
   const year = new Date().getFullYear();
+
+  const scrollToSection = (id: string) => {
+    const element = document.getElementById(id);
+    if (element) {
+      element.scrollIntoView({ behavior: "smooth" });
+    }
+  };
+
   return (
     <footer className="py-12 px-4 md:px-8 border-t border-border bg-white">
-      <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-center gap-6">
-        <div className="flex items-center gap-3">
-          <img src="/assets/im3-logo.jpg" alt="IM3 Systems" className="h-8 w-auto object-contain rounded-lg" />
+      <div className="max-w-7xl mx-auto">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
+          <div className="md:col-span-1">
+            <img src="/assets/im3-logo.jpg" alt="IM3 Systems" className="h-10 w-auto object-contain rounded-lg mb-4" />
+            <p className="text-sm text-muted-foreground">
+              <a href="mailto:info@im3systems.com" className="hover:text-[hsl(var(--teal))] transition-colors">info@im3systems.com</a>
+            </p>
+          </div>
+          <div>
+            <h4 className="font-semibold text-sm text-[hsl(var(--ink))] mb-3">Navegación</h4>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li><button onClick={() => scrollToSection('que')} className="hover:text-[hsl(var(--teal))] transition-colors">{t.footer.whatWeDo}</button></li>
+              <li><button onClick={() => scrollToSection('como')} className="hover:text-[hsl(var(--teal))] transition-colors">{t.footer.howWeWork}</button></li>
+              <li><button onClick={() => scrollToSection('para')} className="hover:text-[hsl(var(--teal))] transition-colors">{t.footer.forWhom}</button></li>
+              <li><button onClick={() => scrollToSection('faq')} className="hover:text-[hsl(var(--teal))] transition-colors">{t.footer.faq}</button></li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="font-semibold text-sm text-[hsl(var(--ink))] mb-3">Acciones</h4>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li><button onClick={() => window.open("https://calendar.im3systems.com", "_blank")} className="hover:text-[hsl(var(--teal))] transition-colors">{t.footer.diagnosis}</button></li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="font-semibold text-sm text-[hsl(var(--ink))] mb-3">Social</h4>
+            <ul className="space-y-2 text-sm text-muted-foreground">
+              <li>
+                <a href="https://www.linkedin.com/company/im3-systems" target="_blank" rel="noopener noreferrer" className="hover:text-[hsl(var(--teal))] transition-colors flex items-center gap-2">
+                  <Linkedin className="w-4 h-4" /> LinkedIn
+                </a>
+              </li>
+            </ul>
+          </div>
         </div>
-        <div className="flex flex-col md:flex-row items-center gap-4 text-sm text-muted-foreground">
-          <a href="mailto:info@im3systems.com" className="hover:text-[hsl(var(--teal))] transition-colors">info@im3systems.com</a>
-          <span className="hidden md:inline">•</span>
+        <div className="pt-6 border-t border-border flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
           <span>© {year} IM3 Systems</span>
         </div>
       </div>
@@ -699,12 +799,14 @@ export default function Home() {
       <main>
         <Hero />
         <LogoStrip />
+        <CredibilityStrip />
         <Services />
         <LeadMagnet />
         <Process />
         <TargetAudience />
         <Testimonials />
         <Offer />
+        <FAQ />
         <Contact />
       </main>
       <Footer />

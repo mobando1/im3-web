@@ -92,12 +92,31 @@ Preferred communication style: Simple, everyday language.
 - **Hook**: `useI18n()` returns `{ language, setLanguage, t }` where `t` is the translations object
 
 ### Translation Structure
-- Translations are organized by section: nav, hero, priorities, services, process, targetAudience, testimonials, offer, contact, footer
+- Translations are organized by section: nav, hero, priorities, services, process, targetAudience, testimonials, offer, faq, contact, footer, credibility, logoStrip, leadMagnet
 - Natural adaptations per language (not literal translations)
 
 ### Design Decisions
 - **Widget remains in English**: The InteractiveHeroWidget uses English text intentionally. Technical dashboards and operational software interfaces typically use English even in Spanish-speaking markets, maintaining authenticity as a professional software demo.
 - **Language toggle**: Available in header navigation for desktop and mobile views
+- **Benefit-focused copy**: Hero and CTAs focus on client outcomes (reduce hours, errors, chaos) rather than technical descriptions
+- **Unified CTA**: All CTAs use "Solicitar diagnóstico gratis" / "Request free diagnosis" for consistency and reduced friction
+- **Testimonials with metrics**: All testimonials include specific, quantifiable results
+
+### Page Sections (in order)
+1. Header (fixed nav with language toggle)
+2. Hero (benefit-focused headline + interactive widget)
+3. LogoStrip (client logo carousel)
+4. CredibilityStrip (12+ systems, 6 industries, 100% conversion)
+5. Services (3 service cards)
+6. LeadMagnet (free diagnosis CTA)
+7. Process (5-step methodology)
+8. TargetAudience (fits/doesn't fit cards)
+9. Testimonials (3 client quotes with metrics)
+10. Offer (2 engagement models)
+11. FAQ (5 expandable questions)
+12. Contact (final CTA)
+13. Footer (nav links, LinkedIn, email)
 
 ### Calendar CTAs
-- All "schedule call" CTAs link to: https://calendar.im3systems.com
+- All CTAs link to: https://calendar.im3systems.com
+- Unified label: "Solicitar diagnóstico gratis" (ES) / "Request free diagnosis" (EN)

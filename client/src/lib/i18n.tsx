@@ -8,15 +8,15 @@ const translations = {
       whatWeDo: "Qué hacemos",
       howWeWork: "Cómo trabajamos",
       forWhom: "Para quién",
-      requestDiagnosis: "Solicitar diagnóstico",
+      requestDiagnosis: "Solicitar diagnóstico gratis",
       spanish: "Español",
       english: "English",
     },
     hero: {
       badge: "IM3 · SISTEMAS OPERATIVOS",
-      headline: "Sistemas confiables para operar sin fricción",
-      subheadline: "Construimos aplicaciones internas y automatizaciones conectadas que ordenan la operación diaria de una empresa.",
-      cta: "Agendar conversación",
+      headline: "Reduce horas de trabajo manual, errores y caos operativo",
+      subheadline: "Diseñamos sistemas a tu medida para que tu equipo deje de depender de WhatsApp y Excel. PYMEs que operaban en hojas de cálculo ahora cierran mes en horas, no días.",
+      cta: "Solicitar diagnóstico gratis",
       secondary: "Ver qué hacemos",
       badges: {
         internalApps: "Apps internas",
@@ -40,6 +40,14 @@ const translations = {
     logoStrip: {
       title: "Empresas que confían en sistemas IM3",
     },
+    credibility: {
+      systems: "12+",
+      systemsLabel: "Sistemas implementados",
+      industries: "6",
+      industriesLabel: "Industrias",
+      conversion: "100%",
+      conversionLabel: "De diagnósticos continúan a implementación",
+    },
     services: {
       title: "Sistemas internos que ordenan la operación",
       subtitle: "Construimos soluciones a medida para reducir fricción, centralizar información y ejecutar mejor.",
@@ -54,7 +62,7 @@ const translations = {
       badge: "SIN COSTO",
       title: "Diagnóstico operativo inicial",
       description: "Analizamos tu operación, detectamos cuellos de botella y te entregamos un mapa claro de qué sistema implementar, por qué y en qué orden.",
-      cta: "Solicitar diagnóstico",
+      cta: "Solicitar diagnóstico gratis",
     },
     process: {
       title: "Estructura antes de velocidad",
@@ -90,8 +98,8 @@ const translations = {
       subtitle: "Casos reales de impacto operativo.",
       reviews: [
         { quote: "Logramos reducir el tiempo de cierre de 4 días a 4 horas.", author: "Laura Méndez", role: "Operaciones · Bodega 72" },
-        { quote: "Por fin tenemos visibilidad real del inventario en tiempo real.", author: "Carlos Rojas", role: "Admin · CasaMesa" },
-        { quote: "La implementación fue ordenada y el equipo adoptó la herramienta rápido.", author: "Paula Andrade", role: "Dirección · Quanta" },
+        { quote: "Pasamos de perder 8% del inventario por errores manuales a menos del 0.5%. Por fin tenemos visibilidad real.", author: "Carlos Rojas", role: "Admin · CasaMesa" },
+        { quote: "En 2 semanas el equipo ya operaba sin soporte. Antes tardábamos meses en adoptar herramientas nuevas.", author: "Paula Andrade", role: "Dirección · Quanta" },
       ],
     },
     offer: {
@@ -107,16 +115,33 @@ const translations = {
       strategicGuidanceBenefit: "Ideal si ya tienes capacidad técnica pero te falta dirección.",
       noSalesPressure: "Sin presión de venta",
       noSalesPressureDesc: "El objetivo del diagnóstico es entender tu operación. Si podemos ayudar, te presentaremos estas opciones. Si no, te daremos una recomendación honesta.",
-      scheduleConversation: "Agendar conversación",
+      scheduleConversation: "Solicitar diagnóstico gratis",
+    },
+    faq: {
+      title: "Preguntas frecuentes",
+      subtitle: "Lo que necesitas saber antes de dar el primer paso.",
+      items: [
+        { question: "¿Cuánto toma una implementación típica?", answer: "Depende del alcance, pero un MVP funcional suele estar listo en 4 a 8 semanas. Empezamos con lo que más impacta tu operación y vamos iterando." },
+        { question: "¿Qué pasa si mi equipo no es técnico?", answer: "No necesitas equipo técnico. Diseñamos todo para que sea fácil de usar. Además, entregamos documentación y capacitación para que tu equipo opere sin depender de nosotros." },
+        { question: "¿Qué tecnologías usan?", answer: "Usamos las herramientas que mejor se adapten a tu caso: desde apps web modernas hasta integraciones con las plataformas que ya usas (Google Sheets, CRMs, POS, etc.)." },
+        { question: "¿Cuál es el rango de inversión?", answer: "Cada proyecto es diferente. El diagnóstico inicial es gratuito y al final te entregamos una propuesta clara con alcance, tiempos y costos definidos. Sin sorpresas." },
+        { question: "¿El diagnóstico tiene algún costo o compromiso?", answer: "No. El diagnóstico es 100% gratuito y sin compromiso. Si después de entender tu operación podemos ayudar, te presentamos opciones. Si no, te damos una recomendación honesta." },
+      ],
     },
     contact: {
       title: "¿Dónde se está perdiendo tiempo o control en tu operación?",
       subtitle: "Una conversación corta para entender tu caso y proponer el siguiente paso.",
-      scheduleCall: "Agendar una llamada",
+      scheduleCall: "Solicitar diagnóstico gratis",
       backToTop: "Volver arriba",
     },
     footer: {
       copyright: "IM3 Systems",
+      whatWeDo: "Qué hacemos",
+      howWeWork: "Cómo trabajamos",
+      forWhom: "Para quién",
+      diagnosis: "Diagnóstico gratis",
+      faq: "Preguntas frecuentes",
+      privacyPolicy: "Política de privacidad",
     },
   },
   en: {
@@ -124,15 +149,15 @@ const translations = {
       whatWeDo: "What we do",
       howWeWork: "How we work",
       forWhom: "Who it's for",
-      requestDiagnosis: "Request diagnosis",
+      requestDiagnosis: "Request free diagnosis",
       spanish: "Español",
       english: "English",
     },
     hero: {
       badge: "IM3 · OPERATIONAL SYSTEMS",
-      headline: "Reliable systems for frictionless operations",
-      subheadline: "We build internal apps and connected automations that bring order to your company's daily operations.",
-      cta: "Schedule a call",
+      headline: "Cut manual hours, errors, and operational chaos",
+      subheadline: "We build custom systems so your team stops relying on WhatsApp and spreadsheets. SMBs that ran on Excel now close their month in hours, not days.",
+      cta: "Request free diagnosis",
       secondary: "See what we do",
       badges: {
         internalApps: "Internal apps",
@@ -156,6 +181,14 @@ const translations = {
     logoStrip: {
       title: "Companies that trust IM3 systems",
     },
+    credibility: {
+      systems: "12+",
+      systemsLabel: "Systems implemented",
+      industries: "6",
+      industriesLabel: "Industries",
+      conversion: "100%",
+      conversionLabel: "Of assessments lead to implementation",
+    },
     services: {
       title: "Internal systems that bring order to operations",
       subtitle: "We build tailored solutions to reduce friction, centralize information, and improve execution.",
@@ -170,7 +203,7 @@ const translations = {
       badge: "FREE",
       title: "Initial operations assessment",
       description: "We analyze your operations, identify bottlenecks, and deliver a clear roadmap of what system to implement, why, and in what order.",
-      cta: "Request assessment",
+      cta: "Request free assessment",
     },
     process: {
       title: "Structure before speed",
@@ -206,8 +239,8 @@ const translations = {
       subtitle: "Real operational impact cases.",
       reviews: [
         { quote: "We reduced our closing time from 4 days to 4 hours.", author: "Laura Méndez", role: "Operations · Bodega 72" },
-        { quote: "We finally have real-time inventory visibility.", author: "Carlos Rojas", role: "Admin · CasaMesa" },
-        { quote: "The implementation was organized and our team adopted it quickly.", author: "Paula Andrade", role: "Director · Quanta" },
+        { quote: "We went from losing 8% of inventory due to manual errors to under 0.5%. We finally have real visibility.", author: "Carlos Rojas", role: "Admin · CasaMesa" },
+        { quote: "In 2 weeks our team was operating without support. Before, it took us months to adopt new tools.", author: "Paula Andrade", role: "Director · Quanta" },
       ],
     },
     offer: {
@@ -223,16 +256,33 @@ const translations = {
       strategicGuidanceBenefit: "Ideal if you have technical capacity but need direction.",
       noSalesPressure: "No sales pressure",
       noSalesPressureDesc: "The goal of the assessment is to understand your operations. If we can help, we'll present these options. If not, we'll give you an honest recommendation.",
-      scheduleConversation: "Schedule a conversation",
+      scheduleConversation: "Request free diagnosis",
+    },
+    faq: {
+      title: "Frequently asked questions",
+      subtitle: "What you need to know before taking the first step.",
+      items: [
+        { question: "How long does a typical implementation take?", answer: "It depends on scope, but a functional MVP is usually ready in 4 to 8 weeks. We start with what impacts your operation most and iterate from there." },
+        { question: "What if my team isn't technical?", answer: "You don't need a technical team. We design everything to be easy to use. Plus, we deliver documentation and training so your team can operate without depending on us." },
+        { question: "What technologies do you use?", answer: "We use whatever tools best fit your case: from modern web apps to integrations with platforms you already use (Google Sheets, CRMs, POS, etc.)." },
+        { question: "What's the investment range?", answer: "Every project is different. The initial assessment is free, and at the end we deliver a clear proposal with defined scope, timeline, and costs. No surprises." },
+        { question: "Does the assessment cost anything or have any commitment?", answer: "No. The assessment is 100% free with no commitment. If after understanding your operation we can help, we present options. If not, we give you an honest recommendation." },
+      ],
     },
     contact: {
       title: "Where is your operation losing time or control?",
       subtitle: "A short conversation to understand your case and propose the next step.",
-      scheduleCall: "Schedule a call",
+      scheduleCall: "Request free diagnosis",
       backToTop: "Back to top",
     },
     footer: {
       copyright: "IM3 Systems",
+      whatWeDo: "What we do",
+      howWeWork: "How we work",
+      forWhom: "Who it's for",
+      diagnosis: "Free diagnosis",
+      faq: "FAQ",
+      privacyPolicy: "Privacy policy",
     },
   },
 };
