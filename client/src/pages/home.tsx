@@ -859,6 +859,30 @@ const Footer = () => {
   );
 };
 
+const SectionDivider = ({ variant = "default" }: { variant?: "default" | "teal" | "dot" }) => {
+  if (variant === "dot") {
+    return (
+      <div className="flex items-center justify-center py-2">
+        <div className="h-px w-16 bg-gradient-to-r from-transparent to-border" />
+        <div className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--teal))]/40 mx-3" />
+        <div className="h-px w-16 bg-gradient-to-l from-transparent to-border" />
+      </div>
+    );
+  }
+  if (variant === "teal") {
+    return (
+      <div className="flex items-center justify-center py-2">
+        <div className="h-px w-full max-w-xs bg-gradient-to-r from-transparent via-[hsl(var(--teal))]/20 to-transparent" />
+      </div>
+    );
+  }
+  return (
+    <div className="flex items-center justify-center py-2">
+      <div className="h-px w-full max-w-xs bg-gradient-to-r from-transparent via-border to-transparent" />
+    </div>
+  );
+};
+
 // --- Main Page Component ---
 
 export default function Home() {
@@ -868,14 +892,23 @@ export default function Home() {
       <main>
         <Hero />
         <LogoStrip />
+        <SectionDivider variant="dot" />
         <CredibilityStrip />
+        <SectionDivider variant="teal" />
         <Services />
+        <SectionDivider variant="dot" />
         <LeadMagnet />
+        <SectionDivider variant="teal" />
         <Process />
+        <SectionDivider variant="dot" />
         <TargetAudience />
+        <SectionDivider variant="teal" />
         <Testimonials />
+        <SectionDivider variant="dot" />
         <Offer />
+        <SectionDivider variant="teal" />
         <FAQ />
+        <SectionDivider variant="dot" />
         <Contact />
       </main>
       <Footer />
