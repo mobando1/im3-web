@@ -14,8 +14,8 @@ const translations = {
     },
     hero: {
       badge: "IM3 · SISTEMAS OPERATIVOS",
-      headline: "Reduce horas de trabajo manual, errores y caos operativo",
-      subheadline: "Diseñamos sistemas a tu medida para que tu equipo deje de depender de WhatsApp y Excel. PYMEs que operaban en hojas de cálculo ahora cierran mes en horas, no días.",
+      headline: "Sistemas confiables para operar sin fricción",
+      subheadline: "Reduce horas de trabajo manual, errores y caos operativo con sistemas hechos a tu medida.",
       cta: "Solicitar diagnóstico gratis",
       secondary: "Ver qué hacemos",
       badges: {
@@ -155,8 +155,8 @@ const translations = {
     },
     hero: {
       badge: "IM3 · OPERATIONAL SYSTEMS",
-      headline: "Cut manual hours, errors, and operational chaos",
-      subheadline: "We build custom systems so your team stops relying on WhatsApp and spreadsheets. SMBs that ran on Excel now close their month in hours, not days.",
+      headline: "Reliable systems for frictionless operations",
+      subheadline: "Cut manual hours, errors, and operational chaos with custom-built systems tailored to your business.",
       cta: "Request free diagnosis",
       secondary: "See what we do",
       badges: {
