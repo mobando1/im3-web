@@ -69,9 +69,9 @@ const translations = {
       title: "Cómo trabajamos contigo",
       steps: [
         { num: "01", title: "Diagnóstico estratégico", text: "Analizamos tu operación, entendemos tu negocio, detectamos oportunidades y puntos críticos, definimos el sistema, procesos y herramientas que realmente necesitas." },
-        { num: "02", title: "Desarrollo de la solución", text: "Construimos el sistema adaptado a tu negocio." },
-        { num: "03", title: "Implementación", text: "Lo integramos en tu operación para que funcione en la práctica." },
-        { num: "04", title: "Entrega y acompañamiento", text: "Te dejamos todo claro, documentado y listo para crecer." },
+        { num: "02", title: "Desarrollo de la solución", text: "Diseñamos y construimos el sistema a medida — interfaces, automatizaciones, integraciones y flujos adaptados a cómo funciona tu equipo en el día a día." },
+        { num: "03", title: "Implementación", text: "Lo integramos directamente en tu operación real, migramos datos, conectamos herramientas existentes y validamos que todo funcione antes de salir en vivo." },
+        { num: "04", title: "Entrega y acompañamiento", text: "Te dejamos todo documentado, entrenamos a tu equipo, y te acompañamos las primeras semanas para asegurar una adopción sin fricciones." },
       ],
     },
     targetAudience: {
@@ -209,9 +209,9 @@ const translations = {
       title: "How we work with you",
       steps: [
         { num: "01", title: "Strategic diagnosis", text: "We analyze your operation, understand your business, detect opportunities and critical points, and define the system, processes, and tools you truly need." },
-        { num: "02", title: "Solution development", text: "We build the system tailored to your business." },
-        { num: "03", title: "Implementation", text: "We integrate it into your operation so it works in practice." },
-        { num: "04", title: "Delivery & support", text: "We leave everything clear, documented, and ready to grow." },
+        { num: "02", title: "Solution development", text: "We design and build the system to fit — interfaces, automations, integrations, and workflows adapted to how your team operates day to day." },
+        { num: "03", title: "Implementation", text: "We integrate it directly into your real operation, migrate data, connect existing tools, and validate everything works before going live." },
+        { num: "04", title: "Delivery & support", text: "We leave everything documented, train your team, and walk alongside you for the first weeks to ensure frictionless adoption." },
       ],
     },
     targetAudience: {

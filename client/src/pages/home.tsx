@@ -575,31 +575,62 @@ const LeadMagnet = () => {
   );
 };
 
+const ProcessStep = ({ step, index, total }: { step: { num: string; title: string; text: string }; index: number; total: number }) => {
+  const [hovered, setHovered] = useState(false);
+
+  return (
+    <div 
+      className="group relative"
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <div className="flex items-start gap-5">
+        <div className="flex flex-col items-center shrink-0">
+          <div className={cn(
+            "w-12 h-12 rounded-xl flex items-center justify-center font-display font-bold text-lg transition-all duration-300",
+            hovered 
+              ? "bg-[hsl(var(--teal))] text-white shadow-lg shadow-teal-500/20 scale-110" 
+              : "bg-[#0F2438] text-white"
+          )}>
+            {step.num}
+          </div>
+          {index < total - 1 && (
+            <div className="w-px h-full min-h-[24px] bg-gradient-to-b from-[#0F2438]/30 to-transparent mt-2" />
+          )}
+        </div>
+        <div className="pb-8 flex-1">
+          <h4 className={cn(
+            "text-lg sm:text-xl font-bold transition-colors duration-300 mb-1",
+            hovered ? "text-[hsl(var(--teal))]" : "text-[hsl(var(--ink))]"
+          )}>{step.title}</h4>
+          <div className={cn(
+            "overflow-hidden transition-all duration-400 ease-out",
+            hovered ? "max-h-40 opacity-100 mt-2" : "max-h-0 opacity-0"
+          )}>
+            <p className="text-sm text-muted-foreground leading-relaxed">{step.text}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const Process = () => {
   const { t } = useI18n();
 
   return (
     <section id="como" className="py-6 sm:py-8 px-4 md:px-8 bg-[hsl(var(--paper))]">
-      <div className="max-w-7xl mx-auto">
-        <div className="max-w-3xl mb-8">
+      <div className="max-w-3xl mx-auto">
+        <div className="mb-10">
           <Reveal>
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] leading-tight">{t.process.title}</h2>
           </Reveal>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+        <div>
           {t.process.steps.map((step: { num: string; title: string; text: string }, i: number) => (
             <Reveal key={i} delay={i * 100}>
-              <div className="bg-white p-6 rounded-2xl border border-border h-full relative overflow-hidden group hover:shadow-md hover:border-[hsl(var(--teal))]/30 transition-all">
-                <div className="text-6xl font-display font-bold text-gray-100 absolute -right-4 -top-4 group-hover:text-teal-50 transition-colors">{step.num}</div>
-                <div className="relative z-10">
-                  <div className="w-8 h-8 rounded-full bg-[hsl(var(--teal))] text-white flex items-center justify-center text-xs font-bold mb-4">
-                    {i + 1}
-                  </div>
-                  <h4 className="font-bold text-[hsl(var(--ink))] mb-2">{step.title}</h4>
-                  <p className="text-sm text-muted-foreground leading-relaxed">{step.text}</p>
-                </div>
-              </div>
+              <ProcessStep step={step} index={i} total={t.process.steps.length} />
             </Reveal>
           ))}
         </div>
