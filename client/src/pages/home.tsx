@@ -211,7 +211,7 @@ const PrioritiesCard = () => {
               </div>
               <p className="text-xs text-gray-500 leading-relaxed max-w-lg pl-[19px]">{t.priorities.subtitle}</p>
             </div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {items.map((item, i) => {
                 const Icon = item.icon;
                 const isActive = active === i;
@@ -220,37 +220,48 @@ const PrioritiesCard = () => {
                     key={i}
                     data-testid={`priority-${i}`}
                     className={cn(
-                      "relative text-left rounded-xl p-4 transition-all duration-300 cursor-pointer border",
+                      "priority-card relative text-left rounded-lg px-3 py-2.5 transition-all duration-300 cursor-pointer border overflow-hidden",
                       isActive
-                        ? "bg-white/10 border-[hsl(var(--teal))]/40 shadow-lg shadow-teal-900/20"
-                        : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.07] hover:border-white/10"
+                        ? "bg-white/10 border-[hsl(var(--teal))]/40"
+                        : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.07]"
                     )}
                     onMouseEnter={() => setActive(i)}
                     onMouseLeave={() => setActive(null)}
                     onClick={() => setActive(isActive ? null : i)}
                   >
-                    <div className={cn(
-                      "w-10 h-10 rounded-lg flex items-center justify-center mb-3 transition-all duration-300",
-                      isActive
-                        ? "bg-[hsl(var(--teal))] text-white shadow-lg shadow-teal-500/30"
-                        : "bg-white/10 text-gray-400"
-                    )}>
-                      <Icon className="w-5 h-5" />
+                    {!isActive && (
+                      <div className="absolute inset-0 priority-shimmer pointer-events-none" />
+                    )}
+                    <div className="flex items-center gap-2">
+                      <h4 className={cn(
+                        "font-semibold text-xs transition-colors duration-300",
+                        isActive ? "text-white" : "text-gray-300"
+                      )}>{item.title}</h4>
+                      <Icon className={cn(
+                        "w-3.5 h-3.5 shrink-0 transition-all duration-300",
+                        isActive ? "text-[hsl(var(--teal))]" : "text-gray-500"
+                      )} />
                     </div>
-                    <h4 className={cn(
-                      "font-semibold text-sm mb-1 transition-colors duration-300",
-                      isActive ? "text-white" : "text-gray-300"
-                    )}>{item.title}</h4>
                     <div className={cn(
                       "overflow-hidden transition-all duration-300 ease-out",
-                      isActive ? "max-h-24 opacity-100" : "max-h-0 opacity-0"
+                      isActive ? "max-h-20 opacity-100 mt-1.5" : "max-h-0 opacity-0"
                     )}>
-                      <p className="text-xs text-gray-400 leading-relaxed">{item.desc}</p>
+                      <p className="text-[11px] text-gray-400 leading-relaxed">{item.desc}</p>
                     </div>
                   </button>
                 );
               })}
             </div>
+            <style>{`
+              @keyframes shimmer {
+                0% { transform: translateX(-100%); }
+                100% { transform: translateX(100%); }
+              }
+              .priority-shimmer {
+                background: linear-gradient(90deg, transparent 0%, rgba(47,164,169,0.08) 50%, transparent 100%);
+                animation: shimmer 3s ease-in-out infinite;
+              }
+            `}</style>
           </div>
         </div>
       </Reveal>
