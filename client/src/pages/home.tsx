@@ -204,11 +204,12 @@ const PrioritiesCard = () => {
         <div className="bg-[hsl(var(--ink))] rounded-2xl shadow-2xl border border-white/10 overflow-hidden relative">
           <div className="absolute inset-0 bg-gradient-to-br from-[hsl(var(--teal))]/5 via-transparent to-blue-600/5 pointer-events-none" />
           <div className="relative p-6 sm:p-8">
-            <div className="flex items-center justify-between mb-6">
-              <div>
-                <h3 className="text-lg font-bold text-white">{t.priorities.title}</h3>
-                <p className="text-sm text-gray-400 mt-1 max-w-md">{t.priorities.subtitle}</p>
+            <div className="mb-5">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-1 h-5 rounded-full bg-[hsl(var(--teal))]" />
+                <h3 className="text-base font-bold text-white tracking-tight">{t.priorities.title}</h3>
               </div>
+              <p className="text-xs text-gray-500 leading-relaxed max-w-lg pl-[19px]">{t.priorities.subtitle}</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {items.map((item, i) => {
