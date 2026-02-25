@@ -283,6 +283,42 @@ const Hero = () => {
         </div>
       </div>
       
+      {/* "Lo que priorizamos" Card below hero */}
+      <div className="max-w-4xl mx-auto -mt-6 md:-mt-12 relative z-20 px-4">
+        <Reveal delay={600}>
+          <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-xl border border-border/50">
+            <div className="flex flex-col md:flex-row gap-8 items-start md:items-center">
+              <div className="md:w-1/3 border-b md:border-b-0 md:border-r border-border pb-6 md:pb-0 md:pr-8">
+                <h3 className="text-xl font-bold text-[hsl(var(--ink))] mb-2">{t.priorities.title}</h3>
+                <p className="text-sm text-muted-foreground">{t.priorities.subtitle}</p>
+              </div>
+              <div className="md:w-2/3 grid grid-cols-1 sm:grid-cols-3 gap-6">
+                <div>
+                  <div className="w-8 h-8 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center mb-3 text-[hsl(var(--teal))]">
+                    <Check className="w-4 h-4" />
+                  </div>
+                  <h4 className="font-semibold text-sm mb-1">{t.priorities.clearExecution}</h4>
+                  <p className="text-xs text-muted-foreground">{t.priorities.clearExecutionDesc}</p>
+                </div>
+                <div>
+                  <div className="w-8 h-8 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center mb-3 text-[hsl(var(--teal))]">
+                    <Layout className="w-4 h-4" />
+                  </div>
+                  <h4 className="font-semibold text-sm mb-1">{t.priorities.structure}</h4>
+                  <p className="text-xs text-muted-foreground">{t.priorities.structureDesc}</p>
+                </div>
+                <div>
+                  <div className="w-8 h-8 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center mb-3 text-[hsl(var(--teal))]">
+                    <ShieldCheck className="w-4 h-4" />
+                  </div>
+                  <h4 className="font-semibold text-sm mb-1">{t.priorities.maintainable}</h4>
+                  <p className="text-xs text-muted-foreground">{t.priorities.maintainableDesc}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </Reveal>
+      </div>
     </section>
   );
 };
@@ -389,91 +425,6 @@ const CredibilityStrip = () => {
               <div className="text-xs sm:text-sm text-muted-foreground mt-1">{stat.label}</div>
             </div>
           ))}
-        </div>
-      </div>
-    </section>
-  );
-};
-
-const PrioritiesDetail = () => {
-  const { t } = useI18n();
-  const sectionRef = useRef<HTMLDivElement>(null);
-  const [isActive, setIsActive] = useState(false);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsActive(true);
-          observer.disconnect();
-        }
-      },
-      { threshold: 0.2 }
-    );
-    if (sectionRef.current) observer.observe(sectionRef.current);
-    return () => observer.disconnect();
-  }, []);
-
-  const steps = [
-    { phase: "Orden", pillar: t.priorities.clearExecution, desc: t.priorities.clearExecutionDesc, icon: Check },
-    { phase: "Claridad", pillar: t.priorities.structure, desc: t.priorities.structureDesc, icon: Layout },
-    { phase: "Resultados", pillar: t.priorities.maintainable, desc: t.priorities.maintainableDesc, icon: ShieldCheck },
-  ];
-
-  return (
-    <section className="py-12 px-4 md:px-8" ref={sectionRef}>
-      <div className="max-w-5xl mx-auto">
-        <div className="bg-[hsl(var(--ink))] rounded-[24px] p-8 md:p-12 overflow-hidden relative">
-          <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-[hsl(var(--teal))] opacity-[0.06] blur-[120px] rounded-full pointer-events-none -translate-y-1/3 translate-x-1/4"></div>
-
-          <div className="relative z-10">
-            <div className="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-10">
-              <h3 className="text-2xl md:text-3xl font-display font-bold text-white">{t.priorities.title}</h3>
-              <div className="flex items-center gap-2">
-                {steps.map((step, i) => (
-                  <div key={i} className="flex items-center gap-2">
-                    <span
-                      className={cn(
-                        "text-xs font-mono font-medium tracking-wider uppercase transition-all duration-700",
-                        isActive ? "text-[hsl(var(--teal))]" : "text-gray-600"
-                      )}
-                      style={{ transitionDelay: `${i * 250}ms` }}
-                    >
-                      {step.phase}
-                    </span>
-                    {i < steps.length - 1 && (
-                      <ArrowRight
-                        className={cn(
-                          "w-3 h-3 transition-all duration-500",
-                          isActive ? "text-[hsl(var(--teal))]/50" : "text-gray-700"
-                        )}
-                        style={{ transitionDelay: `${200 + i * 250}ms` }}
-                      />
-                    )}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="grid md:grid-cols-3 gap-5">
-              {steps.map((step, i) => (
-                <div
-                  key={i}
-                  className={cn(
-                    "bg-white/[0.05] border border-white/[0.07] rounded-2xl p-6 transition-all duration-700 ease-out hover:bg-white/[0.09] hover:border-[hsl(var(--teal))]/20 group",
-                    isActive ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
-                  )}
-                  style={{ transitionDelay: `${300 + i * 150}ms` }}
-                >
-                  <div className="w-10 h-10 rounded-xl bg-[hsl(var(--teal))]/10 flex items-center justify-center text-[hsl(var(--teal))] mb-5 group-hover:bg-[hsl(var(--teal))]/20 transition-colors">
-                    <step.icon className="w-5 h-5" />
-                  </div>
-                  <h4 className="font-semibold text-white mb-2">{step.pillar}</h4>
-                  <p className="text-sm text-gray-400 leading-relaxed">{step.desc}</p>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     </section>
@@ -882,7 +833,6 @@ export default function Home() {
         <Hero />
         <LogoStrip />
         <CredibilityStrip />
-        <PrioritiesDetail />
         <Services />
         <LeadMagnet />
         <Process />
