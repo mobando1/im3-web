@@ -29,7 +29,7 @@ const translations = {
     },
     priorities: {
       title: "Lo que priorizamos",
-      subtitle: "Orden → claridad → ejecución. Tecnología al servicio de la operación, no al revés.",
+      subtitle: "Orden → claridad → ejecución. Tecnología al servicio de la operación.",
       clearExecution: "Ejecución clara",
       clearExecutionDesc: "Alcance, entregables y criterios definidos.",
       structure: "Estructura",
