@@ -271,7 +271,7 @@ const Hero = () => {
   ];
 
   return (
-    <section className="pt-20 pb-12 px-4 md:px-8">
+    <section className="pt-16 pb-6 px-4 md:px-8">
       <div className="max-w-7xl mx-auto bg-[hsl(var(--ink))] rounded-[32px] overflow-hidden text-white relative shadow-2xl">
         {/* Abstract Background Elements */}
         <div className="absolute inset-0 opacity-20 mix-blend-soft-light" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.7\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")' }}></div>
@@ -379,7 +379,7 @@ const LogoStrip = () => {
   );
   
   return (
-    <section className="py-12 overflow-hidden bg-[hsl(var(--paper))]">
+    <section className="py-6 overflow-hidden bg-[hsl(var(--paper))]">
       <div className="max-w-7xl mx-auto px-8 mb-8 text-center">
         <div className="flex items-center justify-center gap-6">
           <div className="h-px flex-1 max-w-24 bg-gradient-to-r from-transparent to-[hsl(var(--teal))]/30" />
@@ -450,7 +450,7 @@ const CredibilityStrip = () => {
   ];
 
   return (
-    <section className="py-8 px-4 md:px-8">
+    <section className="py-4 px-4 md:px-8">
       <div className="max-w-4xl mx-auto">
         <div className="grid grid-cols-3 gap-4 md:gap-8">
           {stats.map((stat, i) => (
@@ -492,7 +492,7 @@ const Services = () => {
   ];
 
   return (
-    <section id="que" className="py-10 sm:py-12 px-4 md:px-8">
+    <section id="que" className="py-6 sm:py-8 px-4 md:px-8">
       <div className="max-w-7xl mx-auto">
         <div className="max-w-3xl mb-8">
           <Reveal>
@@ -523,7 +523,7 @@ const LeadMagnet = () => {
   const { t } = useI18n();
   
   return (
-    <section id="diagnostico" className="py-12 px-4 md:px-8">
+    <section id="diagnostico" className="py-6 px-4 md:px-8">
       <Reveal>
         <div className="max-w-5xl mx-auto bg-gradient-to-r from-teal-50 to-blue-50 rounded-3xl p-8 md:p-12 border border-teal-100 flex flex-col md:flex-row items-center justify-between gap-8 shadow-sm">
           <div className="md:w-2/3">
@@ -551,7 +551,7 @@ const Process = () => {
   const { t } = useI18n();
 
   return (
-    <section id="como" className="py-10 sm:py-12 px-4 md:px-8 bg-[hsl(var(--paper))]">
+    <section id="como" className="py-6 sm:py-8 px-4 md:px-8 bg-[hsl(var(--paper))]">
       <div className="max-w-7xl mx-auto">
         <div className="text-center max-w-2xl mx-auto mb-8">
           <Reveal>
@@ -585,7 +585,7 @@ const TargetAudience = () => {
   const { t } = useI18n();
   
   return (
-    <section id="para" className="py-10 sm:py-12 px-4 md:px-8">
+    <section id="para" className="py-6 sm:py-8 px-4 md:px-8">
       <div className="max-w-7xl mx-auto">
         <div className="mb-8">
           <Reveal>
@@ -637,7 +637,7 @@ const Testimonials = () => {
   const { t } = useI18n();
 
   return (
-    <section className="py-12 px-4 md:px-8 bg-[hsl(var(--paper))]">
+    <section className="py-6 sm:py-8 px-4 md:px-8 bg-[hsl(var(--paper))]">
       <div className="max-w-7xl mx-auto">
         <Reveal>
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">{t.testimonials.title}</h2>
@@ -671,7 +671,7 @@ const Offer = () => {
   const { t } = useI18n();
   
   return (
-    <section id="oferta" className="py-12 px-4 md:px-8">
+    <section id="oferta" className="py-6 sm:py-8 px-4 md:px-8">
       <div className="max-w-4xl mx-auto text-center mb-8">
          <Reveal>
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">{t.offer.title}</h2>
@@ -740,7 +740,7 @@ const Contact = () => {
   const { t } = useI18n();
   
   return (
-    <section id="contacto" className="py-16 px-4 md:px-8">
+    <section id="contacto" className="py-8 px-4 md:px-8">
       <div className="max-w-3xl mx-auto text-center">
         <Reveal>
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-6 leading-tight">
@@ -774,7 +774,7 @@ const FAQ = () => {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
-    <section id="faq" className="py-12 px-4 md:px-8 bg-[hsl(var(--paper))]">
+    <section id="faq" className="py-6 sm:py-8 px-4 md:px-8 bg-[hsl(var(--paper))]">
       <div className="max-w-3xl mx-auto">
         <Reveal>
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-2 leading-tight">{t.faq.title}</h2>
@@ -816,7 +816,7 @@ const Footer = () => {
   };
 
   return (
-    <footer className="py-12 px-4 md:px-8 border-t border-border bg-white">
+    <footer className="py-8 px-4 md:px-8 border-t border-border bg-white">
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           <div className="md:col-span-1">
