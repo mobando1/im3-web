@@ -372,27 +372,60 @@ const LogoStrip = () => {
   );
 };
 
+const AnimatedCounter = ({ value, suffix = "", prefix = "", duration = 1500 }: { value: number; suffix?: string; prefix?: string; duration?: number }) => {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [display, setDisplay] = useState(0);
+  const [hasAnimated, setHasAnimated] = useState(false);
+
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting && !hasAnimated) {
+          setHasAnimated(true);
+          observer.disconnect();
+          const start = performance.now();
+          const animate = (now: number) => {
+            const elapsed = now - start;
+            const progress = Math.min(elapsed / duration, 1);
+            const eased = 1 - Math.pow(1 - progress, 3);
+            setDisplay(Math.round(eased * value));
+            if (progress < 1) {
+              requestAnimationFrame(animate);
+            }
+          };
+          requestAnimationFrame(animate);
+        }
+      },
+      { threshold: 0.3 }
+    );
+    if (ref.current) observer.observe(ref.current);
+    return () => observer.disconnect();
+  }, [value, duration, hasAnimated]);
+
+  return <span ref={ref}>{prefix}{display}{suffix}</span>;
+};
+
 const CredibilityStrip = () => {
   const { t } = useI18n();
   const stats = [
-    { value: t.credibility.systems, label: t.credibility.systemsLabel },
-    { value: t.credibility.industries, label: t.credibility.industriesLabel },
-    { value: t.credibility.conversion, label: t.credibility.conversionLabel },
+    { num: 12, suffix: "+", label: t.credibility.systemsLabel },
+    { num: 6, suffix: "", label: t.credibility.industriesLabel },
+    { num: 100, suffix: "%", label: t.credibility.conversionLabel },
   ];
 
   return (
     <section className="py-8 px-4 md:px-8">
       <div className="max-w-4xl mx-auto">
-        <Reveal>
-          <div className="grid grid-cols-3 gap-4 md:gap-8">
-            {stats.map((stat, i) => (
-              <div key={i} className="text-center">
-                <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--teal))]">{stat.value}</div>
-                <div className="text-xs sm:text-sm text-muted-foreground mt-1">{stat.label}</div>
+        <div className="grid grid-cols-3 gap-4 md:gap-8">
+          {stats.map((stat, i) => (
+            <div key={i} className="text-center">
+              <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--teal))]">
+                <AnimatedCounter value={stat.num} suffix={stat.suffix} duration={1200 + i * 300} />
               </div>
-            ))}
-          </div>
-        </Reveal>
+              <div className="text-xs sm:text-sm text-muted-foreground mt-1">{stat.label}</div>
+            </div>
+          ))}
+        </div>
       </div>
     </section>
   );
