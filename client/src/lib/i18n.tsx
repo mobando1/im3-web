@@ -29,7 +29,8 @@ const translations = {
     },
     priorities: {
       title: "Lo que priorizamos",
-      subtitle: "Orden → claridad → resultados. Convertimos la tecnología en una herramienta práctica para mejorar tus procesos, ahorrar tiempo y hacer crecer tu empresa.",
+      subtitle: "Convertimos la tecnología en una herramienta práctica para mejorar tus procesos, ahorrar tiempo y hacer crecer tu empresa.",
+      flow: ["Orden", "Claridad", "Resultados"],
       clearExecution: "Ejecución clara",
       clearExecutionDesc: "Objetivos definidos desde el inicio para que sepas qué vas a lograr y cómo impacta tu negocio.",
       structure: "Estructura sólida",
@@ -170,7 +171,8 @@ const translations = {
     },
     priorities: {
       title: "Our priorities",
-      subtitle: "Order → clarity → results. We turn technology into a practical tool to improve your processes, save time, and grow your business.",
+      subtitle: "We turn technology into a practical tool to improve your processes, save time, and grow your business.",
+      flow: ["Order", "Clarity", "Results"],
       clearExecution: "Clear execution",
       clearExecutionDesc: "Goals defined from day one so you know what you'll achieve and how it impacts your business.",
       structure: "Solid structure",

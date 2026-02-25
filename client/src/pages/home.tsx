@@ -24,7 +24,8 @@ import {
   Gauge,
   Link2,
   Calendar,
-  Linkedin
+  Linkedin,
+  ChevronsRight
 } from "lucide-react";
 
 const InteractiveHeroWidget = lazy(() => import("@/components/InteractiveHeroWidget").then(m => ({ default: m.InteractiveHeroWidget })));
@@ -204,11 +205,23 @@ const PrioritiesCard = () => {
         <div className="bg-white rounded-2xl shadow-lg border border-border/60 overflow-hidden relative">
           <div className="absolute inset-0 bg-gradient-to-br from-[hsl(var(--teal))]/[0.03] via-transparent to-blue-50/30 pointer-events-none" />
           <div className="relative p-5 sm:p-6">
-            <div className="flex items-center gap-3 mb-3 flex-wrap sm:flex-nowrap">
-              <div className="w-1 h-4 rounded-full bg-[hsl(var(--teal))] shrink-0" />
-              <h3 className="text-sm font-bold text-[hsl(var(--ink))] tracking-tight shrink-0">{t.priorities.title}</h3>
-              <span className="hidden sm:block text-gray-300 mx-1">—</span>
-              <p className="text-xs text-muted-foreground leading-snug">{t.priorities.subtitle}</p>
+            <div className="mb-3">
+              <div className="flex items-center gap-3 mb-2">
+                <div className="w-1 h-4 rounded-full bg-[hsl(var(--teal))] shrink-0" />
+                <h3 className="text-sm font-bold text-[hsl(var(--ink))] tracking-tight">{t.priorities.title}</h3>
+                <span className="text-gray-300 mx-0.5">·</span>
+                <div className="flex items-center gap-1.5">
+                  {t.priorities.flow.map((word: string, i: number) => (
+                    <span key={i} className="flex items-center gap-1.5">
+                      <span className="text-xs font-semibold text-[hsl(var(--teal))]">{word}</span>
+                      {i < t.priorities.flow.length - 1 && (
+                        <ChevronsRight className="w-3 h-3 text-[hsl(var(--teal))]/50" />
+                      )}
+                    </span>
+                  ))}
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground leading-snug pl-[19px]">{t.priorities.subtitle}</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {items.map((item, i) => {
