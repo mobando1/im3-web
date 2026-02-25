@@ -522,22 +522,22 @@ const Services = () => {
   return (
     <section id="que" className="py-6 sm:py-8 px-4 md:px-8">
       <div className="max-w-7xl mx-auto">
-        <div className="max-w-3xl mb-8">
+        <div className="text-center max-w-2xl mx-auto mb-10">
           <Reveal>
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 sm:mb-6 leading-tight">{t.services.title}</h2>
-            <p className="text-xl text-muted-foreground">{t.services.subtitle}</p>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-3 leading-tight">{t.services.title}</h2>
+            <p className="text-base sm:text-lg text-muted-foreground">{t.services.subtitle}</p>
           </Reveal>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-8">
+        <div className="grid md:grid-cols-3 gap-6">
           {cards.map((card, i) => (
             <Reveal key={i} delay={i * 100}>
-              <div className="bg-white p-8 rounded-2xl border border-border hover:shadow-lg transition-all duration-300 hover:border-[hsl(var(--teal))] group h-full">
-                <div className={`w-12 h-12 rounded-xl ${card.color} flex items-center justify-center mb-6 group-hover:scale-110 transition-transform`}>
+              <div className="bg-white p-7 rounded-2xl border border-border hover:shadow-lg transition-all duration-300 hover:border-[hsl(var(--teal))] group h-full">
+                <div className={`w-11 h-11 rounded-xl ${card.color} flex items-center justify-center mb-5 group-hover:scale-110 transition-transform`}>
                   {card.icon}
                 </div>
-                <h3 className="text-xl font-bold mb-4 text-[hsl(var(--ink))]">{card.title}</h3>
-                <p className="text-muted-foreground leading-relaxed">{card.text}</p>
+                <h3 className="text-lg font-bold mb-3 text-[hsl(var(--ink))]">{card.title}</h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">{card.text}</p>
               </div>
             </Reveal>
           ))}

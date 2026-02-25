@@ -50,8 +50,8 @@ const translations = {
       conversionLabel: "De diagnósticos continúan a implementación",
     },
     services: {
-      title: "Sistemas internos que ordenan la operación",
-      subtitle: "Construimos soluciones a medida para reducir fricción, centralizar información y ejecutar mejor.",
+      title: "¿Qué construimos?",
+      subtitle: "Tres tipos de soluciones que se combinan según lo que tu operación necesita.",
       internalApps: "Aplicaciones internas",
       internalAppsDesc: "Herramientas a medida para control operativo, reportes, checklists, registros y flujos internos.",
       automation: "Automatización",
@@ -190,8 +190,8 @@ const translations = {
       conversionLabel: "Of assessments lead to implementation",
     },
     services: {
-      title: "Internal systems that bring order to operations",
-      subtitle: "We build tailored solutions to reduce friction, centralize information, and improve execution.",
+      title: "What do we build?",
+      subtitle: "Three types of solutions that combine based on what your operation needs.",
       internalApps: "Internal applications",
       internalAppsDesc: "Custom tools for operational control, reports, checklists, records, and internal workflows.",
       automation: "Automation",
