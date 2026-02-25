@@ -577,37 +577,58 @@ const LeadMagnet = () => {
 
 const ProcessStep = ({ step, index, total }: { step: { num: string; title: string; text: string }; index: number; total: number }) => {
   const [hovered, setHovered] = useState(false);
+  const isLast = index === total - 1;
 
   return (
     <div 
-      className="group relative"
+      className="relative"
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <div className="flex items-start gap-5">
-        <div className="flex flex-col items-center shrink-0">
+      <div className="flex items-start gap-6">
+        <div className="flex flex-col items-center shrink-0 relative">
           <div className={cn(
-            "w-12 h-12 rounded-xl flex items-center justify-center font-display font-bold text-lg transition-all duration-300",
+            "relative w-14 h-14 rounded-2xl flex items-center justify-center font-display font-bold text-lg transition-all duration-500 z-10 cursor-pointer",
             hovered 
-              ? "bg-[hsl(var(--teal))] text-white shadow-lg shadow-teal-500/20 scale-110" 
-              : "bg-[#0F2438] text-white"
+              ? "bg-[hsl(var(--teal))] text-white scale-110 shadow-[0_0_30px_rgba(47,164,169,0.4)]" 
+              : "bg-[#0F2438] text-white shadow-lg"
           )}>
             {step.num}
+            <div className={cn(
+              "absolute inset-0 rounded-2xl border-2 transition-all duration-500",
+              hovered 
+                ? "border-[hsl(var(--teal))]/60 scale-125 opacity-0" 
+                : "border-transparent opacity-0"
+            )} />
+            {!hovered && (
+              <div className="absolute inset-0 rounded-2xl process-pulse pointer-events-none" />
+            )}
           </div>
-          {index < total - 1 && (
-            <div className="w-px h-full min-h-[24px] bg-gradient-to-b from-[#0F2438]/30 to-transparent mt-2" />
+          {!isLast && (
+            <div className="relative w-0.5 flex-1 min-h-[32px] mt-3 mb-1">
+              <div className={cn(
+                "absolute inset-0 rounded-full transition-all duration-500",
+                hovered
+                  ? "bg-gradient-to-b from-[hsl(var(--teal))] to-[hsl(var(--teal))]/10"
+                  : "bg-gradient-to-b from-[#0F2438]/25 via-[hsl(var(--teal))]/15 to-transparent"
+              )} />
+            </div>
           )}
         </div>
-        <div className="pb-8 flex-1">
-          <h4 className={cn(
-            "text-lg sm:text-xl font-bold transition-colors duration-300 mb-1",
-            hovered ? "text-[hsl(var(--teal))]" : "text-[hsl(var(--ink))]"
-          )}>{step.title}</h4>
-          <div className={cn(
-            "overflow-hidden transition-all duration-400 ease-out",
-            hovered ? "max-h-40 opacity-100 mt-2" : "max-h-0 opacity-0"
-          )}>
-            <p className="text-sm text-muted-foreground leading-relaxed">{step.text}</p>
+        <div className={cn("flex-1", isLast ? "pb-2" : "pb-6")}>
+          <div className="pt-3">
+            <h4 className={cn(
+              "text-xl sm:text-2xl font-display font-bold transition-all duration-300",
+              hovered ? "text-[hsl(var(--teal))] translate-x-1" : "text-[hsl(var(--ink))]"
+            )}>{step.title}</h4>
+            <div className={cn(
+              "overflow-hidden transition-all duration-500 ease-out",
+              hovered ? "max-h-40 opacity-100 mt-3" : "max-h-0 opacity-0 mt-0"
+            )}>
+              <div className="bg-white rounded-xl p-4 border border-[hsl(var(--teal))]/15 shadow-sm">
+                <p className="text-sm text-muted-foreground leading-relaxed">{step.text}</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -629,12 +650,21 @@ const Process = () => {
 
         <div>
           {t.process.steps.map((step: { num: string; title: string; text: string }, i: number) => (
-            <Reveal key={i} delay={i * 100}>
+            <Reveal key={i} delay={i * 120}>
               <ProcessStep step={step} index={i} total={t.process.steps.length} />
             </Reveal>
           ))}
         </div>
       </div>
+      <style>{`
+        @keyframes processPulse {
+          0%, 100% { box-shadow: 0 0 0 0 rgba(47,164,169,0.3); }
+          50% { box-shadow: 0 0 0 8px rgba(47,164,169,0); }
+        }
+        .process-pulse {
+          animation: processPulse 2.5s ease-in-out infinite;
+        }
+      `}</style>
     </section>
   );
 };
