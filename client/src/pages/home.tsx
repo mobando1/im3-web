@@ -192,6 +192,70 @@ const Header = () => {
   );
 };
 
+const PrioritiesCard = () => {
+  const { t } = useI18n();
+  const [active, setActive] = useState<number | null>(null);
+
+  const items = [
+    { icon: Check, title: t.priorities.clearExecution, desc: t.priorities.clearExecutionDesc },
+    { icon: Layout, title: t.priorities.structure, desc: t.priorities.structureDesc },
+    { icon: ShieldCheck, title: t.priorities.maintainable, desc: t.priorities.maintainableDesc },
+  ];
+
+  return (
+    <div className="max-w-4xl mx-auto -mt-6 md:-mt-12 relative z-20 px-4">
+      <Reveal delay={600}>
+        <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-xl border border-border/50">
+          <h3 className="text-lg font-bold text-[hsl(var(--ink))] mb-5">{t.priorities.title}</h3>
+          <div className="grid grid-cols-3 gap-3">
+            {items.map((item, i) => {
+              const Icon = item.icon;
+              const isActive = active === i;
+              return (
+                <button
+                  key={i}
+                  data-testid={`priority-${i}`}
+                  className={cn(
+                    "relative text-left rounded-xl p-4 transition-all duration-300 cursor-pointer group",
+                    isActive
+                      ? "bg-[hsl(var(--ink))] text-white shadow-lg"
+                      : "bg-[hsl(var(--paper))] hover:bg-[hsl(var(--ink))]/5"
+                  )}
+                  onMouseEnter={() => setActive(i)}
+                  onMouseLeave={() => setActive(null)}
+                  onClick={() => setActive(isActive ? null : i)}
+                >
+                  <div className="flex items-center gap-3 mb-1">
+                    <div className={cn(
+                      "w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors duration-300",
+                      isActive ? "bg-[hsl(var(--teal))] text-white" : "bg-white text-[hsl(var(--teal))]"
+                    )}>
+                      <Icon className="w-4 h-4" />
+                    </div>
+                    <h4 className={cn(
+                      "font-semibold text-sm transition-colors duration-300",
+                      isActive ? "text-white" : "text-[hsl(var(--ink))]"
+                    )}>{item.title}</h4>
+                  </div>
+                  <div className={cn(
+                    "overflow-hidden transition-all duration-300 ease-out",
+                    isActive ? "max-h-24 opacity-100 mt-2" : "max-h-0 opacity-0 mt-0"
+                  )}>
+                    <p className={cn(
+                      "text-xs leading-relaxed pl-11",
+                      isActive ? "text-gray-300" : "text-muted-foreground"
+                    )}>{item.desc}</p>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </Reveal>
+    </div>
+  );
+};
+
 const Hero = () => {
   const { t } = useI18n();
   
@@ -284,41 +348,7 @@ const Hero = () => {
       </div>
       
       {/* "Lo que priorizamos" Card below hero */}
-      <div className="max-w-4xl mx-auto -mt-6 md:-mt-12 relative z-20 px-4">
-        <Reveal delay={600}>
-          <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-xl border border-border/50">
-            <div className="flex flex-col md:flex-row gap-8 items-start md:items-center">
-              <div className="md:w-1/3 border-b md:border-b-0 md:border-r border-border pb-6 md:pb-0 md:pr-8">
-                <h3 className="text-xl font-bold text-[hsl(var(--ink))] mb-2">{t.priorities.title}</h3>
-                <p className="text-sm text-muted-foreground">{t.priorities.subtitle}</p>
-              </div>
-              <div className="md:w-2/3 grid grid-cols-1 sm:grid-cols-3 gap-6">
-                <div>
-                  <div className="w-8 h-8 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center mb-3 text-[hsl(var(--teal))]">
-                    <Check className="w-4 h-4" />
-                  </div>
-                  <h4 className="font-semibold text-sm mb-1">{t.priorities.clearExecution}</h4>
-                  <p className="text-xs text-muted-foreground">{t.priorities.clearExecutionDesc}</p>
-                </div>
-                <div>
-                  <div className="w-8 h-8 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center mb-3 text-[hsl(var(--teal))]">
-                    <Layout className="w-4 h-4" />
-                  </div>
-                  <h4 className="font-semibold text-sm mb-1">{t.priorities.structure}</h4>
-                  <p className="text-xs text-muted-foreground">{t.priorities.structureDesc}</p>
-                </div>
-                <div>
-                  <div className="w-8 h-8 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center mb-3 text-[hsl(var(--teal))]">
-                    <ShieldCheck className="w-4 h-4" />
-                  </div>
-                  <h4 className="font-semibold text-sm mb-1">{t.priorities.maintainable}</h4>
-                  <p className="text-xs text-muted-foreground">{t.priorities.maintainableDesc}</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </Reveal>
-      </div>
+      <PrioritiesCard />
     </section>
   );
 };
