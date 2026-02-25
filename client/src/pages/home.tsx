@@ -581,24 +581,23 @@ const Process = () => {
   return (
     <section id="como" className="py-6 sm:py-8 px-4 md:px-8 bg-[hsl(var(--paper))]">
       <div className="max-w-7xl mx-auto">
-        <div className="text-center max-w-2xl mx-auto mb-8">
+        <div className="max-w-3xl mb-8">
           <Reveal>
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">{t.process.title}</h2>
-            <p className="text-lg text-muted-foreground">{t.process.subtitle}</p>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] leading-tight">{t.process.title}</h2>
           </Reveal>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          {t.process.steps.map((step, i) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+          {t.process.steps.map((step: { num: string; title: string; text: string }, i: number) => (
             <Reveal key={i} delay={i * 100}>
-              <div className="bg-white p-6 rounded-2xl border border-border h-full relative overflow-hidden group hover:shadow-md transition-all">
+              <div className="bg-white p-6 rounded-2xl border border-border h-full relative overflow-hidden group hover:shadow-md hover:border-[hsl(var(--teal))]/30 transition-all">
                 <div className="text-6xl font-display font-bold text-gray-100 absolute -right-4 -top-4 group-hover:text-teal-50 transition-colors">{step.num}</div>
                 <div className="relative z-10">
-                  <div className="w-8 h-8 rounded-full bg-[hsl(var(--ink))] text-white flex items-center justify-center text-xs font-bold mb-4">
+                  <div className="w-8 h-8 rounded-full bg-[hsl(var(--teal))] text-white flex items-center justify-center text-xs font-bold mb-4">
                     {i + 1}
                   </div>
                   <h4 className="font-bold text-[hsl(var(--ink))] mb-2">{step.title}</h4>
-                  <p className="text-sm text-muted-foreground">{step.text}</p>
+                  <p className="text-sm text-muted-foreground leading-relaxed">{step.text}</p>
                 </div>
               </div>
             </Reveal>

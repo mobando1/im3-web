@@ -66,14 +66,12 @@ const translations = {
       cta: "Solicitar diagnóstico gratis",
     },
     process: {
-      title: "Estructura antes de velocidad",
-      subtitle: "Un método simple para construir rápido sin romper la operación (y dejarlo mantenible).",
+      title: "Cómo trabajamos contigo",
       steps: [
-        { num: "01", title: "Diagnóstico", text: "Entendemos tu operación y dónde se pierde tiempo o dinero." },
-        { num: "02", title: "Diseño", text: "Definimos estructura de datos, flujo, roles y métricas." },
-        { num: "03", title: "Construcción", text: "Desarrollamos un MVP funcional con foco en uso real." },
-        { num: "04", title: "Automatización", text: "Conectamos lo necesario para eliminar tareas repetitivas." },
-        { num: "05", title: "Transferencia", text: "Documentación + handoff para que el sistema se mantenga." },
+        { num: "01", title: "Diagnóstico estratégico", text: "Analizamos tu operación, entendemos tu negocio, detectamos oportunidades y puntos críticos, definimos el sistema, procesos y herramientas que realmente necesitas." },
+        { num: "02", title: "Desarrollo de la solución", text: "Construimos el sistema adaptado a tu negocio." },
+        { num: "03", title: "Implementación", text: "Lo integramos en tu operación para que funcione en la práctica." },
+        { num: "04", title: "Entrega y acompañamiento", text: "Te dejamos todo claro, documentado y listo para crecer." },
       ],
     },
     targetAudience: {
@@ -208,14 +206,12 @@ const translations = {
       cta: "Request free assessment",
     },
     process: {
-      title: "Structure before speed",
-      subtitle: "A simple method to build fast without breaking operations (and keep it maintainable).",
+      title: "How we work with you",
       steps: [
-        { num: "01", title: "Assessment", text: "We understand your operations and where time or money is lost." },
-        { num: "02", title: "Design", text: "We define data structure, workflows, roles, and metrics." },
-        { num: "03", title: "Build", text: "We develop a functional MVP focused on real-world use." },
-        { num: "04", title: "Automate", text: "We connect what's needed to eliminate repetitive tasks." },
-        { num: "05", title: "Handoff", text: "Documentation + transfer so the system stays maintained." },
+        { num: "01", title: "Strategic diagnosis", text: "We analyze your operation, understand your business, detect opportunities and critical points, and define the system, processes, and tools you truly need." },
+        { num: "02", title: "Solution development", text: "We build the system tailored to your business." },
+        { num: "03", title: "Implementation", text: "We integrate it into your operation so it works in practice." },
+        { num: "04", title: "Delivery & support", text: "We leave everything clear, documented, and ready to grow." },
       ],
     },
     targetAudience: {
