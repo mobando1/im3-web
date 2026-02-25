@@ -205,50 +205,55 @@ const PrioritiesCard = () => {
   return (
     <div className="max-w-4xl mx-auto -mt-6 md:-mt-12 relative z-20 px-4">
       <Reveal delay={600}>
-        <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-xl border border-border/50">
-          <h3 className="text-lg font-bold text-[hsl(var(--ink))] mb-5">{t.priorities.title}</h3>
-          <div className="grid grid-cols-3 gap-3">
-            {items.map((item, i) => {
-              const Icon = item.icon;
-              const isActive = active === i;
-              return (
-                <button
-                  key={i}
-                  data-testid={`priority-${i}`}
-                  className={cn(
-                    "relative text-left rounded-xl p-4 transition-all duration-300 cursor-pointer group",
-                    isActive
-                      ? "bg-[hsl(var(--ink))] text-white shadow-lg"
-                      : "bg-[hsl(var(--paper))] hover:bg-[hsl(var(--ink))]/5"
-                  )}
-                  onMouseEnter={() => setActive(i)}
-                  onMouseLeave={() => setActive(null)}
-                  onClick={() => setActive(isActive ? null : i)}
-                >
-                  <div className="flex items-center gap-3 mb-1">
-                    <div className={cn(
-                      "w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors duration-300",
-                      isActive ? "bg-[hsl(var(--teal))] text-white" : "bg-white text-[hsl(var(--teal))]"
-                    )}>
-                      <Icon className="w-4 h-4" />
+        <div className="bg-white rounded-2xl shadow-xl border border-border/50 overflow-hidden">
+          <div className="flex flex-col md:flex-row">
+            <div className="md:w-2/5 p-6 sm:p-8 bg-gradient-to-br from-[hsl(var(--ink))] to-[#162a40] text-white flex flex-col justify-center">
+              <h3 className="text-xl font-bold mb-2">{t.priorities.title}</h3>
+              <p className="text-sm text-gray-400 leading-relaxed">{t.priorities.subtitle}</p>
+            </div>
+            <div className="md:w-3/5 p-2 sm:p-3 flex flex-col gap-1.5">
+              {items.map((item, i) => {
+                const Icon = item.icon;
+                const isActive = active === i;
+                return (
+                  <button
+                    key={i}
+                    data-testid={`priority-${i}`}
+                    className={cn(
+                      "relative text-left rounded-xl px-4 py-3 transition-all duration-300 cursor-pointer",
+                      isActive
+                        ? "bg-[hsl(var(--teal))]/10 ring-1 ring-[hsl(var(--teal))]/20"
+                        : "hover:bg-[hsl(var(--paper))]"
+                    )}
+                    onMouseEnter={() => setActive(i)}
+                    onMouseLeave={() => setActive(null)}
+                    onClick={() => setActive(isActive ? null : i)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={cn(
+                        "w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-all duration-300",
+                        isActive ? "bg-[hsl(var(--teal))] text-white shadow-md shadow-teal-200" : "bg-[hsl(var(--paper))] text-[hsl(var(--teal))]"
+                      )}>
+                        <Icon className="w-4 h-4" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-semibold text-sm text-[hsl(var(--ink))]">{item.title}</h4>
+                        <div className={cn(
+                          "overflow-hidden transition-all duration-300 ease-out",
+                          isActive ? "max-h-20 opacity-100 mt-1" : "max-h-0 opacity-0"
+                        )}>
+                          <p className="text-xs text-muted-foreground leading-relaxed">{item.desc}</p>
+                        </div>
+                      </div>
+                      <ChevronRight className={cn(
+                        "w-4 h-4 shrink-0 transition-all duration-300",
+                        isActive ? "text-[hsl(var(--teal))] rotate-90" : "text-gray-300"
+                      )} />
                     </div>
-                    <h4 className={cn(
-                      "font-semibold text-sm transition-colors duration-300",
-                      isActive ? "text-white" : "text-[hsl(var(--ink))]"
-                    )}>{item.title}</h4>
-                  </div>
-                  <div className={cn(
-                    "overflow-hidden transition-all duration-300 ease-out",
-                    isActive ? "max-h-24 opacity-100 mt-2" : "max-h-0 opacity-0 mt-0"
-                  )}>
-                    <p className={cn(
-                      "text-xs leading-relaxed pl-11",
-                      isActive ? "text-gray-300" : "text-muted-foreground"
-                    )}>{item.desc}</p>
-                  </div>
-                </button>
-              );
-            })}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </div>
       </Reveal>
