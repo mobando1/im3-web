@@ -120,3 +120,11 @@ Preferred communication style: Simple, everyday language.
 ### Calendar CTAs
 - All CTAs link to: https://calendar.im3systems.com
 - Unified label: "Solicitar diagnóstico gratis" (ES) / "Request free diagnosis" (EN)
+
+### SEO Configuration
+- **Meta tags**: Title, description and keywords optimized for "desarrollo de aplicaciones", "automatización de procesos", "inteligencia artificial para empresas"
+- **Canonical URL**: https://www.im3systems.com
+- **Schema.org structured data**: ProfessionalService, WebSite, FAQPage schemas in `client/index.html`
+- **robots.txt**: Located at `public/robots.txt`, allows all crawlers
+- **sitemap.xml**: Located at `public/sitemap.xml`, references main URL
+- **Open Graph & Twitter Cards**: Configured for social sharing with bilingual support (es_ES, en_US)
