@@ -203,15 +203,18 @@ const PrioritiesCard = () => {
   ];
 
   return (
-    <div className="max-w-4xl mx-auto -mt-6 md:-mt-12 relative z-20 px-4">
+    <div className="max-w-5xl mx-auto -mt-6 md:-mt-12 relative z-20 px-4">
       <Reveal delay={600}>
-        <div className="bg-white rounded-2xl shadow-xl border border-border/50 overflow-hidden">
-          <div className="flex flex-col md:flex-row">
-            <div className="md:w-2/5 p-6 sm:p-8 bg-gradient-to-br from-[hsl(var(--ink))] to-[#162a40] text-white flex flex-col justify-center">
-              <h3 className="text-xl font-bold mb-2">{t.priorities.title}</h3>
-              <p className="text-sm text-gray-400 leading-relaxed">{t.priorities.subtitle}</p>
+        <div className="bg-[hsl(var(--ink))] rounded-2xl shadow-2xl border border-white/10 overflow-hidden relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-[hsl(var(--teal))]/5 via-transparent to-blue-600/5 pointer-events-none" />
+          <div className="relative p-6 sm:p-8">
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h3 className="text-lg font-bold text-white">{t.priorities.title}</h3>
+                <p className="text-sm text-gray-400 mt-1 max-w-md">{t.priorities.subtitle}</p>
+              </div>
             </div>
-            <div className="md:w-3/5 p-2 sm:p-3 flex flex-col gap-1.5">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               {items.map((item, i) => {
                 const Icon = item.icon;
                 const isActive = active === i;
@@ -220,35 +223,32 @@ const PrioritiesCard = () => {
                     key={i}
                     data-testid={`priority-${i}`}
                     className={cn(
-                      "relative text-left rounded-xl px-4 py-3 transition-all duration-300 cursor-pointer",
+                      "relative text-left rounded-xl p-4 transition-all duration-300 cursor-pointer border",
                       isActive
-                        ? "bg-[hsl(var(--teal))]/10 ring-1 ring-[hsl(var(--teal))]/20"
-                        : "hover:bg-[hsl(var(--paper))]"
+                        ? "bg-white/10 border-[hsl(var(--teal))]/40 shadow-lg shadow-teal-900/20"
+                        : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.07] hover:border-white/10"
                     )}
                     onMouseEnter={() => setActive(i)}
                     onMouseLeave={() => setActive(null)}
                     onClick={() => setActive(isActive ? null : i)}
                   >
-                    <div className="flex items-center gap-3">
-                      <div className={cn(
-                        "w-9 h-9 rounded-lg flex items-center justify-center shrink-0 transition-all duration-300",
-                        isActive ? "bg-[hsl(var(--teal))] text-white shadow-md shadow-teal-200" : "bg-[hsl(var(--paper))] text-[hsl(var(--teal))]"
-                      )}>
-                        <Icon className="w-4 h-4" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <h4 className="font-semibold text-sm text-[hsl(var(--ink))]">{item.title}</h4>
-                        <div className={cn(
-                          "overflow-hidden transition-all duration-300 ease-out",
-                          isActive ? "max-h-20 opacity-100 mt-1" : "max-h-0 opacity-0"
-                        )}>
-                          <p className="text-xs text-muted-foreground leading-relaxed">{item.desc}</p>
-                        </div>
-                      </div>
-                      <ChevronRight className={cn(
-                        "w-4 h-4 shrink-0 transition-all duration-300",
-                        isActive ? "text-[hsl(var(--teal))] rotate-90" : "text-gray-300"
-                      )} />
+                    <div className={cn(
+                      "w-10 h-10 rounded-lg flex items-center justify-center mb-3 transition-all duration-300",
+                      isActive
+                        ? "bg-[hsl(var(--teal))] text-white shadow-lg shadow-teal-500/30"
+                        : "bg-white/10 text-gray-400"
+                    )}>
+                      <Icon className="w-5 h-5" />
+                    </div>
+                    <h4 className={cn(
+                      "font-semibold text-sm mb-1 transition-colors duration-300",
+                      isActive ? "text-white" : "text-gray-300"
+                    )}>{item.title}</h4>
+                    <div className={cn(
+                      "overflow-hidden transition-all duration-300 ease-out",
+                      isActive ? "max-h-24 opacity-100" : "max-h-0 opacity-0"
+                    )}>
+                      <p className="text-xs text-gray-400 leading-relaxed">{item.desc}</p>
                     </div>
                   </button>
                 );
