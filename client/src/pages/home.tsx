@@ -429,30 +429,92 @@ const CredibilityStrip = () => {
 
 const PrioritiesDetail = () => {
   const { t } = useI18n();
+  const sectionRef = useRef<HTMLDivElement>(null);
+  const [isActive, setIsActive] = useState(false);
 
-  const items = [
-    { icon: Check, title: t.priorities.clearExecution, desc: t.priorities.clearExecutionDesc },
-    { icon: Layout, title: t.priorities.structure, desc: t.priorities.structureDesc },
-    { icon: ShieldCheck, title: t.priorities.maintainable, desc: t.priorities.maintainableDesc },
+  useEffect(() => {
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (entry.isIntersecting) {
+          setIsActive(true);
+          observer.disconnect();
+        }
+      },
+      { threshold: 0.3 }
+    );
+    if (sectionRef.current) observer.observe(sectionRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  const columns = [
+    { phase: "Orden", pillar: t.priorities.clearExecution, desc: t.priorities.clearExecutionDesc, icon: Check, delay: 0 },
+    { phase: "Claridad", pillar: t.priorities.structure, desc: t.priorities.structureDesc, icon: Layout, delay: 400 },
+    { phase: "Resultados", pillar: t.priorities.maintainable, desc: t.priorities.maintainableDesc, icon: ShieldCheck, delay: 800 },
+  ];
+
+  const codeLines = [
+    ["init()", "validate()", "deploy()"],
+    ["scan()", "map()", "optimize()"],
+    ["build()", "test()", "deliver()"],
   ];
 
   return (
-    <section className="py-12 px-4 md:px-8">
+    <section className="py-16 px-4 md:px-8" ref={sectionRef}>
       <div className="max-w-5xl mx-auto">
         <Reveal>
-          <p className="text-lg text-muted-foreground text-center max-w-2xl mx-auto mb-10">{t.priorities.subtitle}</p>
+          <p className="text-lg text-muted-foreground text-center max-w-2xl mx-auto mb-14">{t.priorities.subtitle}</p>
         </Reveal>
-        <div className="grid md:grid-cols-3 gap-8">
-          {items.map((item, i) => (
-            <Reveal key={i} delay={i * 100}>
-              <div className="text-center">
-                <div className="w-12 h-12 rounded-xl bg-[hsl(var(--paper))] flex items-center justify-center mx-auto mb-4 text-[hsl(var(--teal))]">
-                  <item.icon className="w-5 h-5" />
-                </div>
-                <h4 className="font-bold text-[hsl(var(--ink))] mb-2">{item.title}</h4>
-                <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
+        <div className="grid md:grid-cols-3 gap-6 md:gap-10">
+          {columns.map((col, i) => (
+            <div key={i} className="flex flex-col items-center">
+              <div
+                className={cn(
+                  "transition-all duration-700 ease-out",
+                  isActive ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4"
+                )}
+                style={{ transitionDelay: `${col.delay}ms` }}
+              >
+                <span className="text-xs font-mono uppercase tracking-[0.2em] text-[hsl(var(--teal))] font-semibold">{col.phase}</span>
               </div>
-            </Reveal>
+
+              <div className="relative w-px h-20 my-3 overflow-hidden">
+                <div
+                  className={cn(
+                    "absolute inset-x-0 top-0 w-full bg-gradient-to-b from-[hsl(var(--teal))] to-[hsl(var(--teal))]/20 transition-all duration-1000 ease-out",
+                    isActive ? "h-full" : "h-0"
+                  )}
+                  style={{ transitionDelay: `${col.delay + 300}ms` }}
+                />
+                <div className="absolute inset-0 flex flex-col items-center justify-around py-2">
+                  {codeLines[i].map((line, j) => (
+                    <span
+                      key={j}
+                      className={cn(
+                        "text-[9px] font-mono text-[hsl(var(--teal))]/70 whitespace-nowrap transition-all duration-500",
+                        isActive ? "opacity-100" : "opacity-0"
+                      )}
+                      style={{ transitionDelay: `${col.delay + 500 + j * 200}ms` }}
+                    >
+                      {line}
+                    </span>
+                  ))}
+                </div>
+              </div>
+
+              <div
+                className={cn(
+                  "w-full bg-white rounded-2xl border border-border p-6 text-center transition-all duration-700 ease-out hover:shadow-lg hover:border-[hsl(var(--teal))]/30",
+                  isActive ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
+                )}
+                style={{ transitionDelay: `${col.delay + 600}ms` }}
+              >
+                <div className="w-11 h-11 rounded-xl bg-[hsl(var(--paper))] flex items-center justify-center mx-auto mb-4 text-[hsl(var(--teal))]">
+                  <col.icon className="w-5 h-5" />
+                </div>
+                <h4 className="font-bold text-[hsl(var(--ink))] mb-2">{col.pillar}</h4>
+                <p className="text-sm text-muted-foreground leading-relaxed">{col.desc}</p>
+              </div>
+            </div>
           ))}
         </div>
       </div>
