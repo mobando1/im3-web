@@ -201,14 +201,14 @@ const PrioritiesCard = () => {
   return (
     <div className="max-w-5xl mx-auto -mt-6 md:-mt-12 relative z-20 px-4">
       <Reveal delay={600}>
-        <div className="bg-[hsl(var(--ink))] rounded-2xl shadow-2xl border border-white/10 overflow-hidden relative">
-          <div className="absolute inset-0 bg-gradient-to-br from-[hsl(var(--teal))]/5 via-transparent to-blue-600/5 pointer-events-none" />
-          <div className="relative p-6 sm:p-8">
-            <div className="flex items-center gap-3 mb-4 flex-wrap sm:flex-nowrap">
+        <div className="bg-white rounded-2xl shadow-lg border border-border/60 overflow-hidden relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-[hsl(var(--teal))]/[0.03] via-transparent to-blue-50/30 pointer-events-none" />
+          <div className="relative p-5 sm:p-6">
+            <div className="flex items-center gap-3 mb-3 flex-wrap sm:flex-nowrap">
               <div className="w-1 h-4 rounded-full bg-[hsl(var(--teal))] shrink-0" />
-              <h3 className="text-sm font-bold text-white tracking-tight shrink-0">{t.priorities.title}</h3>
-              <span className="hidden sm:block text-gray-600 mx-1">—</span>
-              <p className="text-xs text-gray-500 leading-snug">{t.priorities.subtitle}</p>
+              <h3 className="text-sm font-bold text-[hsl(var(--ink))] tracking-tight shrink-0">{t.priorities.title}</h3>
+              <span className="hidden sm:block text-gray-300 mx-1">—</span>
+              <p className="text-xs text-muted-foreground leading-snug">{t.priorities.subtitle}</p>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
               {items.map((item, i) => {
@@ -221,8 +221,8 @@ const PrioritiesCard = () => {
                     className={cn(
                       "priority-card relative text-left rounded-lg px-3 py-2.5 transition-all duration-300 cursor-pointer border overflow-hidden",
                       isActive
-                        ? "bg-white/10 border-[hsl(var(--teal))]/40"
-                        : "bg-white/[0.03] border-white/[0.06] hover:bg-white/[0.07]"
+                        ? "bg-[hsl(var(--teal))]/[0.06] border-[hsl(var(--teal))]/30 shadow-sm"
+                        : "bg-[hsl(var(--paper))]/60 border-border/40 hover:bg-[hsl(var(--teal))]/[0.03] hover:border-border/60"
                     )}
                     onMouseEnter={() => setActive(i)}
                     onMouseLeave={() => setActive(null)}
@@ -234,18 +234,18 @@ const PrioritiesCard = () => {
                     <div className="flex items-center gap-2">
                       <h4 className={cn(
                         "font-semibold text-xs transition-colors duration-300",
-                        isActive ? "text-white" : "text-gray-300"
+                        isActive ? "text-[hsl(var(--ink))]" : "text-[hsl(var(--coal))]"
                       )}>{item.title}</h4>
                       <Icon className={cn(
                         "w-3.5 h-3.5 shrink-0 transition-all duration-300",
-                        isActive ? "text-[hsl(var(--teal))]" : "text-gray-500"
+                        isActive ? "text-[hsl(var(--teal))]" : "text-gray-400"
                       )} />
                     </div>
                     <div className={cn(
                       "overflow-hidden transition-all duration-300 ease-out",
                       isActive ? "max-h-20 opacity-100 mt-1.5" : "max-h-0 opacity-0"
                     )}>
-                      <p className="text-[11px] text-gray-400 leading-relaxed">{item.desc}</p>
+                      <p className="text-[11px] text-muted-foreground leading-relaxed">{item.desc}</p>
                     </div>
                   </button>
                 );
@@ -257,7 +257,7 @@ const PrioritiesCard = () => {
                 100% { transform: translateX(100%); }
               }
               .priority-shimmer {
-                background: linear-gradient(90deg, transparent 0%, rgba(47,164,169,0.08) 50%, transparent 100%);
+                background: linear-gradient(90deg, transparent 0%, rgba(47,164,169,0.06) 50%, transparent 100%);
                 animation: shimmer 3s ease-in-out infinite;
               }
             `}</style>
