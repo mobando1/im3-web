@@ -366,35 +366,28 @@ const LogoStrip = () => {
   ];
 
   const LogoItem = ({ logo }: { logo: { name: string; src: string } }) => (
-    <div className="flex-shrink-0 flex items-center mx-6 group">
-      <div className="bg-white rounded-xl border border-border/60 px-6 py-4 flex items-center justify-center shadow-sm group-hover:border-[hsl(var(--teal))]/30 group-hover:shadow-md transition-all duration-300">
-        <img 
-          src={logo.src} 
-          alt={logo.name} 
-          className={cn(
-            "w-auto object-contain rounded-lg opacity-70 group-hover:opacity-100 transition-opacity duration-300",
-            logo.name === "AMJ Solutions" ? "h-28 max-w-[200px]" : "h-12 max-w-[120px]"
-          )}
-        />
-      </div>
+    <div className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity duration-300 mix-blend-multiply flex items-center mx-8">
+      <img 
+        src={logo.src} 
+        alt={logo.name} 
+        className={cn(
+          "w-auto object-contain rounded-xl",
+          logo.name === "AMJ Solutions" ? "h-32 max-w-[240px]" : "h-14 max-w-[130px]"
+        )}
+      />
     </div>
   );
   
   return (
     <section className="py-6 overflow-hidden bg-[hsl(var(--paper))] relative">
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-md h-px bg-gradient-to-r from-transparent via-border/60 to-transparent" />
       <div className="max-w-7xl mx-auto px-8 mb-5 text-center">
-        <div className="flex items-center justify-center gap-6">
-          <div className="h-px flex-1 max-w-24 bg-gradient-to-r from-transparent to-[hsl(var(--teal))]/30" />
-          <p className="text-sm font-display font-semibold text-[hsl(var(--ink))]/60 tracking-wide">{t.logoStrip.title}</p>
-          <div className="h-px flex-1 max-w-24 bg-gradient-to-l from-transparent to-[hsl(var(--teal))]/30" />
-        </div>
+        <p className="text-sm font-display font-semibold text-[hsl(var(--ink))]/60 tracking-wide">{t.logoStrip.title}</p>
       </div>
       <div className="relative overflow-hidden">
-        <div className="absolute top-1/2 left-0 right-0 -translate-y-1/2 h-px bg-gradient-to-r from-transparent via-border to-transparent z-0" />
-        <div className="absolute top-1/2 left-0 right-0 -translate-y-1/2 h-[3px] bg-gradient-to-r from-transparent via-[hsl(var(--teal))]/10 to-transparent z-0 blur-sm" />
-        <div className="absolute left-0 top-0 bottom-0 w-24 bg-gradient-to-r from-[hsl(var(--paper))] to-transparent z-10 pointer-events-none" />
-        <div className="absolute right-0 top-0 bottom-0 w-24 bg-gradient-to-l from-[hsl(var(--paper))] to-transparent z-10 pointer-events-none" />
-        <div className="flex w-max animate-scroll relative z-[1]">
+        <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-[hsl(var(--paper))] to-transparent z-10 pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-[hsl(var(--paper))] to-transparent z-10 pointer-events-none" />
+        <div className="flex w-max animate-scroll">
           {[...logos, ...logos, ...logos, ...logos].map((logo, i) => (
             <LogoItem key={i} logo={logo} />
           ))}
