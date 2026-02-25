@@ -440,82 +440,76 @@ const PrioritiesDetail = () => {
           observer.disconnect();
         }
       },
-      { threshold: 0.3 }
+      { threshold: 0.2 }
     );
     if (sectionRef.current) observer.observe(sectionRef.current);
     return () => observer.disconnect();
   }, []);
 
-  const columns = [
-    { phase: "Orden", pillar: t.priorities.clearExecution, desc: t.priorities.clearExecutionDesc, icon: Check, delay: 0 },
-    { phase: "Claridad", pillar: t.priorities.structure, desc: t.priorities.structureDesc, icon: Layout, delay: 400 },
-    { phase: "Resultados", pillar: t.priorities.maintainable, desc: t.priorities.maintainableDesc, icon: ShieldCheck, delay: 800 },
-  ];
-
-  const codeLines = [
-    ["init()", "validate()", "deploy()"],
-    ["scan()", "map()", "optimize()"],
-    ["build()", "test()", "deliver()"],
+  const steps = [
+    { phase: "Orden", pillar: t.priorities.clearExecution, desc: t.priorities.clearExecutionDesc, icon: Check, num: "01" },
+    { phase: "Claridad", pillar: t.priorities.structure, desc: t.priorities.structureDesc, icon: Layout, num: "02" },
+    { phase: "Resultados", pillar: t.priorities.maintainable, desc: t.priorities.maintainableDesc, icon: ShieldCheck, num: "03" },
   ];
 
   return (
     <section className="py-16 px-4 md:px-8" ref={sectionRef}>
       <div className="max-w-5xl mx-auto">
         <Reveal>
-          <p className="text-lg text-muted-foreground text-center max-w-2xl mx-auto mb-14">{t.priorities.subtitle}</p>
+          <p className="text-lg text-muted-foreground text-center max-w-2xl mx-auto mb-12">{t.priorities.subtitle}</p>
         </Reveal>
-        <div className="grid md:grid-cols-3 gap-6 md:gap-10">
-          {columns.map((col, i) => (
-            <div key={i} className="flex flex-col items-center">
-              <div
-                className={cn(
-                  "transition-all duration-700 ease-out",
-                  isActive ? "opacity-100 translate-y-0" : "opacity-0 -translate-y-4"
-                )}
-                style={{ transitionDelay: `${col.delay}ms` }}
-              >
-                <span className="text-xs font-mono uppercase tracking-[0.2em] text-[hsl(var(--teal))] font-semibold">{col.phase}</span>
-              </div>
 
-              <div className="relative w-px h-20 my-3 overflow-hidden">
+        <div className="relative">
+          <div className="hidden md:block absolute top-[28px] left-[16.66%] right-[16.66%] h-px overflow-hidden">
+            <div
+              className={cn(
+                "h-full bg-gradient-to-r from-[hsl(var(--teal))]/60 via-[hsl(var(--teal))] to-[hsl(var(--teal))]/60 transition-all duration-1500 ease-out origin-left",
+                isActive ? "scale-x-100" : "scale-x-0"
+              )}
+              style={{ transitionDelay: "400ms", transitionDuration: "1200ms" }}
+            />
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-10 md:gap-8">
+            {steps.map((step, i) => (
+              <div key={i} className="flex flex-col items-center">
                 <div
                   className={cn(
-                    "absolute inset-x-0 top-0 w-full bg-gradient-to-b from-[hsl(var(--teal))] to-[hsl(var(--teal))]/20 transition-all duration-1000 ease-out",
-                    isActive ? "h-full" : "h-0"
+                    "relative w-14 h-14 rounded-full flex items-center justify-center mb-8 transition-all duration-700 ease-out",
+                    isActive
+                      ? "bg-[hsl(var(--teal))] shadow-[0_0_20px_rgba(47,164,169,0.3)]"
+                      : "bg-gray-200"
                   )}
-                  style={{ transitionDelay: `${col.delay + 300}ms` }}
-                />
-                <div className="absolute inset-0 flex flex-col items-center justify-around py-2">
-                  {codeLines[i].map((line, j) => (
-                    <span
-                      key={j}
-                      className={cn(
-                        "text-[9px] font-mono text-[hsl(var(--teal))]/70 whitespace-nowrap transition-all duration-500",
-                        isActive ? "opacity-100" : "opacity-0"
-                      )}
-                      style={{ transitionDelay: `${col.delay + 500 + j * 200}ms` }}
-                    >
-                      {line}
-                    </span>
-                  ))}
+                  style={{ transitionDelay: `${i * 400}ms` }}
+                >
+                  <span className={cn(
+                    "text-sm font-mono font-bold transition-colors duration-700",
+                    isActive ? "text-white" : "text-gray-400"
+                  )} style={{ transitionDelay: `${i * 400}ms` }}>
+                    {step.phase}
+                  </span>
                 </div>
-              </div>
 
-              <div
-                className={cn(
-                  "w-full bg-white rounded-2xl border border-border p-6 text-center transition-all duration-700 ease-out hover:shadow-lg hover:border-[hsl(var(--teal))]/30",
-                  isActive ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
-                )}
-                style={{ transitionDelay: `${col.delay + 600}ms` }}
-              >
-                <div className="w-11 h-11 rounded-xl bg-[hsl(var(--paper))] flex items-center justify-center mx-auto mb-4 text-[hsl(var(--teal))]">
-                  <col.icon className="w-5 h-5" />
+                <div
+                  className={cn(
+                    "w-full bg-white rounded-2xl border border-border p-7 transition-all duration-700 ease-out hover:shadow-md hover:border-[hsl(var(--teal))]/30 group",
+                    isActive ? "opacity-100 translate-y-0" : "opacity-0 translate-y-8"
+                  )}
+                  style={{ transitionDelay: `${200 + i * 400}ms` }}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="w-10 h-10 rounded-xl bg-[hsl(var(--paper))] flex items-center justify-center text-[hsl(var(--teal))] shrink-0 group-hover:bg-[hsl(var(--teal))]/10 transition-colors">
+                      <step.icon className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-[hsl(var(--ink))] mb-1.5">{step.pillar}</h4>
+                      <p className="text-sm text-muted-foreground leading-relaxed">{step.desc}</p>
+                    </div>
+                  </div>
                 </div>
-                <h4 className="font-bold text-[hsl(var(--ink))] mb-2">{col.pillar}</h4>
-                <p className="text-sm text-muted-foreground leading-relaxed">{col.desc}</p>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
       </div>
     </section>
