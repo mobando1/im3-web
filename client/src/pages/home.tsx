@@ -221,8 +221,8 @@ const PrioritiesCard = () => {
                     className={cn(
                       "priority-card relative text-left rounded-lg px-3 py-2.5 transition-all duration-300 cursor-pointer border overflow-hidden",
                       isActive
-                        ? "bg-[hsl(var(--teal))]/[0.06] border-[hsl(var(--teal))]/30 shadow-sm"
-                        : "bg-[hsl(var(--paper))]/60 border-border/40 hover:bg-[hsl(var(--teal))]/[0.03] hover:border-border/60"
+                        ? "bg-[hsl(var(--ink))]/[0.08] border-[hsl(var(--teal))]/30 shadow-sm"
+                        : "bg-[hsl(var(--ink))]/[0.04] border-[hsl(var(--ink))]/[0.08] hover:bg-[hsl(var(--ink))]/[0.07]"
                     )}
                     onMouseEnter={() => setActive(i)}
                     onMouseLeave={() => setActive(null)}
@@ -257,8 +257,8 @@ const PrioritiesCard = () => {
                 100% { transform: translateX(100%); }
               }
               .priority-shimmer {
-                background: linear-gradient(90deg, transparent 0%, rgba(47,164,169,0.06) 50%, transparent 100%);
-                animation: shimmer 3s ease-in-out infinite;
+                background: linear-gradient(90deg, transparent 0%, rgba(47,164,169,0.12) 50%, transparent 100%);
+                animation: shimmer 2.5s ease-in-out infinite;
               }
             `}</style>
           </div>
