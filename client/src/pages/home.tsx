@@ -379,9 +379,13 @@ const LogoStrip = () => {
   );
   
   return (
-    <section className="py-8 overflow-hidden bg-[hsl(var(--paper))]">
-      <div className="max-w-7xl mx-auto px-8 mb-8 text-center">
-        <p className="text-sm text-muted-foreground font-medium uppercase tracking-wider">{t.logoStrip.title}</p>
+    <section className="py-10 overflow-hidden bg-[hsl(var(--paper))]">
+      <div className="max-w-7xl mx-auto px-8 mb-6 text-center">
+        <div className="flex items-center justify-center gap-4">
+          <div className="h-px w-12 bg-gradient-to-r from-transparent to-border" />
+          <p className="text-xs text-muted-foreground/70 font-medium uppercase tracking-[0.2em] font-display">{t.logoStrip.title}</p>
+          <div className="h-px w-12 bg-gradient-to-l from-transparent to-border" />
+        </div>
       </div>
       <div className="relative overflow-hidden">
         <div className="flex w-max animate-scroll">
