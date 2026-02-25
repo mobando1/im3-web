@@ -271,7 +271,7 @@ const Hero = () => {
   ];
 
   return (
-    <section className="pt-16 pb-6 px-4 md:px-8">
+    <section className="pt-14 pb-4 px-4 md:px-8">
       <div className="max-w-7xl mx-auto bg-[hsl(var(--ink))] rounded-[32px] overflow-hidden text-white relative shadow-2xl">
         {/* Abstract Background Elements */}
         <div className="absolute inset-0 opacity-20 mix-blend-soft-light" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.7\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")' }}></div>
@@ -740,7 +740,7 @@ const Contact = () => {
   const { t } = useI18n();
   
   return (
-    <section id="contacto" className="py-8 px-4 md:px-8">
+    <section id="contacto" className="py-5 px-4 md:px-8">
       <div className="max-w-3xl mx-auto text-center">
         <Reveal>
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-6 leading-tight">
@@ -816,7 +816,7 @@ const Footer = () => {
   };
 
   return (
-    <footer className="py-8 px-4 md:px-8 border-t border-border bg-white">
+    <footer className="py-5 px-4 md:px-8 border-t border-border bg-white">
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           <div className="md:col-span-1">
