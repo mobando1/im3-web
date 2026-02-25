@@ -234,8 +234,8 @@ const PrioritiesCard = () => {
                     className={cn(
                       "priority-card relative text-left rounded-lg px-3 py-2.5 transition-all duration-300 cursor-pointer border overflow-hidden",
                       isActive
-                        ? "bg-[hsl(var(--ink))]/[0.08] border-[hsl(var(--teal))]/30 shadow-sm"
-                        : "bg-[hsl(var(--ink))]/[0.04] border-[hsl(var(--ink))]/[0.08] hover:bg-[hsl(var(--ink))]/[0.07]"
+                        ? "bg-[hsl(var(--ink))]/[0.12] border-[hsl(var(--teal))]/30 shadow-sm"
+                        : "bg-[hsl(var(--ink))]/[0.07] border-[hsl(var(--ink))]/[0.10] hover:bg-[hsl(var(--ink))]/[0.10]"
                     )}
                     onMouseEnter={() => setActive(i)}
                     onMouseLeave={() => setActive(null)}
