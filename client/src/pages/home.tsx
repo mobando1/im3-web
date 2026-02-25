@@ -287,32 +287,28 @@ const Hero = () => {
       <div className="max-w-4xl mx-auto -mt-6 md:-mt-12 relative z-20 px-4">
         <Reveal delay={600}>
           <div className="bg-white rounded-2xl p-6 sm:p-8 shadow-xl border border-border/50">
-            <div className="flex flex-col md:flex-row gap-8 items-start md:items-center">
-              <div className="md:w-1/3 border-b md:border-b-0 md:border-r border-border pb-6 md:pb-0 md:pr-8">
-                <h3 className="text-xl font-bold text-[hsl(var(--ink))] mb-2">{t.priorities.title}</h3>
-                <p className="text-sm text-muted-foreground">{t.priorities.subtitle}</p>
+            <div className="flex flex-col md:flex-row gap-6 items-start md:items-center">
+              <div className="md:w-1/3 border-b md:border-b-0 md:border-r border-border pb-4 md:pb-0 md:pr-8">
+                <h3 className="text-xl font-bold text-[hsl(var(--ink))]">{t.priorities.title}</h3>
               </div>
-              <div className="md:w-2/3 grid grid-cols-1 sm:grid-cols-3 gap-6">
-                <div>
-                  <div className="w-8 h-8 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center mb-3 text-[hsl(var(--teal))]">
-                    <Check className="w-4 h-4" />
+              <div className="md:w-2/3 flex flex-wrap gap-4">
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center text-[hsl(var(--teal))]">
+                    <Check className="w-3.5 h-3.5" />
                   </div>
-                  <h4 className="font-semibold text-sm mb-1">{t.priorities.clearExecution}</h4>
-                  <p className="text-xs text-muted-foreground">{t.priorities.clearExecutionDesc}</p>
+                  <span className="font-semibold text-sm text-[hsl(var(--ink))]">{t.priorities.clearExecution}</span>
                 </div>
-                <div>
-                  <div className="w-8 h-8 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center mb-3 text-[hsl(var(--teal))]">
-                    <Layout className="w-4 h-4" />
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center text-[hsl(var(--teal))]">
+                    <Layout className="w-3.5 h-3.5" />
                   </div>
-                  <h4 className="font-semibold text-sm mb-1">{t.priorities.structure}</h4>
-                  <p className="text-xs text-muted-foreground">{t.priorities.structureDesc}</p>
+                  <span className="font-semibold text-sm text-[hsl(var(--ink))]">{t.priorities.structure}</span>
                 </div>
-                <div>
-                  <div className="w-8 h-8 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center mb-3 text-[hsl(var(--teal))]">
-                    <ShieldCheck className="w-4 h-4" />
+                <div className="flex items-center gap-2">
+                  <div className="w-7 h-7 rounded-full bg-[hsl(var(--paper))] flex items-center justify-center text-[hsl(var(--teal))]">
+                    <ShieldCheck className="w-3.5 h-3.5" />
                   </div>
-                  <h4 className="font-semibold text-sm mb-1">{t.priorities.maintainable}</h4>
-                  <p className="text-xs text-muted-foreground">{t.priorities.maintainableDesc}</p>
+                  <span className="font-semibold text-sm text-[hsl(var(--ink))]">{t.priorities.maintainable}</span>
                 </div>
               </div>
             </div>
@@ -424,6 +420,39 @@ const CredibilityStrip = () => {
               </div>
               <div className="text-xs sm:text-sm text-muted-foreground mt-1">{stat.label}</div>
             </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const PrioritiesDetail = () => {
+  const { t } = useI18n();
+
+  const items = [
+    { icon: Check, title: t.priorities.clearExecution, desc: t.priorities.clearExecutionDesc },
+    { icon: Layout, title: t.priorities.structure, desc: t.priorities.structureDesc },
+    { icon: ShieldCheck, title: t.priorities.maintainable, desc: t.priorities.maintainableDesc },
+  ];
+
+  return (
+    <section className="py-12 px-4 md:px-8">
+      <div className="max-w-5xl mx-auto">
+        <Reveal>
+          <p className="text-lg text-muted-foreground text-center max-w-2xl mx-auto mb-10">{t.priorities.subtitle}</p>
+        </Reveal>
+        <div className="grid md:grid-cols-3 gap-8">
+          {items.map((item, i) => (
+            <Reveal key={i} delay={i * 100}>
+              <div className="text-center">
+                <div className="w-12 h-12 rounded-xl bg-[hsl(var(--paper))] flex items-center justify-center mx-auto mb-4 text-[hsl(var(--teal))]">
+                  <item.icon className="w-5 h-5" />
+                </div>
+                <h4 className="font-bold text-[hsl(var(--ink))] mb-2">{item.title}</h4>
+                <p className="text-sm text-muted-foreground leading-relaxed">{item.desc}</p>
+              </div>
+            </Reveal>
           ))}
         </div>
       </div>
@@ -833,6 +862,7 @@ export default function Home() {
         <Hero />
         <LogoStrip />
         <CredibilityStrip />
+        <PrioritiesDetail />
         <Services />
         <LeadMagnet />
         <Process />
