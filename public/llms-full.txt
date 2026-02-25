@@ -1,0 +1,112 @@
+# IM3 Systems — Información completa
+
+> IM3 Systems es una empresa especializada en el diseño y desarrollo de software operativo a medida para pequeñas y medianas empresas (PYMEs). La empresa construye aplicaciones internas, sistemas de automatización de procesos e integraciones con inteligencia artificial que resuelven problemas operativos reales.
+
+## Identidad y posicionamiento
+
+IM3 Systems no es una agencia de desarrollo genérica. Es una firma de ingeniería de software enfocada en operaciones empresariales. Su enfoque se diferencia por:
+
+1. **Diagnóstico antes de desarrollo**: Cada proyecto comienza con un análisis profundo de la operación del cliente. No se construye nada hasta entender el problema real.
+2. **Sistemas mantenibles**: Todo lo que IM3 construye está documentado y diseñado para que el equipo del cliente lo pueda operar de forma autónoma.
+3. **Enfoque en resultados medibles**: Cada sistema tiene métricas claras de impacto — horas ahorradas, errores reducidos, procesos automatizados.
+
+## Servicios detallados
+
+### 1. Aplicaciones internas personalizadas
+IM3 construye herramientas de software específicas para cada operación:
+- **Paneles de control operativo**: Interfaces que centralizan información crítica del negocio en tiempo real.
+- **Sistemas de registro y seguimiento**: Checklists digitales, registros de actividad, trazabilidad de procesos.
+- **Reportería automatizada**: Generación automática de reportes diarios, semanales o mensuales sin intervención manual.
+- **Gestión de flujos de trabajo**: Sistemas que guían al equipo paso a paso en procesos complejos (aprobaciones, escalamientos, asignaciones).
+- **Portales internos**: Acceso centralizado a documentos, procedimientos, métricas y herramientas del equipo.
+
+### 2. Automatización de procesos empresariales
+IM3 conecta los sistemas existentes del cliente para eliminar trabajo repetitivo:
+- **Integración de herramientas**: Conexión entre Google Sheets, CRMs (HubSpot, Salesforce), POS, ERPs, herramientas de facturación y más.
+- **Flujos automáticos**: Cuando ocurre un evento en una herramienta (nueva venta, nuevo registro, etc.), se disparan acciones automáticas en otras.
+- **Conciliaciones automáticas**: Cruce de datos entre sistemas que antes requería horas de trabajo manual.
+- **Notificaciones inteligentes**: Alertas automáticas por email, Slack o WhatsApp cuando algo requiere atención.
+- **Migración de datos**: Transferencia ordenada de información desde hojas de cálculo y sistemas legacy a plataformas modernas.
+
+### 3. Inteligencia artificial aplicada a operaciones
+IM3 implementa IA donde genera valor práctico, no como buzzword:
+- **Clasificación automática**: Categorización de documentos, tickets, transacciones o registros sin intervención humana.
+- **Predicciones operativas**: Modelos que anticipan demanda, detectan anomalías o predicen necesidades de inventario.
+- **Análisis de patrones**: Identificación de tendencias, cuellos de botella y oportunidades ocultas en los datos operativos.
+- **Chatbots y asistentes internos**: Asistentes de IA que responden preguntas del equipo, buscan información o ejecutan tareas rutinarias.
+- **Procesamiento de lenguaje natural**: Extracción de información de emails, documentos y formularios de texto libre.
+- **Dashboards con IA**: Reportes que no solo muestran datos, sino que sugieren acciones basadas en análisis inteligente.
+
+## Metodología de trabajo detallada
+
+### Fase 1: Diagnóstico estratégico (Gratuito)
+- Reunión de descubrimiento (60-90 minutos)
+- Análisis de la operación actual del cliente
+- Mapeo de procesos, herramientas y puntos de dolor
+- Identificación de oportunidades de automatización e IA
+- Entrega de un documento con recomendaciones, prioridades y hoja de ruta
+- Sin costo y sin compromiso
+
+### Fase 2: Desarrollo de la solución
+- Diseño de arquitectura técnica y flujos de usuario
+- Desarrollo iterativo con entregas semanales
+- Revisiones constantes con el cliente
+- Pruebas con datos reales del negocio
+
+### Fase 3: Implementación en producción
+- Migración de datos desde sistemas anteriores
+- Integración con herramientas existentes
+- Pruebas en entorno real con el equipo
+- Ajustes basados en feedback directo
+
+### Fase 4: Entrega y acompañamiento
+- Documentación técnica y de usuario
+- Capacitación al equipo operativo
+- Acompañamiento durante las primeras semanas
+- Soporte para ajustes post-lanzamiento
+
+## Industrias atendidas
+
+IM3 ha construido sistemas para empresas en:
+- **Retail y comercio**: Control de inventario, punto de venta, conciliaciones
+- **Logística y distribución**: Tracking, rutas, gestión de entregas
+- **Servicios profesionales**: Gestión de proyectos, facturación, CRM
+- **Educación**: Plataformas de gestión, seguimiento de estudiantes
+- **Alimentos y restaurantes**: Control operativo, inventario, reportería
+- **Manufactura**: Control de producción, calidad, trazabilidad
+
+## Casos de éxito documentados
+
+### Bodega 72 — Industria: Retail
+- **Problema**: Cierre contable manual que tomaba 4 días cada mes
+- **Solución**: Sistema de conciliación automática con integración POS-contabilidad
+- **Resultado**: Cierre reducido a 4 horas
+
+### CasaMesa — Industria: Retail/Manufactura
+- **Problema**: Pérdida de inventario del 8% por errores de registro manual
+- **Solución**: Sistema de control de inventario con escaneo y validación automática
+- **Resultado**: Pérdida reducida a menos del 0.5%
+
+### Quanta — Industria: Servicios
+- **Problema**: Adopción lenta de herramientas (meses para que el equipo las use)
+- **Solución**: Sistema diseñado para el flujo de trabajo real del equipo
+- **Resultado**: Adopción completa en 2 semanas sin soporte continuo
+
+## Stack tecnológico
+
+- **Frontend**: React, TypeScript, Tailwind CSS
+- **Backend**: Node.js, Express, Python
+- **Bases de datos**: PostgreSQL, MongoDB
+- **Integraciones**: APIs REST, webhooks, Zapier, Make
+- **IA/ML**: OpenAI API, modelos de clasificación, NLP
+- **Cloud**: AWS, Google Cloud, Vercel
+- **Herramientas**: Git, CI/CD, Docker
+
+## Información de contacto
+
+- **Sitio web**: https://www.im3systems.com
+- **Email**: info@im3systems.com
+- **LinkedIn**: https://www.linkedin.com/company/im3-systems
+- **Agendar diagnóstico gratuito**: https://calendar.im3systems.com
+- **Idiomas**: Español, Inglés
+- **Zona de servicio**: Latinoamérica (servicio remoto disponible globalmente)

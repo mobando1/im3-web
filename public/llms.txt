@@ -1,0 +1,81 @@
+# IM3 Systems
+
+> IM3 Systems es una empresa que diseña y desarrolla software operativo a medida para PYMEs. Construimos aplicaciones internas, automatizaciones de procesos e integraciones con inteligencia artificial que ordenan la operación, eliminan trabajo manual y generan control real del negocio.
+
+## Qué hacemos
+
+IM3 Systems construye tres tipos de soluciones para empresas:
+
+### Aplicaciones internas
+Herramientas a medida para control operativo, reportes, checklists, registros y flujos internos. Reemplazan hojas de cálculo, WhatsApp y procesos manuales con software diseñado específicamente para la operación del cliente.
+
+### Automatización de procesos
+Conectamos apps y datos para eliminar tareas repetitivas y reducir errores. Integramos CRMs, POS, Google Sheets, ERPs y cualquier herramienta que el negocio ya utilice, creando flujos automáticos que ahorran horas de trabajo diario.
+
+### Sistemas de control con inteligencia artificial
+Dashboards, conciliaciones automáticas, alertas predictivas y auditoría operativa. Aplicamos IA donde tiene sentido práctico: clasificación automática de datos, predicciones de demanda, análisis de patrones, chatbots internos y asistentes de productividad.
+
+## Cómo trabajamos
+
+1. **Diagnóstico estratégico**: Analizamos la operación del cliente, entendemos su negocio, detectamos oportunidades y puntos críticos, definimos el sistema, procesos y herramientas que realmente necesita.
+2. **Desarrollo de la solución**: Diseñamos y construimos el sistema a medida — interfaces, automatizaciones, integraciones y flujos adaptados a cómo funciona el equipo en el día a día.
+3. **Implementación**: Integramos el sistema directamente en la operación real, migramos datos, conectamos herramientas existentes y validamos que todo funcione antes de salir en vivo.
+4. **Entrega y acompañamiento**: Documentamos todo, entrenamos al equipo, y acompañamos las primeras semanas para asegurar una adopción sin fricciones.
+
+## Para quién es IM3
+
+IM3 trabaja con PYMEs que tienen operación real y necesitan orden y control:
+- Empresas cuya operación depende de personas y WhatsApp pero necesitan estructura
+- Negocios con reportes manuales, cierres, conciliaciones o auditorías que toman horas
+- Empresas con varias apps desconectadas (Sheets, POS, CRM, etc.)
+- Equipos que quieren un sistema mantenible, no un proyecto eterno
+
+## Resultados documentados
+
+- 45+ sistemas construidos
+- 6 industrias atendidas
+- 100% de diagnósticos que continúan a implementación
+- Caso: Reducción de tiempo de cierre de 4 días a 4 horas (Bodega 72)
+- Caso: Reducción de pérdida de inventario de 8% a 0.5% (CasaMesa)
+- Caso: Adopción completa del equipo en 2 semanas (Quanta)
+
+## Modelos de trabajo
+
+### Implementación completa (Done For You)
+IM3 se encarga de todo: diseño, construcción y entrega del sistema funcionando. Ideal para empresas que buscan velocidad y garantía de ejecución.
+
+### Acompañamiento estratégico (Consultoría + Diseño)
+IM3 diseña la arquitectura y guía al equipo técnico del cliente para que construyan con supervisión de calidad. Ideal para empresas con capacidad técnica que necesitan dirección.
+
+## Tecnologías
+
+- Aplicaciones web modernas (React, TypeScript, Node.js)
+- Integraciones con Google Sheets, CRMs, POS, ERPs
+- Bases de datos PostgreSQL
+- APIs REST y webhooks
+- Inteligencia artificial aplicada (clasificación, predicción, NLP)
+- Dashboards y reportería en tiempo real
+
+## Contacto
+
+- Web: https://www.im3systems.com
+- Email: info@im3systems.com
+- LinkedIn: https://www.linkedin.com/company/im3-systems
+- Agendar diagnóstico gratis: https://calendar.im3systems.com
+
+## Preguntas frecuentes
+
+**¿Cuánto toma una implementación típica?**
+Depende del alcance, pero un MVP funcional suele estar listo en 4 a 8 semanas. Empezamos con lo que más impacta la operación y vamos iterando.
+
+**¿Qué pasa si mi equipo no es técnico?**
+No se necesita equipo técnico. Diseñamos todo para que sea fácil de usar. Entregamos documentación y capacitación para que el equipo opere sin depender de nosotros.
+
+**¿Qué tecnologías usan?**
+Las herramientas que mejor se adapten a cada caso: desde apps web modernas hasta integraciones con las plataformas que ya usa el cliente (Google Sheets, CRMs, POS, etc.).
+
+**¿El diagnóstico tiene algún costo?**
+No. El diagnóstico es 100% gratuito y sin compromiso.
+
+**¿Usan inteligencia artificial?**
+Sí. Aplicamos IA donde tiene sentido práctico: clasificación automática, predicciones, análisis de datos, chatbots y asistentes internos.

@@ -124,7 +124,10 @@ Preferred communication style: Simple, everyday language.
 ### SEO Configuration
 - **Meta tags**: Title, description and keywords optimized for "desarrollo de aplicaciones", "automatización de procesos", "inteligencia artificial para empresas"
 - **Canonical URL**: https://www.im3systems.com
-- **Schema.org structured data**: ProfessionalService, WebSite, FAQPage schemas in `client/index.html`
-- **robots.txt**: Located at `public/robots.txt`, allows all crawlers
-- **sitemap.xml**: Located at `public/sitemap.xml`, references main URL
+- **Schema.org structured data**: Organization, WebSite, FAQPage, Review schemas in `client/index.html`
+- **robots.txt**: Located at `public/robots.txt`, allows all crawlers including AI bots (GPTBot, ClaudeBot, PerplexityBot, etc.)
+- **sitemap.xml**: Located at `public/sitemap.xml`, references main URL with hreflang
 - **Open Graph & Twitter Cards**: Configured for social sharing with bilingual support (es_ES, en_US)
+- **hreflang tags**: Spanish and English alternate links with x-default
+- **llms.txt**: Located at `public/llms.txt` — structured content for LLM/AI search engines
+- **llms-full.txt**: Located at `public/llms-full.txt` — detailed version with complete service info, case studies, and tech stack
