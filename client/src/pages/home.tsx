@@ -234,8 +234,8 @@ const PrioritiesCard = () => {
                     className={cn(
                       "priority-card relative text-left rounded-lg px-3 py-2.5 transition-all duration-300 cursor-pointer border overflow-hidden",
                       isActive
-                        ? "bg-[hsl(var(--ink))]/[0.12] border-[hsl(var(--teal))]/30 shadow-sm"
-                        : "bg-[hsl(var(--ink))]/[0.07] border-[hsl(var(--ink))]/[0.10] hover:bg-[hsl(var(--ink))]/[0.10]"
+                        ? "bg-[#0B1C2D] border-[hsl(var(--teal))]/40 shadow-md"
+                        : "bg-[#0F2438] border-[#1a3550] hover:bg-[#122d45]"
                     )}
                     onMouseEnter={() => setActive(i)}
                     onMouseLeave={() => setActive(null)}
@@ -247,7 +247,7 @@ const PrioritiesCard = () => {
                     <div className="flex items-center gap-2">
                       <h4 className={cn(
                         "font-semibold text-xs transition-colors duration-300",
-                        isActive ? "text-[hsl(var(--ink))]" : "text-[hsl(var(--coal))]"
+                        isActive ? "text-white" : "text-gray-200"
                       )}>{item.title}</h4>
                       <Icon className={cn(
                         "w-3.5 h-3.5 shrink-0 transition-all duration-300",
@@ -258,7 +258,7 @@ const PrioritiesCard = () => {
                       "overflow-hidden transition-all duration-300 ease-out",
                       isActive ? "max-h-20 opacity-100 mt-1.5" : "max-h-0 opacity-0"
                     )}>
-                      <p className="text-[11px] text-muted-foreground leading-relaxed">{item.desc}</p>
+                      <p className="text-[11px] text-gray-400 leading-relaxed">{item.desc}</p>
                     </div>
                   </button>
                 );
