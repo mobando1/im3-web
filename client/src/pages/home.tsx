@@ -675,25 +675,28 @@ const TargetAudience = () => {
   return (
     <section id="para" className="py-6 sm:py-8 px-4 md:px-8">
       <div className="max-w-7xl mx-auto">
-        <div className="mb-8">
+        <div className="max-w-2xl mx-auto text-center mb-10">
           <Reveal>
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">{t.targetAudience.title}</h2>
-            <p className="text-xl text-muted-foreground">{t.targetAudience.subtitle}</p>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-3 leading-tight">{t.targetAudience.title}</h2>
+            <p className="text-base sm:text-lg text-muted-foreground">{t.targetAudience.subtitle}</p>
           </Reveal>
         </div>
 
         <div className="grid md:grid-cols-2 gap-8">
           <Reveal>
-            <div className="bg-[hsl(var(--ink))] text-white p-8 md:p-12 rounded-[2rem] shadow-xl relative overflow-hidden">
+            <div className="bg-[hsl(var(--ink))] text-white p-8 md:p-10 rounded-[2rem] shadow-xl relative overflow-hidden h-full">
                <div className="absolute top-0 right-0 w-64 h-64 bg-[hsl(var(--teal))] opacity-20 blur-[80px] rounded-full"></div>
-               <h3 className="text-xl sm:text-2xl font-bold mb-8 flex items-center gap-3">
-                 <Check className="text-[hsl(var(--teal))] shrink-0 w-6 h-6" /> {t.targetAudience.fitsYouIf}
-               </h3>
+               <div className="flex items-center gap-3 mb-7">
+                 <div className="w-8 h-8 rounded-full bg-[hsl(var(--teal))]/20 flex items-center justify-center shrink-0">
+                   <Check className="text-[hsl(var(--teal))] w-4 h-4" />
+                 </div>
+                 <h3 className="text-lg sm:text-xl font-bold">{t.targetAudience.fitsYouIf}</h3>
+               </div>
                <ul className="space-y-5 relative z-10">
                  {t.targetAudience.fitsItems.map((item, i) => (
                    <li key={i} className="flex gap-3 items-start">
-                     <Check className="w-4 h-4 text-[hsl(var(--teal))] shrink-0 mt-1" />
-                     <span className="text-gray-300 leading-relaxed">{item}</span>
+                     <Check className="w-4 h-4 text-[hsl(var(--teal))] shrink-0 mt-0.5" />
+                     <span className="text-gray-300 leading-relaxed text-[15px]">{item}</span>
                    </li>
                  ))}
                </ul>
@@ -701,15 +704,18 @@ const TargetAudience = () => {
           </Reveal>
 
           <Reveal delay={200}>
-            <div className="bg-white p-8 md:p-12 rounded-[2rem] border border-border shadow-sm h-full">
-               <h3 className="text-xl sm:text-2xl font-bold mb-8 text-gray-400 flex items-center gap-3">
-                 <X className="shrink-0 w-6 h-6" /> {t.targetAudience.notForYou}
-               </h3>
+            <div className="bg-white p-8 md:p-10 rounded-[2rem] border border-border shadow-sm h-full">
+               <div className="flex items-center gap-3 mb-7">
+                 <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center shrink-0">
+                   <X className="text-red-400 w-4 h-4" />
+                 </div>
+                 <h3 className="text-lg sm:text-xl font-bold text-gray-400">{t.targetAudience.notForYou}</h3>
+               </div>
                <ul className="space-y-5">
                  {t.targetAudience.notForItems.map((item, i) => (
                    <li key={i} className="flex gap-3 items-start">
-                     <X className="w-4 h-4 text-red-300 shrink-0 mt-1" />
-                     <span className="text-muted-foreground leading-relaxed">{item}</span>
+                     <X className="w-4 h-4 text-red-300 shrink-0 mt-0.5" />
+                     <span className="text-muted-foreground leading-relaxed text-[15px]">{item}</span>
                    </li>
                  ))}
                </ul>
