@@ -215,9 +215,12 @@ const Header = () => {
           <button onClick={() => scrollToSection('para')} className="text-left text-lg font-medium py-2 border-b border-[hsl(var(--divider))] text-[hsl(var(--text-primary))]">{t.nav.forWhom}</button>
           <button 
             onClick={openBooking}
-            className="bg-[hsl(var(--teal))] text-white px-5 py-3 rounded-xl text-center font-medium mt-2"
+            className="group relative bg-[hsl(var(--teal))] text-white px-5 py-3 rounded-xl text-center font-medium mt-2 overflow-hidden cta-glow"
           >
-            {t.nav.requestDiagnosis}
+            <span className="relative z-10 flex items-center justify-center gap-2">
+              {t.nav.requestDiagnosis} <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1.5" />
+            </span>
+            <span className="absolute inset-0 cta-shimmer pointer-events-none" />
           </button>
         </div>
       )}
@@ -363,9 +366,12 @@ const Hero = () => {
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button 
                   onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
-                  className="bg-[hsl(var(--teal))] text-white px-6 py-3.5 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:translate-y-[-2px] shadow-[0_10px_20px_-10px_rgba(47,164,169,0.3)] hover:shadow-[0_20px_40px_-15px_rgba(47,164,169,0.5)] ring-offset-2 ring-offset-[hsl(var(--hero-bg))] focus:ring-2 focus:ring-[hsl(var(--teal))] text-center"
+                  className="group relative bg-[hsl(var(--teal))] text-white px-6 py-3.5 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:translate-y-[-2px] shadow-[0_10px_20px_-10px_rgba(47,164,169,0.3)] hover:shadow-[0_20px_40px_-15px_rgba(47,164,169,0.5)] ring-offset-2 ring-offset-[hsl(var(--hero-bg))] focus:ring-2 focus:ring-[hsl(var(--teal))] text-center overflow-hidden cta-glow"
                 >
-                  {t.hero.cta}
+                  <span className="relative z-10 flex items-center justify-center gap-2">
+                    {t.hero.cta} <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1.5" />
+                  </span>
+                  <span className="absolute inset-0 cta-shimmer pointer-events-none" />
                 </button>
                 <button 
                   onClick={() => document.getElementById('que')?.scrollIntoView({ behavior: 'smooth' })}
@@ -597,9 +603,12 @@ const LeadMagnet = () => {
           <div className="md:w-1/3 flex justify-center md:justify-end">
              <button 
                 onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
-                className="bg-[hsl(var(--teal))] text-white px-8 py-4 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:shadow-lg whitespace-nowrap"
+                className="group relative bg-[hsl(var(--teal))] text-white px-8 py-4 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:shadow-lg hover:translate-y-[-2px] whitespace-nowrap overflow-hidden cta-glow"
              >
-                {t.leadMagnet.cta}
+                <span className="relative z-10 flex items-center justify-center gap-2">
+                  {t.leadMagnet.cta} <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1.5" />
+                </span>
+                <span className="absolute inset-0 cta-shimmer pointer-events-none" />
              </button>
           </div>
         </div>
@@ -879,9 +888,12 @@ const Contact = () => {
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <button 
               onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
-              className="bg-[hsl(var(--teal))] text-white px-8 py-4 rounded-xl font-bold hover:opacity-90 transition-all flex items-center justify-center gap-2"
+              className="group relative bg-[hsl(var(--teal))] text-white px-8 py-4 rounded-xl font-bold hover:translate-y-[-2px] hover:shadow-[0_10px_25px_-6px_rgba(47,164,169,0.6)] transition-all flex items-center justify-center gap-2 overflow-hidden cta-glow"
             >
-              <Calendar className="w-5 h-5" /> {t.contact.scheduleCall}
+              <span className="relative z-10 flex items-center justify-center gap-2">
+                <Calendar className="w-5 h-5" /> {t.contact.scheduleCall} <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1.5" />
+              </span>
+              <span className="absolute inset-0 cta-shimmer pointer-events-none" />
             </button>
             <button 
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
