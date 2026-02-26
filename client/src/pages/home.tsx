@@ -322,7 +322,7 @@ const Hero = () => {
 
   return (
     <section className="pt-20 pb-4 px-4 md:px-8">
-      <div className="max-w-7xl mx-auto bg-[hsl(var(--ink))] rounded-[32px] overflow-hidden text-white relative shadow-2xl">
+      <div className="max-w-7xl mx-auto bg-[hsl(var(--hero-bg))] rounded-[32px] overflow-hidden text-white relative shadow-2xl">
         {/* Abstract Background Elements */}
         <div className="absolute inset-0 opacity-20 mix-blend-soft-light" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.7\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")' }}></div>
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]"></div>
@@ -355,7 +355,7 @@ const Hero = () => {
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button 
                   onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
-                  className="bg-[hsl(var(--teal))] text-white px-6 py-3.5 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:translate-y-[-2px] shadow-[0_10px_20px_-10px_rgba(47,164,169,0.3)] hover:shadow-[0_20px_40px_-15px_rgba(47,164,169,0.5)] ring-offset-2 ring-offset-[hsl(var(--ink))] focus:ring-2 focus:ring-[hsl(var(--teal))] text-center"
+                  className="bg-[hsl(var(--teal))] text-white px-6 py-3.5 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:translate-y-[-2px] shadow-[0_10px_20px_-10px_rgba(47,164,169,0.3)] hover:shadow-[0_20px_40px_-15px_rgba(47,164,169,0.5)] ring-offset-2 ring-offset-[hsl(var(--hero-bg))] focus:ring-2 focus:ring-[hsl(var(--teal))] text-center"
                 >
                   {t.hero.cta}
                 </button>
@@ -618,7 +618,7 @@ const ProcessStep = ({ step, index, total }: { step: { num: string; title: strin
             "relative w-14 h-14 rounded-2xl flex items-center justify-center font-display font-bold text-lg transition-all duration-500 z-10 cursor-pointer",
             hovered 
               ? "bg-[hsl(var(--teal))] text-white scale-110 shadow-[0_0_30px_rgba(47,164,169,0.4)]" 
-              : "bg-[#0F2438] text-white shadow-lg"
+              : "bg-[hsl(var(--step-bg))] text-white shadow-lg"
           )}>
             {step.num}
             <div className={cn(
@@ -637,7 +637,7 @@ const ProcessStep = ({ step, index, total }: { step: { num: string; title: strin
                 "absolute inset-0 rounded-full transition-all duration-500",
                 hovered
                   ? "bg-gradient-to-b from-[hsl(var(--teal))] to-[hsl(var(--teal))]/10"
-                  : "bg-gradient-to-b from-[#0F2438]/25 via-[hsl(var(--teal))]/15 to-transparent"
+                  : "bg-gradient-to-b from-[hsl(var(--step-line))]/25 via-[hsl(var(--teal))]/15 to-transparent"
               )} />
             </div>
           )}
@@ -711,7 +711,7 @@ const TargetAudience = () => {
 
         <div className="grid md:grid-cols-2 gap-8">
           <Reveal>
-            <div className="bg-[hsl(var(--ink))] text-white p-8 md:p-10 rounded-[2rem] shadow-xl relative overflow-hidden h-full">
+            <div className="bg-[hsl(var(--hero-bg))] text-white p-8 md:p-10 rounded-[2rem] shadow-xl relative overflow-hidden h-full">
                <div className="absolute top-0 right-0 w-64 h-64 bg-[hsl(var(--teal))] opacity-20 blur-[80px] rounded-full"></div>
                <div className="flex items-center gap-3 mb-7">
                  <CheckCircle2 className="w-7 h-7 text-[hsl(var(--teal))] shrink-0" strokeWidth={2} />
@@ -734,7 +734,7 @@ const TargetAudience = () => {
             <div className="bg-[hsl(var(--surface))] p-8 md:p-10 rounded-[2rem] border border-[hsl(var(--divider))] shadow-sm h-full">
                <div className="flex items-center gap-3 mb-7">
                  <XCircle className="w-7 h-7 text-[hsl(var(--icon-fg-red))]/80 shrink-0" strokeWidth={2} />
-                 <h3 className="text-lg sm:text-xl font-bold text-gray-400">{t.targetAudience.notForYou}</h3>
+                 <h3 className="text-lg sm:text-xl font-bold text-[hsl(var(--text-tertiary))]">{t.targetAudience.notForYou}</h3>
                </div>
                <ul className="space-y-5">
                  {t.targetAudience.notForItems.map((item, i) => (

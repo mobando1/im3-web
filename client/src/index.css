@@ -97,6 +97,9 @@
   --lead-border: 166 76% 90%;
   --avatar-bg: 210 15% 85%;
   --avatar-fg: 215 15% 45%;
+  --hero-bg: 210 60% 11%;
+  --step-bg: 213 42% 14%;
+  --step-line: 213 42% 14%;
 }
 
 .dark {
@@ -145,6 +148,9 @@
   --lead-border: 182 30% 20%;
   --avatar-bg: 220 20% 20%;
   --avatar-fg: 215 15% 60%;
+  --hero-bg: 220 30% 6%;
+  --step-bg: 220 30% 10%;
+  --step-line: 220 30% 10%;
 }
 
 @layer base {
@@ -156,7 +162,7 @@
     transition: background-color 0.3s ease, color 0.3s ease;
   }
   h1, h2, h3, h4, h5, h6 {
-    @apply font-display tracking-tight text-foreground;
+    @apply font-display tracking-tight;
   }
 }
 
