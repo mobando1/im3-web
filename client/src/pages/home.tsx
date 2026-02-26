@@ -32,7 +32,8 @@ import {
   Moon
 } from "lucide-react";
 import { useDarkMode } from "@/hooks/useDarkMode";
-import im3Logo from "@assets/Mesa_de_trabajo_1_1772069787818.png";
+import im3LogoPng from "@assets/Mesa_de_trabajo_1_1772069787818.png";
+import im3LogoJpg from "@assets/Copia_de_logo_mateo_640x360_Mesa_de_trabajo_1_1769286951640.jpg";
 
 const InteractiveHeroWidget = lazy(() => import("@/components/InteractiveHeroWidget").then(m => ({ default: m.InteractiveHeroWidget })));
 
@@ -133,7 +134,7 @@ const Header = () => {
             : "bg-transparent"
         )}>
           <div className="flex items-center gap-2">
-            <img src={im3Logo} alt="IM3 Systems" className={cn("h-8 w-auto object-contain transition-all duration-300", !isScrolled || isDark ? "brightness-0 invert" : "")} />
+            <img src={!isScrolled || isDark ? im3LogoPng : im3LogoJpg} alt="IM3 Systems" className={cn("h-8 w-auto object-contain transition-all duration-300", !isScrolled || isDark ? "brightness-0 invert" : "rounded-md")} />
           </div>
 
           <nav className="hidden md:flex items-center gap-5">
@@ -928,6 +929,7 @@ const FAQ = () => {
 
 const Footer = () => {
   const { t } = useI18n();
+  const { isDark } = useDarkMode();
   const year = new Date().getFullYear();
 
   const scrollToSection = (id: string) => {
@@ -942,7 +944,7 @@ const Footer = () => {
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           <div className="md:col-span-1">
-            <img src={im3Logo} alt="IM3 Systems" className="h-10 w-auto object-contain mb-4 dark:brightness-0 dark:invert" />
+            <img src={isDark ? im3LogoPng : im3LogoJpg} alt="IM3 Systems" className={cn("h-10 w-auto object-contain mb-4", isDark ? "brightness-0 invert" : "rounded-md")} />
             <p className="text-sm text-muted-foreground">
               <a href="mailto:info@im3systems.com" className="hover:text-[hsl(var(--teal))] transition-colors">info@im3systems.com</a>
             </p>
