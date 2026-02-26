@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, lazy, Suspense } from "react";
+import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react";
 import { Link } from "wouter";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
@@ -831,6 +831,7 @@ const Testimonials = () => {
   const reviews = t.testimonials.reviews as { quote: string; author: string; role: string; featured?: boolean }[];
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const [isTransitioning, setIsTransitioning] = useState(true);
   const touchStartX = useRef(0);
 
   const [visibleCount, setVisibleCount] = useState(1);
@@ -842,21 +843,54 @@ const Testimonials = () => {
     return () => window.removeEventListener('resize', updateVisible);
   }, []);
 
-  const maxIndex = reviews.length - visibleCount;
+  const loopedReviews = [...reviews, ...reviews, ...reviews];
+  const realCount = reviews.length;
+  const startOffset = realCount;
+
+  useEffect(() => {
+    setCurrentIndex(startOffset);
+    setIsTransitioning(false);
+    requestAnimationFrame(() => setIsTransitioning(true));
+  }, []);
+
+  const normalizeIndex = useCallback((idx: number) => {
+    return ((idx % realCount) + realCount) % realCount;
+  }, [realCount]);
+
+  const snapToReal = useCallback((idx: number) => {
+    if (idx < realCount || idx >= realCount * 2) {
+      const mapped = startOffset + normalizeIndex(idx);
+      setIsTransitioning(false);
+      setCurrentIndex(mapped);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => setIsTransitioning(true));
+      });
+    }
+  }, [realCount, startOffset, normalizeIndex]);
 
   useEffect(() => {
     if (!isAutoPlaying) return;
     const interval = setInterval(() => {
-      setCurrentIndex(prev => prev >= maxIndex ? 0 : prev + 1);
+      setCurrentIndex(prev => prev + 1);
     }, 4000);
     return () => clearInterval(interval);
-  }, [isAutoPlaying, maxIndex]);
+  }, [isAutoPlaying]);
+
+  useEffect(() => {
+    if (!isTransitioning) return;
+    const timeout = setTimeout(() => snapToReal(currentIndex), 550);
+    return () => clearTimeout(timeout);
+  }, [currentIndex, isTransitioning, snapToReal]);
 
   const goTo = (idx: number) => {
-    setCurrentIndex(Math.max(0, Math.min(idx, maxIndex)));
+    setIsTransitioning(true);
+    setCurrentIndex(idx);
     setIsAutoPlaying(false);
     setTimeout(() => setIsAutoPlaying(true), 8000);
   };
+
+  const goNext = () => goTo(currentIndex + 1);
+  const goPrev = () => goTo(currentIndex - 1);
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartX.current = e.touches[0].clientX;
@@ -865,10 +899,12 @@ const Testimonials = () => {
   const handleTouchEnd = (e: React.TouchEvent) => {
     const diff = touchStartX.current - e.changedTouches[0].clientX;
     if (Math.abs(diff) > 50) {
-      if (diff > 0 && currentIndex < maxIndex) goTo(currentIndex + 1);
-      else if (diff < 0 && currentIndex > 0) goTo(currentIndex - 1);
+      if (diff > 0) goNext();
+      else goPrev();
     }
   };
+
+  const activeDot = normalizeIndex(currentIndex);
 
   return (
     <section className="py-6 sm:py-8 px-4 md:px-8 bg-background">
@@ -885,16 +921,16 @@ const Testimonials = () => {
             onTouchEnd={handleTouchEnd}
           >
             <div
-              className="flex transition-transform duration-500 ease-out"
+              className={cn("flex", isTransitioning && "transition-transform duration-500 ease-out")}
               style={{
                 gap: '1.5rem',
                 transform: `translateX(calc(-${currentIndex} * (${100 / visibleCount}% + ${1.5 / visibleCount}rem)))`
               }}
             >
-              {reviews.map((review, i) => (
+              {loopedReviews.map((review, i) => (
                 <div
                   key={i}
-                  data-testid={`testimonial-card-${i}`}
+                  data-testid={`testimonial-card-${i % realCount}`}
                   className="shrink-0"
                   style={{ width: `calc(${100 / visibleCount}% - ${(visibleCount - 1) * 1.5 / visibleCount}rem)` }}
                 >
@@ -907,27 +943,21 @@ const Testimonials = () => {
           <div className="flex items-center justify-center gap-3 mt-6">
             <button
               data-testid="testimonial-prev"
-              onClick={() => goTo(currentIndex - 1)}
-              disabled={currentIndex === 0}
-              className={cn(
-                "w-8 h-8 rounded-full border flex items-center justify-center transition-all",
-                currentIndex === 0
-                  ? "border-[hsl(var(--divider))] text-[hsl(var(--text-tertiary))] cursor-not-allowed"
-                  : "border-[hsl(var(--teal))]/30 text-[hsl(var(--teal))] hover:bg-[hsl(var(--teal))]/10"
-              )}
+              onClick={goPrev}
+              className="w-8 h-8 rounded-full border border-[hsl(var(--teal))]/30 text-[hsl(var(--teal))] hover:bg-[hsl(var(--teal))]/10 flex items-center justify-center transition-all"
             >
               <ChevronRight className="w-4 h-4 rotate-180" />
             </button>
 
             <div className="flex gap-1.5">
-              {Array.from({ length: maxIndex + 1 }).map((_, i) => (
+              {reviews.map((_, i) => (
                 <button
                   key={i}
                   data-testid={`testimonial-dot-${i}`}
-                  onClick={() => goTo(i)}
+                  onClick={() => goTo(startOffset + i)}
                   className={cn(
                     "h-1.5 rounded-full transition-all duration-300",
-                    currentIndex === i
+                    activeDot === i
                       ? "bg-[hsl(var(--teal))] w-5"
                       : "bg-[hsl(var(--divider))] w-1.5 hover:bg-[hsl(var(--teal))]/40"
                   )}
@@ -937,14 +967,8 @@ const Testimonials = () => {
 
             <button
               data-testid="testimonial-next"
-              onClick={() => goTo(currentIndex + 1)}
-              disabled={currentIndex >= maxIndex}
-              className={cn(
-                "w-8 h-8 rounded-full border flex items-center justify-center transition-all",
-                currentIndex >= maxIndex
-                  ? "border-[hsl(var(--divider))] text-[hsl(var(--text-tertiary))] cursor-not-allowed"
-                  : "border-[hsl(var(--teal))]/30 text-[hsl(var(--teal))] hover:bg-[hsl(var(--teal))]/10"
-              )}
+              onClick={goNext}
+              className="w-8 h-8 rounded-full border border-[hsl(var(--teal))]/30 text-[hsl(var(--teal))] hover:bg-[hsl(var(--teal))]/10 flex items-center justify-center transition-all"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
