@@ -134,7 +134,12 @@ const Header = () => {
             : "bg-transparent"
         )}>
           <div className="flex items-center gap-2">
-            <img src={!isScrolled || isDark ? im3LogoPng : im3LogoJpg} alt="IM3 Systems" className={cn("h-8 w-auto object-contain transition-all duration-300", !isScrolled || isDark ? "brightness-0 invert" : "rounded-md")} />
+            <img 
+              src={!isScrolled || isDark ? im3LogoPng : im3LogoJpg} 
+              alt="IM3 Systems" 
+              className="h-8 w-auto object-contain transition-all duration-300"
+              style={!isScrolled || isDark ? { filter: "brightness(0) invert(1)" } : undefined}
+            />
           </div>
 
           <nav className="hidden md:flex items-center gap-5">
@@ -944,7 +949,12 @@ const Footer = () => {
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           <div className="md:col-span-1">
-            <img src={isDark ? im3LogoPng : im3LogoJpg} alt="IM3 Systems" className={cn("h-10 w-auto object-contain mb-4", isDark ? "brightness-0 invert" : "rounded-md")} />
+            <img 
+              src={isDark ? im3LogoPng : im3LogoJpg} 
+              alt="IM3 Systems" 
+              className="h-10 w-auto object-contain mb-4"
+              style={isDark ? { filter: "brightness(0) invert(1)" } : undefined}
+            />
             <p className="text-sm text-muted-foreground">
               <a href="mailto:info@im3systems.com" className="hover:text-[hsl(var(--teal))] transition-colors">info@im3systems.com</a>
             </p>
