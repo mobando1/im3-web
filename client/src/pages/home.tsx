@@ -127,13 +127,13 @@ const Header = () => {
   return (
     <header 
       className={cn(
-        "fixed top-0 left-0 right-0 z-50 transition-all duration-300 px-4 md:px-6",
-        isScrolled ? "py-2" : "py-3"
+        "fixed top-0 left-0 right-0 z-50 transition-all duration-300 px-3 sm:px-4 md:px-6",
+        isScrolled ? "py-1.5 sm:py-2" : "py-2 sm:py-3"
       )}
     >
       <div className="max-w-5xl mx-auto">
         <div className={cn(
-          "flex items-center justify-between rounded-xl px-4 py-2 transition-all duration-300 backdrop-blur-md",
+          "flex items-center justify-between rounded-xl px-3 sm:px-4 py-2 transition-all duration-300 backdrop-blur-md",
           isDark 
             ? "bg-[hsl(220,25%,12%)]/80 border border-white/10 shadow-sm" 
             : "bg-white/80 border border-black/5 shadow-sm"
@@ -142,7 +142,7 @@ const Header = () => {
             <img 
               src={im3Logo} 
               alt="IM3 Systems" 
-              className="h-8 w-auto object-contain transition-all duration-300"
+              className="h-7 sm:h-8 w-auto object-contain transition-all duration-300"
               style={isDark ? { filter: "brightness(0) invert(1)" } : undefined}
             />
           </div>
@@ -194,7 +194,7 @@ const Header = () => {
 
       {/* Mobile Menu */}
       {mobileMenuOpen && (
-        <div className="absolute top-full left-4 right-4 mt-2 p-6 bg-[hsl(var(--surface))] rounded-2xl shadow-xl border border-[hsl(var(--divider))] md:hidden flex flex-col gap-4 animate-in slide-in-from-top-4 fade-in duration-200">
+        <div className="absolute top-full left-3 right-3 sm:left-4 sm:right-4 mt-2 p-5 sm:p-6 bg-[hsl(var(--surface))] rounded-2xl shadow-xl border border-[hsl(var(--divider))] md:hidden flex flex-col gap-3 sm:gap-4 animate-in slide-in-from-top-4 fade-in duration-200">
           <div className="flex items-center justify-center gap-2 pb-4 border-b border-[hsl(var(--divider))]">
             <button 
               className={cn(
@@ -245,11 +245,11 @@ const PrioritiesCard = () => {
   ];
 
   return (
-    <div className="max-w-5xl mx-auto -mt-6 md:-mt-12 relative z-20 px-4">
+    <div className="max-w-5xl mx-auto -mt-4 sm:-mt-6 md:-mt-12 relative z-20 px-3 sm:px-4">
       <Reveal delay={600}>
         <div className="bg-[hsl(var(--surface))] rounded-2xl shadow-lg border border-[hsl(var(--divider))]/60 overflow-hidden relative">
           <div className="absolute inset-0 bg-gradient-to-br from-[hsl(var(--teal))]/[0.03] via-transparent to-[hsl(var(--teal))]/[0.02] pointer-events-none" />
-          <div className="relative p-5 sm:p-6">
+          <div className="relative p-4 sm:p-5 md:p-6">
             <div className="mb-3">
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-1 h-4 rounded-full bg-[hsl(var(--teal))] shrink-0" />
@@ -339,15 +339,15 @@ const Hero = () => {
   ];
 
   return (
-    <section className="pt-20 pb-4 px-4 md:px-8">
-      <div className="max-w-7xl mx-auto bg-[hsl(var(--hero-bg))] rounded-[32px] overflow-hidden text-white relative shadow-2xl">
+    <section className="pt-16 sm:pt-20 pb-4 px-3 sm:px-4 md:px-8">
+      <div className="max-w-7xl mx-auto bg-[hsl(var(--hero-bg))] rounded-2xl sm:rounded-[32px] overflow-hidden text-white relative shadow-2xl">
         <div className="absolute inset-0 opacity-20 mix-blend-soft-light" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.7\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")' }}></div>
         <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]"></div>
         
         <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[hsl(var(--teal))] opacity-10 blur-[120px] rounded-full pointer-events-none -translate-y-1/2 translate-x-1/4"></div>
         <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-600 opacity-10 blur-[100px] rounded-full pointer-events-none translate-y-1/4 -translate-x-1/4"></div>
 
-        <div className="grid md:grid-cols-2 gap-8 md:gap-12 p-6 sm:p-8 md:p-16 relative z-10 items-center">
+        <div className="grid md:grid-cols-2 gap-6 sm:gap-8 md:gap-12 p-5 sm:p-8 md:p-16 relative z-10 items-center">
           <div className="space-y-8">
             <Reveal>
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-xs font-medium tracking-wide text-[hsl(var(--teal))] shadow-lg shadow-teal-900/20 backdrop-blur-md">
@@ -357,13 +357,13 @@ const Hero = () => {
             </Reveal>
             
             <Reveal delay={100}>
-              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-display font-bold leading-[1.15] tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-white to-gray-400">
+              <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-display font-bold leading-[1.15] tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-white to-gray-400">
                 {t.hero.headline}
               </h1>
             </Reveal>
 
             <Reveal delay={200}>
-              <p className="text-base sm:text-lg text-gray-300 leading-relaxed max-w-xl font-light">
+              <p className="text-sm sm:text-base md:text-lg text-gray-300 leading-relaxed max-w-xl font-light">
                 {t.hero.subheadline}
               </p>
             </Reveal>
@@ -389,11 +389,11 @@ const Hero = () => {
             </Reveal>
 
             <Reveal delay={400}>
-              <div className="flex flex-wrap gap-2 sm:gap-3 pt-4 border-t border-white/5 mt-6 sm:mt-8">
+              <div className="flex flex-wrap gap-1.5 sm:gap-2 md:gap-3 pt-4 border-t border-white/5 mt-4 sm:mt-8">
                 {badges.map((badge, i) => (
                   <span 
                     key={i} 
-                    className="group px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-gray-400 font-mono hover:bg-[hsl(var(--teal))]/10 hover:border-[hsl(var(--teal))]/30 hover:text-[hsl(var(--teal))] transition-all duration-300 cursor-default flex items-center gap-2"
+                    className="group px-2 sm:px-3 py-1 sm:py-1.5 rounded-lg bg-white/5 border border-white/10 text-[10px] sm:text-xs text-gray-400 font-mono hover:bg-[hsl(var(--teal))]/10 hover:border-[hsl(var(--teal))]/30 hover:text-[hsl(var(--teal))] transition-all duration-300 cursor-default flex items-center gap-1.5 sm:gap-2"
                   >
                     <badge.icon className="w-3 h-3 opacity-60 group-hover:opacity-100 transition-opacity" />
                     {badge.label}
@@ -434,22 +434,22 @@ const LogoStrip = () => {
   ];
 
   const LogoItem = ({ logo }: { logo: { name: string; src: string } }) => (
-    <div className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity duration-300 flex items-center mx-8">
+    <div className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity duration-300 flex items-center mx-4 sm:mx-8">
       <img 
         src={logo.src} 
         alt={logo.name} 
         className={cn(
           "w-auto object-contain rounded-xl",
-          logo.name === "AMJ Solutions" ? "h-32 max-w-[240px]" : "h-14 max-w-[130px]"
+          logo.name === "AMJ Solutions" ? "h-20 sm:h-32 max-w-[160px] sm:max-w-[240px]" : "h-10 sm:h-14 max-w-[90px] sm:max-w-[130px]"
         )}
       />
     </div>
   );
   
   return (
-    <section className="py-6 overflow-hidden bg-background relative">
+    <section className="py-4 sm:py-6 overflow-hidden bg-background relative">
       <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-md h-px bg-gradient-to-r from-transparent via-[hsl(var(--divider))]/60 to-transparent" />
-      <div className="max-w-7xl mx-auto px-8 mb-5 text-center">
+      <div className="max-w-7xl mx-auto px-4 sm:px-8 mb-4 sm:mb-5 text-center">
         <p className="text-sm font-display font-semibold text-[hsl(var(--text-secondary))] tracking-wide">{t.logoStrip.title}</p>
       </div>
       <div className="relative overflow-hidden">
@@ -516,14 +516,14 @@ const CredibilityStrip = () => {
   ];
 
   return (
-    <section className="py-4 px-4 md:px-8">
+    <section className="py-4 px-3 sm:px-4 md:px-8">
       <div className="max-w-3xl mx-auto">
-        <div className="flex items-center justify-center gap-6 sm:gap-10 md:gap-16">
+        <div className="flex items-center justify-center gap-4 sm:gap-10 md:gap-16">
           {stats.map((stat, i) => (
             <Reveal key={i} delay={i * 150}>
-              <div className="flex items-center gap-6 sm:gap-10 md:gap-16">
+              <div className="flex items-center gap-4 sm:gap-10 md:gap-16">
                 <div className="text-center">
-                  <div className="text-3xl sm:text-4xl md:text-5xl font-display font-bold text-[hsl(var(--teal))]">
+                  <div className="text-2xl sm:text-4xl md:text-5xl font-display font-bold text-[hsl(var(--teal))]">
                     <AnimatedCounter value={stat.num} suffix={stat.suffix} duration={1200 + i * 300} />
                   </div>
                   <div className="text-[10px] sm:text-xs text-muted-foreground mt-1 font-medium tracking-wide">{stat.label}</div>
@@ -565,7 +565,7 @@ const Services = () => {
   ];
 
   return (
-    <section id="que" className="py-6 sm:py-8 px-4 md:px-8">
+    <section id="que" className="py-6 sm:py-8 px-3 sm:px-4 md:px-8">
       <div className="max-w-7xl mx-auto">
         <div className="text-center max-w-2xl mx-auto mb-10">
           <Reveal>
@@ -577,7 +577,7 @@ const Services = () => {
         <div className="grid md:grid-cols-3 gap-6">
           {cards.map((card, i) => (
             <Reveal key={i} delay={i * 100}>
-              <div className="bg-[hsl(var(--surface))] p-7 rounded-2xl border border-[hsl(var(--divider))] hover:shadow-lg transition-all duration-300 hover:border-[hsl(var(--teal))] group h-full">
+              <div className="bg-[hsl(var(--surface))] p-5 sm:p-7 rounded-2xl border border-[hsl(var(--divider))] hover:shadow-lg transition-all duration-300 hover:border-[hsl(var(--teal))] group h-full">
                 <div className={`w-11 h-11 rounded-xl ${card.color} flex items-center justify-center mb-5 group-hover:scale-110 transition-transform`}>
                   {card.icon}
                 </div>
@@ -596,20 +596,20 @@ const LeadMagnet = () => {
   const { t } = useI18n();
   
   return (
-    <section id="diagnostico" className="py-6 px-4 md:px-8">
+    <section id="diagnostico" className="py-6 px-3 sm:px-4 md:px-8">
       <Reveal>
-        <div className="max-w-5xl mx-auto bg-gradient-to-r from-[hsl(var(--lead-from))] to-[hsl(var(--lead-to))] rounded-3xl p-8 md:p-12 border border-[hsl(var(--lead-border))] flex flex-col md:flex-row items-center justify-between gap-8 shadow-sm">
+        <div className="max-w-5xl mx-auto bg-gradient-to-r from-[hsl(var(--lead-from))] to-[hsl(var(--lead-to))] rounded-2xl sm:rounded-3xl p-6 sm:p-8 md:p-12 border border-[hsl(var(--lead-border))] flex flex-col md:flex-row items-center justify-between gap-6 sm:gap-8 shadow-sm">
           <div className="md:w-2/3">
             <div className="inline-block px-3 py-1 bg-[hsl(var(--surface))] text-[hsl(var(--teal))] text-xs font-bold rounded-full mb-4 shadow-sm">{t.leadMagnet.badge}</div>
-            <h3 className="text-2xl md:text-3xl font-bold text-[hsl(var(--text-primary))] mb-4">{t.leadMagnet.title}</h3>
-            <p className="text-[hsl(var(--text-secondary))] text-lg">
+            <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-[hsl(var(--text-primary))] mb-3 sm:mb-4">{t.leadMagnet.title}</h3>
+            <p className="text-[hsl(var(--text-secondary))] text-base sm:text-lg">
               {t.leadMagnet.description}
             </p>
           </div>
-          <div className="md:w-1/3 flex justify-center md:justify-end">
+          <div className="w-full md:w-1/3 flex justify-center md:justify-end">
              <button 
                 onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
-                className="group relative bg-[hsl(var(--teal))] text-white px-8 py-4 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:shadow-lg hover:translate-y-[-2px] whitespace-nowrap overflow-hidden cta-glow"
+                className="group relative bg-[hsl(var(--teal))] text-white px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:shadow-lg hover:translate-y-[-2px] w-full md:w-auto overflow-hidden cta-glow"
              >
                 <span className="relative z-10 flex items-center justify-center gap-2">
                   {t.leadMagnet.cta} <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1.5" />
@@ -631,7 +631,7 @@ const Process = () => {
   const total = steps.length;
 
   return (
-    <section id="como" className="py-6 sm:py-8 px-4 md:px-8 bg-background">
+    <section id="como" className="py-6 sm:py-8 px-3 sm:px-4 md:px-8 bg-background">
       <div className="max-w-3xl mx-auto">
         <div className="mb-10">
           <Reveal>
@@ -651,11 +651,12 @@ const Process = () => {
                   className="relative cursor-pointer"
                   onMouseEnter={() => setHoveredStep(i)}
                   onMouseLeave={() => setHoveredStep(null)}
+                  onClick={() => setHoveredStep(hoveredStep === i ? null : i)}
                 >
-                  <div className="flex items-start gap-6">
+                  <div className="flex items-start gap-4 sm:gap-6">
                     <div className="flex flex-col items-center shrink-0 relative">
                       <div className={cn(
-                        "relative w-14 h-14 rounded-2xl flex items-center justify-center font-display font-bold text-lg z-10 transition-all duration-500",
+                        "relative w-11 h-11 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl flex items-center justify-center font-display font-bold text-base sm:text-lg z-10 transition-all duration-500",
                         isActive
                           ? "bg-[hsl(var(--teal))] text-white scale-105 shadow-[0_0_20px_rgba(47,164,169,0.3)]"
                           : isPast
@@ -720,7 +721,7 @@ const TargetAudience = () => {
   const { t } = useI18n();
   
   return (
-    <section id="para" className="py-6 sm:py-8 px-4 md:px-8">
+    <section id="para" className="py-6 sm:py-8 px-3 sm:px-4 md:px-8">
       <div className="max-w-7xl mx-auto">
         <div className="max-w-2xl mx-auto text-center mb-10">
           <Reveal>
@@ -731,7 +732,7 @@ const TargetAudience = () => {
 
         <div className="grid md:grid-cols-2 gap-8">
           <Reveal>
-            <div className="bg-[hsl(var(--hero-bg))] text-white p-8 md:p-10 rounded-[2rem] shadow-xl relative overflow-hidden h-full">
+            <div className="bg-[hsl(var(--hero-bg))] text-white p-6 sm:p-8 md:p-10 rounded-2xl sm:rounded-[2rem] shadow-xl relative overflow-hidden h-full">
                <div className="absolute top-0 right-0 w-64 h-64 bg-[hsl(var(--teal))] opacity-20 blur-[80px] rounded-full"></div>
                <div className="flex items-center gap-3 mb-7">
                  <CheckCircle2 className="w-7 h-7 text-[hsl(var(--teal))] shrink-0" strokeWidth={2} />
@@ -751,7 +752,7 @@ const TargetAudience = () => {
           </Reveal>
 
           <Reveal delay={200}>
-            <div className="bg-[hsl(var(--surface))] p-8 md:p-10 rounded-[2rem] border border-[hsl(var(--divider))] shadow-sm h-full">
+            <div className="bg-[hsl(var(--surface))] p-6 sm:p-8 md:p-10 rounded-2xl sm:rounded-[2rem] border border-[hsl(var(--divider))] shadow-sm h-full">
                <div className="flex items-center gap-3 mb-7">
                  <XCircle className="w-7 h-7 text-[hsl(var(--icon-fg-red))]/80 shrink-0" strokeWidth={2} />
                  <h3 className="text-lg sm:text-xl font-bold text-[hsl(var(--text-tertiary))]">{t.targetAudience.notForYou}</h3>
@@ -907,7 +908,7 @@ const Testimonials = () => {
   const activeDot = normalizeIndex(currentIndex);
 
   return (
-    <section className="py-6 sm:py-8 px-4 md:px-8 bg-background">
+    <section className="py-6 sm:py-8 px-3 sm:px-4 md:px-8 bg-background">
       <div className="max-w-5xl mx-auto">
         <Reveal>
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--text-primary))] mb-4 leading-tight">{t.testimonials.title}</h2>
@@ -983,7 +984,7 @@ const Offer = () => {
   const { t } = useI18n();
   
   return (
-    <section id="oferta" className="py-6 sm:py-8 px-4 md:px-8">
+    <section id="oferta" className="py-6 sm:py-8 px-3 sm:px-4 md:px-8">
       <div className="max-w-4xl mx-auto text-center mb-8">
          <Reveal>
             <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--text-primary))] mb-4 leading-tight">{t.offer.title}</h2>
@@ -993,7 +994,7 @@ const Offer = () => {
 
       <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-8 mb-8">
         <Reveal delay={100}>
-          <div className="bg-[hsl(var(--surface))] p-8 rounded-2xl border border-[hsl(var(--divider))] h-full hover:border-[hsl(var(--teal))] transition-all hover:shadow-lg flex flex-col">
+          <div className="bg-[hsl(var(--surface))] p-6 sm:p-8 rounded-2xl border border-[hsl(var(--divider))] h-full hover:border-[hsl(var(--teal))] transition-all hover:shadow-lg flex flex-col">
             <div className="w-12 h-12 bg-[hsl(var(--icon-bg-blue))] rounded-xl flex items-center justify-center text-[hsl(var(--icon-fg-blue))] mb-6">
               <Zap className="w-6 h-6" />
             </div>
@@ -1011,7 +1012,7 @@ const Offer = () => {
         </Reveal>
 
         <Reveal delay={200}>
-          <div className="bg-[hsl(var(--surface))] p-8 rounded-2xl border border-[hsl(var(--divider))] h-full hover:border-[hsl(var(--teal))] transition-all hover:shadow-lg flex flex-col">
+          <div className="bg-[hsl(var(--surface))] p-6 sm:p-8 rounded-2xl border border-[hsl(var(--divider))] h-full hover:border-[hsl(var(--teal))] transition-all hover:shadow-lg flex flex-col">
             <div className="w-12 h-12 bg-[hsl(var(--icon-bg-amber))] rounded-xl flex items-center justify-center text-[hsl(var(--icon-fg-amber))] mb-6">
               <Users className="w-6 h-6" />
             </div>
@@ -1030,7 +1031,7 @@ const Offer = () => {
       </div>
 
       <Reveal delay={300}>
-        <div className="max-w-3xl mx-auto bg-[hsl(var(--surface-raised))] rounded-2xl p-8 text-center border border-[hsl(var(--divider))]">
+        <div className="max-w-3xl mx-auto bg-[hsl(var(--surface-raised))] rounded-2xl p-6 sm:p-8 text-center border border-[hsl(var(--divider))]">
           <h3 className="text-lg font-bold mb-2 text-[hsl(var(--text-primary))]">{t.offer.noSalesPressure}</h3>
           <p className="text-muted-foreground mb-6 max-w-lg mx-auto">
             {t.offer.noSalesPressureDesc}
@@ -1052,13 +1053,13 @@ const Contact = () => {
   const { t } = useI18n();
   
   return (
-    <section id="contacto" className="py-5 px-4 md:px-8">
+    <section id="contacto" className="py-5 px-3 sm:px-4 md:px-8">
       <div className="max-w-3xl mx-auto text-center">
         <Reveal>
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--text-primary))] mb-6 leading-tight">
             {t.contact.title}
           </h2>
-          <p className="text-xl text-muted-foreground mb-10">
+          <p className="text-base sm:text-xl text-muted-foreground mb-8 sm:mb-10">
             {t.contact.subtitle}
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
@@ -1089,7 +1090,7 @@ const FAQ = () => {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
-    <section id="faq" className="py-6 sm:py-8 px-4 md:px-8 bg-background">
+    <section id="faq" className="py-6 sm:py-8 px-3 sm:px-4 md:px-8 bg-background">
       <div className="max-w-3xl mx-auto">
         <Reveal>
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--text-primary))] mb-2 leading-tight">{t.faq.title}</h2>
@@ -1132,10 +1133,10 @@ const Footer = () => {
   };
 
   return (
-    <footer className="py-5 px-4 md:px-8 border-t border-[hsl(var(--divider))] bg-[hsl(var(--surface))]">
+    <footer className="py-5 px-3 sm:px-4 md:px-8 border-t border-[hsl(var(--divider))] bg-[hsl(var(--surface))]">
       <div className="max-w-7xl mx-auto">
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
-          <div className="md:col-span-1">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 mb-8">
+          <div className="col-span-2 md:col-span-1">
             <img 
               src={im3Logo} 
               alt="IM3 Systems" 
