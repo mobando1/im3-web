@@ -32,7 +32,13 @@ import {
   Moon
 } from "lucide-react";
 import { useDarkMode } from "@/hooks/useDarkMode";
-import im3Logo from "@assets/Mesa_de_trabajo_13_1772070483914.png";
+import im3Logo from "@assets/Mesa_de_trabajo_13_1772070483914.png"
+import headshotSebastian from "@assets/stock_images/headshot_sebastian.png"
+import headshotNicolas from "@assets/stock_images/headshot_nicolas.png"
+import headshotAndres from "@assets/stock_images/headshot_andres.png"
+import headshotCamila from "@assets/stock_images/headshot_camila.png"
+import headshotDiego from "@assets/stock_images/headshot_diego.png"
+import headshotValentina from "@assets/stock_images/headshot_valentina.png";
 
 const InteractiveHeroWidget = lazy(() => import("@/components/InteractiveHeroWidget").then(m => ({ default: m.InteractiveHeroWidget })));
 
@@ -768,6 +774,15 @@ const TargetAudience = () => {
   );
 };
 
+const avatarMap: Record<string, string> = {
+  "Sebastián Garzón": headshotSebastian,
+  "Nicolás Hernández": headshotNicolas,
+  "Andrés Villamizar": headshotAndres,
+  "Camila Restrepo": headshotCamila,
+  "Diego Morales": headshotDiego,
+  "Valentina Ospina": headshotValentina,
+};
+
 const TestimonialCard = ({ review, isFeatured, featuredLabel }: { review: { quote: string; author: string; role: string; featured?: boolean }; isFeatured?: boolean; featuredLabel?: string }) => (
   <div className={cn(
     "p-6 sm:p-8 rounded-2xl border shadow-sm h-full flex flex-col justify-between shrink-0 transition-all duration-300",
@@ -784,14 +799,25 @@ const TestimonialCard = ({ review, isFeatured, featuredLabel }: { review: { quot
       <p className="text-base sm:text-lg text-[hsl(var(--text-primary))] mb-6 font-medium leading-relaxed">"{review.quote}"</p>
     </div>
     <div className="flex items-center gap-3">
-      <div className={cn(
-        "w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm",
-        isFeatured
-          ? "bg-[hsl(var(--teal))]/15 text-[hsl(var(--teal))]"
-          : "bg-[hsl(var(--avatar-bg))] text-[hsl(var(--avatar-fg))]"
-      )}>
-        {review.author.split(' ').map((n: string) => n[0]).join('')}
-      </div>
+      {avatarMap[review.author] ? (
+        <img
+          src={avatarMap[review.author]}
+          alt={review.author}
+          className={cn(
+            "w-11 h-11 rounded-full object-cover",
+            isFeatured ? "ring-2 ring-[hsl(var(--teal))]/30" : ""
+          )}
+        />
+      ) : (
+        <div className={cn(
+          "w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm",
+          isFeatured
+            ? "bg-[hsl(var(--teal))]/15 text-[hsl(var(--teal))]"
+            : "bg-[hsl(var(--avatar-bg))] text-[hsl(var(--avatar-fg))]"
+        )}>
+          {review.author.split(' ').map((n: string) => n[0]).join('')}
+        </div>
+      )}
       <div>
         <div className="font-bold text-sm text-[hsl(var(--text-primary))]">{review.author}</div>
         <div className="text-xs text-muted-foreground">{review.role}</div>
