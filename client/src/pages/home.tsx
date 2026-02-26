@@ -165,9 +165,12 @@ const Header = () => {
           <div className="hidden md:flex items-center">
             <button 
               onClick={openBooking}
-              className="bg-[hsl(var(--teal))] text-white px-4 py-1.5 rounded-lg text-xs font-medium hover:translate-y-[-1px] hover:shadow-md transition-all duration-300 flex items-center gap-1.5"
+              className="group relative bg-[hsl(var(--teal))] text-white px-5 py-2 rounded-xl text-sm font-semibold hover:translate-y-[-2px] hover:shadow-[0_8px_20px_-6px_rgba(47,164,169,0.5)] transition-all duration-300 flex items-center gap-2 overflow-hidden cta-glow"
             >
-              {t.nav.requestDiagnosis} <ArrowRight className="w-3 h-3" />
+              <span className="relative z-10 flex items-center gap-2">
+                {t.nav.requestDiagnosis} <ArrowRight className="w-3.5 h-3.5 transition-transform duration-300 group-hover:translate-x-1" />
+              </span>
+              <span className="absolute inset-0 cta-shimmer pointer-events-none" />
             </button>
           </div>
 
