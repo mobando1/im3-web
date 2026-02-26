@@ -132,7 +132,7 @@ const Header = () => {
             : "bg-transparent"
         )}>
           <div className="flex items-center gap-2">
-            <img src="/assets/im3-logo.jpg" alt="IM3 Systems" className="h-8 w-auto object-contain rounded-md" />
+            <img src="/assets/im3-logo.png" alt="IM3 Systems" className="h-8 w-auto object-contain" />
           </div>
 
           <nav className="hidden md:flex items-center gap-5">
@@ -941,7 +941,7 @@ const Footer = () => {
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           <div className="md:col-span-1">
-            <img src="/assets/im3-logo.jpg" alt="IM3 Systems" className="h-10 w-auto object-contain rounded-lg mb-4" />
+            <img src="/assets/im3-logo.png" alt="IM3 Systems" className="h-10 w-auto object-contain mb-4" />
             <p className="text-sm text-muted-foreground">
               <a href="mailto:info@im3systems.com" className="hover:text-[hsl(var(--teal))] transition-colors">info@im3systems.com</a>
             </p>
