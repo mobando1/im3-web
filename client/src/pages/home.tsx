@@ -137,7 +137,7 @@ const Header = () => {
               src={im3Logo} 
               alt="IM3 Systems" 
               className="h-8 w-auto object-contain transition-all duration-300"
-              style={!isScrolled || isDark ? { filter: "brightness(0) invert(1)" } : undefined}
+              style={isDark ? { filter: "brightness(0) invert(1)" } : undefined}
             />
           </div>
 
