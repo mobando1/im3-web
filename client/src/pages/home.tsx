@@ -690,7 +690,7 @@ const TargetAudience = () => {
                <div className="absolute top-0 right-0 w-64 h-64 bg-[hsl(var(--teal))] opacity-20 blur-[80px] rounded-full"></div>
                <div className="flex items-center gap-3 mb-7">
                  <CheckCircle2 className="w-7 h-7 text-[hsl(var(--teal))] shrink-0" strokeWidth={2} />
-                 <h3 className="text-lg sm:text-xl font-bold">{t.targetAudience.fitsYouIf}</h3>
+                 <h3 className="text-lg sm:text-xl font-bold text-white relative z-10">{t.targetAudience.fitsYouIf}</h3>
                </div>
                <ul className="space-y-5 relative z-10">
                  {t.targetAudience.fitsItems.map((item, i) => (
