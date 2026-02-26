@@ -828,34 +828,161 @@ const TargetAudience = () => {
   );
 };
 
+const TestimonialCard = ({ review, isFeatured, featuredLabel }: { review: { quote: string; author: string; role: string; featured?: boolean }; isFeatured?: boolean; featuredLabel?: string }) => (
+  <div className={cn(
+    "p-6 sm:p-8 rounded-2xl border shadow-sm h-full flex flex-col justify-between shrink-0 transition-all duration-300",
+    isFeatured
+      ? "bg-[hsl(var(--surface))] border-[hsl(var(--teal))]/20 ring-1 ring-[hsl(var(--teal))]/10"
+      : "bg-[hsl(var(--surface))] border-[hsl(var(--divider))]"
+  )}>
+    <div>
+      {isFeatured && (
+        <div className="inline-block px-2 py-0.5 bg-[hsl(var(--teal))]/10 text-[hsl(var(--teal))] text-[10px] font-bold rounded-full mb-3 uppercase tracking-wider">
+          {featuredLabel || "Featured client"}
+        </div>
+      )}
+      <p className="text-base sm:text-lg text-[hsl(var(--text-primary))] mb-6 font-medium leading-relaxed">"{review.quote}"</p>
+    </div>
+    <div className="flex items-center gap-3">
+      <div className={cn(
+        "w-10 h-10 rounded-full flex items-center justify-center font-bold text-sm",
+        isFeatured
+          ? "bg-[hsl(var(--teal))]/15 text-[hsl(var(--teal))]"
+          : "bg-[hsl(var(--avatar-bg))] text-[hsl(var(--avatar-fg))]"
+      )}>
+        {review.author.split(' ').map((n: string) => n[0]).join('')}
+      </div>
+      <div>
+        <div className="font-bold text-sm text-[hsl(var(--text-primary))]">{review.author}</div>
+        <div className="text-xs text-muted-foreground">{review.role}</div>
+      </div>
+    </div>
+  </div>
+);
+
 const Testimonials = () => {
   const { t } = useI18n();
+  const reviews = t.testimonials.reviews as { quote: string; author: string; role: string; featured?: boolean }[];
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const touchStartX = useRef(0);
+
+  const [visibleCount, setVisibleCount] = useState(1);
+
+  useEffect(() => {
+    const updateVisible = () => setVisibleCount(window.innerWidth >= 768 ? 2 : 1);
+    updateVisible();
+    window.addEventListener('resize', updateVisible);
+    return () => window.removeEventListener('resize', updateVisible);
+  }, []);
+
+  const maxIndex = reviews.length - visibleCount;
+
+  useEffect(() => {
+    if (!isAutoPlaying) return;
+    const interval = setInterval(() => {
+      setCurrentIndex(prev => prev >= maxIndex ? 0 : prev + 1);
+    }, 4000);
+    return () => clearInterval(interval);
+  }, [isAutoPlaying, maxIndex]);
+
+  const goTo = (idx: number) => {
+    setCurrentIndex(Math.max(0, Math.min(idx, maxIndex)));
+    setIsAutoPlaying(false);
+    setTimeout(() => setIsAutoPlaying(true), 8000);
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartX.current = e.touches[0].clientX;
+  };
+
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) {
+      if (diff > 0 && currentIndex < maxIndex) goTo(currentIndex + 1);
+      else if (diff < 0 && currentIndex > 0) goTo(currentIndex - 1);
+    }
+  };
 
   return (
     <section className="py-6 sm:py-8 px-4 md:px-8 bg-background">
-      <div className="max-w-7xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         <Reveal>
           <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--text-primary))] mb-4 leading-tight">{t.testimonials.title}</h2>
           <p className="text-muted-foreground mb-8">{t.testimonials.subtitle}</p>
         </Reveal>
 
-        <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
-          {t.testimonials.reviews.map((review, i) => (
-            <Reveal key={i} delay={i * 100}>
-              <div className="bg-[hsl(var(--surface))] p-8 rounded-2xl border border-[hsl(var(--divider))] shadow-sm h-full flex flex-col justify-between">
-                <p className="text-lg text-[hsl(var(--text-primary))] mb-8 font-medium">"{review.quote}"</p>
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-[hsl(var(--avatar-bg))] flex items-center justify-center font-bold text-[hsl(var(--avatar-fg))] text-sm">
-                    {review.author.split(' ').map(n => n[0]).join('')}
-                  </div>
-                  <div>
-                    <div className="font-bold text-sm text-[hsl(var(--text-primary))]">{review.author}</div>
-                    <div className="text-xs text-muted-foreground">{review.role}</div>
-                  </div>
+        <div className="relative">
+          <div
+            className="overflow-hidden"
+            onTouchStart={handleTouchStart}
+            onTouchEnd={handleTouchEnd}
+          >
+            <div
+              className="flex transition-transform duration-500 ease-out"
+              style={{
+                gap: '1.5rem',
+                transform: `translateX(calc(-${currentIndex} * (${100 / visibleCount}% + ${1.5 / visibleCount}rem)))`
+              }}
+            >
+              {reviews.map((review, i) => (
+                <div
+                  key={i}
+                  data-testid={`testimonial-card-${i}`}
+                  className="shrink-0"
+                  style={{ width: `calc(${100 / visibleCount}% - ${(visibleCount - 1) * 1.5 / visibleCount}rem)` }}
+                >
+                  <TestimonialCard review={review} isFeatured={review.featured} featuredLabel={t.testimonials.featuredLabel} />
                 </div>
-              </div>
-            </Reveal>
-          ))}
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center justify-center gap-3 mt-6">
+            <button
+              data-testid="testimonial-prev"
+              onClick={() => goTo(currentIndex - 1)}
+              disabled={currentIndex === 0}
+              className={cn(
+                "w-8 h-8 rounded-full border flex items-center justify-center transition-all",
+                currentIndex === 0
+                  ? "border-[hsl(var(--divider))] text-[hsl(var(--text-tertiary))] cursor-not-allowed"
+                  : "border-[hsl(var(--teal))]/30 text-[hsl(var(--teal))] hover:bg-[hsl(var(--teal))]/10"
+              )}
+            >
+              <ChevronRight className="w-4 h-4 rotate-180" />
+            </button>
+
+            <div className="flex gap-1.5">
+              {Array.from({ length: maxIndex + 1 }).map((_, i) => (
+                <button
+                  key={i}
+                  data-testid={`testimonial-dot-${i}`}
+                  onClick={() => goTo(i)}
+                  className={cn(
+                    "h-1.5 rounded-full transition-all duration-300",
+                    currentIndex === i
+                      ? "bg-[hsl(var(--teal))] w-5"
+                      : "bg-[hsl(var(--divider))] w-1.5 hover:bg-[hsl(var(--teal))]/40"
+                  )}
+                />
+              ))}
+            </div>
+
+            <button
+              data-testid="testimonial-next"
+              onClick={() => goTo(currentIndex + 1)}
+              disabled={currentIndex >= maxIndex}
+              className={cn(
+                "w-8 h-8 rounded-full border flex items-center justify-center transition-all",
+                currentIndex >= maxIndex
+                  ? "border-[hsl(var(--divider))] text-[hsl(var(--text-tertiary))] cursor-not-allowed"
+                  : "border-[hsl(var(--teal))]/30 text-[hsl(var(--teal))] hover:bg-[hsl(var(--teal))]/10"
+              )}
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          </div>
         </div>
       </div>
     </section>
