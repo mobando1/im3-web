@@ -325,30 +325,30 @@ const Hero = () => {
 
   return (
     <section className="pt-20 pb-4 px-4 md:px-8">
-      <div className="max-w-7xl mx-auto bg-[hsl(var(--ink))] rounded-[32px] overflow-hidden relative shadow-2xl dark:shadow-lg dark:border dark:border-[hsl(var(--divider))]">
-        <div className="absolute inset-0 opacity-20 mix-blend-soft-light dark:opacity-5" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.7\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")' }}></div>
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)] dark:bg-[linear-gradient(to_right,#00000008_1px,transparent_1px),linear-gradient(to_bottom,#00000008_1px,transparent_1px)]"></div>
+      <div className="max-w-7xl mx-auto bg-[hsl(var(--hero-bg))] rounded-[32px] overflow-hidden text-white relative shadow-2xl">
+        <div className="absolute inset-0 opacity-20 mix-blend-soft-light" style={{ backgroundImage: 'url("data:image/svg+xml,%3Csvg viewBox=\'0 0 256 256\' xmlns=\'http://www.w3.org/2000/svg\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'0.7\' numOctaves=\'4\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")' }}></div>
+        <div className="absolute inset-0 bg-[linear-gradient(to_right,#ffffff05_1px,transparent_1px),linear-gradient(to_bottom,#ffffff05_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_0%,#000_70%,transparent_100%)]"></div>
         
-        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[hsl(var(--teal))] opacity-10 dark:opacity-5 blur-[120px] rounded-full pointer-events-none -translate-y-1/2 translate-x-1/4"></div>
-        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-600 opacity-10 dark:opacity-5 blur-[100px] rounded-full pointer-events-none translate-y-1/4 -translate-x-1/4"></div>
+        <div className="absolute top-0 right-0 w-[600px] h-[600px] bg-[hsl(var(--teal))] opacity-10 blur-[120px] rounded-full pointer-events-none -translate-y-1/2 translate-x-1/4"></div>
+        <div className="absolute bottom-0 left-0 w-[400px] h-[400px] bg-blue-600 opacity-10 blur-[100px] rounded-full pointer-events-none translate-y-1/4 -translate-x-1/4"></div>
 
         <div className="grid md:grid-cols-2 gap-8 md:gap-12 p-6 sm:p-8 md:p-16 relative z-10 items-center">
           <div className="space-y-8">
             <Reveal>
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 dark:bg-black/5 border border-white/10 dark:border-black/10 text-xs font-medium tracking-wide text-[hsl(var(--teal))] shadow-lg shadow-teal-900/20 dark:shadow-teal-600/10 backdrop-blur-md">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-white/10 border border-white/10 text-xs font-medium tracking-wide text-[hsl(var(--teal))] shadow-lg shadow-teal-900/20 backdrop-blur-md">
                 <span className="w-2 h-2 rounded-full bg-[hsl(var(--teal))] animate-pulse"></span>
                 {t.hero.badge}
               </div>
             </Reveal>
             
             <Reveal delay={100}>
-              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-display font-bold leading-[1.15] tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-white to-gray-400 dark:from-[#0B1C2D] dark:via-[#0B1C2D] dark:to-gray-500">
+              <h1 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-display font-bold leading-[1.15] tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-white to-gray-400">
                 {t.hero.headline}
               </h1>
             </Reveal>
 
             <Reveal delay={200}>
-              <p className="text-base sm:text-lg text-gray-300 dark:text-gray-500 leading-relaxed max-w-xl font-light">
+              <p className="text-base sm:text-lg text-gray-300 leading-relaxed max-w-xl font-light">
                 {t.hero.subheadline}
               </p>
             </Reveal>
@@ -357,13 +357,13 @@ const Hero = () => {
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button 
                   onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
-                  className="bg-[hsl(var(--teal))] text-white px-6 py-3.5 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:translate-y-[-2px] shadow-[0_10px_20px_-10px_rgba(47,164,169,0.3)] hover:shadow-[0_20px_40px_-15px_rgba(47,164,169,0.5)] ring-offset-2 ring-offset-[hsl(var(--ink))] focus:ring-2 focus:ring-[hsl(var(--teal))] text-center"
+                  className="bg-[hsl(var(--teal))] text-white px-6 py-3.5 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:translate-y-[-2px] shadow-[0_10px_20px_-10px_rgba(47,164,169,0.3)] hover:shadow-[0_20px_40px_-15px_rgba(47,164,169,0.5)] ring-offset-2 ring-offset-[hsl(var(--hero-bg))] focus:ring-2 focus:ring-[hsl(var(--teal))] text-center"
                 >
                   {t.hero.cta}
                 </button>
                 <button 
                   onClick={() => document.getElementById('que')?.scrollIntoView({ behavior: 'smooth' })}
-                  className="bg-white/5 dark:bg-black/5 border border-white/10 dark:border-black/10 text-white dark:text-[#0B1C2D] px-6 py-3.5 rounded-xl font-medium hover:bg-white/10 dark:hover:bg-black/10 transition-all backdrop-blur-sm text-center"
+                  className="bg-white/5 border border-white/10 text-white px-6 py-3.5 rounded-xl font-medium hover:bg-white/10 transition-all backdrop-blur-sm text-center"
                 >
                   {t.hero.secondary}
                 </button>
@@ -371,11 +371,11 @@ const Hero = () => {
             </Reveal>
 
             <Reveal delay={400}>
-              <div className="flex flex-wrap gap-2 sm:gap-3 pt-4 border-t border-white/5 dark:border-black/5 mt-6 sm:mt-8">
+              <div className="flex flex-wrap gap-2 sm:gap-3 pt-4 border-t border-white/5 mt-6 sm:mt-8">
                 {badges.map((badge, i) => (
                   <span 
                     key={i} 
-                    className="group px-3 py-1.5 rounded-lg bg-white/5 dark:bg-black/5 border border-white/10 dark:border-black/10 text-xs text-gray-400 dark:text-gray-500 font-mono hover:bg-[hsl(var(--teal))]/10 hover:border-[hsl(var(--teal))]/30 hover:text-[hsl(var(--teal))] transition-all duration-300 cursor-default flex items-center gap-2"
+                    className="group px-3 py-1.5 rounded-lg bg-white/5 border border-white/10 text-xs text-gray-400 font-mono hover:bg-[hsl(var(--teal))]/10 hover:border-[hsl(var(--teal))]/30 hover:text-[hsl(var(--teal))] transition-all duration-300 cursor-default flex items-center gap-2"
                   >
                     <badge.icon className="w-3 h-3 opacity-60 group-hover:opacity-100 transition-opacity" />
                     {badge.label}
@@ -386,7 +386,7 @@ const Hero = () => {
           </div>
 
           <Reveal delay={200} className="relative hidden md:block">
-             <div className="relative rounded-xl overflow-hidden border border-white/10 dark:border-black/10 shadow-2xl bg-[#0F2438] transform rotate-1 hover:rotate-0 transition-transform duration-700 ease-out group perspective-1000 h-[380px]">
+             <div className="relative rounded-xl overflow-hidden border border-white/10 shadow-2xl bg-[#0F2438] transform rotate-1 hover:rotate-0 transition-transform duration-700 ease-out group perspective-1000 h-[380px]">
                 <div className="absolute inset-0 bg-[#0F172A]">
                   <Suspense fallback={<div className="w-full h-full bg-[#0F172A] flex items-center justify-center"><div className="w-6 h-6 border-2 border-teal-400 border-t-transparent rounded-full animate-spin" /></div>}>
                     <InteractiveHeroWidget />
@@ -394,7 +394,7 @@ const Hero = () => {
                 </div>
              </div>
              
-             <div className="absolute -inset-4 bg-gradient-to-tr from-[hsl(var(--teal))] to-blue-600 rounded-3xl blur-2xl opacity-20 dark:opacity-10 -z-10 animate-pulse duration-3000"></div>
+             <div className="absolute -inset-4 bg-gradient-to-tr from-[hsl(var(--teal))] to-blue-600 rounded-3xl blur-2xl opacity-20 -z-10 animate-pulse duration-3000"></div>
           </Reveal>
         </div>
       </div>
@@ -711,11 +711,11 @@ const TargetAudience = () => {
 
         <div className="grid md:grid-cols-2 gap-8">
           <Reveal>
-            <div className="bg-[hsl(var(--ink))] p-8 md:p-10 rounded-[2rem] shadow-xl dark:shadow-lg relative overflow-hidden h-full dark:border dark:border-[hsl(var(--divider))]">
-               <div className="absolute top-0 right-0 w-64 h-64 bg-[hsl(var(--teal))] opacity-20 dark:opacity-10 blur-[80px] rounded-full"></div>
+            <div className="bg-[hsl(var(--hero-bg))] text-white p-8 md:p-10 rounded-[2rem] shadow-xl relative overflow-hidden h-full">
+               <div className="absolute top-0 right-0 w-64 h-64 bg-[hsl(var(--teal))] opacity-20 blur-[80px] rounded-full"></div>
                <div className="flex items-center gap-3 mb-7">
                  <CheckCircle2 className="w-7 h-7 text-[hsl(var(--teal))] shrink-0" strokeWidth={2} />
-                 <h3 className="text-lg sm:text-xl font-bold text-white dark:text-[#0B1C2D] relative z-10">{t.targetAudience.fitsYouIf}</h3>
+                 <h3 className="text-lg sm:text-xl font-bold text-white relative z-10">{t.targetAudience.fitsYouIf}</h3>
                </div>
                <ul className="space-y-5 relative z-10">
                  {t.targetAudience.fitsItems.map((item, i) => (
@@ -723,7 +723,7 @@ const TargetAudience = () => {
                      <div className="w-5 h-5 rounded-full border-2 border-[hsl(var(--teal))]/60 flex items-center justify-center shrink-0 mt-0.5">
                        <Check className="w-3 h-3 text-[hsl(var(--teal))]" strokeWidth={3} />
                      </div>
-                     <span className="text-gray-300 dark:text-gray-500 leading-relaxed text-[15px]">{item}</span>
+                     <span className="text-gray-300 leading-relaxed text-[15px]">{item}</span>
                    </li>
                  ))}
                </ul>
