@@ -32,6 +32,7 @@ import {
   Moon
 } from "lucide-react";
 import { useDarkMode } from "@/hooks/useDarkMode";
+import im3Logo from "@assets/Mesa_de_trabajo_1_1772069787818.png";
 
 const InteractiveHeroWidget = lazy(() => import("@/components/InteractiveHeroWidget").then(m => ({ default: m.InteractiveHeroWidget })));
 
@@ -132,7 +133,7 @@ const Header = () => {
             : "bg-transparent"
         )}>
           <div className="flex items-center gap-2">
-            <img src="/assets/im3-logo.png" alt="IM3 Systems" className={cn("h-8 w-auto object-contain transition-all duration-300", !isScrolled || isDark ? "brightness-0 invert" : "")} />
+            <img src={im3Logo} alt="IM3 Systems" className={cn("h-8 w-auto object-contain transition-all duration-300", !isScrolled || isDark ? "brightness-0 invert" : "")} />
           </div>
 
           <nav className="hidden md:flex items-center gap-5">
@@ -165,10 +166,10 @@ const Header = () => {
           <div className="hidden md:flex items-center">
             <button 
               onClick={openBooking}
-              className="group relative bg-[hsl(var(--teal))] text-white px-5 py-2 rounded-xl text-sm font-semibold hover:translate-y-[-2px] hover:shadow-[0_8px_20px_-6px_rgba(47,164,169,0.5)] transition-all duration-300 flex items-center gap-2 overflow-hidden cta-glow"
+              className="group relative bg-[hsl(var(--teal))] text-white px-6 py-2.5 rounded-xl text-[13px] font-bold hover:translate-y-[-2px] hover:shadow-[0_10px_25px_-6px_rgba(47,164,169,0.6)] transition-all duration-300 flex items-center gap-2.5 overflow-hidden cta-glow"
             >
               <span className="relative z-10 flex items-center gap-2">
-                {t.nav.requestDiagnosis} <ArrowRight className="w-3.5 h-3.5 transition-transform duration-300 group-hover:translate-x-1" />
+                {t.nav.requestDiagnosis} <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1.5" />
               </span>
               <span className="absolute inset-0 cta-shimmer pointer-events-none" />
             </button>
@@ -941,7 +942,7 @@ const Footer = () => {
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           <div className="md:col-span-1">
-            <img src="/assets/im3-logo.png" alt="IM3 Systems" className="h-10 w-auto object-contain mb-4 dark:brightness-0 dark:invert" />
+            <img src={im3Logo} alt="IM3 Systems" className="h-10 w-auto object-contain mb-4 dark:brightness-0 dark:invert" />
             <p className="text-sm text-muted-foreground">
               <a href="mailto:info@im3systems.com" className="hover:text-[hsl(var(--teal))] transition-colors">info@im3systems.com</a>
             </p>

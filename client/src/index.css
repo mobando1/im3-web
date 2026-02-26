@@ -187,8 +187,8 @@
 }
 
 @keyframes ctaGlow {
-  0%, 100% { box-shadow: 0 0 8px rgba(47,164,169,0.3), 0 0 0 0 rgba(47,164,169,0); }
-  50% { box-shadow: 0 0 12px rgba(47,164,169,0.4), 0 0 20px rgba(47,164,169,0.15); }
+  0%, 100% { box-shadow: 0 0 10px rgba(47,164,169,0.3), 0 0 0 0 rgba(47,164,169,0); }
+  50% { box-shadow: 0 0 16px rgba(47,164,169,0.45), 0 0 28px rgba(47,164,169,0.2); }
 }
 
 @keyframes ctaShimmer {
@@ -197,10 +197,10 @@
 }
 
 .cta-glow {
-  animation: ctaGlow 2.5s ease-in-out infinite;
+  animation: ctaGlow 2s ease-in-out infinite;
 }
 
 .cta-shimmer {
-  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.15) 50%, transparent 100%);
-  animation: ctaShimmer 3s ease-in-out infinite;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.18) 50%, transparent 100%);
+  animation: ctaShimmer 2.5s ease-in-out infinite;
 }
