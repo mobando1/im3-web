@@ -171,10 +171,10 @@ const Header = () => {
           <div className="hidden md:flex items-center">
             <button 
               onClick={openBooking}
-              className="group relative bg-[hsl(var(--teal))] text-white px-6 py-2.5 rounded-xl text-[13px] font-bold hover:translate-y-[-2px] hover:shadow-[0_10px_25px_-6px_rgba(47,164,169,0.6)] transition-all duration-300 flex items-center gap-2.5 overflow-hidden cta-glow"
+              className="group relative bg-[hsl(var(--teal))] text-white px-7 py-3 rounded-xl text-sm font-bold hover:translate-y-[-2px] hover:shadow-[0_10px_25px_-6px_rgba(47,164,169,0.6)] transition-all duration-300 flex items-center gap-2.5 overflow-hidden header-cta-glow"
             >
               <span className="relative z-10 flex items-center gap-2">
-                {t.nav.requestDiagnosis} <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1.5" />
+                {t.nav.requestDiagnosis} <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-2" />
               </span>
               <span className="absolute inset-0 cta-shimmer pointer-events-none" />
             </button>
