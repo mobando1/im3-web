@@ -133,10 +133,10 @@ const Header = () => {
     >
       <div className="max-w-5xl mx-auto">
         <div className={cn(
-          "flex items-center justify-between rounded-xl px-4 py-2 transition-all duration-300",
-          isScrolled 
-            ? isDark ? "bg-[hsl(220,25%,12%)]/80 backdrop-blur-md shadow-sm border border-white/10" : "bg-white/80 backdrop-blur-md shadow-sm border border-white/20" 
-            : "bg-transparent"
+          "flex items-center justify-between rounded-xl px-4 py-2 transition-all duration-300 backdrop-blur-md",
+          isDark 
+            ? "bg-[hsl(220,25%,12%)]/80 border border-white/10 shadow-sm" 
+            : "bg-white/80 border border-black/5 shadow-sm"
         )}>
           <div className="flex items-center gap-2">
             <img 
