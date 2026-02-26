@@ -73,6 +73,7 @@ const translations = {
         { num: "03", title: "Implementación", text: "Lo integramos directamente en tu operación real, migramos datos, conectamos herramientas existentes y validamos que todo funcione antes de salir en vivo." },
         { num: "04", title: "Entrega y acompañamiento", text: "Te dejamos todo documentado, entrenamos a tu equipo, y te acompañamos las primeras semanas para asegurar una adopción sin fricciones." },
       ],
+      cycleLabel: "Ciclo continuo de mejora",
     },
     targetAudience: {
       title: "¿Con quién trabajamos mejor?",
@@ -212,6 +213,7 @@ const translations = {
         { num: "03", title: "Implementation", text: "We integrate it directly into your real operation, migrate data, connect existing tools, and validate everything works before going live." },
         { num: "04", title: "Delivery & support", text: "We leave everything documented, train your team, and walk alongside you for the first weeks to ensure frictionless adoption." },
       ],
+      cycleLabel: "Continuous improvement cycle",
     },
     targetAudience: {
       title: "Who do we work best with?",
