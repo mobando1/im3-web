@@ -32,8 +32,7 @@ import {
   Moon
 } from "lucide-react";
 import { useDarkMode } from "@/hooks/useDarkMode";
-import im3LogoPng from "@assets/Mesa_de_trabajo_1_1772069787818.png";
-import im3LogoJpg from "@assets/Copia_de_logo_mateo_640x360_Mesa_de_trabajo_1_1769286951640.jpg";
+import im3Logo from "@assets/Mesa_de_trabajo_13_1772070483914.png";
 
 const InteractiveHeroWidget = lazy(() => import("@/components/InteractiveHeroWidget").then(m => ({ default: m.InteractiveHeroWidget })));
 
@@ -135,7 +134,7 @@ const Header = () => {
         )}>
           <div className="flex items-center gap-2">
             <img 
-              src={!isScrolled || isDark ? im3LogoPng : im3LogoJpg} 
+              src={im3Logo} 
               alt="IM3 Systems" 
               className="h-8 w-auto object-contain transition-all duration-300"
               style={!isScrolled || isDark ? { filter: "brightness(0) invert(1)" } : undefined}
@@ -950,7 +949,7 @@ const Footer = () => {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           <div className="md:col-span-1">
             <img 
-              src={isDark ? im3LogoPng : im3LogoJpg} 
+              src={im3Logo} 
               alt="IM3 Systems" 
               className="h-10 w-auto object-contain mb-4"
               style={isDark ? { filter: "brightness(0) invert(1)" } : undefined}
