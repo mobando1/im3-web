@@ -41,14 +41,12 @@
 }
 
 :root {
-  /* IM3 Palette Mapping */
-  --ink: 210 60% 11%;     /* #0B1C2D */
-  --coal: 0 0% 12%;       /* #1F1F1F */
-  --paper: 210 14% 96%;   /* #F4F6F8 */
-  --teal: 182 56% 42%;    /* #2FA4A9 */
+  --ink: 210 60% 11%;
+  --coal: 0 0% 12%;
+  --paper: 210 14% 96%;
+  --teal: 182 56% 42%;
   --white: 0 0% 100%;
 
-  /* Shadcn Variables */
   --background: hsl(var(--paper));
   --foreground: hsl(var(--ink));
 
@@ -61,13 +59,13 @@
   --primary: hsl(var(--teal));
   --primary-foreground: hsl(var(--white));
 
-  --secondary: 210 20% 90%; /* Light grey for secondary actions */
+  --secondary: 210 20% 90%;
   --secondary-foreground: hsl(var(--ink));
 
   --muted: 210 20% 92%;
   --muted-foreground: 215 20% 45%;
 
-  --accent: 182 30% 92%; /* Light teal tint */
+  --accent: 182 30% 92%;
   --accent-foreground: hsl(var(--teal));
 
   --destructive: 0 84% 60%;
@@ -78,19 +76,75 @@
   --ring: hsl(var(--teal));
 
   --radius: 1rem;
+
+  --surface: 0 0% 100%;
+  --surface-raised: 210 14% 96%;
+  --surface-hover: 210 20% 97%;
+  --text-primary: 210 60% 11%;
+  --text-secondary: 215 20% 45%;
+  --text-tertiary: 215 15% 65%;
+  --divider: 210 15% 90%;
+  --icon-bg-blue: 214 95% 96%;
+  --icon-fg-blue: 221 83% 53%;
+  --icon-bg-amber: 48 97% 96%;
+  --icon-fg-amber: 32 95% 44%;
+  --icon-bg-emerald: 152 76% 96%;
+  --icon-fg-emerald: 160 84% 39%;
+  --icon-bg-red: 0 86% 97%;
+  --icon-fg-red: 0 72% 51%;
+  --lead-from: 166 76% 97%;
+  --lead-to: 214 95% 97%;
+  --lead-border: 166 76% 90%;
+  --avatar-bg: 210 15% 85%;
+  --avatar-fg: 215 15% 45%;
 }
 
 .dark {
-  /* Inverse for dark mode if ever needed, but strictly following design spec for now */
-  --background: hsl(var(--ink));
-  --foreground: hsl(var(--paper));
-  --card: 215 50% 13%;
-  --card-foreground: hsl(var(--paper));
+  --ink: 210 14% 96%;
+  --coal: 210 14% 90%;
+  --paper: 220 25% 8%;
+  --white: 220 25% 12%;
+
+  --background: hsl(var(--paper));
+  --foreground: hsl(var(--ink));
+  --card: hsl(220 25% 12%);
+  --card-foreground: hsl(210 14% 90%);
+  --popover: hsl(220 25% 12%);
+  --popover-foreground: hsl(210 14% 90%);
   --primary: hsl(var(--teal));
-  --primary-foreground: hsl(var(--white));
-  --muted: 215 30% 15%;
-  --muted-foreground: 215 20% 65%;
-  --border: 215 30% 20%;
+  --primary-foreground: hsl(0 0% 100%);
+  --secondary: 220 20% 16%;
+  --secondary-foreground: hsl(210 14% 90%);
+  --muted: 220 20% 14%;
+  --muted-foreground: 215 15% 60%;
+  --accent: 182 30% 15%;
+  --accent-foreground: hsl(var(--teal));
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 220 20% 18%;
+  --input: 220 20% 18%;
+  --ring: hsl(var(--teal));
+
+  --surface: 220 25% 12%;
+  --surface-raised: 220 25% 15%;
+  --surface-hover: 220 25% 16%;
+  --text-primary: 210 14% 96%;
+  --text-secondary: 215 15% 60%;
+  --text-tertiary: 215 10% 50%;
+  --divider: 220 20% 18%;
+  --icon-bg-blue: 221 50% 18%;
+  --icon-fg-blue: 214 95% 70%;
+  --icon-bg-amber: 32 50% 18%;
+  --icon-fg-amber: 38 95% 65%;
+  --icon-bg-emerald: 160 40% 15%;
+  --icon-fg-emerald: 152 76% 55%;
+  --icon-bg-red: 0 40% 16%;
+  --icon-fg-red: 0 72% 65%;
+  --lead-from: 182 30% 12%;
+  --lead-to: 220 30% 12%;
+  --lead-border: 182 30% 20%;
+  --avatar-bg: 220 20% 20%;
+  --avatar-fg: 215 15% 60%;
 }
 
 @layer base {
@@ -99,15 +153,20 @@
   }
   body {
     @apply font-sans antialiased bg-background text-foreground;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
   h1, h2, h3, h4, h5, h6 {
     @apply font-display tracking-tight text-foreground;
   }
 }
 
-/* Custom Utilities */
 .glass-panel {
   @apply bg-white/80 backdrop-blur-md border border-white/20 shadow-sm;
+}
+
+.dark .glass-panel {
+  background: hsl(220 25% 12% / 0.8);
+  border-color: hsl(220 20% 20%);
 }
 
 .reveal-hidden {

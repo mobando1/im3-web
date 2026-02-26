@@ -27,8 +27,11 @@ import {
   Link2,
   Calendar,
   Linkedin,
-  ChevronsRight
+  ChevronsRight,
+  Sun,
+  Moon
 } from "lucide-react";
+import { useDarkMode } from "@/hooks/useDarkMode";
 
 const InteractiveHeroWidget = lazy(() => import("@/components/InteractiveHeroWidget").then(m => ({ default: m.InteractiveHeroWidget })));
 
@@ -71,8 +74,26 @@ const Reveal = ({ children, className, delay = 0 }: { children: React.ReactNode,
   );
 };
 
+const DarkModeToggle = ({ isDark, toggle }: { isDark: boolean; toggle: () => void }) => (
+  <button
+    data-testid="dark-mode-toggle"
+    onClick={toggle}
+    className={cn(
+      "relative w-8 h-8 rounded-lg flex items-center justify-center transition-all duration-300",
+      isDark 
+        ? "bg-[hsl(var(--teal))]/15 text-[hsl(var(--teal))] hover:bg-[hsl(var(--teal))]/25" 
+        : "bg-[hsl(var(--ink))]/5 text-[hsl(var(--ink))]/70 hover:bg-[hsl(var(--ink))]/10"
+    )}
+    aria-label={isDark ? "Switch to light mode" : "Switch to dark mode"}
+  >
+    <Sun className={cn("w-4 h-4 absolute transition-all duration-300", isDark ? "opacity-0 rotate-90 scale-0" : "opacity-100 rotate-0 scale-100")} />
+    <Moon className={cn("w-4 h-4 absolute transition-all duration-300", isDark ? "opacity-100 rotate-0 scale-100" : "opacity-0 -rotate-90 scale-0")} />
+  </button>
+);
+
 const Header = () => {
   const { t, language, setLanguage } = useI18n();
+  const { isDark, toggle: toggleDark } = useDarkMode();
   const [isScrolled, setIsScrolled] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -106,7 +127,9 @@ const Header = () => {
       <div className="max-w-5xl mx-auto">
         <div className={cn(
           "flex items-center justify-between rounded-xl px-4 py-2 transition-all duration-300",
-          isScrolled ? "bg-white/80 backdrop-blur-md shadow-sm border border-white/20" : "bg-transparent"
+          isScrolled 
+            ? isDark ? "bg-[hsl(220,25%,12%)]/80 backdrop-blur-md shadow-sm border border-white/10" : "bg-white/80 backdrop-blur-md shadow-sm border border-white/20" 
+            : "bg-transparent"
         )}>
           <div className="flex items-center gap-2">
             <img src="/assets/im3-logo.jpg" alt="IM3 Systems" className="h-8 w-auto object-contain rounded-md" />
@@ -116,11 +139,11 @@ const Header = () => {
             <button onClick={() => scrollToSection('que')} className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">{t.nav.whatWeDo}</button>
             <button onClick={() => scrollToSection('como')} className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">{t.nav.howWeWork}</button>
             <button onClick={() => scrollToSection('para')} className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors">{t.nav.forWhom}</button>
-            <div className="flex items-center gap-0.5 border border-border/50 rounded-md p-0.5 bg-white/40">
+            <div className="flex items-center gap-0.5 border border-[hsl(var(--divider))] rounded-md p-0.5 bg-[hsl(var(--surface))]/40">
               <button 
                 className={cn(
                   "px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors",
-                  language === 'es' ? "bg-[hsl(var(--ink))]/10 text-[hsl(var(--ink))]" : "text-muted-foreground hover:bg-gray-100"
+                  language === 'es' ? "bg-[hsl(var(--text-primary))]/10 text-[hsl(var(--text-primary))]" : "text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--surface-hover))]"
                 )}
                 onClick={() => setLanguage('es')}
               >
@@ -129,19 +152,20 @@ const Header = () => {
               <button 
                 className={cn(
                   "px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors",
-                  language === 'en' ? "bg-[hsl(var(--ink))]/10 text-[hsl(var(--ink))]" : "text-muted-foreground hover:bg-gray-100"
+                  language === 'en' ? "bg-[hsl(var(--text-primary))]/10 text-[hsl(var(--text-primary))]" : "text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--surface-hover))]"
                 )}
                 onClick={() => setLanguage('en')}
               >
                 EN
               </button>
             </div>
+            <DarkModeToggle isDark={isDark} toggle={toggleDark} />
           </nav>
 
           <div className="hidden md:flex items-center">
             <button 
               onClick={openBooking}
-              className="bg-[hsl(var(--ink))] text-white px-4 py-1.5 rounded-lg text-xs font-medium hover:translate-y-[-1px] hover:shadow-md transition-all duration-300 flex items-center gap-1.5"
+              className="bg-[hsl(var(--teal))] text-white px-4 py-1.5 rounded-lg text-xs font-medium hover:translate-y-[-1px] hover:shadow-md transition-all duration-300 flex items-center gap-1.5"
             >
               {t.nav.requestDiagnosis} <ArrowRight className="w-3 h-3" />
             </button>
@@ -155,12 +179,12 @@ const Header = () => {
 
       {/* Mobile Menu */}
       {mobileMenuOpen && (
-        <div className="absolute top-full left-4 right-4 mt-2 p-6 bg-white rounded-2xl shadow-xl border border-border md:hidden flex flex-col gap-4 animate-in slide-in-from-top-4 fade-in duration-200">
-          <div className="flex items-center justify-center gap-2 pb-4 border-b border-border/50">
+        <div className="absolute top-full left-4 right-4 mt-2 p-6 bg-[hsl(var(--surface))] rounded-2xl shadow-xl border border-[hsl(var(--divider))] md:hidden flex flex-col gap-4 animate-in slide-in-from-top-4 fade-in duration-200">
+          <div className="flex items-center justify-center gap-2 pb-4 border-b border-[hsl(var(--divider))]">
             <button 
               className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors",
-                language === 'es' ? "bg-[hsl(var(--ink))]/10 text-[hsl(var(--ink))]" : "text-muted-foreground hover:bg-gray-100"
+                language === 'es' ? "bg-[hsl(var(--text-primary))]/10 text-[hsl(var(--text-primary))]" : "text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--surface-hover))]"
               )}
               onClick={() => setLanguage('es')}
             >
@@ -169,19 +193,20 @@ const Header = () => {
             <button 
               className={cn(
                 "flex items-center gap-2 px-4 py-2 rounded-lg font-medium transition-colors",
-                language === 'en' ? "bg-[hsl(var(--ink))]/10 text-[hsl(var(--ink))]" : "text-muted-foreground hover:bg-gray-100"
+                language === 'en' ? "bg-[hsl(var(--text-primary))]/10 text-[hsl(var(--text-primary))]" : "text-[hsl(var(--text-secondary))] hover:bg-[hsl(var(--surface-hover))]"
               )}
               onClick={() => setLanguage('en')}
             >
               <span className="text-xl">🇺🇸</span> {t.nav.english}
             </button>
+            <DarkModeToggle isDark={isDark} toggle={toggleDark} />
           </div>
-          <button onClick={() => scrollToSection('que')} className="text-left text-lg font-medium py-2 border-b border-border/50">{t.nav.whatWeDo}</button>
-          <button onClick={() => scrollToSection('como')} className="text-left text-lg font-medium py-2 border-b border-border/50">{t.nav.howWeWork}</button>
-          <button onClick={() => scrollToSection('para')} className="text-left text-lg font-medium py-2 border-b border-border/50">{t.nav.forWhom}</button>
+          <button onClick={() => scrollToSection('que')} className="text-left text-lg font-medium py-2 border-b border-[hsl(var(--divider))] text-[hsl(var(--text-primary))]">{t.nav.whatWeDo}</button>
+          <button onClick={() => scrollToSection('como')} className="text-left text-lg font-medium py-2 border-b border-[hsl(var(--divider))] text-[hsl(var(--text-primary))]">{t.nav.howWeWork}</button>
+          <button onClick={() => scrollToSection('para')} className="text-left text-lg font-medium py-2 border-b border-[hsl(var(--divider))] text-[hsl(var(--text-primary))]">{t.nav.forWhom}</button>
           <button 
             onClick={openBooking}
-            className="bg-[hsl(var(--ink))] text-white px-5 py-3 rounded-xl text-center font-medium mt-2"
+            className="bg-[hsl(var(--teal))] text-white px-5 py-3 rounded-xl text-center font-medium mt-2"
           >
             {t.nav.requestDiagnosis}
           </button>
@@ -204,14 +229,14 @@ const PrioritiesCard = () => {
   return (
     <div className="max-w-5xl mx-auto -mt-6 md:-mt-12 relative z-20 px-4">
       <Reveal delay={600}>
-        <div className="bg-white rounded-2xl shadow-lg border border-border/60 overflow-hidden relative">
-          <div className="absolute inset-0 bg-gradient-to-br from-[hsl(var(--teal))]/[0.03] via-transparent to-blue-50/30 pointer-events-none" />
+        <div className="bg-[hsl(var(--surface))] rounded-2xl shadow-lg border border-[hsl(var(--divider))]/60 overflow-hidden relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-[hsl(var(--teal))]/[0.03] via-transparent to-[hsl(var(--teal))]/[0.02] pointer-events-none" />
           <div className="relative p-5 sm:p-6">
             <div className="mb-3">
               <div className="flex items-center gap-3 mb-2">
                 <div className="w-1 h-4 rounded-full bg-[hsl(var(--teal))] shrink-0" />
-                <h3 className="text-sm font-bold text-[hsl(var(--ink))] tracking-tight">{t.priorities.title}</h3>
-                <span className="text-gray-300 mx-0.5">·</span>
+                <h3 className="text-sm font-bold text-[hsl(var(--text-primary))] tracking-tight">{t.priorities.title}</h3>
+                <span className="text-[hsl(var(--text-tertiary))] mx-0.5">·</span>
                 <div className="flex items-center gap-1.5">
                   {t.priorities.flow.map((word: string, i: number) => (
                     <span key={i} className="flex items-center gap-1.5">
@@ -391,7 +416,7 @@ const LogoStrip = () => {
   ];
 
   const LogoItem = ({ logo }: { logo: { name: string; src: string } }) => (
-    <div className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity duration-300 mix-blend-multiply flex items-center mx-8">
+    <div className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity duration-300 flex items-center mx-8">
       <img 
         src={logo.src} 
         alt={logo.name} 
@@ -404,14 +429,14 @@ const LogoStrip = () => {
   );
   
   return (
-    <section className="py-6 overflow-hidden bg-[hsl(var(--paper))] relative">
-      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-md h-px bg-gradient-to-r from-transparent via-border/60 to-transparent" />
+    <section className="py-6 overflow-hidden bg-background relative">
+      <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full max-w-md h-px bg-gradient-to-r from-transparent via-[hsl(var(--divider))]/60 to-transparent" />
       <div className="max-w-7xl mx-auto px-8 mb-5 text-center">
-        <p className="text-sm font-display font-semibold text-[hsl(var(--ink))]/60 tracking-wide">{t.logoStrip.title}</p>
+        <p className="text-sm font-display font-semibold text-[hsl(var(--text-secondary))] tracking-wide">{t.logoStrip.title}</p>
       </div>
       <div className="relative overflow-hidden">
-        <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-[hsl(var(--paper))] to-transparent z-10 pointer-events-none" />
-        <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-[hsl(var(--paper))] to-transparent z-10 pointer-events-none" />
+        <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
         <div className="flex w-max animate-scroll">
           {[...logos, ...logos, ...logos, ...logos].map((logo, i) => (
             <LogoItem key={i} logo={logo} />
@@ -505,19 +530,19 @@ const Services = () => {
       icon: <Layout className="w-6 h-6" />,
       title: t.services.internalApps,
       text: t.services.internalAppsDesc,
-      color: "bg-blue-50 text-blue-600"
+      color: "bg-[hsl(var(--icon-bg-blue))] text-[hsl(var(--icon-fg-blue))]"
     },
     {
       icon: <Zap className="w-6 h-6" />,
       title: t.services.automation,
       text: t.services.automationDesc,
-      color: "bg-amber-50 text-amber-600"
+      color: "bg-[hsl(var(--icon-bg-amber))] text-[hsl(var(--icon-fg-amber))]"
     },
     {
       icon: <Activity className="w-6 h-6" />,
       title: t.services.controlSystems,
       text: t.services.controlSystemsDesc,
-      color: "bg-emerald-50 text-emerald-600"
+      color: "bg-[hsl(var(--icon-bg-emerald))] text-[hsl(var(--icon-fg-emerald))]"
     }
   ];
 
@@ -526,7 +551,7 @@ const Services = () => {
       <div className="max-w-7xl mx-auto">
         <div className="text-center max-w-2xl mx-auto mb-10">
           <Reveal>
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-3 leading-tight">{t.services.title}</h2>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--text-primary))] mb-3 leading-tight">{t.services.title}</h2>
             <p className="text-base sm:text-lg text-muted-foreground">{t.services.subtitle}</p>
           </Reveal>
         </div>
@@ -534,11 +559,11 @@ const Services = () => {
         <div className="grid md:grid-cols-3 gap-6">
           {cards.map((card, i) => (
             <Reveal key={i} delay={i * 100}>
-              <div className="bg-white p-7 rounded-2xl border border-border hover:shadow-lg transition-all duration-300 hover:border-[hsl(var(--teal))] group h-full">
+              <div className="bg-[hsl(var(--surface))] p-7 rounded-2xl border border-[hsl(var(--divider))] hover:shadow-lg transition-all duration-300 hover:border-[hsl(var(--teal))] group h-full">
                 <div className={`w-11 h-11 rounded-xl ${card.color} flex items-center justify-center mb-5 group-hover:scale-110 transition-transform`}>
                   {card.icon}
                 </div>
-                <h3 className="text-lg font-bold mb-3 text-[hsl(var(--ink))]">{card.title}</h3>
+                <h3 className="text-lg font-bold mb-3 text-[hsl(var(--text-primary))]">{card.title}</h3>
                 <p className="text-sm text-muted-foreground leading-relaxed">{card.text}</p>
               </div>
             </Reveal>
@@ -555,11 +580,11 @@ const LeadMagnet = () => {
   return (
     <section id="diagnostico" className="py-6 px-4 md:px-8">
       <Reveal>
-        <div className="max-w-5xl mx-auto bg-gradient-to-r from-teal-50 to-blue-50 rounded-3xl p-8 md:p-12 border border-teal-100 flex flex-col md:flex-row items-center justify-between gap-8 shadow-sm">
+        <div className="max-w-5xl mx-auto bg-gradient-to-r from-[hsl(var(--lead-from))] to-[hsl(var(--lead-to))] rounded-3xl p-8 md:p-12 border border-[hsl(var(--lead-border))] flex flex-col md:flex-row items-center justify-between gap-8 shadow-sm">
           <div className="md:w-2/3">
-            <div className="inline-block px-3 py-1 bg-white text-[hsl(var(--teal))] text-xs font-bold rounded-full mb-4 shadow-sm">{t.leadMagnet.badge}</div>
-            <h3 className="text-2xl md:text-3xl font-bold text-[hsl(var(--ink))] mb-4">{t.leadMagnet.title}</h3>
-            <p className="text-[hsl(var(--coal))] opacity-80 text-lg">
+            <div className="inline-block px-3 py-1 bg-[hsl(var(--surface))] text-[hsl(var(--teal))] text-xs font-bold rounded-full mb-4 shadow-sm">{t.leadMagnet.badge}</div>
+            <h3 className="text-2xl md:text-3xl font-bold text-[hsl(var(--text-primary))] mb-4">{t.leadMagnet.title}</h3>
+            <p className="text-[hsl(var(--text-secondary))] text-lg">
               {t.leadMagnet.description}
             </p>
           </div>
@@ -621,13 +646,13 @@ const ProcessStep = ({ step, index, total }: { step: { num: string; title: strin
           <div className="pt-3">
             <h4 className={cn(
               "text-xl sm:text-2xl font-display font-bold transition-all duration-300",
-              hovered ? "text-[hsl(var(--teal))] translate-x-1" : "text-[hsl(var(--ink))]"
+              hovered ? "text-[hsl(var(--teal))] translate-x-1" : "text-[hsl(var(--text-primary))]"
             )}>{step.title}</h4>
             <div className={cn(
               "overflow-hidden transition-all duration-500 ease-out",
               hovered ? "max-h-40 opacity-100 mt-3" : "max-h-0 opacity-0 mt-0"
             )}>
-              <div className="bg-white rounded-xl p-4 border border-[hsl(var(--teal))]/15 shadow-sm">
+              <div className="bg-[hsl(var(--surface))] rounded-xl p-4 border border-[hsl(var(--teal))]/15 shadow-sm">
                 <p className="text-sm text-muted-foreground leading-relaxed">{step.text}</p>
               </div>
             </div>
@@ -642,11 +667,11 @@ const Process = () => {
   const { t } = useI18n();
 
   return (
-    <section id="como" className="py-6 sm:py-8 px-4 md:px-8 bg-[hsl(var(--paper))]">
+    <section id="como" className="py-6 sm:py-8 px-4 md:px-8 bg-background">
       <div className="max-w-3xl mx-auto">
         <div className="mb-10">
           <Reveal>
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] leading-tight">{t.process.title}</h2>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--text-primary))] leading-tight">{t.process.title}</h2>
           </Reveal>
         </div>
 
@@ -679,7 +704,7 @@ const TargetAudience = () => {
       <div className="max-w-7xl mx-auto">
         <div className="max-w-2xl mx-auto text-center mb-10">
           <Reveal>
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-3 leading-tight">{t.targetAudience.title}</h2>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--text-primary))] mb-3 leading-tight">{t.targetAudience.title}</h2>
             <p className="text-base sm:text-lg text-muted-foreground">{t.targetAudience.subtitle}</p>
           </Reveal>
         </div>
@@ -706,16 +731,16 @@ const TargetAudience = () => {
           </Reveal>
 
           <Reveal delay={200}>
-            <div className="bg-white p-8 md:p-10 rounded-[2rem] border border-border shadow-sm h-full">
+            <div className="bg-[hsl(var(--surface))] p-8 md:p-10 rounded-[2rem] border border-[hsl(var(--divider))] shadow-sm h-full">
                <div className="flex items-center gap-3 mb-7">
-                 <XCircle className="w-7 h-7 text-red-400/80 shrink-0" strokeWidth={2} />
+                 <XCircle className="w-7 h-7 text-[hsl(var(--icon-fg-red))]/80 shrink-0" strokeWidth={2} />
                  <h3 className="text-lg sm:text-xl font-bold text-gray-400">{t.targetAudience.notForYou}</h3>
                </div>
                <ul className="space-y-5">
                  {t.targetAudience.notForItems.map((item, i) => (
                    <li key={i} className="flex gap-3 items-start">
-                     <div className="w-5 h-5 rounded-full border-2 border-red-200 flex items-center justify-center shrink-0 mt-0.5">
-                       <X className="w-3 h-3 text-red-300" strokeWidth={3} />
+                     <div className="w-5 h-5 rounded-full border-2 border-[hsl(var(--icon-fg-red))]/30 flex items-center justify-center shrink-0 mt-0.5">
+                       <X className="w-3 h-3 text-[hsl(var(--icon-fg-red))]/60" strokeWidth={3} />
                      </div>
                      <span className="text-muted-foreground leading-relaxed text-[15px]">{item}</span>
                    </li>
@@ -733,24 +758,24 @@ const Testimonials = () => {
   const { t } = useI18n();
 
   return (
-    <section className="py-6 sm:py-8 px-4 md:px-8 bg-[hsl(var(--paper))]">
+    <section className="py-6 sm:py-8 px-4 md:px-8 bg-background">
       <div className="max-w-7xl mx-auto">
         <Reveal>
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">{t.testimonials.title}</h2>
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--text-primary))] mb-4 leading-tight">{t.testimonials.title}</h2>
           <p className="text-muted-foreground mb-8">{t.testimonials.subtitle}</p>
         </Reveal>
 
         <div className="grid md:grid-cols-3 gap-6">
           {t.testimonials.reviews.map((review, i) => (
             <Reveal key={i} delay={i * 100}>
-              <div className="bg-white p-8 rounded-2xl border border-border shadow-sm h-full flex flex-col justify-between">
-                <p className="text-lg text-[hsl(var(--coal))] mb-8 font-medium">"{review.quote}"</p>
+              <div className="bg-[hsl(var(--surface))] p-8 rounded-2xl border border-[hsl(var(--divider))] shadow-sm h-full flex flex-col justify-between">
+                <p className="text-lg text-[hsl(var(--text-primary))] mb-8 font-medium">"{review.quote}"</p>
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center font-bold text-gray-500 text-sm">
+                  <div className="w-10 h-10 rounded-full bg-[hsl(var(--avatar-bg))] flex items-center justify-center font-bold text-[hsl(var(--avatar-fg))] text-sm">
                     {review.author.split(' ').map(n => n[0]).join('')}
                   </div>
                   <div>
-                    <div className="font-bold text-sm text-[hsl(var(--ink))]">{review.author}</div>
+                    <div className="font-bold text-sm text-[hsl(var(--text-primary))]">{review.author}</div>
                     <div className="text-xs text-muted-foreground">{review.role}</div>
                   </div>
                 </div>
@@ -770,23 +795,23 @@ const Offer = () => {
     <section id="oferta" className="py-6 sm:py-8 px-4 md:px-8">
       <div className="max-w-4xl mx-auto text-center mb-8">
          <Reveal>
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-4 leading-tight">{t.offer.title}</h2>
+            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--text-primary))] mb-4 leading-tight">{t.offer.title}</h2>
             <p className="text-lg text-muted-foreground">{t.offer.subtitle}</p>
          </Reveal>
       </div>
 
       <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-8 mb-8">
         <Reveal delay={100}>
-          <div className="bg-white p-8 rounded-2xl border border-border h-full hover:border-[hsl(var(--teal))] transition-all hover:shadow-lg flex flex-col">
-            <div className="w-12 h-12 bg-blue-50 rounded-xl flex items-center justify-center text-blue-600 mb-6">
+          <div className="bg-[hsl(var(--surface))] p-8 rounded-2xl border border-[hsl(var(--divider))] h-full hover:border-[hsl(var(--teal))] transition-all hover:shadow-lg flex flex-col">
+            <div className="w-12 h-12 bg-[hsl(var(--icon-bg-blue))] rounded-xl flex items-center justify-center text-[hsl(var(--icon-fg-blue))] mb-6">
               <Zap className="w-6 h-6" />
             </div>
-            <h3 className="text-xl font-bold text-[hsl(var(--ink))] mb-4">{t.offer.fullImplementation} <span className="block text-sm font-normal text-muted-foreground mt-1">{t.offer.fullImplementationTag}</span></h3>
+            <h3 className="text-xl font-bold text-[hsl(var(--text-primary))] mb-4">{t.offer.fullImplementation} <span className="block text-sm font-normal text-muted-foreground mt-1">{t.offer.fullImplementationTag}</span></h3>
             <p className="text-muted-foreground mb-6 flex-grow">
               {t.offer.fullImplementationDesc}
             </p>
-            <div className="pt-6 border-t border-border mt-auto">
-              <div className="flex items-center gap-2 text-sm font-medium text-[hsl(var(--ink))]">
+            <div className="pt-6 border-t border-[hsl(var(--divider))] mt-auto">
+              <div className="flex items-center gap-2 text-sm font-medium text-[hsl(var(--text-primary))]">
                 <Check className="w-4 h-4 text-[hsl(var(--teal))]" />
                 {t.offer.fullImplementationBenefit}
               </div>
@@ -795,16 +820,16 @@ const Offer = () => {
         </Reveal>
 
         <Reveal delay={200}>
-          <div className="bg-white p-8 rounded-2xl border border-border h-full hover:border-[hsl(var(--teal))] transition-all hover:shadow-lg flex flex-col">
-            <div className="w-12 h-12 bg-amber-50 rounded-xl flex items-center justify-center text-amber-600 mb-6">
+          <div className="bg-[hsl(var(--surface))] p-8 rounded-2xl border border-[hsl(var(--divider))] h-full hover:border-[hsl(var(--teal))] transition-all hover:shadow-lg flex flex-col">
+            <div className="w-12 h-12 bg-[hsl(var(--icon-bg-amber))] rounded-xl flex items-center justify-center text-[hsl(var(--icon-fg-amber))] mb-6">
               <Users className="w-6 h-6" />
             </div>
-            <h3 className="text-xl font-bold text-[hsl(var(--ink))] mb-4">{t.offer.strategicGuidance} <span className="block text-sm font-normal text-muted-foreground mt-1">{t.offer.strategicGuidanceTag}</span></h3>
+            <h3 className="text-xl font-bold text-[hsl(var(--text-primary))] mb-4">{t.offer.strategicGuidance} <span className="block text-sm font-normal text-muted-foreground mt-1">{t.offer.strategicGuidanceTag}</span></h3>
             <p className="text-muted-foreground mb-6 flex-grow">
               {t.offer.strategicGuidanceDesc}
             </p>
-            <div className="pt-6 border-t border-border mt-auto">
-              <div className="flex items-center gap-2 text-sm font-medium text-[hsl(var(--ink))]">
+            <div className="pt-6 border-t border-[hsl(var(--divider))] mt-auto">
+              <div className="flex items-center gap-2 text-sm font-medium text-[hsl(var(--text-primary))]">
                 <Check className="w-4 h-4 text-[hsl(var(--teal))]" />
                 {t.offer.strategicGuidanceBenefit}
               </div>
@@ -814,14 +839,14 @@ const Offer = () => {
       </div>
 
       <Reveal delay={300}>
-        <div className="max-w-3xl mx-auto bg-[hsl(var(--paper))] rounded-2xl p-8 text-center border border-border">
-          <h3 className="text-lg font-bold mb-2 text-[hsl(var(--ink))]">{t.offer.noSalesPressure}</h3>
+        <div className="max-w-3xl mx-auto bg-[hsl(var(--surface-raised))] rounded-2xl p-8 text-center border border-[hsl(var(--divider))]">
+          <h3 className="text-lg font-bold mb-2 text-[hsl(var(--text-primary))]">{t.offer.noSalesPressure}</h3>
           <p className="text-muted-foreground mb-6 max-w-lg mx-auto">
             {t.offer.noSalesPressureDesc}
           </p>
           <button 
             onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
-            className="text-[hsl(var(--teal))] font-bold hover:text-[hsl(var(--ink))] transition-colors flex items-center justify-center gap-2 mx-auto"
+            className="text-[hsl(var(--teal))] font-bold hover:text-[hsl(var(--text-primary))] transition-colors flex items-center justify-center gap-2 mx-auto"
           >
             {t.offer.scheduleConversation} <ArrowRight className="w-4 h-4" />
           </button>
@@ -839,7 +864,7 @@ const Contact = () => {
     <section id="contacto" className="py-5 px-4 md:px-8">
       <div className="max-w-3xl mx-auto text-center">
         <Reveal>
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-6 leading-tight">
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--text-primary))] mb-6 leading-tight">
             {t.contact.title}
           </h2>
           <p className="text-xl text-muted-foreground mb-10">
@@ -848,13 +873,13 @@ const Contact = () => {
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <button 
               onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
-              className="bg-[hsl(var(--ink))] text-white px-8 py-4 rounded-xl font-bold hover:bg-[hsl(var(--coal))] transition-all flex items-center justify-center gap-2"
+              className="bg-[hsl(var(--teal))] text-white px-8 py-4 rounded-xl font-bold hover:opacity-90 transition-all flex items-center justify-center gap-2"
             >
               <Calendar className="w-5 h-5" /> {t.contact.scheduleCall}
             </button>
             <button 
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              className="bg-white border border-border text-[hsl(var(--ink))] px-8 py-4 rounded-xl font-bold hover:bg-gray-50 transition-all flex items-center justify-center gap-2"
+              className="bg-[hsl(var(--surface))] border border-[hsl(var(--divider))] text-[hsl(var(--text-primary))] px-8 py-4 rounded-xl font-bold hover:bg-[hsl(var(--surface-hover))] transition-all flex items-center justify-center gap-2"
             >
               {t.contact.backToTop} <ArrowUpRight className="w-5 h-5" />
             </button>
@@ -870,22 +895,22 @@ const FAQ = () => {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
 
   return (
-    <section id="faq" className="py-6 sm:py-8 px-4 md:px-8 bg-[hsl(var(--paper))]">
+    <section id="faq" className="py-6 sm:py-8 px-4 md:px-8 bg-background">
       <div className="max-w-3xl mx-auto">
         <Reveal>
-          <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--ink))] mb-2 leading-tight">{t.faq.title}</h2>
+          <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--text-primary))] mb-2 leading-tight">{t.faq.title}</h2>
           <p className="text-muted-foreground mb-8">{t.faq.subtitle}</p>
         </Reveal>
         <div className="space-y-3">
           {t.faq.items.map((item, i) => (
             <Reveal key={i} delay={i * 50}>
-              <div className="bg-white rounded-xl border border-border overflow-hidden">
+              <div className="bg-[hsl(var(--surface))] rounded-xl border border-[hsl(var(--divider))] overflow-hidden">
                 <button
                   data-testid={`faq-toggle-${i}`}
                   onClick={() => setOpenIndex(openIndex === i ? null : i)}
-                  className="w-full flex items-center justify-between p-5 text-left hover:bg-gray-50 transition-colors"
+                  className="w-full flex items-center justify-between p-5 text-left hover:bg-[hsl(var(--surface-hover))] transition-colors"
                 >
-                  <span className="font-semibold text-[hsl(var(--ink))] pr-4">{item.question}</span>
+                  <span className="font-semibold text-[hsl(var(--text-primary))] pr-4">{item.question}</span>
                   <ChevronDown className={cn("w-5 h-5 text-muted-foreground shrink-0 transition-transform duration-200", openIndex === i && "rotate-180")} />
                 </button>
                 <div className={cn("overflow-hidden transition-all duration-300", openIndex === i ? "max-h-60 opacity-100" : "max-h-0 opacity-0")}>
@@ -912,7 +937,7 @@ const Footer = () => {
   };
 
   return (
-    <footer className="py-5 px-4 md:px-8 border-t border-border bg-white">
+    <footer className="py-5 px-4 md:px-8 border-t border-[hsl(var(--divider))] bg-[hsl(var(--surface))]">
       <div className="max-w-7xl mx-auto">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           <div className="md:col-span-1">
@@ -922,7 +947,7 @@ const Footer = () => {
             </p>
           </div>
           <div>
-            <h4 className="font-semibold text-sm text-[hsl(var(--ink))] mb-3">Navegación</h4>
+            <h4 className="font-semibold text-sm text-[hsl(var(--text-primary))] mb-3">Navegación</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li><button onClick={() => scrollToSection('que')} className="hover:text-[hsl(var(--teal))] transition-colors">{t.footer.whatWeDo}</button></li>
               <li><button onClick={() => scrollToSection('como')} className="hover:text-[hsl(var(--teal))] transition-colors">{t.footer.howWeWork}</button></li>
@@ -931,13 +956,13 @@ const Footer = () => {
             </ul>
           </div>
           <div>
-            <h4 className="font-semibold text-sm text-[hsl(var(--ink))] mb-3">Acciones</h4>
+            <h4 className="font-semibold text-sm text-[hsl(var(--text-primary))] mb-3">Acciones</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li><button onClick={() => window.open("https://calendar.im3systems.com", "_blank")} className="hover:text-[hsl(var(--teal))] transition-colors">{t.footer.diagnosis}</button></li>
             </ul>
           </div>
           <div>
-            <h4 className="font-semibold text-sm text-[hsl(var(--ink))] mb-3">Social</h4>
+            <h4 className="font-semibold text-sm text-[hsl(var(--text-primary))] mb-3">Social</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>
                 <a href="https://www.linkedin.com/company/im3-systems" target="_blank" rel="noopener noreferrer" className="hover:text-[hsl(var(--teal))] transition-colors flex items-center gap-2">
@@ -947,7 +972,7 @@ const Footer = () => {
             </ul>
           </div>
         </div>
-        <div className="pt-6 border-t border-border flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
+        <div className="pt-6 border-t border-[hsl(var(--divider))] flex flex-col sm:flex-row justify-between items-center gap-4 text-sm text-muted-foreground">
           <span>© {year} IM3 Systems</span>
         </div>
       </div>
@@ -959,9 +984,9 @@ const SectionDivider = ({ variant = "default" }: { variant?: "default" | "teal" 
   if (variant === "dot") {
     return (
       <div className="flex items-center justify-center py-2">
-        <div className="h-px w-16 bg-gradient-to-r from-transparent to-border" />
+        <div className="h-px w-16 bg-gradient-to-r from-transparent to-[hsl(var(--divider))]" />
         <div className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--teal))]/40 mx-3" />
-        <div className="h-px w-16 bg-gradient-to-l from-transparent to-border" />
+        <div className="h-px w-16 bg-gradient-to-l from-transparent to-[hsl(var(--divider))]" />
       </div>
     );
   }
@@ -974,7 +999,7 @@ const SectionDivider = ({ variant = "default" }: { variant?: "default" | "teal" 
   }
   return (
     <div className="flex items-center justify-center py-2">
-      <div className="h-px w-full max-w-xs bg-gradient-to-r from-transparent via-border to-transparent" />
+      <div className="h-px w-full max-w-xs bg-gradient-to-r from-transparent via-[hsl(var(--divider))] to-transparent" />
     </div>
   );
 };
@@ -983,7 +1008,7 @@ const SectionDivider = ({ variant = "default" }: { variant?: "default" | "teal" 
 
 export default function Home() {
   return (
-    <div className="min-h-screen font-sans bg-[hsl(var(--paper))] selection:bg-[hsl(var(--teal))] selection:text-white">
+    <div className="min-h-screen font-sans bg-background selection:bg-[hsl(var(--teal))] selection:text-white transition-colors duration-300">
       <Header />
       <main>
         <Hero />

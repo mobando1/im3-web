@@ -59,6 +59,7 @@ Preferred communication style: Simple, everyday language.
 - Typography: Inter and Manrope font families
 - Border radius: 18px default
 - Premium, minimalist aesthetic with subtle shadows and rounded corners
+- **Dark mode**: Toggle in header (desktop and mobile). Uses CSS custom properties with semantic tokens (--surface, --text-primary, --divider, etc.). Persisted to localStorage. Respects system preference on first visit. Hook: `useDarkMode()` in `client/src/hooks/useDarkMode.ts`. `.dark` class applied to `<html>` element.
 
 ## External Dependencies
 
