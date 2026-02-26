@@ -96,9 +96,8 @@ const translations = {
       title: "Resultados que hablan por sí solos",
       subtitle: "Casos reales de impacto operativo.",
       reviews: [
-        { quote: "Logramos reducir el tiempo de cierre de 4 días a 4 horas.", author: "Laura Méndez", role: "Operaciones · Bodega 72" },
-        { quote: "Pasamos de perder 8% del inventario por errores manuales a menos del 0.5%. Por fin tenemos visibilidad real.", author: "Carlos Rojas", role: "Admin · CasaMesa" },
-        { quote: "En 2 semanas el equipo ya operaba sin soporte. Antes tardábamos meses en adoptar herramientas nuevas.", author: "Paula Andrade", role: "Dirección · Quanta" },
+        { quote: "Nos automatizaron todo el agendamiento de clases, cronogramas y la página web. Lo que antes nos tomaba horas de coordinación manual ahora funciona solo. El equipo puede enfocarse en enseñar, no en administrar.", author: "Sebastián Garzón", role: "Fundador · Passport2Fluency" },
+        { quote: "Nos construyeron la página web y un chatbot de ventas y atención al cliente en WhatsApp. Los resultados fueron asombrosos — cerramos más ventas y nuestros clientes reciben respuesta inmediata, 24/7.", author: "Nicolás Hernández", role: "Director · AMJ Solutions" },
       ],
     },
     offer: {
@@ -236,9 +235,8 @@ const translations = {
       title: "Results that speak for themselves",
       subtitle: "Real operational impact cases.",
       reviews: [
-        { quote: "We reduced our closing time from 4 days to 4 hours.", author: "Laura Méndez", role: "Operations · Bodega 72" },
-        { quote: "We went from losing 8% of inventory due to manual errors to under 0.5%. We finally have real visibility.", author: "Carlos Rojas", role: "Admin · CasaMesa" },
-        { quote: "In 2 weeks our team was operating without support. Before, it took us months to adopt new tools.", author: "Paula Andrade", role: "Director · Quanta" },
+        { quote: "They automated our entire class scheduling, timetables, and website. What used to take hours of manual coordination now runs on its own. The team can focus on teaching, not managing.", author: "Sebastián Garzón", role: "Founder · Passport2Fluency" },
+        { quote: "They built our website and a WhatsApp sales and customer service chatbot. The results were amazing — we close more sales and our clients get instant responses, 24/7.", author: "Nicolás Hernández", role: "Director · AMJ Solutions" },
       ],
     },
     offer: {

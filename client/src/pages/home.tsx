@@ -839,7 +839,7 @@ const Testimonials = () => {
           <p className="text-muted-foreground mb-8">{t.testimonials.subtitle}</p>
         </Reveal>
 
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-2 gap-6 max-w-4xl mx-auto">
           {t.testimonials.reviews.map((review, i) => (
             <Reveal key={i} delay={i * 100}>
               <div className="bg-[hsl(var(--surface))] p-8 rounded-2xl border border-[hsl(var(--divider))] shadow-sm h-full flex flex-col justify-between">
