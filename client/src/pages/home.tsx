@@ -4,11 +4,13 @@ import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { 
   ArrowRight, 
-  Check, 
+  Check,
+  CheckCircle2,
   ChevronDown,
   ChevronRight, 
   Menu, 
-  X, 
+  X,
+  XCircle, 
   Activity, 
   Cpu, 
   ShieldCheck, 
@@ -687,15 +689,15 @@ const TargetAudience = () => {
             <div className="bg-[hsl(var(--ink))] text-white p-8 md:p-10 rounded-[2rem] shadow-xl relative overflow-hidden h-full">
                <div className="absolute top-0 right-0 w-64 h-64 bg-[hsl(var(--teal))] opacity-20 blur-[80px] rounded-full"></div>
                <div className="flex items-center gap-3 mb-7">
-                 <div className="w-8 h-8 rounded-full bg-[hsl(var(--teal))]/20 flex items-center justify-center shrink-0">
-                   <Check className="text-[hsl(var(--teal))] w-4 h-4" />
-                 </div>
+                 <CheckCircle2 className="w-7 h-7 text-[hsl(var(--teal))] shrink-0" strokeWidth={2} />
                  <h3 className="text-lg sm:text-xl font-bold">{t.targetAudience.fitsYouIf}</h3>
                </div>
                <ul className="space-y-5 relative z-10">
                  {t.targetAudience.fitsItems.map((item, i) => (
                    <li key={i} className="flex gap-3 items-start">
-                     <Check className="w-4 h-4 text-[hsl(var(--teal))] shrink-0 mt-0.5" />
+                     <div className="w-5 h-5 rounded-full border-2 border-[hsl(var(--teal))]/60 flex items-center justify-center shrink-0 mt-0.5">
+                       <Check className="w-3 h-3 text-[hsl(var(--teal))]" strokeWidth={3} />
+                     </div>
                      <span className="text-gray-300 leading-relaxed text-[15px]">{item}</span>
                    </li>
                  ))}
@@ -706,15 +708,15 @@ const TargetAudience = () => {
           <Reveal delay={200}>
             <div className="bg-white p-8 md:p-10 rounded-[2rem] border border-border shadow-sm h-full">
                <div className="flex items-center gap-3 mb-7">
-                 <div className="w-8 h-8 rounded-full bg-red-50 flex items-center justify-center shrink-0">
-                   <X className="text-red-400 w-4 h-4" />
-                 </div>
+                 <XCircle className="w-7 h-7 text-red-400/80 shrink-0" strokeWidth={2} />
                  <h3 className="text-lg sm:text-xl font-bold text-gray-400">{t.targetAudience.notForYou}</h3>
                </div>
                <ul className="space-y-5">
                  {t.targetAudience.notForItems.map((item, i) => (
                    <li key={i} className="flex gap-3 items-start">
-                     <X className="w-4 h-4 text-red-300 shrink-0 mt-0.5" />
+                     <div className="w-5 h-5 rounded-full border-2 border-red-200 flex items-center justify-center shrink-0 mt-0.5">
+                       <X className="w-3 h-3 text-red-300" strokeWidth={3} />
+                     </div>
                      <span className="text-muted-foreground leading-relaxed text-[15px]">{item}</span>
                    </li>
                  ))}
