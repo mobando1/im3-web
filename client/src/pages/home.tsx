@@ -619,40 +619,13 @@ const LeadMagnet = () => {
 
 const Process = () => {
   const { t } = useI18n();
-  const [activeStep, setActiveStep] = useState(0);
-  const [isAnimating, setIsAnimating] = useState(true);
   const [hoveredStep, setHoveredStep] = useState<number | null>(null);
-  const sectionRef = useRef<HTMLDivElement>(null);
-  const [isVisible, setIsVisible] = useState(false);
 
   const steps = t.process.steps as { num: string; title: string; text: string }[];
   const total = steps.length;
 
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsVisible(true);
-        }
-      },
-      { threshold: 0.2 }
-    );
-    if (sectionRef.current) observer.observe(sectionRef.current);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!isVisible || !isAnimating) return;
-    const interval = setInterval(() => {
-      setActiveStep(prev => (prev + 1) % total);
-    }, 2000);
-    return () => clearInterval(interval);
-  }, [isVisible, isAnimating, total]);
-
-  const currentStep = hoveredStep !== null ? hoveredStep : activeStep;
-
   return (
-    <section id="como" className="py-6 sm:py-8 px-4 md:px-8 bg-background" ref={sectionRef}>
+    <section id="como" className="py-6 sm:py-8 px-4 md:px-8 bg-background">
       <div className="max-w-3xl mx-auto">
         <div className="mb-10">
           <Reveal>
@@ -662,42 +635,36 @@ const Process = () => {
 
         <div className="relative">
           {steps.map((step, i) => {
-            const isActive = currentStep === i;
-            const isPast = currentStep > i;
+            const isActive = hoveredStep === i;
+            const isPast = hoveredStep !== null && hoveredStep > i;
             const isLast = i === total - 1;
 
             return (
               <Reveal key={i} delay={i * 120}>
                 <div
                   className="relative cursor-pointer"
-                  onMouseEnter={() => { setHoveredStep(i); setIsAnimating(false); }}
-                  onMouseLeave={() => { setHoveredStep(null); setIsAnimating(true); }}
+                  onMouseEnter={() => setHoveredStep(i)}
+                  onMouseLeave={() => setHoveredStep(null)}
                 >
                   <div className="flex items-start gap-6">
                     <div className="flex flex-col items-center shrink-0 relative">
                       <div className={cn(
                         "relative w-14 h-14 rounded-2xl flex items-center justify-center font-display font-bold text-lg z-10 transition-all duration-500",
                         isActive
-                          ? "bg-[hsl(var(--teal))] text-white scale-110 shadow-[0_0_30px_rgba(47,164,169,0.4)]"
+                          ? "bg-[hsl(var(--teal))] text-white scale-105 shadow-[0_0_20px_rgba(47,164,169,0.3)]"
                           : isPast
-                            ? "bg-[hsl(var(--teal))]/60 text-white shadow-md"
-                            : "bg-[hsl(var(--step-bg))] text-white/60 shadow-lg"
+                            ? "bg-[hsl(var(--teal))]/50 text-white shadow-md"
+                            : "bg-[hsl(var(--step-bg))] text-white shadow-lg"
                       )}>
                         {step.num}
-                        {isActive && (
-                          <div className="absolute inset-0 rounded-2xl border-2 border-[hsl(var(--teal))]/40 animate-ping pointer-events-none" />
-                        )}
                       </div>
                       {!isLast && (
-                        <div className="relative w-0.5 flex-1 min-h-[32px] mt-3 mb-1 overflow-hidden">
+                        <div className="relative w-0.5 flex-1 min-h-[32px] mt-3 mb-1">
                           <div className="absolute inset-0 rounded-full bg-[hsl(var(--step-line))]/15" />
                           <div
-                            className="absolute top-0 left-0 right-0 rounded-full bg-[hsl(var(--teal))] transition-all duration-700 ease-out"
+                            className="absolute top-0 left-0 right-0 rounded-full bg-[hsl(var(--teal))] transition-all duration-500 ease-out"
                             style={{ height: isPast || isActive ? "100%" : "0%" }}
                           />
-                          {isActive && (
-                            <div className="absolute top-0 left-0 right-0 h-3 rounded-full bg-[hsl(var(--teal))] shadow-[0_0_8px_rgba(47,164,169,0.6)] process-line-pulse" />
-                          )}
                         </div>
                       )}
                     </div>
@@ -705,10 +672,10 @@ const Process = () => {
                       <div className="pt-3">
                         <h4 className={cn(
                           "text-xl sm:text-2xl font-display font-bold transition-all duration-300",
-                          isActive ? "text-[hsl(var(--teal))] translate-x-1" : "text-[hsl(var(--text-primary))]"
+                          isActive ? "text-[hsl(var(--teal))]" : "text-[hsl(var(--text-primary))]"
                         )}>{step.title}</h4>
                         <div className={cn(
-                          "overflow-hidden transition-all duration-500 ease-out",
+                          "overflow-hidden transition-all duration-400 ease-out",
                           isActive ? "max-h-40 opacity-100 mt-3" : "max-h-0 opacity-0 mt-0"
                         )}>
                           <div className="bg-[hsl(var(--surface))] rounded-xl p-4 border border-[hsl(var(--teal))]/15 shadow-sm">
@@ -725,12 +692,12 @@ const Process = () => {
 
           <Reveal delay={total * 120}>
             <div className={cn(
-              "flex items-center gap-3 pt-4 pl-[22px] transition-all duration-700",
-              currentStep === total - 1 ? "opacity-100" : "opacity-30"
+              "flex items-center gap-3 pt-4 pl-[22px] transition-all duration-500",
+              hoveredStep === total - 1 ? "opacity-100" : "opacity-30"
             )}>
               <div className="flex items-center gap-2">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" className="text-[hsl(var(--teal))]">
-                  <path d="M12 20C12 20 4 14 4 8C4 5 7 3 12 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeDasharray={currentStep === total - 1 ? "0" : "4 4"} className="transition-all duration-700" />
+                  <path d="M12 20C12 20 4 14 4 8C4 5 7 3 12 3" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeDasharray={hoveredStep === total - 1 ? "0" : "4 4"} className="transition-all duration-500" />
                   <path d="M9 5L12 3L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
                 </svg>
                 <span className="text-xs font-medium text-[hsl(var(--teal))]/70">{t.process.cycleLabel || "Ciclo continuo"}</span>
@@ -738,34 +705,7 @@ const Process = () => {
             </div>
           </Reveal>
         </div>
-
-        <Reveal delay={200}>
-          <div className="flex justify-center gap-2 mt-8">
-            {steps.map((_, i) => (
-              <button
-                key={i}
-                data-testid={`process-dot-${i}`}
-                onClick={() => { setActiveStep(i); setIsAnimating(false); setTimeout(() => setIsAnimating(true), 4000); }}
-                className={cn(
-                  "w-2 h-2 rounded-full transition-all duration-300",
-                  currentStep === i
-                    ? "bg-[hsl(var(--teal))] w-6"
-                    : "bg-[hsl(var(--step-line))]/30 hover:bg-[hsl(var(--teal))]/50"
-                )}
-              />
-            ))}
-          </div>
-        </Reveal>
       </div>
-      <style>{`
-        @keyframes processLinePulse {
-          0% { transform: translateY(-100%); }
-          100% { transform: translateY(1200%); }
-        }
-        .process-line-pulse {
-          animation: processLinePulse 1s ease-in-out infinite;
-        }
-      `}</style>
     </section>
   );
 };
