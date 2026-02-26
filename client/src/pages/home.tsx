@@ -132,7 +132,7 @@ const Header = () => {
             : "bg-transparent"
         )}>
           <div className="flex items-center gap-2">
-            <img src="/assets/im3-logo.png" alt="IM3 Systems" className="h-8 w-auto object-contain dark:brightness-0 dark:invert" />
+            <img src="/assets/im3-logo.png" alt="IM3 Systems" className={cn("h-8 w-auto object-contain transition-all duration-300", !isScrolled || isDark ? "brightness-0 invert" : "")} />
           </div>
 
           <nav className="hidden md:flex items-center gap-5">
