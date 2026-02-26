@@ -686,13 +686,13 @@ const TargetAudience = () => {
           <Reveal>
             <div className="bg-[hsl(var(--ink))] text-white p-8 md:p-12 rounded-[2rem] shadow-xl relative overflow-hidden">
                <div className="absolute top-0 right-0 w-64 h-64 bg-[hsl(var(--teal))] opacity-20 blur-[80px] rounded-full"></div>
-               <h3 className="text-2xl font-bold mb-8 flex items-center gap-3">
-                 <Check className="text-[hsl(var(--teal))]" /> {t.targetAudience.fitsYouIf}
+               <h3 className="text-xl sm:text-2xl font-bold mb-8 flex items-center gap-3">
+                 <Check className="text-[hsl(var(--teal))] shrink-0 w-6 h-6" /> {t.targetAudience.fitsYouIf}
                </h3>
-               <ul className="space-y-4 relative z-10">
+               <ul className="space-y-5 relative z-10">
                  {t.targetAudience.fitsItems.map((item, i) => (
                    <li key={i} className="flex gap-3 items-start">
-                     <span className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--teal))] mt-2.5"></span>
+                     <Check className="w-4 h-4 text-[hsl(var(--teal))] shrink-0 mt-1" />
                      <span className="text-gray-300 leading-relaxed">{item}</span>
                    </li>
                  ))}
@@ -702,13 +702,13 @@ const TargetAudience = () => {
 
           <Reveal delay={200}>
             <div className="bg-white p-8 md:p-12 rounded-[2rem] border border-border shadow-sm h-full">
-               <h3 className="text-2xl font-bold mb-8 text-gray-400 flex items-center gap-3">
-                 <X /> {t.targetAudience.notForYou}
+               <h3 className="text-xl sm:text-2xl font-bold mb-8 text-gray-400 flex items-center gap-3">
+                 <X className="shrink-0 w-6 h-6" /> {t.targetAudience.notForYou}
                </h3>
-               <ul className="space-y-4">
+               <ul className="space-y-5">
                  {t.targetAudience.notForItems.map((item, i) => (
                    <li key={i} className="flex gap-3 items-start">
-                     <span className="w-1.5 h-1.5 rounded-full bg-red-200 mt-2.5"></span>
+                     <X className="w-4 h-4 text-red-300 shrink-0 mt-1" />
                      <span className="text-muted-foreground leading-relaxed">{item}</span>
                    </li>
                  ))}
