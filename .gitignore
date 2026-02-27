@@ -4,3 +4,19 @@ dist
 server/public
 vite.config.ts.*
 *.tar.gz
+# Replit / local
+.cache/
+.local/
+.replit
+attached_assets/
+
+# Env
+.env
+.env.*
+
+# Logs
+*.log
+
+# Node
+node_modules/
+dist/
