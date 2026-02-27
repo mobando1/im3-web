@@ -32,13 +32,13 @@ import {
   Moon
 } from "lucide-react";
 import { useDarkMode } from "@/hooks/useDarkMode";
-import im3Logo from "@assets/Mesa_de_trabajo_13_1772070483914.png"
-import headshotSebastian from "@assets/stock_images/headshot_sebastian.png"
-import headshotNicolas from "@assets/stock_images/headshot_nicolas.png"
-import headshotAndres from "@assets/stock_images/headshot_andres.png"
-import headshotCamila from "@assets/stock_images/headshot_camila.png"
-import headshotDiego from "@assets/stock_images/headshot_diego.png"
-import headshotValentina from "@assets/stock_images/headshot_valentina.png";
+const im3Logo = "/images/im3-logo.svg";
+const headshotSebastian = "/images/headshot.svg";
+const headshotNicolas = "/images/headshot.svg";
+const headshotAndres = "/images/headshot.svg";
+const headshotCamila = "/images/headshot.svg";
+const headshotDiego = "/images/headshot.svg";
+const headshotValentina = "/images/headshot.svg";
 
 const InteractiveHeroWidget = lazy(() => import("@/components/InteractiveHeroWidget").then(m => ({ default: m.InteractiveHeroWidget })));
 
