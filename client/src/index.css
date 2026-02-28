@@ -34,10 +34,29 @@
   --color-input: var(--input);
   --color-ring: var(--ring);
 
+  --color-tech: hsl(215 40% 50%);
+
   --font-sans: 'Inter', sans-serif;
   --font-display: 'Manrope', sans-serif;
-  
+  --font-mono: 'JetBrains Mono', 'Fira Code', 'Roboto Mono', monospace;
+
   --radius: 18px;
+
+  @keyframes float {
+    0% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+    100% { transform: translateY(0px); }
+  }
+
+  @keyframes pulse-glow {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 0.8; }
+  }
+
+  @keyframes grid-move {
+    0% { transform: translateY(0); }
+    100% { transform: translateY(40px); }
+  }
 }
 
 :root {
@@ -212,4 +231,109 @@
 .cta-shimmer {
   background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.18) 50%, transparent 100%);
   animation: ctaShimmer 2.5s ease-in-out infinite;
+}
+
+/* === Booking Page Utilities === */
+
+@utility bg-grid-pattern {
+  background-size: 40px 40px;
+  background-image: linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+}
+
+@utility bg-grid-pattern-light {
+  background-size: 40px 40px;
+  background-image: linear-gradient(to right, rgba(15, 36, 56, 0.03) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(15, 36, 56, 0.03) 1px, transparent 1px);
+}
+
+@utility animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+@utility animate-pulse-glow {
+  animation: pulse-glow 4s ease-in-out infinite;
+}
+
+@utility animate-grid-flow {
+  animation: grid-move 20s linear infinite;
+}
+
+/* === Confirmed Page Styles === */
+
+.technical-grid {
+  background-size: 40px 40px;
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.08) 1px, transparent 1px);
+  mask-image: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0.5) 80%, transparent 100%);
+  position: relative;
+}
+
+.technical-grid::after {
+  content: "";
+  position: absolute;
+  top: -100%;
+  left: 0;
+  width: 100%;
+  height: 200%;
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(59, 130, 246, 0.1) 40%,
+    rgba(59, 130, 246, 0.4) 50%,
+    rgba(59, 130, 246, 0.1) 60%,
+    transparent 100%
+  );
+  animation: scanline 3s linear infinite;
+  pointer-events: none;
+  z-index: 1;
+}
+
+@keyframes scanline {
+  0% { transform: translateY(-50%); }
+  100% { transform: translateY(50%); }
+}
+
+.mono-tag {
+  @apply font-mono text-[10px] uppercase tracking-widest;
+}
+
+.tech-card {
+  @apply relative bg-white border border-border p-3 transition-all duration-300;
+  box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+}
+
+.tech-card::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: -1px;
+  width: 6px;
+  height: 6px;
+  border-top: 1.5px solid var(--color-foreground);
+  border-left: 1.5px solid var(--color-foreground);
+  opacity: 0.3;
+  transition: opacity 0.3s ease;
+}
+
+.tech-card:hover::before {
+  opacity: 1;
+}
+
+.tech-card::after {
+  content: '';
+  position: absolute;
+  bottom: -1px;
+  right: -1px;
+  width: 6px;
+  height: 6px;
+  border-bottom: 1.5px solid var(--color-foreground);
+  border-right: 1.5px solid var(--color-foreground);
+  opacity: 0.3;
+  transition: opacity 0.3s ease;
+}
+
+.tech-card:hover::after {
+  opacity: 1;
 }

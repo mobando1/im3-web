@@ -6,11 +6,15 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { I18nProvider } from "@/lib/i18n";
 import NotFound from "@/pages/not-found";
 import Home from "@/pages/home";
+import Booking from "@/pages/booking";
+import Confirmed from "@/pages/confirmed";
 
 function Router() {
   return (
     <Switch>
       <Route path="/" component={Home} />
+      <Route path="/booking" component={Booking} />
+      <Route path="/confirmed" component={Confirmed} />
       <Route component={NotFound} />
     </Switch>
   );
