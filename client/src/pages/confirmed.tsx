@@ -127,22 +127,22 @@ export default function Confirmed() {
             <img src="/assets/im3-logo.png" alt="IM3" className="h-5 w-auto" />
           </Link>
           <div className="flex items-center gap-2">
-            <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-            <span>System Operational</span>
+            <span className="w-2 h-2 bg-primary rounded-full animate-pulse" />
+            <span>Confirmed</span>
           </div>
           <div>IM3.OS v2.4</div>
         </div>
       </div>
 
       <div className="flex-grow">
-        <div className="max-w-4xl mx-auto px-6 py-20 md:py-24">
+        <div className="max-w-4xl mx-auto px-6 py-12 md:py-16">
 
           {/* HERO */}
           <motion.header
             initial="hidden"
             animate="visible"
             variants={sectionVariants}
-            className="mb-20 relative"
+            className="mb-14 relative"
           >
             {/* Visual Confirmation Status */}
             <div className="mb-10 relative w-20 h-20">
@@ -185,7 +185,7 @@ export default function Confirmed() {
               CONFIRMACIÓN #2401-OP
             </div>
 
-            <h1 className="text-4xl md:text-6xl font-medium tracking-tight mb-8 text-primary max-w-2xl leading-[1.1]">
+            <h1 className="text-2xl sm:text-4xl md:text-5xl font-medium tracking-tight mb-8 text-primary max-w-2xl leading-[1.1]">
               Tu diagnóstico operativo está confirmado.
             </h1>
 
@@ -200,7 +200,7 @@ export default function Confirmed() {
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.8 }}
-              className="mt-20 flex items-center gap-4 group cursor-pointer w-fit"
+              className="mt-12 flex items-center gap-4 group cursor-pointer w-fit"
               onClick={() => {
                 const nextSection = document.getElementById('briefing-start');
                 nextSection?.scrollIntoView({ behavior: 'smooth' });
@@ -230,7 +230,7 @@ export default function Confirmed() {
             </motion.div>
           </motion.header>
 
-          <div className="space-y-24">
+          <div className="space-y-16">
             {/* SECCIÓN 2 — QUÉ VA A PASAR */}
             <motion.section
               id="briefing-start"
@@ -300,17 +300,16 @@ export default function Confirmed() {
                     </div>
                     <p className="text-gray-600 leading-relaxed text-sm">No vendemos herramientas empaquetadas ni prometemos resultados mágicos inmediatos.</p>
                   </div>
-                  <div className="bg-foreground text-background p-8 relative overflow-hidden group">
-                    <div className="absolute inset-0 bg-white/5 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  <div className="bg-primary/5 p-8 relative overflow-hidden group hover:bg-primary/10 transition-colors">
                     <div className="flex justify-between items-start mb-4">
-                      <span className="mono-tag text-gray-400 border border-gray-700 px-1.5 rounded-[2px]">CORE VALUE</span>
-                      <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
+                      <span className="mono-tag text-primary border border-primary/20 px-1.5 rounded-[2px]">CORE VALUE</span>
+                      <svg className="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7"></path></svg>
                     </div>
-                    <p className="font-light leading-relaxed text-sm opacity-90 mb-6">Diseñamos estructuras de software a medida que reducen la fricción, los errores y la dependencia operativa.</p>
+                    <p className="text-muted-foreground leading-relaxed text-sm mb-6">Diseñamos estructuras de software a medida que reducen la fricción, los errores y la dependencia operativa.</p>
 
                     <div className="flex flex-wrap gap-2">
                       {["Apps a medida", "Automatizaciones"].map((tag, i) => (
-                        <span key={i} className="px-2.5 py-1 rounded-full bg-white/10 border border-white/10 text-[10px] font-medium text-gray-300 backdrop-blur-sm">
+                        <span key={i} className="px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-[10px] font-medium text-foreground">
                           {tag}
                         </span>
                       ))}
@@ -335,7 +334,7 @@ export default function Confirmed() {
               </div>
 
               <div>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6">
                   {[
                     { title: "Apps a Medida", id: "SYS-05", type: "control" },
                     { title: "Control Operativo", id: "SYS-01", type: "control" },
@@ -369,16 +368,8 @@ export default function Confirmed() {
 
               <div className="space-y-6">
                 {/* Preparation Card */}
-                <div className="bg-white border border-border p-8 relative overflow-hidden">
-                  <div className="absolute top-0 right-0 p-4 opacity-[0.03]">
-                    <svg width="100" height="100" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
-                      <path d="M0 0H40V40H0V0Z" fill="currentColor"/>
-                      <path d="M20 0V40" stroke="white" strokeWidth="2"/>
-                      <path d="M0 20H40" stroke="white" strokeWidth="2"/>
-                    </svg>
-                  </div>
-
-                  <div className="space-y-8">
+                <div className="bg-white border border-border p-6 md:p-8">
+                  <div className="space-y-6">
                     <div>
                       <h3 className="text-lg font-medium mb-2 text-foreground">Requerimientos de entrada</h3>
                       <p className="text-muted-foreground text-sm max-w-md">No necesitas preparar presentaciones. Solo necesitamos tu experiencia directa sobre la operación actual.</p>
@@ -432,7 +423,7 @@ export default function Confirmed() {
               </div>
 
               <div>
-                <h3 className="text-lg font-medium mb-4 text-foreground">Canales de Investigación</h3>
+                <h3 className="text-lg font-medium mb-4 text-foreground">Canal de Investigación</h3>
                 <p className="text-sm text-muted-foreground mb-6">Accede a nuestro contenido público sobre arquitectura de sistemas y eficiencia operativa.</p>
 
                 <div className="flex flex-wrap gap-4">
@@ -456,7 +447,7 @@ export default function Confirmed() {
         variants={sectionVariants}
         className="border-t border-border bg-gray-50"
       >
-        <div className="max-w-4xl mx-auto px-6 py-16 flex flex-col md:flex-row items-center justify-between gap-8 text-center md:text-left">
+        <div className="max-w-4xl mx-auto px-6 py-10 flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left">
           <div>
             <p className="text-2xl font-medium mb-2 text-primary tracking-tight">Nos vemos en la sesión.</p>
             <p className="text-sm text-muted-foreground">Diagnóstico Operativo Inicial</p>

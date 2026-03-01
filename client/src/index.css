@@ -233,6 +233,31 @@
   animation: ctaShimmer 2.5s ease-in-out infinite;
 }
 
+/* Dark mode variants for technical classes */
+
+.dark .technical-grid {
+  background-image:
+    linear-gradient(to right, rgba(255, 255, 255, 0.06) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.06) 1px, transparent 1px);
+}
+
+.dark .technical-grid::after {
+  background: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(59, 130, 246, 0.05) 40%,
+    rgba(59, 130, 246, 0.15) 50%,
+    rgba(59, 130, 246, 0.05) 60%,
+    transparent 100%
+  );
+}
+
+.dark .tech-card {
+  background: hsl(220 25% 12%);
+  border-color: hsl(220 20% 18%);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
 /* === Booking Page Utilities === */
 
 @utility bg-grid-pattern {
