@@ -325,8 +325,15 @@
 }
 
 .tech-card {
-  @apply relative bg-white border border-border p-3 transition-all duration-300;
+  @apply relative bg-white border border-border p-3;
   box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+  transform: translateY(0) scale(1);
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+
+.tech-card:hover {
+  transform: translateY(-2px) scale(1.005);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.04);
 }
 
 .tech-card::before {
@@ -361,4 +368,42 @@
 
 .tech-card:hover::after {
   opacity: 1;
+}
+
+/* Animated dashed border (marching ants) */
+@keyframes dash-march {
+  0% { background-position: 0 0, 0 100%, 0 0, 100% 0; }
+  100% { background-position: 40px 0, -40px 100%, 0 -40px, 100% 40px; }
+}
+
+.animated-dashed-border {
+  border: none;
+  background-image:
+    linear-gradient(90deg, var(--color-border) 50%, transparent 50%),
+    linear-gradient(90deg, var(--color-border) 50%, transparent 50%),
+    linear-gradient(0deg, var(--color-border) 50%, transparent 50%),
+    linear-gradient(0deg, var(--color-border) 50%, transparent 50%);
+  background-size: 8px 1px, 8px 1px, 1px 8px, 1px 8px;
+  background-position: 0 0, 0 100%, 0 0, 100% 0;
+  background-repeat: repeat-x, repeat-x, repeat-y, repeat-y;
+  animation: dash-march 1.5s linear infinite;
+}
+
+/* Accessibility: respect reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  .animate-float,
+  .animate-pulse-glow,
+  .animate-pulse,
+  .animated-dashed-border,
+  .technical-grid::after {
+    animation: none !important;
+  }
+
+  .tech-card {
+    transition: none !important;
+  }
+
+  .tech-card:hover {
+    transform: none !important;
+  }
 }
