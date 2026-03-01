@@ -61,7 +61,7 @@ IM3 diseña la arquitectura y guía al equipo técnico del cliente para que cons
 - Web: https://www.im3systems.com
 - Email: info@im3systems.com
 - LinkedIn: https://www.linkedin.com/company/im3-systems
-- Agendar diagnóstico gratis: https://calendar.im3systems.com
+- Agendar diagnóstico gratis: https://im3systems.com/booking
 
 ## Preguntas frecuentes
 

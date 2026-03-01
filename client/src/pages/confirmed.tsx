@@ -1,5 +1,6 @@
 import { motion, useMotionTemplate, useMotionValue } from "framer-motion";
-import { MouseEvent } from "react";
+import { MouseEvent, useEffect } from "react";
+import { Link } from "wouter";
 
 const SystemIcon = ({ type }: { type: string }) => {
   if (type === "control") {
@@ -85,6 +86,11 @@ function TechCard({ item, index }: { item: { id: string; title: string; type: st
 }
 
 export default function Confirmed() {
+  useEffect(() => {
+    document.title = "Sesión Confirmada | IM3 Systems";
+    return () => { document.title = "IM3 Systems | Desarrollo de software, automatización e inteligencia artificial para empresas"; };
+  }, []);
+
   const sectionVariants = {
     hidden: { opacity: 0, y: 10 },
     visible: {
@@ -117,6 +123,9 @@ export default function Confirmed() {
       <div className="fixed top-0 left-0 w-full h-1 bg-foreground z-50" />
       <div className="w-full border-b border-border bg-background/80 backdrop-blur-sm z-40 sticky top-0">
         <div className="max-w-4xl mx-auto px-6 h-12 flex items-center justify-between text-[10px] font-mono tracking-widest uppercase text-muted-foreground">
+          <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
+            <img src="/assets/im3-logo.png" alt="IM3" className="h-5 w-auto" />
+          </Link>
           <div className="flex items-center gap-2">
             <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse" />
             <span>System Operational</span>
@@ -427,17 +436,11 @@ export default function Confirmed() {
                 <p className="text-sm text-muted-foreground mb-6">Accede a nuestro contenido público sobre arquitectura de sistemas y eficiencia operativa.</p>
 
                 <div className="flex flex-wrap gap-4">
-                  {[
-                    { name: "LinkedIn", url: "#", code: "LNK" },
-                    { name: "Twitter / X", url: "#", code: "TWT" },
-                    { name: "Newsletter", url: "#", code: "SUB" }
-                  ].map((social, i) => (
-                    <a key={i} href={social.url} className="group flex items-center gap-3 px-4 py-3 bg-white border border-border hover:border-foreground transition-all duration-300">
-                      <span className="mono-tag text-muted-foreground group-hover:text-foreground">{social.code}</span>
-                      <span className="text-sm font-medium text-gray-800">{social.name}</span>
-                      <svg className="w-3 h-3 text-muted-foreground group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path></svg>
-                    </a>
-                  ))}
+                  <a href="https://www.linkedin.com/company/im3-systems" target="_blank" rel="noopener noreferrer" className="group flex items-center gap-3 px-4 py-3 bg-white border border-border hover:border-foreground transition-all duration-300">
+                    <span className="mono-tag text-muted-foreground group-hover:text-foreground">LNK</span>
+                    <span className="text-sm font-medium text-gray-800">LinkedIn</span>
+                    <svg className="w-3 h-3 text-muted-foreground group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 8l4 4m0 0l-4 4m4-4H3"></path></svg>
+                  </a>
                 </div>
               </div>
             </motion.section>

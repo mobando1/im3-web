@@ -107,6 +107,6 @@ IM3 ha construido sistemas para empresas en:
 - **Sitio web**: https://www.im3systems.com
 - **Email**: info@im3systems.com
 - **LinkedIn**: https://www.linkedin.com/company/im3-systems
-- **Agendar diagnóstico gratuito**: https://calendar.im3systems.com
+- **Agendar diagnóstico gratuito**: https://im3systems.com/booking
 - **Idiomas**: Español, Inglés
 - **Zona de servicio**: Latinoamérica (servicio remoto disponible globalmente)

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { useLocation } from 'wouter';
 import { motion, AnimatePresence } from 'framer-motion';
 import { audio } from '@/lib/audio';
 import { Volume2, VolumeX, ArrowRight, RefreshCcw, Plus, MousePointer2 } from 'lucide-react';
@@ -44,6 +45,7 @@ const COLORS = {
 // --- Physics & Canvas Logic ---
 
 export const LivingSystemHero = () => {
+  const [, navigate] = useLocation();
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [soundEnabled, setSoundEnabled] = useState(false);
@@ -462,7 +464,7 @@ export const LivingSystemHero = () => {
 
             <div className="flex flex-wrap gap-4 items-center">
                 <button 
-                  onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
+                  onClick={() => navigate("/booking")}
                   className="bg-[hsl(var(--ink))] text-white px-6 py-3.5 rounded-xl font-semibold hover:bg-gray-800 transition-all hover:translate-y-[-2px] shadow-lg flex items-center gap-2"
                 >
                   Agendar diagnóstico operativo <ArrowRight className="w-4 h-4" />

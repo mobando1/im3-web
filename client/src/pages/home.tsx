@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react";
-import { Link } from "wouter";
+import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
 import { 
@@ -32,13 +32,7 @@ import {
   Moon
 } from "lucide-react";
 import { useDarkMode } from "@/hooks/useDarkMode";
-const im3Logo = "/images/im3-logo.svg";
-const headshotSebastian = "/images/headshot.svg";
-const headshotNicolas = "/images/headshot.svg";
-const headshotAndres = "/images/headshot.svg";
-const headshotCamila = "/images/headshot.svg";
-const headshotDiego = "/images/headshot.svg";
-const headshotValentina = "/images/headshot.svg";
+const im3Logo = "/assets/im3-logo.png";
 
 const InteractiveHeroWidget = lazy(() => import("@/components/InteractiveHeroWidget").then(m => ({ default: m.InteractiveHeroWidget })));
 
@@ -120,9 +114,8 @@ const Header = () => {
     }
   };
 
-  const openBooking = () => {
-    window.open("https://calendar.im3systems.com", "_blank");
-  };
+  const [, navigate] = useLocation();
+  const openBooking = () => navigate("/booking");
 
   return (
     <header 
@@ -328,6 +321,7 @@ const PrioritiesCard = () => {
 
 const Hero = () => {
   const { t } = useI18n();
+  const [, navigate] = useLocation();
   
   const badges = [
     { label: t.hero.badges.internalApps, icon: Layout },
@@ -371,8 +365,8 @@ const Hero = () => {
             <Reveal delay={300}>
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
                 <button 
-                  onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
-                  className="group relative bg-[hsl(var(--teal))] text-white px-6 py-3.5 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:translate-y-[-2px] shadow-[0_10px_20px_-10px_rgba(47,164,169,0.3)] hover:shadow-[0_20px_40px_-15px_rgba(47,164,169,0.5)] ring-offset-2 ring-offset-[hsl(var(--hero-bg))] focus:ring-2 focus:ring-[hsl(var(--teal))] text-center overflow-hidden cta-glow"
+                  onClick={() => navigate("/booking")}
+                  className="group relative bg-[hsl(var(--teal))] text-white px-6 py-3.5 rounded-xl font-semibold hover:bg-primary/90 transition-all hover:translate-y-[-2px] shadow-[0_10px_20px_-10px_rgba(47,164,169,0.3)] hover:shadow-[0_20px_40px_-15px_rgba(47,164,169,0.5)] ring-offset-2 ring-offset-[hsl(var(--hero-bg))] focus:ring-2 focus:ring-[hsl(var(--teal))] text-center overflow-hidden cta-glow"
                 >
                   <span className="relative z-10 flex items-center justify-center gap-2">
                     {t.hero.cta} <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1.5" />
@@ -594,6 +588,7 @@ const Services = () => {
 
 const LeadMagnet = () => {
   const { t } = useI18n();
+  const [, navigate] = useLocation();
   
   return (
     <section id="diagnostico" className="py-6 px-3 sm:px-4 md:px-8">
@@ -608,8 +603,8 @@ const LeadMagnet = () => {
           </div>
           <div className="w-full md:w-1/3 flex justify-center md:justify-end">
              <button 
-                onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
-                className="group relative bg-[hsl(var(--teal))] text-white px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl font-semibold hover:bg-[#258a8e] transition-all hover:shadow-lg hover:translate-y-[-2px] w-full md:w-auto overflow-hidden cta-glow"
+                onClick={() => navigate("/booking")}
+                className="group relative bg-[hsl(var(--teal))] text-white px-6 sm:px-8 py-3.5 sm:py-4 rounded-xl font-semibold hover:bg-primary/90 transition-all hover:shadow-lg hover:translate-y-[-2px] w-full md:w-auto overflow-hidden cta-glow"
              >
                 <span className="relative z-10 flex items-center justify-center gap-2">
                   {t.leadMagnet.cta} <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1.5" />
@@ -775,14 +770,6 @@ const TargetAudience = () => {
   );
 };
 
-const avatarMap: Record<string, string> = {
-  "Sebastián Garzón": headshotSebastian,
-  "Nicolás Hernández": headshotNicolas,
-  "Andrés Villamizar": headshotAndres,
-  "Camila Restrepo": headshotCamila,
-  "Diego Morales": headshotDiego,
-  "Valentina Ospina": headshotValentina,
-};
 
 const TestimonialCard = ({ review, isFeatured, featuredLabel }: { review: { quote: string; author: string; role: string; featured?: boolean }; isFeatured?: boolean; featuredLabel?: string }) => (
   <div className={cn(
@@ -800,25 +787,14 @@ const TestimonialCard = ({ review, isFeatured, featuredLabel }: { review: { quot
       <p className="text-base sm:text-lg text-[hsl(var(--text-primary))] mb-6 font-medium leading-relaxed">"{review.quote}"</p>
     </div>
     <div className="flex items-center gap-3">
-      {avatarMap[review.author] ? (
-        <img
-          src={avatarMap[review.author]}
-          alt={review.author}
-          className={cn(
-            "w-11 h-11 rounded-full object-cover",
-            isFeatured ? "ring-2 ring-[hsl(var(--teal))]/30" : ""
-          )}
-        />
-      ) : (
-        <div className={cn(
-          "w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm",
-          isFeatured
-            ? "bg-[hsl(var(--teal))]/15 text-[hsl(var(--teal))]"
-            : "bg-[hsl(var(--avatar-bg))] text-[hsl(var(--avatar-fg))]"
-        )}>
-          {review.author.split(' ').map((n: string) => n[0]).join('')}
-        </div>
-      )}
+      <div className={cn(
+        "w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm",
+        isFeatured
+          ? "bg-[hsl(var(--teal))]/15 text-[hsl(var(--teal))]"
+          : "bg-[hsl(var(--avatar-bg))] text-[hsl(var(--avatar-fg))]"
+      )}>
+        {review.author.split(' ').map((n: string) => n[0]).join('')}
+      </div>
       <div>
         <div className="font-bold text-sm text-[hsl(var(--text-primary))]">{review.author}</div>
         <div className="text-xs text-muted-foreground">{review.role}</div>
@@ -982,6 +958,7 @@ const Testimonials = () => {
 
 const Offer = () => {
   const { t } = useI18n();
+  const [, navigate] = useLocation();
   
   return (
     <section id="oferta" className="py-6 sm:py-8 px-3 sm:px-4 md:px-8">
@@ -1037,7 +1014,7 @@ const Offer = () => {
             {t.offer.noSalesPressureDesc}
           </p>
           <button 
-            onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
+            onClick={() => navigate("/booking")}
             className="text-[hsl(var(--teal))] font-bold hover:text-[hsl(var(--text-primary))] transition-colors flex items-center justify-center gap-2 mx-auto"
           >
             {t.offer.scheduleConversation} <ArrowRight className="w-4 h-4" />
@@ -1051,6 +1028,7 @@ const Offer = () => {
 
 const Contact = () => {
   const { t } = useI18n();
+  const [, navigate] = useLocation();
   
   return (
     <section id="contacto" className="py-5 px-3 sm:px-4 md:px-8">
@@ -1064,7 +1042,7 @@ const Contact = () => {
           </p>
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <button 
-              onClick={() => window.open("https://calendar.im3systems.com", "_blank")}
+              onClick={() => navigate("/booking")}
               className="group relative bg-[hsl(var(--teal))] text-white px-8 py-4 rounded-xl font-bold hover:translate-y-[-2px] hover:shadow-[0_10px_25px_-6px_rgba(47,164,169,0.6)] transition-all flex items-center justify-center gap-2 overflow-hidden cta-glow"
             >
               <span className="relative z-10 flex items-center justify-center gap-2">
@@ -1123,6 +1101,7 @@ const FAQ = () => {
 const Footer = () => {
   const { t } = useI18n();
   const { isDark } = useDarkMode();
+  const [, navigate] = useLocation();
   const year = new Date().getFullYear();
 
   const scrollToSection = (id: string) => {
@@ -1159,7 +1138,7 @@ const Footer = () => {
           <div>
             <h4 className="font-semibold text-sm text-[hsl(var(--text-primary))] mb-3">Acciones</h4>
             <ul className="space-y-2 text-sm text-muted-foreground">
-              <li><button onClick={() => window.open("https://calendar.im3systems.com", "_blank")} className="hover:text-[hsl(var(--teal))] transition-colors">{t.footer.diagnosis}</button></li>
+              <li><button onClick={() => navigate("/booking")} className="hover:text-[hsl(var(--teal))] transition-colors">{t.footer.diagnosis}</button></li>
             </ul>
           </div>
           <div>
