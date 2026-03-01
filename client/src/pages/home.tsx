@@ -771,7 +771,7 @@ const TargetAudience = () => {
 };
 
 
-const TestimonialCard = ({ review, isFeatured, featuredLabel }: { review: { quote: string; author: string; role: string; featured?: boolean }; isFeatured?: boolean; featuredLabel?: string }) => (
+const TestimonialCard = ({ review, isFeatured, featuredLabel }: { review: { quote: string; author: string; role: string; image?: string; featured?: boolean }; isFeatured?: boolean; featuredLabel?: string }) => (
   <div className={cn(
     "p-6 sm:p-8 rounded-2xl border shadow-sm h-full flex flex-col justify-between shrink-0 transition-all duration-300",
     isFeatured
@@ -787,14 +787,18 @@ const TestimonialCard = ({ review, isFeatured, featuredLabel }: { review: { quot
       <p className="text-base sm:text-lg text-[hsl(var(--text-primary))] mb-6 font-medium leading-relaxed">"{review.quote}"</p>
     </div>
     <div className="flex items-center gap-3">
-      <div className={cn(
-        "w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm",
-        isFeatured
-          ? "bg-[hsl(var(--teal))]/15 text-[hsl(var(--teal))]"
-          : "bg-[hsl(var(--avatar-bg))] text-[hsl(var(--avatar-fg))]"
-      )}>
-        {review.author.split(' ').map((n: string) => n[0]).join('')}
-      </div>
+      {review.image ? (
+        <img src={review.image} alt={review.author} className="w-11 h-11 rounded-full object-cover" />
+      ) : (
+        <div className={cn(
+          "w-11 h-11 rounded-full flex items-center justify-center font-bold text-sm",
+          isFeatured
+            ? "bg-[hsl(var(--teal))]/15 text-[hsl(var(--teal))]"
+            : "bg-[hsl(var(--avatar-bg))] text-[hsl(var(--avatar-fg))]"
+        )}>
+          {review.author.split(' ').map((n: string) => n[0]).join('')}
+        </div>
+      )}
       <div>
         <div className="font-bold text-sm text-[hsl(var(--text-primary))]">{review.author}</div>
         <div className="text-xs text-muted-foreground">{review.role}</div>
@@ -805,7 +809,7 @@ const TestimonialCard = ({ review, isFeatured, featuredLabel }: { review: { quot
 
 const Testimonials = () => {
   const { t } = useI18n();
-  const reviews = t.testimonials.reviews as { quote: string; author: string; role: string; featured?: boolean }[];
+  const reviews = t.testimonials.reviews as { quote: string; author: string; role: string; image?: string; featured?: boolean }[];
   const [currentIndex, setCurrentIndex] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
   const [isTransitioning, setIsTransitioning] = useState(true);
