@@ -188,7 +188,7 @@ export default function DiagnosticForm() {
   };
 
   return (
-    <div className="max-w-2xl mx-auto">
+    <div className="max-w-4xl mx-auto">
       {/* Progress section */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-3">
