@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useLocation } from "wouter";
@@ -46,12 +46,20 @@ const stepValidators = [
 
 const ease = [0.25, 0.46, 0.45, 0.94] as [number, number, number, number];
 
-export default function DiagnosticForm() {
+interface DiagnosticFormProps {
+  onStepChange?: (step: number) => void;
+}
+
+export default function DiagnosticForm({ onStepChange }: DiagnosticFormProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [direction, setDirection] = useState(1); // 1 = forward, -1 = backward
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [, navigate] = useLocation();
   const { toast } = useToast();
+
+  useEffect(() => {
+    onStepChange?.(currentStep);
+  }, [currentStep, onStepChange]);
 
   const form = useForm<DiagnosticFormData>({
     defaultValues: {

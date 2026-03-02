@@ -1,10 +1,16 @@
-import { useEffect } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link } from "wouter";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Clock, ShieldCheck, Cpu, BarChart3, CheckCircle2 } from "lucide-react";
 import DiagnosticForm from "@/components/diagnostic-form/DiagnosticForm";
 
 export default function Booking() {
+  const [formStarted, setFormStarted] = useState(false);
+
+  const handleStepChange = useCallback((step: number) => {
+    setFormStarted(step > 0);
+  }, []);
+
   useEffect(() => {
     document.title = "Diagnóstico Empresarial | IM3 Systems";
     return () => {
@@ -47,115 +53,115 @@ export default function Booking() {
       {/* Main Content */}
       <div className="flex-grow">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 md:py-14">
-          {/* Page Header */}
-          <motion.header
-            initial="hidden"
-            animate="visible"
-            variants={sectionVariants}
-            className="mb-10"
-          >
-            <div className="mono-tag mb-6 text-tech border border-tech/20 inline-block px-2 py-1 rounded-[2px] bg-tech/5">
-              SESIÓN ESTRATÉGICA
-            </div>
-
-            <h1 className="text-2xl sm:text-3xl md:text-4xl font-medium tracking-tight mb-4 text-primary max-w-2xl leading-[1.1]">
-              Diagnóstico de IA y Tecnología
-            </h1>
-
-            <p className="text-sm text-muted-foreground max-w-xl leading-relaxed mb-4">
-              Agende su sesión y complete el formulario de diagnóstico para que podamos preparar un análisis personalizado de su operación.
-            </p>
-
-            <div className="flex flex-col sm:flex-row gap-3 sm:gap-6">
-              <div className="flex items-center gap-3 text-muted-foreground text-sm font-medium border-l-2 border-primary pl-4">
-                <Clock className="w-4 h-4 text-primary" />
-                <span>30 minutos · Evaluación técnica</span>
-              </div>
-
-              <div className="flex items-start gap-2 text-xs text-muted-foreground">
-                <ShieldCheck className="w-4 h-4 text-tech shrink-0 mt-0.5" />
-                <span>Información tratada con absoluta confidencialidad</span>
-              </div>
-            </div>
-          </motion.header>
-
-          {/* Info sections */}
-          <motion.div
-            initial="hidden"
-            animate="visible"
-            variants={{
-              hidden: { opacity: 0 },
-              visible: {
-                opacity: 1,
-                transition: { staggerChildren: 0.1, delayChildren: 0.15 }
-              }
-            }}
-            className="mb-12 space-y-4"
-          >
-            <div className="grid md:grid-cols-2 gap-4">
-              <motion.div variants={sectionVariants} className="border border-border rounded-sm overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/50 border-b border-border">
-                  <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">01</span>
-                  <span className="text-xs font-medium text-foreground">El Objetivo</span>
-                </div>
-                <div className="p-4 flex gap-3">
-                  <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                    <Cpu className="w-4 h-4 text-primary" />
+          <AnimatePresence>
+            {!formStarted && (
+              <motion.div
+                key="intro-sections"
+                initial={{ opacity: 1, height: "auto" }}
+                exit={{ opacity: 0, height: 0, overflow: "hidden" }}
+                transition={{ duration: 0.4, ease: [0.25, 0.46, 0.45, 0.94] }}
+              >
+                {/* Page Header */}
+                <motion.header
+                  initial="hidden"
+                  animate="visible"
+                  variants={sectionVariants}
+                  className="mb-10"
+                >
+                  <div className="mono-tag mb-6 text-tech border border-tech/20 inline-block px-2 py-1 rounded-[2px] bg-tech/5">
+                    SESIÓN ESTRATÉGICA
                   </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground mb-1">Diagnóstico Técnico</p>
+
+                  <h1 className="text-2xl sm:text-3xl md:text-4xl font-medium tracking-tight mb-4 text-primary max-w-2xl leading-[1.1]">
+                    Diagnóstico de IA y Tecnología
+                  </h1>
+
+                  <p className="text-sm text-muted-foreground max-w-xl leading-relaxed mb-4">
+                    Agende su sesión y complete el formulario de diagnóstico para que podamos preparar un análisis personalizado de su operación.
+                  </p>
+
+                  <div className="flex flex-col sm:flex-row gap-3 sm:gap-6">
+                    <div className="flex items-center gap-3 text-muted-foreground text-sm font-medium border-l-2 border-primary pl-4">
+                      <Clock className="w-4 h-4 text-primary" />
+                      <span>30 minutos · Evaluación técnica</span>
+                    </div>
+
+                    <div className="flex items-start gap-2 text-xs text-muted-foreground">
+                      <ShieldCheck className="w-4 h-4 text-tech shrink-0 mt-0.5" />
+                      <span>Información tratada con absoluta confidencialidad</span>
+                    </div>
+                  </div>
+                </motion.header>
+
+                {/* Info sections */}
+                <div className="mb-12 space-y-4">
+                  <div className="grid md:grid-cols-2 gap-4">
+                    <div className="border border-border rounded-sm overflow-hidden">
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/50 border-b border-border">
+                        <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">01</span>
+                        <span className="text-xs font-medium text-foreground">El Objetivo</span>
+                      </div>
+                      <div className="p-4 flex gap-3">
+                        <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                          <Cpu className="w-4 h-4 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-foreground mb-1">Diagnóstico Técnico</p>
+                          <p className="text-xs text-muted-foreground leading-relaxed">
+                            Identificar las áreas donde la inteligencia artificial y la automatización pueden generar mayor impacto en su operación.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="border border-border rounded-sm overflow-hidden">
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/50 border-b border-border">
+                        <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">02</span>
+                        <span className="text-xs font-medium text-foreground">Entregable</span>
+                      </div>
+                      <div className="p-4 flex gap-3">
+                        <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                          <BarChart3 className="w-4 h-4 text-primary" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-medium text-foreground mb-1">Entregable Directo</p>
+                          <p className="text-xs text-muted-foreground leading-relaxed">
+                            Recomendaciones accionables de automatización e inteligencia artificial adaptadas a su industria y modelo de negocio.
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="border border-border rounded-sm overflow-hidden">
+                    <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/50 border-b border-border">
+                      <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">03</span>
+                      <span className="text-xs font-medium text-foreground">Enfoque de la Sesión</span>
+                    </div>
+                    <div className="p-4 space-y-2.5">
+                      {[
+                        "Casos de uso reales de IA en tu sector",
+                        "Análisis de viabilidad técnica",
+                        "Roadmap de implementación sugerido",
+                      ].map((item) => (
+                        <div key={item} className="flex items-center gap-2.5">
+                          <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+                          <span className="text-sm text-muted-foreground">{item}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5 px-4 py-3 bg-muted/30 border border-border rounded-sm">
+                    <ShieldCheck className="w-4 h-4 text-tech shrink-0 mt-0.5" />
                     <p className="text-xs text-muted-foreground leading-relaxed">
-                      Identificar las áreas donde la inteligencia artificial y la automatización pueden generar mayor impacto en su operación.
+                      Si no vemos una aplicación clara de tecnología para tu caso, te lo diremos. Diagnóstico técnico, no comercial.
                     </p>
                   </div>
                 </div>
               </motion.div>
-
-              <motion.div variants={sectionVariants} className="border border-border rounded-sm overflow-hidden">
-                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/50 border-b border-border">
-                  <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">02</span>
-                  <span className="text-xs font-medium text-foreground">Entregable</span>
-                </div>
-                <div className="p-4 flex gap-3">
-                  <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
-                    <BarChart3 className="w-4 h-4 text-primary" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium text-foreground mb-1">Entregable Directo</p>
-                    <p className="text-xs text-muted-foreground leading-relaxed">
-                      Recomendaciones accionables de automatización e inteligencia artificial adaptadas a su industria y modelo de negocio.
-                    </p>
-                  </div>
-                </div>
-              </motion.div>
-            </div>
-
-            <motion.div variants={sectionVariants} className="border border-border rounded-sm overflow-hidden">
-              <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/50 border-b border-border">
-                <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">03</span>
-                <span className="text-xs font-medium text-foreground">Enfoque de la Sesión</span>
-              </div>
-              <div className="p-4 space-y-2.5">
-                {[
-                  "Casos de uso reales de IA en tu sector",
-                  "Análisis de viabilidad técnica",
-                  "Roadmap de implementación sugerido",
-                ].map((item) => (
-                  <div key={item} className="flex items-center gap-2.5">
-                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
-                    <span className="text-sm text-muted-foreground">{item}</span>
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-
-            <motion.div variants={sectionVariants} className="flex items-start gap-2.5 px-4 py-3 bg-muted/30 border border-border rounded-sm">
-              <ShieldCheck className="w-4 h-4 text-tech shrink-0 mt-0.5" />
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                Si no vemos una aplicación clara de tecnología para tu caso, te lo diremos. Diagnóstico técnico, no comercial.
-              </p>
-            </motion.div>
-          </motion.div>
+            )}
+          </AnimatePresence>
 
           {/* Diagnostic Form */}
           <motion.div
@@ -163,7 +169,7 @@ export default function Booking() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.5, delay: 0.2 }}
           >
-            <DiagnosticForm />
+            <DiagnosticForm onStepChange={handleStepChange} />
           </motion.div>
         </div>
       </div>
