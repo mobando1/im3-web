@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Link } from "wouter";
 import { motion } from "framer-motion";
-import { Clock, ShieldCheck } from "lucide-react";
+import { Clock, ShieldCheck, Cpu, BarChart3, CheckCircle2 } from "lucide-react";
 import DiagnosticForm from "@/components/diagnostic-form/DiagnosticForm";
 
 export default function Booking() {
@@ -78,6 +78,84 @@ export default function Booking() {
               </div>
             </div>
           </motion.header>
+
+          {/* Info sections */}
+          <motion.div
+            initial="hidden"
+            animate="visible"
+            variants={{
+              hidden: { opacity: 0 },
+              visible: {
+                opacity: 1,
+                transition: { staggerChildren: 0.1, delayChildren: 0.15 }
+              }
+            }}
+            className="mb-12 space-y-4"
+          >
+            <div className="grid md:grid-cols-2 gap-4">
+              <motion.div variants={sectionVariants} className="border border-border rounded-sm overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/50 border-b border-border">
+                  <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">01</span>
+                  <span className="text-xs font-medium text-foreground">El Objetivo</span>
+                </div>
+                <div className="p-4 flex gap-3">
+                  <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                    <Cpu className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground mb-1">Diagnóstico Técnico</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Identificar las áreas donde la inteligencia artificial y la automatización pueden generar mayor impacto en su operación.
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+
+              <motion.div variants={sectionVariants} className="border border-border rounded-sm overflow-hidden">
+                <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/50 border-b border-border">
+                  <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">02</span>
+                  <span className="text-xs font-medium text-foreground">Entregable</span>
+                </div>
+                <div className="p-4 flex gap-3">
+                  <div className="w-9 h-9 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center shrink-0">
+                    <BarChart3 className="w-4 h-4 text-primary" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium text-foreground mb-1">Entregable Directo</p>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Recomendaciones accionables de automatización e inteligencia artificial adaptadas a su industria y modelo de negocio.
+                    </p>
+                  </div>
+                </div>
+              </motion.div>
+            </div>
+
+            <motion.div variants={sectionVariants} className="border border-border rounded-sm overflow-hidden">
+              <div className="flex items-center gap-2 px-4 py-2.5 bg-muted/50 border-b border-border">
+                <span className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider">03</span>
+                <span className="text-xs font-medium text-foreground">Enfoque de la Sesión</span>
+              </div>
+              <div className="p-4 space-y-2.5">
+                {[
+                  "Casos de uso reales de IA en tu sector",
+                  "Análisis de viabilidad técnica",
+                  "Roadmap de implementación sugerido",
+                ].map((item) => (
+                  <div key={item} className="flex items-center gap-2.5">
+                    <CheckCircle2 className="w-4 h-4 text-primary shrink-0" />
+                    <span className="text-sm text-muted-foreground">{item}</span>
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+
+            <motion.div variants={sectionVariants} className="flex items-start gap-2.5 px-4 py-3 bg-muted/30 border border-border rounded-sm">
+              <ShieldCheck className="w-4 h-4 text-tech shrink-0 mt-0.5" />
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                Si no vemos una aplicación clara de tecnología para tu caso, te lo diremos. Diagnóstico técnico, no comercial.
+              </p>
+            </motion.div>
+          </motion.div>
 
           {/* Diagnostic Form */}
           <motion.div
