@@ -209,9 +209,9 @@ const Header = () => {
             </button>
             <DarkModeToggle isDark={isDark} toggle={toggleDark} />
           </div>
-          <button onClick={() => scrollToSection('que')} className="text-left text-lg font-medium py-2 border-b border-[hsl(var(--divider))] text-[hsl(var(--text-primary))]">{t.nav.whatWeDo}</button>
-          <button onClick={() => scrollToSection('como')} className="text-left text-lg font-medium py-2 border-b border-[hsl(var(--divider))] text-[hsl(var(--text-primary))]">{t.nav.howWeWork}</button>
-          <button onClick={() => scrollToSection('para')} className="text-left text-lg font-medium py-2 border-b border-[hsl(var(--divider))] text-[hsl(var(--text-primary))]">{t.nav.forWhom}</button>
+          <button onClick={() => scrollToSection('que')} className="text-left text-base sm:text-lg font-medium py-3 border-b border-[hsl(var(--divider))] text-[hsl(var(--text-primary))]">{t.nav.whatWeDo}</button>
+          <button onClick={() => scrollToSection('como')} className="text-left text-base sm:text-lg font-medium py-3 border-b border-[hsl(var(--divider))] text-[hsl(var(--text-primary))]">{t.nav.howWeWork}</button>
+          <button onClick={() => scrollToSection('para')} className="text-left text-base sm:text-lg font-medium py-3 border-b border-[hsl(var(--divider))] text-[hsl(var(--text-primary))]">{t.nav.forWhom}</button>
           <button 
             onClick={openBooking}
             className="group relative bg-[hsl(var(--teal))] text-white px-5 py-3 rounded-xl text-center font-medium mt-2 overflow-hidden cta-glow"
@@ -447,8 +447,8 @@ const LogoStrip = () => {
         <p className="text-sm font-display font-semibold text-[hsl(var(--text-secondary))] tracking-wide">{t.logoStrip.title}</p>
       </div>
       <div className="relative overflow-hidden">
-        <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
-        <div className="absolute right-0 top-0 bottom-0 w-20 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
+        <div className="absolute left-0 top-0 bottom-0 w-12 sm:w-16 md:w-20 bg-gradient-to-r from-background to-transparent z-10 pointer-events-none" />
+        <div className="absolute right-0 top-0 bottom-0 w-12 sm:w-16 md:w-20 bg-gradient-to-l from-background to-transparent z-10 pointer-events-none" />
         <div className="flex w-max animate-scroll">
           {[...logos, ...logos, ...logos, ...logos].map((logo, i) => (
             <LogoItem key={i} logo={logo} />
@@ -568,7 +568,7 @@ const Services = () => {
           </Reveal>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-6">
+        <div className="grid md:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
           {cards.map((card, i) => (
             <Reveal key={i} delay={i * 100}>
               <div className="bg-[hsl(var(--surface))] p-5 sm:p-7 rounded-2xl border border-[hsl(var(--divider))] hover:shadow-lg transition-all duration-300 hover:border-[hsl(var(--teal))] group h-full">
@@ -725,10 +725,10 @@ const TargetAudience = () => {
           </Reveal>
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8">
+        <div className="grid md:grid-cols-2 gap-4 sm:gap-6 md:gap-8">
           <Reveal>
             <div className="bg-[hsl(var(--hero-bg))] text-white p-6 sm:p-8 md:p-10 rounded-2xl sm:rounded-[2rem] shadow-xl relative overflow-hidden h-full">
-               <div className="absolute top-0 right-0 w-64 h-64 bg-[hsl(var(--teal))] opacity-20 blur-[80px] rounded-full"></div>
+               <div className="absolute top-0 right-0 w-32 sm:w-48 md:w-64 h-32 sm:h-48 md:h-64 bg-[hsl(var(--teal))] opacity-20 blur-[80px] rounded-full"></div>
                <div className="flex items-center gap-3 mb-7">
                  <CheckCircle2 className="w-7 h-7 text-[hsl(var(--teal))] shrink-0" strokeWidth={2} />
                  <h3 className="text-lg sm:text-xl font-bold text-white relative z-10">{t.targetAudience.fitsYouIf}</h3>
@@ -925,12 +925,12 @@ const Testimonials = () => {
             <button
               data-testid="testimonial-prev"
               onClick={goPrev}
-              className="w-8 h-8 rounded-full border border-[hsl(var(--teal))]/30 text-[hsl(var(--teal))] hover:bg-[hsl(var(--teal))]/10 flex items-center justify-center transition-all"
+              className="w-10 h-10 rounded-full border border-[hsl(var(--teal))]/30 text-[hsl(var(--teal))] hover:bg-[hsl(var(--teal))]/10 flex items-center justify-center transition-all"
             >
               <ChevronRight className="w-4 h-4 rotate-180" />
             </button>
 
-            <div className="flex gap-1.5">
+            <div className="flex gap-1.5 py-3">
               {reviews.map((_, i) => (
                 <button
                   key={i}
@@ -949,7 +949,7 @@ const Testimonials = () => {
             <button
               data-testid="testimonial-next"
               onClick={goNext}
-              className="w-8 h-8 rounded-full border border-[hsl(var(--teal))]/30 text-[hsl(var(--teal))] hover:bg-[hsl(var(--teal))]/10 flex items-center justify-center transition-all"
+              className="w-10 h-10 rounded-full border border-[hsl(var(--teal))]/30 text-[hsl(var(--teal))] hover:bg-[hsl(var(--teal))]/10 flex items-center justify-center transition-all"
             >
               <ChevronRight className="w-4 h-4" />
             </button>
@@ -973,7 +973,7 @@ const Offer = () => {
          </Reveal>
       </div>
 
-      <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-8 mb-8">
+      <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-4 sm:gap-6 md:gap-8 mb-8">
         <Reveal delay={100}>
           <div className="bg-[hsl(var(--surface))] p-6 sm:p-8 rounded-2xl border border-[hsl(var(--divider))] h-full hover:border-[hsl(var(--teal))] transition-all hover:shadow-lg flex flex-col">
             <div className="w-12 h-12 bg-[hsl(var(--icon-bg-blue))] rounded-xl flex items-center justify-center text-[hsl(var(--icon-fg-blue))] mb-6">
@@ -1085,13 +1085,13 @@ const FAQ = () => {
                 <button
                   data-testid={`faq-toggle-${i}`}
                   onClick={() => setOpenIndex(openIndex === i ? null : i)}
-                  className="w-full flex items-center justify-between p-5 text-left hover:bg-[hsl(var(--surface-hover))] transition-colors"
+                  className="w-full flex items-center justify-between p-3 sm:p-4 md:p-5 text-left hover:bg-[hsl(var(--surface-hover))] transition-colors"
                 >
                   <span className="font-semibold text-[hsl(var(--text-primary))] pr-4">{item.question}</span>
                   <ChevronDown className={cn("w-5 h-5 text-muted-foreground shrink-0 transition-transform duration-200", openIndex === i && "rotate-180")} />
                 </button>
                 <div className={cn("overflow-hidden transition-all duration-300", openIndex === i ? "max-h-60 opacity-100" : "max-h-0 opacity-0")}>
-                  <p className="px-5 pb-5 text-muted-foreground leading-relaxed">{item.answer}</p>
+                  <p className="px-3 pb-3 sm:px-4 sm:pb-4 md:px-5 md:pb-5 text-muted-foreground leading-relaxed">{item.answer}</p>
                 </div>
               </div>
             </Reveal>

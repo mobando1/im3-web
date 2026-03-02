@@ -205,7 +205,7 @@ export default function Confirmed() {
       <div className="fixed inset-0 technical-grid pointer-events-none -z-10" />
 
       {/* Ambient Decorative Elements */}
-      <div className="fixed inset-0 pointer-events-none -z-5 overflow-hidden" aria-hidden="true">
+      <div className="fixed inset-0 pointer-events-none -z-5 overflow-hidden hidden sm:block" aria-hidden="true">
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 0.15 }}
@@ -235,7 +235,7 @@ export default function Confirmed() {
       {/* System Status Bar - Fixed Top */}
       <div className="fixed top-0 left-0 w-full h-1 bg-foreground z-50" />
       <div className="w-full border-b border-border bg-background/80 backdrop-blur-sm z-40 sticky top-0">
-        <div className="max-w-6xl mx-auto px-6 h-12 flex items-center justify-between text-[10px] font-mono tracking-widest uppercase text-muted-foreground">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-12 flex items-center justify-between text-[10px] font-mono tracking-widest uppercase text-muted-foreground">
           <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
             <img src="/assets/im3-logo.png" alt="IM3 Systems - Ir al inicio" className="h-5 w-auto" />
           </Link>
@@ -248,7 +248,7 @@ export default function Confirmed() {
       </div>
 
       <div className="flex-grow">
-        <div className="max-w-6xl mx-auto px-6 py-12 md:py-16">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-12 md:py-16">
 
           {/* HERO */}
           <motion.header
@@ -304,7 +304,7 @@ export default function Confirmed() {
 
             <div className="flex flex-col md:flex-row md:items-start gap-8 border-l border-primary/20 pl-6 md:pl-8">
               <div>
-                <p className="text-lg font-medium text-foreground mb-3">Qué sucederá en esta sesión</p>
+                <p className="text-base sm:text-lg font-medium text-foreground mb-3">Qué sucederá en esta sesión</p>
                 <p className="text-base md:text-lg text-muted-foreground font-light leading-relaxed max-w-2xl">
                   Analizaremos cómo funciona realmente tu operación para detectar fricciones, trabajo manual innecesario y oportunidades donde un mejor sistema puede simplificar y fortalecer la forma en que tu empresa opera.
                 </p>
@@ -362,10 +362,10 @@ export default function Confirmed() {
               whileInView="visible"
               viewport={{ once: true, margin: "-10%" }}
               variants={sectionVariants}
-              className="grid md:grid-cols-[200px_1fr] gap-8"
+              className="grid md:grid-cols-[200px_1fr] gap-4 sm:gap-6 md:gap-8"
             >
               <div className="md:text-right">
-                <motion.h2 variants={headingVariants} className="text-xs font-semibold uppercase tracking-widest text-muted-foreground pt-1 flex items-center justify-end gap-2">
+                <motion.h2 variants={headingVariants} className="text-sm font-semibold uppercase tracking-widest text-muted-foreground pt-1 flex items-center justify-start md:justify-end gap-2">
                   01 <motion.span variants={dividerLineVariants} className="w-8 h-px bg-border inline-block origin-left" /> Auditoría Operativa
                 </motion.h2>
               </div>
@@ -415,17 +415,17 @@ export default function Confirmed() {
               whileInView="visible"
               viewport={{ once: true, margin: "-10%" }}
               variants={sectionVariants}
-              className="grid md:grid-cols-[200px_1fr] gap-8"
+              className="grid md:grid-cols-[200px_1fr] gap-4 sm:gap-6 md:gap-8"
             >
               <div className="md:text-right">
-                <motion.h2 variants={headingVariants} className="text-xs font-semibold uppercase tracking-widest text-muted-foreground pt-1 flex items-center justify-end gap-2">
+                <motion.h2 variants={headingVariants} className="text-sm font-semibold uppercase tracking-widest text-muted-foreground pt-1 flex items-center justify-start md:justify-end gap-2">
                   02 <motion.span variants={dividerLineVariants} className="w-8 h-px bg-border inline-block origin-left" /> Entregable
                 </motion.h2>
               </div>
 
               <div>
                 <div className="bg-card border border-border p-6 md:p-8">
-                  <h3 className="text-lg font-medium mb-2 text-foreground">Qué recibirás después de la auditoría</h3>
+                  <h3 className="text-base sm:text-lg font-medium mb-2 text-foreground">Qué recibirás después de la auditoría</h3>
                   <p className="text-sm text-muted-foreground mb-6">Tras la sesión elaboramos un diagnóstico inicial, donde podrás ver:</p>
 
                   <motion.div
@@ -463,10 +463,10 @@ export default function Confirmed() {
               whileInView="visible"
               viewport={{ once: true, margin: "-10%" }}
               variants={sectionVariants}
-              className="grid md:grid-cols-[200px_1fr] gap-8"
+              className="grid md:grid-cols-[200px_1fr] gap-4 sm:gap-6 md:gap-8"
             >
               <div className="md:text-right">
-                <motion.h2 variants={headingVariants} className="text-xs font-semibold uppercase tracking-widest text-muted-foreground pt-1 flex items-center justify-end gap-2">
+                <motion.h2 variants={headingVariants} className="text-sm font-semibold uppercase tracking-widest text-muted-foreground pt-1 flex items-center justify-start md:justify-end gap-2">
                   03 <motion.span variants={dividerLineVariants} className="w-8 h-px bg-border inline-block origin-left" /> Alcance
                 </motion.h2>
               </div>
@@ -514,10 +514,10 @@ export default function Confirmed() {
               whileInView="visible"
               viewport={{ once: true, margin: "-10%" }}
               variants={sectionVariants}
-              className="grid md:grid-cols-[200px_1fr] gap-8"
+              className="grid md:grid-cols-[200px_1fr] gap-4 sm:gap-6 md:gap-8"
             >
               <div className="md:text-right">
-                <motion.h2 variants={headingVariants} className="text-xs font-semibold uppercase tracking-widest text-muted-foreground pt-1 flex items-center justify-end gap-2">
+                <motion.h2 variants={headingVariants} className="text-sm font-semibold uppercase tracking-widest text-muted-foreground pt-1 flex items-center justify-start md:justify-end gap-2">
                   04 <motion.span variants={dividerLineVariants} className="w-8 h-px bg-border inline-block origin-left" /> Pre-Work
                 </motion.h2>
               </div>
@@ -525,7 +525,7 @@ export default function Confirmed() {
               <motion.div variants={containerVariants} className="space-y-6">
                 {/* Preparation Card */}
                 <motion.div variants={itemVariants} className="bg-card border border-border p-6 md:p-8">
-                  <h3 className="text-lg font-medium mb-2 text-foreground">Requerimientos de entrada</h3>
+                  <h3 className="text-base sm:text-lg font-medium mb-2 text-foreground">Requerimientos de entrada</h3>
                   <p className="text-muted-foreground text-sm max-w-md">No necesitas preparar presentaciones. Solo necesitamos tu experiencia directa sobre la operación actual.</p>
                 </motion.div>
 
@@ -550,16 +550,16 @@ export default function Confirmed() {
               whileInView="visible"
               viewport={{ once: true, margin: "-10%" }}
               variants={sectionVariants}
-              className="grid md:grid-cols-[200px_1fr] gap-8"
+              className="grid md:grid-cols-[200px_1fr] gap-4 sm:gap-6 md:gap-8"
             >
               <div className="md:text-right">
-                <motion.h2 variants={headingVariants} className="text-xs font-semibold uppercase tracking-widest text-muted-foreground pt-1 flex items-center justify-end gap-2">
+                <motion.h2 variants={headingVariants} className="text-sm font-semibold uppercase tracking-widest text-muted-foreground pt-1 flex items-center justify-start md:justify-end gap-2">
                   05 <motion.span variants={dividerLineVariants} className="w-8 h-px bg-border inline-block origin-left" /> Síguenos
                 </motion.h2>
               </div>
 
               <div>
-                <h3 className="text-lg font-medium mb-4 text-foreground">Dónde encontrarnos</h3>
+                <h3 className="text-base sm:text-lg font-medium mb-4 text-foreground">Dónde encontrarnos</h3>
                 <p className="text-sm text-muted-foreground mb-6">Síguenos para contenido sobre tecnología, IA aplicada y mejores prácticas operativas para empresas.</p>
 
                 <div className="flex flex-wrap gap-4">
@@ -584,7 +584,7 @@ export default function Confirmed() {
         variants={sectionVariants}
         className="border-t border-border bg-muted/50"
       >
-        <div className="max-w-6xl mx-auto px-6 py-10 flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-10 flex flex-col md:flex-row items-center justify-between gap-6 text-center md:text-left">
           <div>
             <motion.p
               variants={footerTextVariants}
@@ -609,7 +609,7 @@ export default function Confirmed() {
 
         {/* System Footer Bar */}
         <div className="border-t border-border py-3 bg-background">
-          <div className="max-w-6xl mx-auto px-6 flex justify-between text-[10px] text-muted-foreground font-mono uppercase">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col items-center gap-1 sm:flex-row sm:justify-between text-[10px] text-muted-foreground font-mono uppercase">
             <span>IM3 Systems</span>
             <span>Secure Connection</span>
             <span>IM3 © 2026</span>

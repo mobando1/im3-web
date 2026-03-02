@@ -35,14 +35,14 @@ export default function Booking() {
   };
 
   return (
-    <div className="min-h-screen text-foreground font-sans selection:bg-gray-200 relative overflow-hidden flex flex-col">
+    <div className="min-h-screen text-foreground font-sans selection:bg-primary/20 relative overflow-hidden flex flex-col">
       {/* Background Grid */}
       <div className="fixed inset-0 technical-grid pointer-events-none -z-10" />
 
       {/* System Status Bar */}
       <div className="fixed top-0 left-0 w-full h-1 bg-foreground z-50" />
       <div className="w-full border-b border-border bg-background/80 backdrop-blur-sm z-40 sticky top-0">
-        <div className="max-w-6xl mx-auto px-6 h-12 flex items-center justify-between text-[10px] font-mono tracking-widest uppercase text-muted-foreground">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 h-12 flex items-center justify-between text-[10px] font-mono tracking-widest uppercase text-muted-foreground">
           <Link href="/" className="flex items-center gap-3 hover:opacity-80 transition-opacity">
             <img src="/assets/im3-logo.png" alt="IM3" className="h-5 w-auto" />
           </Link>
@@ -56,7 +56,7 @@ export default function Booking() {
 
       {/* Main Content */}
       <div className="flex-grow">
-        <div className="max-w-6xl mx-auto px-6 py-8 md:py-14">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-8 md:py-14">
 
           {/* Page Header */}
           <motion.header
@@ -69,7 +69,7 @@ export default function Booking() {
               SESIÓN ESTRATÉGICA
             </div>
 
-            <h1 className="text-3xl md:text-5xl font-medium tracking-tight mb-6 text-primary max-w-2xl leading-[1.1]">
+            <h1 className="text-2xl sm:text-3xl md:text-5xl font-medium tracking-tight mb-6 text-primary max-w-2xl leading-[1.1]">
               Diagnóstico de IA y Tecnología
             </h1>
 
@@ -80,7 +80,7 @@ export default function Booking() {
           </motion.header>
 
           {/* Two Column Layout */}
-          <div className="grid grid-cols-1 lg:grid-cols-[1fr_minmax(0,580px)] gap-10 lg:gap-12">
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr_minmax(0,580px)] gap-6 sm:gap-8 lg:gap-12">
 
             {/* LEFT: Info Content */}
             <div className="space-y-10 order-2 lg:order-1">
@@ -148,11 +148,11 @@ export default function Booking() {
                   03 <span className="w-8 h-px bg-border inline-block" /> Enfoque
                 </h2>
 
-                <div className="bg-white border border-border p-6 relative overflow-hidden">
+                <div className="bg-card border border-border p-6 relative overflow-hidden">
                   <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-wider mb-4">Enfoque de la sesión:</p>
                   <div className="grid gap-3">
                     {["Casos de uso reales de IA en tu sector", "Análisis de viabilidad técnica", "Roadmap de implementación sugerido"].map((item, i) => (
-                      <div key={i} className="flex items-center gap-3 text-sm text-gray-700 bg-gray-50/50 p-3 border border-transparent hover:border-border transition-colors rounded-sm">
+                      <div key={i} className="flex items-center gap-3 text-sm text-foreground/80 bg-muted/30 p-3 border border-transparent hover:border-border transition-colors rounded-sm">
                         <div className="w-5 h-5 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                           <CheckCircle2 className="w-3 h-3 text-primary" />
                         </div>
@@ -186,7 +186,7 @@ export default function Booking() {
               transition={{ duration: 0.6, delay: 0.2 }}
               className="order-1 lg:order-2 lg:sticky lg:top-20 lg:self-start"
             >
-              <div className="bg-white border border-border overflow-hidden shadow-sm">
+              <div className="bg-card border border-border overflow-hidden shadow-sm">
                 {/* Calendar header bar */}
                 <div className="border-b border-border px-4 py-3 flex items-center justify-between">
                   <div className="flex items-center gap-2">
@@ -200,16 +200,16 @@ export default function Booking() {
                   src="https://api.leadconnectorhq.com/widget/booking/e1UKFLu5HkQcVg5aZdei"
                   title="Calendario de reservas IM3 Systems"
                   loading="lazy"
-                  style={{ width: '100%', border: 'none', overflow: 'hidden', minHeight: '650px' }}
+                  style={{ width: '100%', border: 'none', overflow: 'hidden', minHeight: '550px' }}
                   scrolling="no"
                   id="e1UKFLu5HkQcVg5aZdei_1769311894804"
-                  className="w-full bg-white"
+                  className="w-full bg-card"
                 />
               </div>
 
               <div className="mt-4 flex justify-center items-center gap-3 opacity-60">
                 <div className="flex items-center gap-2">
-                  <div className="w-1.5 h-1.5 bg-gray-400 rounded-full" />
+                  <div className="w-1.5 h-1.5 bg-muted-foreground/40 rounded-full" />
                   <p className="text-xs text-muted-foreground font-mono uppercase tracking-wide">
                     Confirmación automática vía email
                   </p>
@@ -227,9 +227,9 @@ export default function Booking() {
         whileInView="visible"
         viewport={{ once: true, margin: "-10%" }}
         variants={sectionVariants}
-        className="border-t border-border bg-gray-50 mt-10"
+        className="border-t border-border bg-muted/50 mt-10"
       >
-        <div className="max-w-6xl mx-auto px-6 py-3 flex justify-between text-[10px] text-muted-foreground font-mono uppercase">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-3 flex flex-col items-center gap-1 sm:flex-row sm:justify-between text-[10px] text-muted-foreground font-mono uppercase">
           <span>IM3 Systems</span>
           <span>Secure Connection</span>
           <span>IM3 © 2026</span>
