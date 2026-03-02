@@ -1,5 +1,7 @@
 import { UseFormReturn } from "react-hook-form";
 import { FileCheck, Pencil } from "lucide-react";
+import { format } from "date-fns";
+import { es } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
 import type { DiagnosticFormData } from "../schema";
 import { stepMeta } from "../schema";
@@ -65,9 +67,20 @@ function ReviewSection({
 export default function StepReview({ form, onGoToStep }: StepProps) {
   const data = form.getValues();
 
+  const formattedDate = data.fechaCita
+    ? format(new Date(data.fechaCita + "T12:00:00"), "EEEE d 'de' MMMM, yyyy", { locale: es })
+    : "—";
+
   const sections = [
     {
       title: stepMeta[0].title,
+      items: [
+        { label: "Fecha", value: formattedDate },
+        { label: "Hora", value: data.horaCita || "—" },
+      ],
+    },
+    {
+      title: stepMeta[1].title,
       items: [
         { label: "Empresa", value: data.empresa },
         { label: "Industria / Sector", value: data.industria },
@@ -78,14 +91,14 @@ export default function StepReview({ form, onGoToStep }: StepProps) {
       ],
     },
     {
-      title: stepMeta[1].title,
+      title: stepMeta[2].title,
       items: [
         { label: "Objetivos", value: data.objetivos || [] },
         { label: "Resultado esperado", value: data.resultadoEsperado },
       ],
     },
     {
-      title: stepMeta[2].title,
+      title: stepMeta[3].title,
       items: [
         { label: "Productos / Servicios", value: data.productos },
         { label: "Volumen mensual", value: data.volumenMensual },
@@ -93,21 +106,21 @@ export default function StepReview({ form, onGoToStep }: StepProps) {
       ],
     },
     {
-      title: stepMeta[3].title,
+      title: stepMeta[4].title,
       items: [
         { label: "Canales de adquisición", value: data.canalesAdquisicion?.map(c => c === "Otro" ? `Otro: ${data.canalAdquisicionOtro}` : c) || [] },
         { label: "Canal principal", value: data.canalPrincipal },
       ],
     },
     {
-      title: stepMeta[4].title,
+      title: stepMeta[5].title,
       items: [
         { label: "Herramientas actuales", value: data.herramientas },
         { label: "¿Conectadas?", value: data.conectadas + (data.conectadasDetalle ? ` — ${data.conectadasDetalle}` : "") },
       ],
     },
     {
-      title: stepMeta[5].title,
+      title: stepMeta[6].title,
       items: [
         { label: "Nivel tecnológico", value: data.nivelTech },
         { label: "¿Usa IA?", value: data.usaIA + (data.usaIAParaQue ? ` — ${data.usaIAParaQue}` : "") },
@@ -130,7 +143,7 @@ export default function StepReview({ form, onGoToStep }: StepProps) {
       ],
     },
     {
-      title: stepMeta[6].title,
+      title: stepMeta[7].title,
       items: [
         { label: "Áreas prioritarias", value: data.areaPrioridad || [] },
         { label: "Presupuesto", value: data.presupuesto },
@@ -145,7 +158,7 @@ export default function StepReview({ form, onGoToStep }: StepProps) {
           <FileCheck className="w-5 h-5" />
         </div>
         <div>
-          <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Paso 8 de 8</p>
+          <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Paso 9 de 9</p>
           <h2 className="text-lg font-medium text-foreground">Resumen del Diagnóstico</h2>
         </div>
       </div>

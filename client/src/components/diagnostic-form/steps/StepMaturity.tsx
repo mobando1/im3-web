@@ -54,7 +54,7 @@ export default function StepMaturity({ form }: StepProps) {
           <Cpu className="w-5 h-5" />
         </div>
         <div>
-          <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Paso 6 de 8</p>
+          <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Paso 7 de 9</p>
           <h2 className="text-lg font-medium text-foreground">Madurez Tecnológica</h2>
         </div>
       </div>

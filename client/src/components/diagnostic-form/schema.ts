@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+// Step 0 — Agendar Cita
+export const step0Schema = z.object({
+  fechaCita: z.string().min(1, "Seleccione una fecha"),
+  horaCita: z.string().min(1, "Seleccione un horario"),
+});
+
 // Step 1 — Información General
 export const step1Schema = z.object({
   empresa: z.string().min(1, "Requerido"),
@@ -79,7 +85,8 @@ export const diagnosticFormSchema = z.object({
   ...step7Schema.shape,
 });
 
-export type DiagnosticFormData = z.infer<typeof step1Schema> &
+export type DiagnosticFormData = z.infer<typeof step0Schema> &
+  z.infer<typeof step1Schema> &
   z.infer<typeof step2Schema> &
   z.infer<typeof step3Schema> &
   z.infer<typeof step4Schema> &
@@ -89,6 +96,7 @@ export type DiagnosticFormData = z.infer<typeof step1Schema> &
 
 // Step schemas array for easy access by index
 export const stepSchemas = [
+  step0Schema,
   step1Schema,
   step2Schema,
   step3Schema,
@@ -100,6 +108,7 @@ export const stepSchemas = [
 
 // Step metadata
 export const stepMeta = [
+  { title: "Agendar Cita", icon: "CalendarDays" },
   { title: "Información General", icon: "Building2" },
   { title: "Contexto de la Auditoría", icon: "Target" },
   { title: "Modelo de Negocio", icon: "Briefcase" },

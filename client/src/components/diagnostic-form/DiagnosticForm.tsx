@@ -9,6 +9,7 @@ import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import {
+  step0Schema,
   step1Schema,
   step2Schema,
   step3Schema,
@@ -19,6 +20,7 @@ import {
   stepMeta,
   type DiagnosticFormData,
 } from "./schema";
+import StepBooking from "./steps/StepBooking";
 import StepGeneral from "./steps/StepGeneral";
 import StepContext from "./steps/StepContext";
 import StepBusiness from "./steps/StepBusiness";
@@ -28,9 +30,10 @@ import StepMaturity from "./steps/StepMaturity";
 import StepPriorities from "./steps/StepPriorities";
 import StepReview from "./steps/StepReview";
 
-const TOTAL_STEPS = 8;
+const TOTAL_STEPS = 9;
 
 const stepValidators = [
+  step0Schema,
   step1Schema,
   step2Schema,
   step3Schema,
@@ -52,6 +55,8 @@ export default function DiagnosticForm() {
 
   const form = useForm<DiagnosticFormData>({
     defaultValues: {
+      fechaCita: "",
+      horaCita: "",
       empresa: "",
       industria: "",
       anosOperacion: "",
@@ -169,14 +174,15 @@ export default function DiagnosticForm() {
 
   const renderStep = () => {
     switch (currentStep) {
-      case 0: return <StepGeneral form={form} />;
-      case 1: return <StepContext form={form} />;
-      case 2: return <StepBusiness form={form} />;
-      case 3: return <StepAcquisition form={form} />;
-      case 4: return <StepTools form={form} />;
-      case 5: return <StepMaturity form={form} />;
-      case 6: return <StepPriorities form={form} />;
-      case 7: return <StepReview form={form} onGoToStep={goToStep} />;
+      case 0: return <StepBooking form={form} />;
+      case 1: return <StepGeneral form={form} />;
+      case 2: return <StepContext form={form} />;
+      case 3: return <StepBusiness form={form} />;
+      case 4: return <StepAcquisition form={form} />;
+      case 5: return <StepTools form={form} />;
+      case 6: return <StepMaturity form={form} />;
+      case 7: return <StepPriorities form={form} />;
+      case 8: return <StepReview form={form} onGoToStep={goToStep} />;
       default: return null;
     }
   };

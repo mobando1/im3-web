@@ -22,7 +22,7 @@ export default function StepGeneral({ form }: StepProps) {
           <Building2 className="w-5 h-5" />
         </div>
         <div>
-          <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Paso 1 de 8</p>
+          <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Paso 2 de 9</p>
           <h2 className="text-lg font-medium text-foreground">Información General</h2>
         </div>
       </div>

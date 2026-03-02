@@ -29,7 +29,7 @@ export default function StepBusiness({ form }: StepProps) {
           <Briefcase className="w-5 h-5" />
         </div>
         <div>
-          <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Paso 3 de 8</p>
+          <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Paso 4 de 9</p>
           <h2 className="text-lg font-medium text-foreground">Modelo de Negocio</h2>
         </div>
       </div>

@@ -22,7 +22,7 @@ export default function StepTools({ form }: StepProps) {
           <Wrench className="w-5 h-5" />
         </div>
         <div>
-          <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Paso 5 de 8</p>
+          <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Paso 6 de 9</p>
           <h2 className="text-lg font-medium text-foreground">Sistemas y Herramientas</h2>
         </div>
       </div>
