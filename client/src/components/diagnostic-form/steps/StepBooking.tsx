@@ -1,10 +1,14 @@
-import { useMemo } from "react";
+import { useState, useMemo } from "react";
 import { UseFormReturn } from "react-hook-form";
-import { CalendarDays, Clock, Check } from "lucide-react";
-import { format, addDays, isBefore, startOfDay, isWeekend } from "date-fns";
+import { CalendarDays, Clock, Check, ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  format, addDays, addMonths, subMonths,
+  startOfMonth, endOfMonth, startOfWeek, endOfWeek,
+  eachDayOfInterval, isSameDay, isSameMonth,
+  isBefore, isAfter, isWeekend, startOfDay,
+} from "date-fns";
 import { es } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
-import { Calendar } from "@/components/ui/calendar";
 import type { DiagnosticFormData } from "../schema";
 
 interface StepProps {
@@ -13,6 +17,7 @@ interface StepProps {
 
 const BUSINESS_HOURS = { start: 9, end: 17 };
 const SLOT_DURATION = 30;
+const WEEKDAYS = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sa", "Do"];
 const ease = [0.25, 0.46, 0.45, 0.94] as [number, number, number, number];
 
 function generateTimeSlots(): string[] {
@@ -30,14 +35,27 @@ export default function StepBooking({ form }: StepProps) {
   const fechaCita = watch("fechaCita");
   const horaCita = watch("horaCita");
 
+  const today = startOfDay(new Date());
+  const maxDate = addDays(today, 90);
+  const [viewMonth, setViewMonth] = useState(startOfMonth(today));
+
   const timeSlots = useMemo(generateTimeSlots, []);
 
   const selectedDate = fechaCita ? new Date(fechaCita + "T12:00:00") : undefined;
-  const today = startOfDay(new Date());
-  const maxDate = addDays(today, 90);
 
-  const handleDateSelect = (date: Date | undefined) => {
-    if (!date) return;
+  // Generate calendar grid days
+  const calendarDays = useMemo(() => {
+    const monthStart = startOfMonth(viewMonth);
+    const monthEnd = endOfMonth(viewMonth);
+    const gridStart = startOfWeek(monthStart, { weekStartsOn: 1 });
+    const gridEnd = endOfWeek(monthEnd, { weekStartsOn: 1 });
+    return eachDayOfInterval({ start: gridStart, end: gridEnd });
+  }, [viewMonth]);
+
+  const canGoPrev = isAfter(startOfMonth(viewMonth), startOfMonth(today));
+  const canGoNext = isBefore(endOfMonth(viewMonth), maxDate);
+
+  const handleDateSelect = (date: Date) => {
     setValue("fechaCita", format(date, "yyyy-MM-dd"), { shouldValidate: true });
     setValue("horaCita", "", { shouldValidate: true });
   };
@@ -46,8 +64,8 @@ export default function StepBooking({ form }: StepProps) {
     setValue("horaCita", time, { shouldValidate: true });
   };
 
-  const disabledDays = (date: Date) => {
-    return isBefore(date, today) || isWeekend(date) || isBefore(maxDate, date);
+  const isDayDisabled = (date: Date) => {
+    return isBefore(date, today) || isWeekend(date) || isAfter(date, maxDate);
   };
 
   return (
@@ -68,41 +86,90 @@ export default function StepBooking({ form }: StepProps) {
       </p>
 
       {/* Main card — side by side on md+ */}
-      <div className="border border-border rounded-sm bg-card overflow-hidden">
+      <div className="border border-border rounded-lg bg-card overflow-hidden shadow-sm">
         <div className="grid grid-cols-1 md:grid-cols-[1fr_280px]">
-          {/* Left: Calendar */}
-          <div className="p-4 md:p-6">
-            <div className="flex items-center gap-2 mb-4">
-              <CalendarDays className="w-4 h-4 text-primary" />
-              <span className="text-sm font-medium text-foreground">Fecha</span>
-              <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground ml-auto">
-                Lun – Vie
-              </span>
+
+          {/* Left: Custom Calendar */}
+          <div className="p-5 md:p-6">
+            {/* Month navigation */}
+            <div className="flex items-center justify-between mb-5">
+              <button
+                type="button"
+                onClick={() => setViewMonth(subMonths(viewMonth, 1))}
+                disabled={!canGoPrev}
+                className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+
+              <h3 className="text-lg font-semibold tracking-tight capitalize">
+                {format(viewMonth, "MMMM yyyy", { locale: es })}
+              </h3>
+
+              <button
+                type="button"
+                onClick={() => setViewMonth(addMonths(viewMonth, 1))}
+                disabled={!canGoNext}
+                className="w-9 h-9 rounded-full flex items-center justify-center hover:bg-muted transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
             </div>
 
-            <div className="flex justify-center">
-              <Calendar
-                mode="single"
-                selected={selectedDate}
-                onSelect={handleDateSelect}
-                disabled={disabledDays}
-                locale={es}
-                fromDate={today}
-                toDate={maxDate}
-                className="[--cell-size:3rem]"
-                classNames={{
-                  weekday: "text-muted-foreground flex-1 select-none text-[10px] font-mono uppercase tracking-wider",
-                  caption_label: "select-none font-medium text-base",
-                  today: "ring-1 ring-primary/30 rounded-full",
-                  day: "group/day relative aspect-square h-full w-full select-none p-0 text-center",
-                }}
-              />
+            {/* Weekday headers */}
+            <div className="grid grid-cols-7 mb-2">
+              {WEEKDAYS.map((day) => (
+                <div
+                  key={day}
+                  className="text-center text-[11px] font-mono uppercase tracking-wider text-muted-foreground py-2"
+                >
+                  {day}
+                </div>
+              ))}
+            </div>
+
+            {/* Day grid */}
+            <div className="grid grid-cols-7 gap-px">
+              {calendarDays.map((day) => {
+                const disabled = isDayDisabled(day);
+                const isCurrentMonth = isSameMonth(day, viewMonth);
+                const isSelected = selectedDate ? isSameDay(day, selectedDate) : false;
+                const isToday = isSameDay(day, today);
+                const isWeekendDay = isWeekend(day);
+
+                return (
+                  <div key={day.toISOString()} className="flex items-center justify-center py-0.5">
+                    <button
+                      type="button"
+                      onClick={() => handleDateSelect(day)}
+                      disabled={disabled || !isCurrentMonth}
+                      className={[
+                        "w-10 h-10 md:w-11 md:h-11 rounded-full flex items-center justify-center",
+                        "text-sm transition-all duration-200 select-none",
+                        isSelected
+                          ? "bg-primary text-primary-foreground font-semibold shadow-md shadow-primary/25"
+                          : isToday
+                          ? "font-semibold text-primary ring-2 ring-primary/30"
+                          : !isCurrentMonth
+                          ? "text-muted-foreground/25 cursor-default"
+                          : disabled
+                          ? "text-muted-foreground/30 cursor-not-allowed"
+                          : isWeekendDay
+                          ? "text-muted-foreground/40 cursor-not-allowed"
+                          : "text-foreground font-medium hover:bg-primary/10 cursor-pointer",
+                      ].join(" ")}
+                    >
+                      {format(day, "d")}
+                    </button>
+                  </div>
+                );
+              })}
             </div>
 
             {errors.fechaCita && <p className="text-xs text-destructive mt-3">{errors.fechaCita.message}</p>}
           </div>
 
-          {/* Right: Time slots (visible after date selected) */}
+          {/* Right: Time slots */}
           <AnimatePresence>
             {fechaCita && (
               <motion.div
@@ -121,7 +188,7 @@ export default function StepBooking({ form }: StepProps) {
                     {format(new Date(fechaCita + "T12:00:00"), "EEEE d 'de' MMMM", { locale: es })}
                   </p>
 
-                  <div className="space-y-1.5 max-h-[380px] md:max-h-[400px] overflow-y-auto pr-1 scrollbar-thin">
+                  <div className="space-y-1.5 max-h-[380px] md:max-h-[400px] overflow-y-auto pr-1">
                     {timeSlots.map((time, i) => {
                       const isSelected = horaCita === time;
                       return (
