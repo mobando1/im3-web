@@ -4,6 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "./db";
 import { diagnostics } from "@shared/schema";
 import { log } from "./index";
+import { isGoogleDriveConfigured, createDiagnosticInDrive } from "./google-drive";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -63,6 +64,23 @@ export async function registerRoutes(
       }
     } else {
       console.log("Datos del diagnóstico (sin DB):", JSON.stringify(data, null, 2));
+    }
+
+    // Create Google Drive folder + Sheet (non-blocking)
+    if (isGoogleDriveConfigured()) {
+      createDiagnosticInDrive(data)
+        .then(({ folderUrl }) => {
+          log(`Google Drive creado: ${data.empresa}`);
+          if (db && insertedId) {
+            db.update(diagnostics)
+              .set({ googleDriveUrl: folderUrl })
+              .where(eq(diagnostics.id, insertedId))
+              .catch((err: unknown) => log(`Error updating Drive URL: ${err}`));
+          }
+        })
+        .catch((err: unknown) => {
+          log(`Error creando Google Drive: ${err}`);
+        });
     }
 
     // Send contact data to GHL webhook (non-blocking)

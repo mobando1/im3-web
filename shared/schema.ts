@@ -64,6 +64,7 @@ export const diagnostics = pgTable("diagnostics", {
   // Metadata
   createdAt: timestamp("created_at").defaultNow().notNull(),
   sentToGhl: boolean("sent_to_ghl").default(false).notNull(),
+  googleDriveUrl: text("google_drive_url"),
 });
 
 export type Diagnostic = typeof diagnostics.$inferSelect;
