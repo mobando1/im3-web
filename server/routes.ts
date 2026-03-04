@@ -299,9 +299,9 @@ export async function registerRoutes(
       }
 
       res.json({ success: true });
-    } catch (err) {
+    } catch (err: any) {
       log(`Error newsletter subscribe: ${err}`);
-      res.status(500).json({ error: "Error interno" });
+      res.status(500).json({ error: "Error interno", debug: err?.message || String(err) });
     }
   });
 
