@@ -127,3 +127,14 @@ export const abandonedLeads = pgTable("abandoned_leads", {
 });
 
 export type AbandonedLead = typeof abandonedLeads.$inferSelect;
+
+// Newsletter subscribers
+export const newsletterSubscribers = pgTable("newsletter_subscribers", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull().unique(),
+  subscribedAt: timestamp("subscribed_at").defaultNow().notNull(),
+  unsubscribedAt: timestamp("unsubscribed_at"),
+  isActive: boolean("is_active").default(true).notNull(),
+});
+
+export type NewsletterSubscriber = typeof newsletterSubscribers.$inferSelect;

@@ -2,10 +2,11 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers } from "@shared/schema";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive } from "./google-drive";
-import { isEmailConfigured } from "./email-sender";
+import { isEmailConfigured, sendEmail } from "./email-sender";
+import { generateEmailContent } from "./email-ai";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -233,6 +234,75 @@ export async function registerRoutes(
     }
 
     res.json({ tracked: true });
+  });
+
+  // Newsletter subscription
+  app.post("/api/newsletter/subscribe", async (req, res) => {
+    const { email } = req.body;
+
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      res.status(400).json({ error: "Email inválido" });
+      return;
+    }
+
+    if (!db) {
+      res.json({ success: true });
+      return;
+    }
+
+    try {
+      // Check if already subscribed
+      const existing = await db
+        .select()
+        .from(newsletterSubscribers)
+        .where(eq(newsletterSubscribers.email, email))
+        .limit(1);
+
+      if (existing.length > 0 && existing[0].isActive) {
+        res.json({ success: true, alreadySubscribed: true });
+        return;
+      }
+
+      if (existing.length > 0) {
+        // Reactivate
+        await db
+          .update(newsletterSubscribers)
+          .set({ isActive: true, unsubscribedAt: null, subscribedAt: new Date() })
+          .where(eq(newsletterSubscribers.email, email));
+      } else {
+        await db.insert(newsletterSubscribers).values({ email });
+      }
+
+      log(`Newsletter subscriber: ${email}`);
+
+      // Send welcome email (non-blocking)
+      if (isEmailConfigured()) {
+        (async () => {
+          try {
+            const [template] = await db
+              .select()
+              .from(emailTemplates)
+              .where(eq(emailTemplates.nombre, "newsletter_bienvenida"));
+
+            if (!template) {
+              log("Template 'newsletter_bienvenida' no encontrado");
+              return;
+            }
+
+            const { subject, body } = await generateEmailContent(template, {} as any);
+            await sendEmail(email, subject, body);
+            log(`Newsletter welcome email sent to ${email}`);
+          } catch (err) {
+            log(`Error sending newsletter welcome: ${err}`);
+          }
+        })();
+      }
+
+      res.json({ success: true });
+    } catch (err) {
+      log(`Error newsletter subscribe: ${err}`);
+      res.status(500).json({ error: "Error interno" });
+    }
   });
 
   return httpServer;

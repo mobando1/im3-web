@@ -45,6 +45,20 @@ Tono: breve, útil, no presiona.`,
     delayDays: 4,
   },
   {
+    nombre: "newsletter_bienvenida",
+    subjectPrompt: "Genera un subject de bienvenida al newsletter de tendencias tech de IM3 Systems. Corto, cálido, profesional. Máximo 50 caracteres.",
+    bodyPrompt: `Genera un email de bienvenida al newsletter semanal de IM3 Systems.
+Incluye:
+1. Agradecimiento breve por suscribirse
+2. Qué van a recibir: tendencias de IA y automatización, casos de uso reales, y 3 pasos accionables cada semana para aplicar en su empresa
+3. Que el contenido es práctico, no solo noticias — enfocado en lo que pueden implementar
+4. Firmado por el equipo de IM3 Systems
+5. Nota: pueden darse de baja en cualquier momento respondiendo a este email
+Tono: cercano, profesional, genera expectativa. NO incluir links de unsubscribe.`,
+    sequenceOrder: 100,
+    delayDays: 0,
+  },
+  {
     nombre: "abandono",
     subjectPrompt: "Genera un subject corto y empático para alguien que empezó a agendar su diagnóstico tecnológico pero no terminó. Máximo 50 caracteres. Algo como '¿Todavía pensando?' o 'Tu diagnóstico está pendiente'.",
     bodyPrompt: `Genera un email de rescate para alguien que dejó su email pero no completó el formulario de diagnóstico tecnológico de IM3 Systems.
