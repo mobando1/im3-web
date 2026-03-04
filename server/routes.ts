@@ -236,17 +236,6 @@ export async function registerRoutes(
     res.json({ tracked: true });
   });
 
-  // Debug endpoint (temporary)
-  app.get("/api/debug-env", (_req, res) => {
-    const ak = process.env.ANTHROPIC_API_KEY || "";
-    const rk = process.env.RESEND_API_KEY || "";
-    res.json({
-      anthropic: ak ? `${ak.slice(0, 10)}...${ak.slice(-4)} (${ak.length} chars)` : "NOT SET",
-      resend: rk ? `${rk.slice(0, 6)}...${rk.slice(-4)} (${rk.length} chars)` : "NOT SET",
-      emailConfigured: !!(ak && rk),
-    });
-  });
-
   // Newsletter subscription
   app.post("/api/newsletter/subscribe", async (req, res) => {
     const { email } = req.body;
@@ -286,30 +275,28 @@ export async function registerRoutes(
 
       log(`Newsletter subscriber: ${email}`);
 
-      // Send welcome email
-      let emailResult: any = null;
-      if (isEmailConfigured()) {
-        try {
-          const [template] = await db
-            .select()
-            .from(emailTemplates)
-            .where(eq(emailTemplates.nombre, "newsletter_bienvenida"));
+      // Send welcome email (fixed template, no AI dependency)
+      if (process.env.RESEND_API_KEY) {
+        const welcomeSubject = "Bienvenido al newsletter de IM3 Systems";
+        const welcomeHtml = `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+          <div style="background:#2B7A78;padding:24px 32px;border-radius:8px 8px 0 0">
+            <h1 style="color:#fff;font-size:22px;margin:0">IM3 Systems</h1>
+          </div>
+          <div style="padding:32px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+            <h2 style="color:#2B7A78;font-size:20px;margin:0 0 16px">¡Gracias por suscribirte!</h2>
+            <p style="line-height:1.6;margin:0 0 16px">Cada semana recibirás las tendencias más relevantes en inteligencia artificial, automatización y tecnología aplicada a empresas.</p>
+            <p style="line-height:1.6;margin:0 0 16px">No solo noticias — te compartiremos <strong>3 pasos concretos</strong> que puedes implementar en tu empresa esa misma semana.</p>
+            <p style="line-height:1.6;margin:0 0 24px">Nuestro objetivo: que en 2 minutos de lectura obtengas valor real para tu operación.</p>
+            <p style="line-height:1.6;margin:0;color:#666">— Equipo IM3 Systems</p>
+          </div>
+        </div>`;
 
-          if (!template) {
-            emailResult = { error: "Template not found" };
-          } else {
-            const { subject, body } = await generateEmailContent(template, null);
-            const sent = await sendEmail(email, subject, body);
-            emailResult = { sent: true, messageId: sent?.messageId };
-          }
-        } catch (err: any) {
-          emailResult = { error: err?.message || String(err) };
-        }
-      } else {
-        emailResult = { error: "Email not configured" };
+        sendEmail(email, welcomeSubject, welcomeHtml).catch((err) => {
+          log(`Error sending newsletter welcome: ${err}`);
+        });
       }
 
-      res.json({ success: true, emailResult });
+      res.json({ success: true });
     } catch (err) {
       log(`Error newsletter subscribe: ${err}`);
       res.status(500).json({ error: "Error interno" });
