@@ -275,30 +275,30 @@ export async function registerRoutes(
 
       log(`Newsletter subscriber: ${email}`);
 
-      // Send welcome email (non-blocking)
+      // Send welcome email
+      let emailResult: any = null;
       if (isEmailConfigured()) {
-        (async () => {
-          try {
-            const [template] = await db
-              .select()
-              .from(emailTemplates)
-              .where(eq(emailTemplates.nombre, "newsletter_bienvenida"));
+        try {
+          const [template] = await db
+            .select()
+            .from(emailTemplates)
+            .where(eq(emailTemplates.nombre, "newsletter_bienvenida"));
 
-            if (!template) {
-              log("Template 'newsletter_bienvenida' no encontrado");
-              return;
-            }
-
+          if (!template) {
+            emailResult = { error: "Template not found" };
+          } else {
             const { subject, body } = await generateEmailContent(template, null);
-            await sendEmail(email, subject, body);
-            log(`Newsletter welcome email sent to ${email}`);
-          } catch (err) {
-            log(`Error sending newsletter welcome: ${err}`);
+            const sent = await sendEmail(email, subject, body);
+            emailResult = { sent: true, messageId: sent?.messageId };
           }
-        })();
+        } catch (err: any) {
+          emailResult = { error: err?.message || String(err) };
+        }
+      } else {
+        emailResult = { error: "Email not configured" };
       }
 
-      res.json({ success: true });
+      res.json({ success: true, emailResult });
     } catch (err) {
       log(`Error newsletter subscribe: ${err}`);
       res.status(500).json({ error: "Error interno" });
