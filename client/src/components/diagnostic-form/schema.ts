@@ -1,7 +1,8 @@
 import { z } from "zod";
 
-// Step 0 — Agendar Cita
+// Step 0 — Email + Agendar Cita
 export const step0Schema = z.object({
+  email: z.string().email("Ingrese un email válido"),
   fechaCita: z.string().min(1, "Seleccione una fecha"),
   horaCita: z.string().min(1, "Seleccione un horario"),
 });
@@ -14,6 +15,7 @@ export const step1Schema = z.object({
   empleados: z.string().min(1, "Seleccione una opción"),
   ciudades: z.string().min(1, "Requerido"),
   participante: z.string().min(1, "Requerido"),
+  telefono: z.string().optional(),
 });
 
 // Step 2 — Contexto de la auditoría

@@ -71,6 +71,8 @@ export default function DiagnosticForm({ onStepChange }: DiagnosticFormProps) {
       empleados: "",
       ciudades: "",
       participante: "",
+      email: "",
+      telefono: "",
       objetivos: [],
       resultadoEsperado: "",
       productos: "",

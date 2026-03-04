@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, json, timestamp, boolean } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, json, timestamp, boolean, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -30,6 +30,8 @@ export const diagnostics = pgTable("diagnostics", {
   empleados: text("empleados").notNull(),
   ciudades: text("ciudades").notNull(),
   participante: text("participante").notNull(),
+  email: text("email").notNull(),
+  telefono: text("telefono"),
   // Step 2 — Contexto
   objetivos: json("objetivos").$type<string[]>().notNull(),
   resultadoEsperado: text("resultado_esperado").notNull(),
@@ -69,3 +71,48 @@ export const diagnostics = pgTable("diagnostics", {
 
 export type Diagnostic = typeof diagnostics.$inferSelect;
 export type InsertDiagnostic = typeof diagnostics.$inferInsert;
+
+// Contacts (normalized from diagnostics for email sequences)
+export const contacts = pgTable("contacts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  diagnosticId: varchar("diagnostic_id").notNull(),
+  email: text("email").notNull(),
+  nombre: text("nombre").notNull(),
+  empresa: text("empresa").notNull(),
+  telefono: text("telefono"),
+  status: text("status").notNull().default("lead"), // lead | contacted | scheduled | converted
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type Contact = typeof contacts.$inferSelect;
+export type InsertContact = typeof contacts.$inferInsert;
+
+// Email templates (prompts for Claude API)
+export const emailTemplates = pgTable("email_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  nombre: text("nombre").notNull(),
+  subjectPrompt: text("subject_prompt").notNull(),
+  bodyPrompt: text("body_prompt").notNull(),
+  sequenceOrder: integer("sequence_order").notNull(),
+  delayDays: integer("delay_days").notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+});
+
+export type EmailTemplate = typeof emailTemplates.$inferSelect;
+export type InsertEmailTemplate = typeof emailTemplates.$inferInsert;
+
+// Sent emails (tracking every email sent)
+export const sentEmails = pgTable("sent_emails", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contactId: varchar("contact_id").notNull(),
+  templateId: varchar("template_id").notNull(),
+  subject: text("subject"),
+  body: text("body"),
+  status: text("status").notNull().default("pending"), // pending | sent | opened | clicked | bounced
+  scheduledFor: timestamp("scheduled_for").notNull(),
+  sentAt: timestamp("sent_at"),
+  resendMessageId: text("resend_message_id"),
+});
+
+export type SentEmail = typeof sentEmails.$inferSelect;
+export type InsertSentEmail = typeof sentEmails.$inferInsert;

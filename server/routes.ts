@@ -1,10 +1,11 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { eq } from "drizzle-orm";
+import { eq, asc } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails } from "@shared/schema";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive } from "./google-drive";
+import { isEmailConfigured } from "./email-sender";
 
 export async function registerRoutes(
   httpServer: Server,
@@ -35,6 +36,8 @@ export async function registerRoutes(
           empleados: data.empleados,
           ciudades: data.ciudades,
           participante: data.participante,
+          email: data.email,
+          telefono: data.telefono || null,
           objetivos: data.objetivos,
           resultadoEsperado: data.resultadoEsperado,
           productos: data.productos,
@@ -113,7 +116,81 @@ export async function registerRoutes(
         });
     }
 
+    // Schedule email sequence (non-blocking)
+    if (db && insertedId && data.email && isEmailConfigured()) {
+      (async () => {
+        try {
+          // Create contact
+          const [contact] = await db.insert(contacts).values({
+            diagnosticId: insertedId!,
+            email: data.email,
+            nombre: data.participante,
+            empresa: data.empresa,
+            telefono: data.telefono || null,
+          }).returning();
+
+          // Get active templates ordered by sequence
+          const templates = await db
+            .select()
+            .from(emailTemplates)
+            .where(eq(emailTemplates.isActive, true))
+            .orderBy(asc(emailTemplates.sequenceOrder));
+
+          // Schedule emails
+          const now = new Date();
+          for (const template of templates) {
+            const scheduledFor = new Date(now);
+            scheduledFor.setDate(scheduledFor.getDate() + template.delayDays);
+
+            await db.insert(sentEmails).values({
+              contactId: contact.id,
+              templateId: template.id,
+              scheduledFor,
+            });
+          }
+
+          log(`Secuencia de ${templates.length} email(s) programada para ${data.email}`);
+        } catch (err) {
+          log(`Error programando emails: ${err}`);
+        }
+      })();
+    }
+
     res.json({ success: true, id: insertedId });
+  });
+
+  // Resend webhook for tracking (opens, clicks, bounces)
+  app.post("/api/email-webhook", async (req, res) => {
+    const event = req.body;
+
+    if (!db || !event?.data?.email_id) {
+      res.json({ received: true });
+      return;
+    }
+
+    try {
+      const messageId = event.data.email_id;
+      const statusMap: Record<string, string> = {
+        "email.opened": "opened",
+        "email.clicked": "clicked",
+        "email.bounced": "bounced",
+        "email.complained": "bounced",
+      };
+
+      const newStatus = statusMap[event.type];
+      if (newStatus) {
+        await db
+          .update(sentEmails)
+          .set({ status: newStatus })
+          .where(eq(sentEmails.resendMessageId, messageId));
+
+        log(`Email webhook: ${event.type} para ${messageId}`);
+      }
+    } catch (err) {
+      log(`Error procesando email webhook: ${err}`);
+    }
+
+    res.json({ received: true });
   });
 
   return httpServer;

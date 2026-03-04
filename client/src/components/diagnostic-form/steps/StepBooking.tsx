@@ -1,6 +1,8 @@
 import { useState, useMemo } from "react";
 import { UseFormReturn } from "react-hook-form";
-import { CalendarDays, Clock, Check, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, Clock, Check, ChevronLeft, ChevronRight, Mail } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   format, addDays, addMonths, subMonths,
   startOfMonth, endOfMonth, startOfWeek, endOfWeek,
@@ -31,9 +33,13 @@ function generateTimeSlots(): string[] {
 }
 
 export default function StepBooking({ form }: StepProps) {
-  const { setValue, watch, formState: { errors } } = form;
+  const { register, setValue, watch, formState: { errors } } = form;
+  const email = watch("email");
   const fechaCita = watch("fechaCita");
   const horaCita = watch("horaCita");
+
+  // Email is valid if it matches basic email pattern
+  const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || "");
 
   const today = startOfDay(new Date());
   const maxDate = addDays(today, 90);
@@ -82,8 +88,37 @@ export default function StepBooking({ form }: StepProps) {
       </div>
 
       <p className="text-sm text-muted-foreground">
-        Seleccione una fecha y horario para su sesión de diagnóstico.
+        Ingrese su correo electrónico para agendar su sesión de diagnóstico.
       </p>
+
+      {/* Email gate */}
+      <div className="space-y-2">
+        <Label htmlFor="email" className="text-sm font-medium flex items-center gap-2">
+          <Mail className="w-4 h-4 text-primary" />
+          Correo electrónico
+        </Label>
+        <Input
+          id="email"
+          type="email"
+          placeholder="Ej: juan@empresa.com"
+          {...register("email")}
+          className="max-w-md"
+        />
+        {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+      </div>
+
+      {/* Calendar — visible only when email is valid */}
+      <AnimatePresence>
+        {emailValid && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -12 }}
+            transition={{ duration: 0.35, ease }}
+          >
+            <p className="text-xs text-muted-foreground mb-3">
+              Seleccione una fecha y horario disponible.
+            </p>
 
       {/* Main card — side by side on md+ */}
       <div className="border border-border rounded-lg bg-card overflow-hidden shadow-sm">
@@ -249,6 +284,10 @@ export default function StepBooking({ form }: StepProps) {
                 <span className="text-[10px] text-muted-foreground">· 30 min · Sesión de diagnóstico</span>
               </div>
             </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
           </motion.div>
         )}
       </AnimatePresence>

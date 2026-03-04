@@ -118,6 +118,20 @@ export default function StepGeneral({ form }: StepProps) {
         />
         {errors.participante && <p className="text-xs text-destructive">{errors.participante.message}</p>}
       </div>
+
+      {/* Q7 — Teléfono (opcional) */}
+      <div className="space-y-2">
+        <Label htmlFor="telefono" className="text-sm font-medium">
+          Teléfono / WhatsApp <span className="text-muted-foreground font-normal">(opcional)</span>
+        </Label>
+        <Input
+          id="telefono"
+          type="tel"
+          placeholder="Ej: +57 300 123 4567"
+          {...register("telefono")}
+        />
+        {errors.telefono && <p className="text-xs text-destructive">{errors.telefono.message}</p>}
+      </div>
     </div>
   );
 }
