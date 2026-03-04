@@ -28,30 +28,35 @@ Reglas:
 - Firma: "Equipo IM3 Systems"
 - Color primario de la marca: #2B7A78 (teal)`;
 
-function buildContext(data: Diagnostic): string {
-  return `DATOS DEL CLIENTE:
-- Empresa: ${data.empresa}
-- Industria: ${data.industria}
-- Años de operación: ${data.anosOperacion}
-- Empleados: ${data.empleados}
-- Ciudades: ${data.ciudades}
-- Participante: ${data.participante}
-- Fecha de cita: ${data.fechaCita}
-- Hora de cita: ${data.horaCita}
-- Objetivos: ${Array.isArray(data.objetivos) ? data.objetivos.join(", ") : data.objetivos}
-- Resultado esperado: ${data.resultadoEsperado}
-- Productos/Servicios: ${data.productos}
-- Volumen mensual: ${data.volumenMensual}
-- Herramientas actuales: ${data.herramientas}
-- Nivel tecnológico: ${data.nivelTech}
-- Usa IA: ${data.usaIA}
-- Áreas prioritarias: ${Array.isArray(data.areaPrioridad) ? data.areaPrioridad.join(", ") : data.areaPrioridad}
-- Presupuesto: ${data.presupuesto}`;
+function buildContext(data: Partial<Diagnostic> | null): string {
+  if (!data || !data.empresa) {
+    return "CONTEXTO: Email genérico de IM3 Systems (sin datos específicos de cliente).";
+  }
+
+  const lines: string[] = ["DATOS DEL CLIENTE:"];
+  if (data.empresa) lines.push(`- Empresa: ${data.empresa}`);
+  if (data.industria) lines.push(`- Industria: ${data.industria}`);
+  if (data.anosOperacion) lines.push(`- Años de operación: ${data.anosOperacion}`);
+  if (data.empleados) lines.push(`- Empleados: ${data.empleados}`);
+  if (data.ciudades) lines.push(`- Ciudades: ${data.ciudades}`);
+  if (data.participante) lines.push(`- Participante: ${data.participante}`);
+  if (data.fechaCita) lines.push(`- Fecha de cita: ${data.fechaCita}`);
+  if (data.horaCita) lines.push(`- Hora de cita: ${data.horaCita}`);
+  if (data.objetivos) lines.push(`- Objetivos: ${Array.isArray(data.objetivos) ? data.objetivos.join(", ") : data.objetivos}`);
+  if (data.resultadoEsperado) lines.push(`- Resultado esperado: ${data.resultadoEsperado}`);
+  if (data.productos) lines.push(`- Productos/Servicios: ${data.productos}`);
+  if (data.volumenMensual) lines.push(`- Volumen mensual: ${data.volumenMensual}`);
+  if (data.herramientas) lines.push(`- Herramientas actuales: ${data.herramientas}`);
+  if (data.nivelTech) lines.push(`- Nivel tecnológico: ${data.nivelTech}`);
+  if (data.usaIA) lines.push(`- Usa IA: ${data.usaIA}`);
+  if (data.areaPrioridad) lines.push(`- Áreas prioritarias: ${Array.isArray(data.areaPrioridad) ? data.areaPrioridad.join(", ") : data.areaPrioridad}`);
+  if (data.presupuesto) lines.push(`- Presupuesto: ${data.presupuesto}`);
+  return lines.join("\n");
 }
 
 export async function generateEmailContent(
   template: EmailTemplate,
-  diagnosticData: Diagnostic
+  diagnosticData: Partial<Diagnostic> | null
 ): Promise<{ subject: string; body: string }> {
   const anthropic = getClient();
   if (!anthropic) {
@@ -96,7 +101,7 @@ export async function generateEmailContent(
       ? bodyResponse.content[0].text.trim()
       : "<p>Error generando contenido</p>";
 
-  log(`Email AI generado: "${subject}" para ${diagnosticData.empresa}`);
+  log(`Email AI generado: "${subject}" para ${diagnosticData?.empresa || "suscriptor"}`);
 
   return { subject, body };
 }

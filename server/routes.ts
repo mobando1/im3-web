@@ -289,7 +289,7 @@ export async function registerRoutes(
               return;
             }
 
-            const { subject, body } = await generateEmailContent(template, {} as any);
+            const { subject, body } = await generateEmailContent(template, null);
             await sendEmail(email, subject, body);
             log(`Newsletter welcome email sent to ${email}`);
           } catch (err) {

@@ -28,6 +28,10 @@ export async function sendEmail(
 
   const from = process.env.EMAIL_FROM || "IM3 Systems <onboarding@resend.dev>";
 
+  if (from.includes("resend.dev")) {
+    log(`⚠ EMAIL_FROM usa dominio de prueba (${from}) — solo envía al email del dueño de la cuenta Resend`);
+  }
+
   const { data, error } = await client.emails.send({
     from,
     to,
