@@ -364,7 +364,7 @@ const Hero = () => {
 
             <Reveal delay={300}>
               <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-                <button 
+                <button
                   onClick={() => navigate("/booking")}
                   className="group relative bg-[hsl(var(--teal))] text-white px-6 py-3.5 rounded-xl font-semibold hover:bg-primary/90 transition-all hover:translate-y-[-2px] shadow-[0_10px_20px_-10px_rgba(47,164,169,0.3)] hover:shadow-[0_20px_40px_-15px_rgba(47,164,169,0.5)] ring-offset-2 ring-offset-[hsl(var(--hero-bg))] focus:ring-2 focus:ring-[hsl(var(--teal))] text-center overflow-hidden cta-glow"
                 >
@@ -373,13 +373,16 @@ const Hero = () => {
                   </span>
                   <span className="absolute inset-0 cta-shimmer pointer-events-none" />
                 </button>
-                <button 
+                <button
                   onClick={() => document.getElementById('que')?.scrollIntoView({ behavior: 'smooth' })}
                   className="bg-white/5 border border-white/10 text-white px-6 py-3.5 rounded-xl font-medium hover:bg-white/10 transition-all backdrop-blur-sm text-center"
                 >
                   {t.hero.secondary}
                 </button>
               </div>
+              <p className="text-xs text-white/50 mt-3 flex items-center gap-1.5">
+                <Zap className="w-3 h-3" /> Cupos limitados: 2 auditorías semanales
+              </p>
             </Reveal>
 
             <Reveal delay={400}>
@@ -1061,6 +1064,9 @@ const Contact = () => {
               {t.contact.backToTop} <ArrowUpRight className="w-5 h-5" />
             </button>
           </div>
+          <p className="text-xs text-muted-foreground mt-4 flex items-center justify-center gap-1.5">
+            <Zap className="w-3 h-3 text-amber-500" /> Cupos limitados: solo 2 auditorías por semana
+          </p>
         </Reveal>
       </div>
     </section>

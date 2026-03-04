@@ -1,7 +1,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
-import { Clock, ShieldCheck, Cpu, BarChart3, CheckCircle2 } from "lucide-react";
+import { Clock, ShieldCheck, Cpu, BarChart3, CheckCircle2, Zap } from "lucide-react";
 import DiagnosticForm from "@/components/diagnostic-form/DiagnosticForm";
 
 export default function Booking() {
@@ -83,7 +83,7 @@ export default function Booking() {
                   <div className="flex flex-col sm:flex-row gap-3 sm:gap-6">
                     <div className="flex items-center gap-3 text-muted-foreground text-sm font-medium border-l-2 border-primary pl-4">
                       <Clock className="w-4 h-4 text-primary" />
-                      <span>30 minutos · Evaluación técnica</span>
+                      <span>45 minutos · Evaluación técnica</span>
                     </div>
 
                     <div className="flex items-start gap-2 text-xs text-muted-foreground">
@@ -149,6 +149,16 @@ export default function Booking() {
                           <span className="text-sm text-muted-foreground">{item}</span>
                         </div>
                       ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-start gap-2.5 px-4 py-3 bg-amber-500/5 border border-amber-500/20 rounded-sm">
+                    <Zap className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs font-semibold text-foreground mb-0.5">Cupos Limitados</p>
+                      <p className="text-xs text-muted-foreground leading-relaxed">
+                        Solo aceptamos 2 auditorías por semana. Cada diagnóstico requiere un análisis profundo de su operación, herramientas y procesos. Limitamos los cupos para poder entregar recomendaciones de alto valor y calidad.
+                      </p>
                     </div>
                   </div>
 

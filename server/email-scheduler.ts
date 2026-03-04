@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import { db } from "./db";
-import { sentEmails, emailTemplates, contacts, diagnostics } from "@shared/schema";
+import { sentEmails, emailTemplates, contacts, diagnostics, abandonedLeads } from "@shared/schema";
 import { eq, and, lte } from "drizzle-orm";
 import { generateEmailContent } from "./email-ai";
 import { sendEmail, isEmailConfigured } from "./email-sender";
@@ -98,6 +98,63 @@ async function processEmailQueue() {
   }
 }
 
+async function processAbandonedEmails() {
+  if (!db || !isEmailConfigured()) return;
+
+  try {
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+
+    // Find abandoned leads: email captured > 1 hour ago, not converted, email not sent
+    const abandoned = await db
+      .select()
+      .from(abandonedLeads)
+      .where(
+        and(
+          eq(abandonedLeads.converted, false),
+          eq(abandonedLeads.emailSent, false),
+          lte(abandonedLeads.capturedAt, oneHourAgo)
+        )
+      )
+      .limit(5);
+
+    if (abandoned.length === 0) return;
+
+    // Get the abandonment template
+    const [template] = await db
+      .select()
+      .from(emailTemplates)
+      .where(eq(emailTemplates.nombre, "abandono"));
+
+    if (!template) {
+      log("Template 'abandono' no encontrado — correr seed");
+      return;
+    }
+
+    log(`Procesando ${abandoned.length} email(s) de abandono`);
+
+    for (const lead of abandoned) {
+      try {
+        // Generate content with minimal context (we only have the email)
+        const minimalData = { email: lead.email } as any;
+        const { subject, body } = await generateEmailContent(template, minimalData);
+
+        await sendEmail(lead.email, subject, body);
+
+        await db
+          .update(abandonedLeads)
+          .set({ emailSent: true })
+          .where(eq(abandonedLeads.id, lead.id));
+
+        log(`Email de abandono enviado a ${lead.email}`);
+      } catch (err) {
+        log(`Error enviando email de abandono a ${lead.email}: ${err}`);
+      }
+    }
+  } catch (err) {
+    log(`Error en processAbandonedEmails: ${err}`);
+  }
+}
+
 export function startEmailScheduler() {
   if (!isEmailConfigured()) {
     log("⚠ Email system not configured (missing ANTHROPIC_API_KEY or RESEND_API_KEY)");
@@ -107,11 +164,13 @@ export function startEmailScheduler() {
   // Run every 15 minutes
   cron.schedule("*/15 * * * *", () => {
     processEmailQueue();
+    processAbandonedEmails();
   });
 
   // Also run once at startup (after 10 seconds to let DB connect)
   setTimeout(() => {
     processEmailQueue();
+    processAbandonedEmails();
   }, 10_000);
 
   log("Email scheduler iniciado (cada 15 min)");

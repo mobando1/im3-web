@@ -10,7 +10,7 @@ Datos: empresa={empresa}, industria={industria}, participante={participante}, fe
 Incluye:
 1. Agradecimiento por agendar
 2. Resumen breve de lo que analizaremos basado en su industria y objetivos
-3. Qué esperar de la sesión (30 min, evaluación técnica)
+3. Qué esperar de la sesión (45 min, evaluación técnica)
 4. Próximos pasos (recibirán un cuestionario previo)
 Tono: profesional pero cercano, genera confianza.`,
     sequenceOrder: 0,
@@ -38,11 +38,25 @@ Datos: empresa={empresa}, participante={participante}, fecha={fechaCita}, hora={
 Incluye:
 1. Recordatorio amigable de la sesión
 2. Qué preparar: tener a mano info sobre herramientas actuales y procesos clave
-3. Duración: 30 minutos
+3. Duración: 45 minutos
 4. Que pueden reagendar si lo necesitan contactando a info@im3systems.com
 Tono: breve, útil, no presiona.`,
     sequenceOrder: 2,
     delayDays: 4,
+  },
+  {
+    nombre: "abandono",
+    subjectPrompt: "Genera un subject corto y empático para alguien que empezó a agendar su diagnóstico tecnológico pero no terminó. Máximo 50 caracteres. Algo como '¿Todavía pensando?' o 'Tu diagnóstico está pendiente'.",
+    bodyPrompt: `Genera un email de rescate para alguien que dejó su email pero no completó el formulario de diagnóstico tecnológico de IM3 Systems.
+Incluye:
+1. Tono empático, sin presión — "sabemos que a veces hay interrupciones"
+2. Brevísimo recordatorio de lo que obtienen: diagnóstico personalizado de IA y automatización, gratuito, 45 minutos
+3. Un mini caso de éxito verosímil (ej: "Una empresa de logística redujo 35% sus tiempos de procesamiento después de nuestro diagnóstico")
+4. CTA claro: "Completar mi diagnóstico" con link a https://im3systems.com/booking
+5. Nota de escasez sutil: "Solo realizamos 2 auditorías por semana"
+Tono: cercano, sin vender demasiado, genera curiosidad.`,
+    sequenceOrder: 99,
+    delayDays: 0,
   },
 ];
 

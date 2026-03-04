@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { UseFormReturn } from "react-hook-form";
-import { CalendarDays, Clock, Check, ChevronLeft, ChevronRight, Mail } from "lucide-react";
+import { CalendarDays, Clock, Check, ChevronLeft, ChevronRight, Mail, Zap } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -17,17 +17,21 @@ interface StepProps {
   form: UseFormReturn<DiagnosticFormData>;
 }
 
-const BUSINESS_HOURS = { start: 9, end: 17 };
-const SLOT_DURATION = 30;
+const SESSION_MIN = 45;
+const BUFFER_MIN = 20;
 const WEEKDAYS = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sa", "Do"];
 const ease = [0.25, 0.46, 0.45, 0.94] as [number, number, number, number];
 
+// 1pm-5pm with 45 min sessions + 20 min buffer = 4 slots
 function generateTimeSlots(): string[] {
   const slots: string[] = [];
-  for (let hour = BUSINESS_HOURS.start; hour < BUSINESS_HOURS.end; hour++) {
-    for (let min = 0; min < 60; min += SLOT_DURATION) {
-      slots.push(`${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`);
-    }
+  let totalMin = 13 * 60; // start at 1:00 PM
+  const endMin = 17 * 60;  // end by 5:00 PM
+  while (totalMin + SESSION_MIN <= endMin) {
+    const h = Math.floor(totalMin / 60);
+    const m = totalMin % 60;
+    slots.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+    totalMin += SESSION_MIN + BUFFER_MIN;
   }
   return slots;
 }
@@ -40,6 +44,19 @@ export default function StepBooking({ form }: StepProps) {
 
   // Email is valid if it matches basic email pattern
   const emailValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email || "");
+
+  // Track email for abandonment detection
+  const trackedEmailRef = useRef<string>("");
+  useEffect(() => {
+    if (emailValid && email && email !== trackedEmailRef.current) {
+      trackedEmailRef.current = email;
+      fetch("/api/track-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      }).catch(() => {});
+    }
+  }, [emailValid, email]);
 
   const today = startOfDay(new Date());
   const maxDate = addDays(today, 90);
@@ -105,6 +122,14 @@ export default function StepBooking({ form }: StepProps) {
           className="max-w-md"
         />
         {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
+      </div>
+
+      {/* Scarcity badge */}
+      <div className="flex items-start gap-2.5 px-4 py-3 bg-amber-500/5 border border-amber-500/20 rounded-sm">
+        <Zap className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          <span className="font-semibold text-foreground">Disponibilidad limitada</span> — Solo realizamos 2 auditorías por semana para garantizar un análisis profundo y personalizado de cada empresa.
+        </p>
       </div>
 
       {/* Calendar — visible only when email is valid */}
@@ -247,7 +272,7 @@ export default function StepBooking({ form }: StepProps) {
                           )}
                           <span className="font-mono text-sm font-medium">{time}</span>
                           <span className={`text-[10px] ml-auto ${isSelected ? "text-primary-foreground/70" : "text-muted-foreground"}`}>
-                            30 min
+                            45 min
                           </span>
                         </motion.button>
                       );
@@ -281,7 +306,7 @@ export default function StepBooking({ form }: StepProps) {
               </p>
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="text-xs font-mono text-primary font-medium">{horaCita}</span>
-                <span className="text-[10px] text-muted-foreground">· 30 min · Sesión de diagnóstico</span>
+                <span className="text-[10px] text-muted-foreground">· 45 min · Sesión de diagnóstico</span>
               </div>
             </div>
           </motion.div>

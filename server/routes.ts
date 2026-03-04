@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads } from "@shared/schema";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive } from "./google-drive";
 import { isEmailConfigured } from "./email-sender";
@@ -156,6 +156,14 @@ export async function registerRoutes(
       })();
     }
 
+    // Mark abandoned lead as converted (non-blocking)
+    if (db && data.email) {
+      db.update(abandonedLeads)
+        .set({ converted: true })
+        .where(eq(abandonedLeads.email, data.email))
+        .catch((err: unknown) => log(`Error marking lead converted: ${err}`));
+    }
+
     res.json({ success: true, id: insertedId });
   });
 
@@ -191,6 +199,40 @@ export async function registerRoutes(
     }
 
     res.json({ received: true });
+  });
+
+  // Track email for abandonment detection
+  app.post("/api/track-email", async (req, res) => {
+    const { email } = req.body;
+
+    if (!db || !email) {
+      res.json({ tracked: true });
+      return;
+    }
+
+    try {
+      // Upsert: insert or update capturedAt if email already exists
+      const existing = await db
+        .select()
+        .from(abandonedLeads)
+        .where(eq(abandonedLeads.email, email))
+        .limit(1);
+
+      if (existing.length > 0) {
+        await db
+          .update(abandonedLeads)
+          .set({ capturedAt: new Date(), converted: false, emailSent: false })
+          .where(eq(abandonedLeads.email, email));
+      } else {
+        await db.insert(abandonedLeads).values({ email });
+      }
+
+      log(`Email tracked: ${email}`);
+    } catch (err) {
+      log(`Error tracking email: ${err}`);
+    }
+
+    res.json({ tracked: true });
   });
 
   return httpServer;

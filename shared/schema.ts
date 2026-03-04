@@ -116,3 +116,14 @@ export const sentEmails = pgTable("sent_emails", {
 
 export type SentEmail = typeof sentEmails.$inferSelect;
 export type InsertSentEmail = typeof sentEmails.$inferInsert;
+
+// Abandoned leads (email captured but form not completed)
+export const abandonedLeads = pgTable("abandoned_leads", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull(),
+  capturedAt: timestamp("captured_at").defaultNow().notNull(),
+  converted: boolean("converted").default(false).notNull(),
+  emailSent: boolean("email_sent").default(false).notNull(),
+});
+
+export type AbandonedLead = typeof abandonedLeads.$inferSelect;
