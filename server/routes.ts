@@ -236,6 +236,17 @@ export async function registerRoutes(
     res.json({ tracked: true });
   });
 
+  // Debug endpoint (temporary)
+  app.get("/api/debug-env", (_req, res) => {
+    const ak = process.env.ANTHROPIC_API_KEY || "";
+    const rk = process.env.RESEND_API_KEY || "";
+    res.json({
+      anthropic: ak ? `${ak.slice(0, 10)}...${ak.slice(-4)} (${ak.length} chars)` : "NOT SET",
+      resend: rk ? `${rk.slice(0, 6)}...${rk.slice(-4)} (${rk.length} chars)` : "NOT SET",
+      emailConfigured: !!(ak && rk),
+    });
+  });
+
   // Newsletter subscription
   app.post("/api/newsletter/subscribe", async (req, res) => {
     const { email } = req.body;
