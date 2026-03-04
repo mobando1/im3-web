@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { UseFormReturn } from "react-hook-form";
-import { CalendarDays, Clock, Check, ChevronLeft, ChevronRight, Mail, Zap } from "lucide-react";
+import { CalendarDays, Clock, Check, ChevronLeft, ChevronRight, Mail } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -17,24 +17,9 @@ interface StepProps {
   form: UseFormReturn<DiagnosticFormData>;
 }
 
-const SESSION_MIN = 45;
-const BUFFER_MIN = 20;
+const TIME_SLOTS = ["13:00", "14:00", "15:00", "16:00", "17:00"];
 const WEEKDAYS = ["Lu", "Ma", "Mi", "Ju", "Vi", "Sa", "Do"];
 const ease = [0.25, 0.46, 0.45, 0.94] as [number, number, number, number];
-
-// 1pm-5pm with 45 min sessions + 20 min buffer = 4 slots
-function generateTimeSlots(): string[] {
-  const slots: string[] = [];
-  let totalMin = 13 * 60; // start at 1:00 PM
-  const endMin = 17 * 60;  // end by 5:00 PM
-  while (totalMin + SESSION_MIN <= endMin) {
-    const h = Math.floor(totalMin / 60);
-    const m = totalMin % 60;
-    slots.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
-    totalMin += SESSION_MIN + BUFFER_MIN;
-  }
-  return slots;
-}
 
 export default function StepBooking({ form }: StepProps) {
   const { register, setValue, watch, formState: { errors } } = form;
@@ -62,7 +47,7 @@ export default function StepBooking({ form }: StepProps) {
   const maxDate = addDays(today, 90);
   const [viewMonth, setViewMonth] = useState(startOfMonth(today));
 
-  const timeSlots = useMemo(generateTimeSlots, []);
+  const timeSlots = TIME_SLOTS;
 
   const selectedDate = fechaCita ? new Date(fechaCita + "T12:00:00") : undefined;
 
@@ -122,14 +107,6 @@ export default function StepBooking({ form }: StepProps) {
           className="max-w-md"
         />
         {errors.email && <p className="text-xs text-destructive">{errors.email.message}</p>}
-      </div>
-
-      {/* Scarcity badge */}
-      <div className="flex items-start gap-2.5 px-4 py-3 bg-amber-500/5 border border-amber-500/20 rounded-sm">
-        <Zap className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          <span className="font-semibold text-foreground">Disponibilidad limitada</span> — Solo realizamos 2 auditorías por semana para garantizar un análisis profundo y personalizado de cada empresa.
-        </p>
       </div>
 
       {/* Calendar — visible only when email is valid */}

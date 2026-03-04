@@ -152,14 +152,11 @@ export default function Booking() {
                     </div>
                   </div>
 
-                  <div className="flex items-start gap-2.5 px-4 py-3 bg-amber-500/5 border border-amber-500/20 rounded-sm">
-                    <Zap className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="text-xs font-semibold text-foreground mb-0.5">Cupos Limitados</p>
-                      <p className="text-xs text-muted-foreground leading-relaxed">
-                        Solo aceptamos 2 auditorías por semana. Cada diagnóstico requiere un análisis profundo de su operación, herramientas y procesos. Limitamos los cupos para poder entregar recomendaciones de alto valor y calidad.
-                      </p>
-                    </div>
+                  <div className="flex items-start gap-2.5 px-4 py-3 bg-primary/5 border border-primary/15 rounded-sm">
+                    <Zap className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Cada diagnóstico incluye investigación previa de su industria y preparación personalizada. Por eso trabajamos con una agenda reducida para mantener la calidad del análisis.
+                    </p>
                   </div>
 
                   <div className="flex items-start gap-2.5 px-4 py-3 bg-muted/30 border border-border rounded-sm">

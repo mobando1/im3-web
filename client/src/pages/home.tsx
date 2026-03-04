@@ -380,9 +380,6 @@ const Hero = () => {
                   {t.hero.secondary}
                 </button>
               </div>
-              <p className="text-xs text-white/50 mt-3 flex items-center gap-1.5">
-                <Zap className="w-3 h-3" /> Cupos limitados: 2 auditorías semanales
-              </p>
             </Reveal>
 
             <Reveal delay={400}>
@@ -1064,9 +1061,6 @@ const Contact = () => {
               {t.contact.backToTop} <ArrowUpRight className="w-5 h-5" />
             </button>
           </div>
-          <p className="text-xs text-muted-foreground mt-4 flex items-center justify-center gap-1.5">
-            <Zap className="w-3 h-3 text-amber-500" /> Cupos limitados: solo 2 auditorías por semana
-          </p>
         </Reveal>
       </div>
     </section>
