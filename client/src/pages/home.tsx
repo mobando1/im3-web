@@ -26,7 +26,6 @@ import {
   Gauge,
   Link2,
   Calendar,
-  Mail,
   Linkedin,
   ChevronsRight,
   Sun,
@@ -1047,12 +1046,9 @@ const NewsletterSection = () => {
   return (
     <section className="py-6 px-3 sm:px-4 md:px-8">
       <Reveal>
-        <div className="max-w-2xl mx-auto bg-[hsl(var(--surface-raised))] rounded-2xl p-6 sm:p-8 border border-[hsl(var(--divider))] text-center">
-          <div className="w-10 h-10 rounded-xl bg-[hsl(var(--teal))]/10 flex items-center justify-center mx-auto mb-4">
-            <Mail className="w-5 h-5 text-[hsl(var(--teal))]" />
-          </div>
-          <h3 className="text-lg font-bold text-[hsl(var(--text-primary))] mb-2">{t.newsletter.sectionTitle}</h3>
-          <p className="text-sm text-muted-foreground mb-5">{t.newsletter.sectionDescription}</p>
+        <div className="max-w-2xl mx-auto rounded-2xl p-6 sm:p-8 text-center">
+          <h3 className="text-lg font-display font-bold text-[hsl(var(--text-primary))] mb-2">{t.newsletter.sectionTitle}</h3>
+          <p className="text-sm text-muted-foreground mb-5 max-w-md mx-auto">{t.newsletter.sectionDescription}</p>
 
           {!done ? (
             <form onSubmit={handleSubmit} className="flex gap-2 max-w-sm mx-auto">
@@ -1062,15 +1058,15 @@ const NewsletterSection = () => {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder={t.newsletter.placeholder}
                 required
-                className="flex-1 px-4 py-2.5 rounded-xl border border-[hsl(var(--divider))] bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--teal))]/40 focus:border-[hsl(var(--teal))]"
+                className="flex-1 px-4 py-2.5 rounded-lg border border-[hsl(var(--divider))] bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--teal))]/40 focus:border-[hsl(var(--teal))]"
               />
               <button
                 type="submit"
                 disabled={loading}
-                className="px-5 py-2.5 rounded-xl bg-[hsl(var(--teal))] text-white font-semibold text-sm hover:bg-[hsl(var(--teal))]/90 transition-all disabled:opacity-50 flex items-center gap-2 shrink-0"
+                className="px-5 py-2.5 rounded-lg bg-[hsl(var(--teal))] text-white font-semibold text-sm hover:bg-[hsl(var(--teal))]/90 transition-all disabled:opacity-50 flex items-center gap-1.5 shrink-0"
               >
                 {t.newsletter.subscribe}
-                <ArrowRight className="w-4 h-4" />
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </form>
           ) : (

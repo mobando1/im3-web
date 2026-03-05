@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Mail, ArrowRight, Sparkles } from "lucide-react";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Mail, ArrowRight } from "lucide-react";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
 
@@ -55,20 +55,17 @@ export function NewsletterPopup() {
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) dismiss(); }}>
-      <DialogContent className="sm:max-w-md rounded-2xl border-[hsl(var(--divider))] bg-[hsl(var(--surface))]">
-        <DialogHeader className="text-center sm:text-center">
-          <div className="mx-auto w-12 h-12 rounded-xl bg-[hsl(var(--teal))]/10 flex items-center justify-center mb-2">
-            <Sparkles className="w-6 h-6 text-[hsl(var(--teal))]" />
-          </div>
-          <DialogTitle className="text-xl font-display font-bold text-[hsl(var(--text-primary))]">
+      <DialogContent className="sm:max-w-sm rounded-2xl border-[hsl(var(--divider))] bg-[hsl(var(--surface))] p-5">
+        <div className="space-y-3">
+          <p className="text-lg font-display font-bold text-[hsl(var(--text-primary))] leading-snug">
             {t.newsletter.popupTitle}
-          </DialogTitle>
-          <DialogDescription className="text-sm text-muted-foreground mt-2">
+          </p>
+          <p className="text-sm text-muted-foreground leading-relaxed">
             {t.newsletter.popupDescription}
-          </DialogDescription>
-        </DialogHeader>
+          </p>
+        </div>
 
-        <form onSubmit={handleSubmit} className="flex gap-2 mt-2">
+        <form onSubmit={handleSubmit} className="flex gap-2 mt-3">
           <div className="relative flex-1">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
@@ -77,16 +74,16 @@ export function NewsletterPopup() {
               onChange={(e) => setEmail(e.target.value)}
               placeholder={t.newsletter.placeholder}
               required
-              className="w-full pl-10 pr-4 py-3 rounded-xl border border-[hsl(var(--divider))] bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--teal))]/40 focus:border-[hsl(var(--teal))]"
+              className="w-full pl-10 pr-4 py-2.5 rounded-lg border border-[hsl(var(--divider))] bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--teal))]/40 focus:border-[hsl(var(--teal))]"
             />
           </div>
           <button
             type="submit"
             disabled={loading}
-            className="px-5 py-3 rounded-xl bg-[hsl(var(--teal))] text-white font-semibold text-sm hover:bg-[hsl(var(--teal))]/90 transition-all disabled:opacity-50 flex items-center gap-2 shrink-0"
+            className="px-4 py-2.5 rounded-lg bg-[hsl(var(--teal))] text-white font-semibold text-sm hover:bg-[hsl(var(--teal))]/90 transition-all disabled:opacity-50 flex items-center gap-1.5 shrink-0"
           >
             {t.newsletter.subscribe}
-            <ArrowRight className="w-4 h-4" />
+            <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </form>
 
