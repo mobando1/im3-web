@@ -352,7 +352,35 @@ async function createDiagnosticSheet(
 }
 
 /**
- * Main entry: create folder + sheet for a diagnostic submission.
+ * Upload a JSON file with raw diagnostic data to the client folder.
+ * This allows the Audit Generator to read data programmatically.
+ */
+async function uploadJsonFile(
+  folderId: string,
+  data: DiagnosticData
+): Promise<void> {
+  const auth = getAuth();
+  if (!auth) return;
+
+  const drive = google.drive({ version: "v3", auth });
+
+  const jsonContent = JSON.stringify(data, null, 2);
+
+  await drive.files.create({
+    requestBody: {
+      name: "diagnostico.json",
+      mimeType: "application/json",
+      parents: [folderId],
+    },
+    media: {
+      mimeType: "application/json",
+      body: jsonContent,
+    },
+  });
+}
+
+/**
+ * Main entry: create folder + sheet + JSON for a diagnostic submission.
  * Returns the Google Drive folder URL and sheet URL.
  */
 export async function createDiagnosticInDrive(
@@ -360,6 +388,7 @@ export async function createDiagnosticInDrive(
 ): Promise<{ folderUrl: string; sheetUrl: string }> {
   const folderId = await createClientFolder(data.empresa, data.fechaCita);
   const sheetUrl = await createDiagnosticSheet(folderId, data);
+  await uploadJsonFile(folderId, data);
   const folderUrl = `https://drive.google.com/drive/folders/${folderId}`;
 
   log(`Google Drive creado: ${data.empresa} → ${folderUrl}`);
