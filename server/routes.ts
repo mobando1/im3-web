@@ -236,23 +236,6 @@ export async function registerRoutes(
     res.json({ tracked: true });
   });
 
-  // Temporary debug endpoint
-  app.get("/api/debug-env", (_req, res) => {
-    const gsa = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || "";
-    const gpk = process.env.GOOGLE_PRIVATE_KEY || "";
-    const gdf = process.env.GOOGLE_DRIVE_FOLDER_ID || "";
-    const rk = process.env.RESEND_API_KEY || "";
-    const ak = process.env.ANTHROPIC_API_KEY || "";
-    res.json({
-      google_email: gsa ? `${gsa.slice(0, 15)}... (${gsa.length} chars)` : "NOT SET",
-      google_key: gpk ? `${gpk.slice(0, 20)}... (${gpk.length} chars)` : "NOT SET",
-      google_folder: gdf || "NOT SET",
-      resend: rk ? `${rk.slice(0, 6)}...${rk.slice(-4)} (${rk.length} chars)` : "NOT SET",
-      anthropic: ak ? `${ak.slice(0, 10)}...${ak.slice(-4)} (${ak.length} chars)` : "NOT SET",
-      googleDriveConfigured: !!(gsa && gpk && gdf),
-    });
-  });
-
   // Newsletter subscription
   app.post("/api/newsletter/subscribe", async (req, res) => {
     const { email } = req.body;
