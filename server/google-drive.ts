@@ -1,4 +1,5 @@
 import { google } from "googleapis";
+import { Readable } from "stream";
 import { log } from "./index";
 
 const SCOPES = [
@@ -105,32 +106,47 @@ async function createDiagnosticSheet(
   const sheets = google.sheets({ version: "v4", auth });
   const drive = google.drive({ version: "v3", auth });
 
-  // Create spreadsheet
-  const spreadsheet = await sheets.spreadsheets.create({
+  // Create spreadsheet directly in the target folder using Drive API
+  // (avoids create-in-root + move pattern that fails with drive.file scope)
+  log(`Creating spreadsheet in folder ${folderId}...`);
+  const file = await drive.files.create({
     requestBody: {
-      properties: {
-        title: `Diagnóstico — ${data.empresa}`,
-      },
-      sheets: [
-        { properties: { title: "Diagnóstico", index: 0 } },
-        { properties: { title: "Notas del Equipo", index: 1 } },
-        { properties: { title: "Recomendaciones", index: 2 } },
+      name: `Diagnóstico — ${data.empresa}`,
+      mimeType: "application/vnd.google-apps.spreadsheet",
+      parents: [folderId],
+    },
+    fields: "id",
+  });
+
+  const spreadsheetId = file.data.id!;
+  log(`Spreadsheet created: ${spreadsheetId}`);
+
+  // Rename default "Sheet1" to "Diagnóstico" and add extra sheets
+  const sheetMeta = await sheets.spreadsheets.get({
+    spreadsheetId,
+    fields: "sheets.properties",
+  });
+  const defaultSheetId = sheetMeta.data.sheets![0].properties!.sheetId!;
+
+  const setupRes = await sheets.spreadsheets.batchUpdate({
+    spreadsheetId,
+    requestBody: {
+      requests: [
+        {
+          updateSheetProperties: {
+            properties: { sheetId: defaultSheetId, title: "Diagnóstico" },
+            fields: "title",
+          },
+        },
+        { addSheet: { properties: { title: "Notas del Equipo" } } },
+        { addSheet: { properties: { title: "Recomendaciones" } } },
       ],
     },
   });
 
-  const spreadsheetId = spreadsheet.data.spreadsheetId!;
-  const diagnosticSheetId = spreadsheet.data.sheets![0].properties!.sheetId!;
-  const notesSheetId = spreadsheet.data.sheets![1].properties!.sheetId!;
-  const recsSheetId = spreadsheet.data.sheets![2].properties!.sheetId!;
-
-  // Move to client folder
-  await drive.files.update({
-    fileId: spreadsheetId,
-    addParents: folderId,
-    removeParents: "root",
-    fields: "id, parents",
-  });
+  const diagnosticSheetId = defaultSheetId;
+  const notesSheetId = setupRes.data.replies![1].addSheet!.properties!.sheetId!;
+  const recsSheetId = setupRes.data.replies![2].addSheet!.properties!.sheetId!;
 
   // Build diagnostic data rows
   const rows: (string | string[])[][] = [
@@ -374,7 +390,7 @@ async function uploadJsonFile(
     },
     media: {
       mimeType: "application/json",
-      body: jsonContent,
+      body: Readable.from([jsonContent]),
     },
   });
 }
@@ -386,12 +402,19 @@ async function uploadJsonFile(
 export async function createDiagnosticInDrive(
   data: DiagnosticData
 ): Promise<{ folderUrl: string; sheetUrl: string }> {
-  const folderId = await createClientFolder(data.empresa, data.fechaCita);
-  const sheetUrl = await createDiagnosticSheet(folderId, data);
-  await uploadJsonFile(folderId, data);
-  const folderUrl = `https://drive.google.com/drive/folders/${folderId}`;
+  log(`[Drive] Iniciando para ${data.empresa}...`);
 
-  log(`Google Drive creado: ${data.empresa} → ${folderUrl}`);
+  const folderId = await createClientFolder(data.empresa, data.fechaCita);
+  log(`[Drive] Carpeta creada: ${folderId}`);
+
+  const sheetUrl = await createDiagnosticSheet(folderId, data);
+  log(`[Drive] Spreadsheet creado: ${sheetUrl}`);
+
+  await uploadJsonFile(folderId, data);
+  log(`[Drive] JSON subido`);
+
+  const folderUrl = `https://drive.google.com/drive/folders/${folderId}`;
+  log(`[Drive] Completo: ${data.empresa} → ${folderUrl}`);
 
   return { folderUrl, sheetUrl };
 }
