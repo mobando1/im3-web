@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, isNull } from "drizzle-orm";
 import { db } from "./db";
 import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers } from "@shared/schema";
 import { log } from "./index";
@@ -300,6 +300,77 @@ export async function registerRoutes(
     } catch (err) {
       log(`Error newsletter subscribe: ${err}`);
       res.status(500).json({ error: "Error interno" });
+    }
+  });
+
+  // Regenerate Google Drive files for diagnostics that failed
+  app.post("/api/admin/regenerate-drive", async (req, res) => {
+    if (!db || !isGoogleDriveConfigured()) {
+      res.status(400).json({ error: "DB or Google Drive not configured" });
+      return;
+    }
+
+    try {
+      // Find all diagnostics without a Drive URL
+      const failed = await db
+        .select()
+        .from(diagnostics)
+        .where(isNull(diagnostics.googleDriveUrl));
+
+      if (failed.length === 0) {
+        res.json({ message: "No hay diagnósticos pendientes", regenerated: 0 });
+        return;
+      }
+
+      const results: { id: string; empresa: string; status: string; folderUrl?: string; error?: string }[] = [];
+
+      for (const diag of failed) {
+        try {
+          const data = {
+            fechaCita: diag.fechaCita,
+            horaCita: diag.horaCita,
+            empresa: diag.empresa,
+            industria: diag.industria,
+            anosOperacion: diag.anosOperacion,
+            empleados: diag.empleados,
+            ciudades: diag.ciudades,
+            participante: diag.participante,
+            objetivos: diag.objetivos as string[],
+            resultadoEsperado: diag.resultadoEsperado,
+            productos: diag.productos,
+            volumenMensual: diag.volumenMensual,
+            clientePrincipal: diag.clientePrincipal,
+            clientePrincipalOtro: diag.clientePrincipalOtro || undefined,
+            canalesAdquisicion: diag.canalesAdquisicion as string[],
+            canalAdquisicionOtro: diag.canalAdquisicionOtro || undefined,
+            canalPrincipal: diag.canalPrincipal,
+            herramientas: diag.herramientas,
+            conectadas: diag.conectadas,
+            conectadasDetalle: diag.conectadasDetalle || undefined,
+            nivelTech: diag.nivelTech,
+            usaIA: diag.usaIA,
+            usaIAParaQue: diag.usaIAParaQue || undefined,
+            comodidadTech: diag.comodidadTech,
+            familiaridad: diag.familiaridad as any,
+            areaPrioridad: diag.areaPrioridad as string[],
+            presupuesto: diag.presupuesto,
+          };
+
+          const { folderUrl } = await createDiagnosticInDrive(data);
+
+          await db.update(diagnostics)
+            .set({ googleDriveUrl: folderUrl })
+            .where(eq(diagnostics.id, diag.id));
+
+          results.push({ id: diag.id, empresa: diag.empresa, status: "ok", folderUrl });
+        } catch (err: any) {
+          results.push({ id: diag.id, empresa: diag.empresa, status: "error", error: err?.message || String(err) });
+        }
+      }
+
+      res.json({ regenerated: results.filter(r => r.status === "ok").length, total: failed.length, results });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || String(err) });
     }
   });
 
