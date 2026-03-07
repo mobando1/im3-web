@@ -70,21 +70,21 @@ export async function registerRoutes(
       console.log("Datos del diagnóstico (sin DB):", JSON.stringify(data, null, 2));
     }
 
-    // Create Google Drive folder + Sheet (non-blocking)
+    // Create Google Drive folder + Sheet
+    let driveResult: any = null;
     if (isGoogleDriveConfigured()) {
-      createDiagnosticInDrive(data)
-        .then(({ folderUrl }) => {
-          log(`Google Drive creado: ${data.empresa}`);
-          if (db && insertedId) {
-            db.update(diagnostics)
-              .set({ googleDriveUrl: folderUrl })
-              .where(eq(diagnostics.id, insertedId))
-              .catch((err: unknown) => log(`Error updating Drive URL: ${err}`));
-          }
-        })
-        .catch((err: unknown) => {
-          log(`Error creando Google Drive: ${err}`);
-        });
+      try {
+        const { folderUrl } = await createDiagnosticInDrive(data);
+        driveResult = { ok: true, folderUrl };
+        if (db && insertedId) {
+          await db.update(diagnostics)
+            .set({ googleDriveUrl: folderUrl })
+            .where(eq(diagnostics.id, insertedId));
+        }
+      } catch (err: any) {
+        driveResult = { error: err?.message || String(err) };
+        log(`Error creando Google Drive: ${err}`);
+      }
     }
 
     // Send contact data to GHL webhook (non-blocking)
@@ -165,7 +165,7 @@ export async function registerRoutes(
         .catch((err: unknown) => log(`Error marking lead converted: ${err}`));
     }
 
-    res.json({ success: true, id: insertedId });
+    res.json({ success: true, id: insertedId, driveResult });
   });
 
   // Resend webhook for tracking (opens, clicks, bounces)
