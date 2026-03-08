@@ -71,6 +71,27 @@ export async function cleanupServiceAccountDrive(): Promise<{ deleted: number; f
   };
 }
 
+export async function getDriveDebugInfo() {
+  const auth = getAuth();
+  if (!auth) return { error: "Google auth not configured" };
+
+  const drive = google.drive({ version: "v3", auth });
+  const about = await drive.about.get({ fields: "user,storageQuota" });
+
+  return {
+    impersonateVar: process.env.GOOGLE_DRIVE_IMPERSONATE || "(not set)",
+    serviceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    authenticatedAs: about.data.user?.emailAddress,
+    displayName: about.data.user?.displayName,
+    storage: {
+      limit: about.data.storageQuota?.limit,
+      usage: about.data.storageQuota?.usage,
+      usageInDrive: about.data.storageQuota?.usageInDrive,
+      usageInDriveTrash: about.data.storageQuota?.usageInDriveTrash,
+    },
+  };
+}
+
 export function isGoogleDriveConfigured(): boolean {
   return !!(
     process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL &&

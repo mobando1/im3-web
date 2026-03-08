@@ -4,7 +4,7 @@ import { eq, asc, isNull } from "drizzle-orm";
 import { db } from "./db";
 import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers } from "@shared/schema";
 import { log } from "./index";
-import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
+import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive, getDriveDebugInfo } from "./google-drive";
 import { isEmailConfigured, sendEmail } from "./email-sender";
 import { generateEmailContent } from "./email-ai";
 
@@ -379,6 +379,16 @@ export async function registerRoutes(
     try {
       const result = await cleanupServiceAccountDrive();
       res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || String(err) });
+    }
+  });
+
+  // Debug: check Drive auth identity and storage
+  app.get("/api/admin/debug-drive", async (_req, res) => {
+    try {
+      const info = await getDriveDebugInfo();
+      res.json(info);
     } catch (err: any) {
       res.status(500).json({ error: err?.message || String(err) });
     }
