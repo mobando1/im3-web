@@ -4,7 +4,7 @@ import { eq, asc, isNull } from "drizzle-orm";
 import { db } from "./db";
 import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers } from "@shared/schema";
 import { log } from "./index";
-import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive, getDriveDebugInfo } from "./google-drive";
+import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
 import { isEmailConfigured, sendEmail } from "./email-sender";
 import { generateEmailContent } from "./email-ai";
 
@@ -70,21 +70,20 @@ export async function registerRoutes(
       console.log("Datos del diagnóstico (sin DB):", JSON.stringify(data, null, 2));
     }
 
-    // Create Google Drive folder + Sheet
-    let driveResult: any = null;
+    // Create Google Drive folder + Sheet (non-blocking)
     if (isGoogleDriveConfigured()) {
-      try {
-        const { folderUrl } = await createDiagnosticInDrive(data);
-        driveResult = { ok: true, folderUrl };
-        if (db && insertedId) {
-          await db.update(diagnostics)
-            .set({ googleDriveUrl: folderUrl })
-            .where(eq(diagnostics.id, insertedId));
-        }
-      } catch (err: any) {
-        driveResult = { error: err?.message || String(err) };
-        log(`Error creando Google Drive: ${err}`);
-      }
+      createDiagnosticInDrive(data)
+        .then(({ folderUrl }) => {
+          if (db && insertedId) {
+            db.update(diagnostics)
+              .set({ googleDriveUrl: folderUrl })
+              .where(eq(diagnostics.id, insertedId))
+              .catch((err: unknown) => log(`Error updating Drive URL: ${err}`));
+          }
+        })
+        .catch((err: unknown) => {
+          log(`Error creando Google Drive: ${err}`);
+        });
     }
 
     // Send contact data to GHL webhook (non-blocking)
@@ -165,7 +164,7 @@ export async function registerRoutes(
         .catch((err: unknown) => log(`Error marking lead converted: ${err}`));
     }
 
-    res.json({ success: true, id: insertedId, driveResult });
+    res.json({ success: true, id: insertedId });
   });
 
   // Resend webhook for tracking (opens, clicks, bounces)
@@ -379,16 +378,6 @@ export async function registerRoutes(
     try {
       const result = await cleanupServiceAccountDrive();
       res.json(result);
-    } catch (err: any) {
-      res.status(500).json({ error: err?.message || String(err) });
-    }
-  });
-
-  // Debug: check Drive auth identity and storage
-  app.get("/api/admin/debug-drive", async (_req, res) => {
-    try {
-      const info = await getDriveDebugInfo();
-      res.json(info);
     } catch (err: any) {
       res.status(500).json({ error: err?.message || String(err) });
     }
