@@ -17,6 +17,7 @@ function getAuth() {
     email,
     key: key.replace(/\\n/g, "\n"),
     scopes: SCOPES,
+    subject: process.env.GOOGLE_DRIVE_IMPERSONATE || undefined,
   });
 }
 
