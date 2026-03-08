@@ -4,7 +4,7 @@ import { eq, asc, isNull } from "drizzle-orm";
 import { db } from "./db";
 import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers } from "@shared/schema";
 import { log } from "./index";
-import { isGoogleDriveConfigured, createDiagnosticInDrive } from "./google-drive";
+import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
 import { isEmailConfigured, sendEmail } from "./email-sender";
 import { generateEmailContent } from "./email-ai";
 
@@ -369,6 +369,16 @@ export async function registerRoutes(
       }
 
       res.json({ regenerated: results.filter(r => r.status === "ok").length, total: failed.length, results });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || String(err) });
+    }
+  });
+
+  // Cleanup service account Drive storage (empty trash + delete empty folders)
+  app.post("/api/admin/cleanup-drive", async (req, res) => {
+    try {
+      const result = await cleanupServiceAccountDrive();
+      res.json(result);
     } catch (err: any) {
       res.status(500).json({ error: err?.message || String(err) });
     }

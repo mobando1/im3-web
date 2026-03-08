@@ -20,6 +20,56 @@ function getAuth() {
   });
 }
 
+/**
+ * List all files owned by the service account and optionally empty trash.
+ */
+export async function cleanupServiceAccountDrive(): Promise<{ deleted: number; files: string[] }> {
+  const auth = getAuth();
+  if (!auth) throw new Error("Google auth not configured");
+
+  const drive = google.drive({ version: "v3", auth });
+
+  // Empty trash first
+  try {
+    await drive.files.emptyTrash();
+    log("[Drive Cleanup] Trash emptied");
+  } catch (err: any) {
+    log(`[Drive Cleanup] Trash empty failed: ${err?.message}`);
+  }
+
+  // List all files owned by the service account
+  const res = await drive.files.list({
+    q: `'me' in owners`,
+    fields: "files(id, name, mimeType, size, trashed)",
+    pageSize: 100,
+  });
+
+  const files = res.data.files || [];
+  const deleted: string[] = [];
+
+  // Delete empty folders (no children)
+  for (const file of files) {
+    if (file.mimeType === "application/vnd.google-apps.folder") {
+      const children = await drive.files.list({
+        q: `'${file.id}' in parents and trashed = false`,
+        fields: "files(id)",
+        pageSize: 1,
+      });
+
+      if (!children.data.files || children.data.files.length === 0) {
+        await drive.files.delete({ fileId: file.id! });
+        deleted.push(file.name || file.id!);
+        log(`[Drive Cleanup] Deleted empty folder: ${file.name}`);
+      }
+    }
+  }
+
+  return {
+    deleted: deleted.length,
+    files: files.map(f => `${f.name} (${f.mimeType}, trashed: ${f.trashed})`),
+  };
+}
+
 export function isGoogleDriveConfigured(): boolean {
   return !!(
     process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL &&
