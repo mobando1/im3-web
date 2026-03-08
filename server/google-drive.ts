@@ -464,6 +464,13 @@ export async function createDiagnosticInDrive(
   await uploadJsonFile(folderId, data);
   log(`[Drive] JSON subido`);
 
+  // Notify Audit Generator to import new diagnostic
+  if (process.env.AUDIT_GENERATOR_URL) {
+    fetch(`${process.env.AUDIT_GENERATOR_URL}/api/drive-sync`, {
+      method: 'POST',
+    }).catch(err => log(`[Drive] Webhook al Audit Generator falló: ${(err as Error).message}`));
+  }
+
   const folderUrl = `https://drive.google.com/drive/folders/${folderId}`;
   log(`[Drive] Completo: ${data.empresa} → ${folderUrl}`);
 

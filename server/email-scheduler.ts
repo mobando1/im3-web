@@ -2,9 +2,11 @@ import cron from "node-cron";
 import { db } from "./db";
 import { sentEmails, emailTemplates, contacts, diagnostics, abandonedLeads } from "@shared/schema";
 import { eq, and, lte } from "drizzle-orm";
-import { generateEmailContent } from "./email-ai";
+import { generateEmailContent, buildMicroReminderEmail } from "./email-ai";
 import { sendEmail, isEmailConfigured } from "./email-sender";
 import { log } from "./index";
+
+const MAX_RETRIES = 3;
 
 async function processEmailQueue() {
   if (!db || !isEmailConfigured()) return;
@@ -30,17 +32,6 @@ async function processEmailQueue() {
 
     for (const email of pendingEmails) {
       try {
-        // Get template
-        const [template] = await db
-          .select()
-          .from(emailTemplates)
-          .where(eq(emailTemplates.id, email.templateId));
-
-        if (!template) {
-          log(`Template ${email.templateId} no encontrado, saltando`);
-          continue;
-        }
-
         // Get contact
         const [contact] = await db
           .select()
@@ -48,7 +39,36 @@ async function processEmailQueue() {
           .where(eq(contacts.id, email.contactId));
 
         if (!contact) {
-          log(`Contacto ${email.contactId} no encontrado, saltando`);
+          log(`Contacto ${email.contactId} no encontrado — marcando como failed`);
+          await db
+            .update(sentEmails)
+            .set({ status: "failed" })
+            .where(eq(sentEmails.id, email.id));
+          continue;
+        }
+
+        // Check opt-out
+        if (contact.optedOut) {
+          log(`Contacto ${contact.email} opted out — cancelando email`);
+          await db
+            .update(sentEmails)
+            .set({ status: "failed" })
+            .where(eq(sentEmails.id, email.id));
+          continue;
+        }
+
+        // Get template
+        const [template] = await db
+          .select()
+          .from(emailTemplates)
+          .where(eq(emailTemplates.id, email.templateId));
+
+        if (!template) {
+          log(`Template ${email.templateId} no encontrado — marcando como failed`);
+          await db
+            .update(sentEmails)
+            .set({ status: "failed" })
+            .where(eq(sentEmails.id, email.id));
           continue;
         }
 
@@ -58,18 +78,34 @@ async function processEmailQueue() {
           .from(diagnostics)
           .where(eq(diagnostics.id, contact.diagnosticId));
 
-        if (!diagnostic) {
-          log(`Diagnóstico ${contact.diagnosticId} no encontrado, saltando`);
-          continue;
-        }
+        let subject: string;
+        let body: string;
 
-        // Generate content with AI
-        const { subject, body } = await generateEmailContent(template, diagnostic);
+        // E5 micro_recordatorio: use fixed template (no AI)
+        if (template.nombre === "micro_recordatorio") {
+          const result = buildMicroReminderEmail(
+            diagnostic?.participante || contact.nombre,
+            diagnostic?.horaCita || "",
+            diagnostic?.meetLink || null,
+            contact.id
+          );
+          subject = result.subject;
+          body = result.body;
+        } else {
+          // Generate content with AI
+          const result = await generateEmailContent(
+            template,
+            diagnostic || null,
+            contact.id
+          );
+          subject = result.subject;
+          body = result.body;
+        }
 
         // Send email
         const result = await sendEmail(contact.email, subject, body);
 
-        // Update record
+        // Update record — success
         await db
           .update(sentEmails)
           .set({
@@ -88,13 +124,34 @@ async function processEmailQueue() {
             .set({ status: "contacted" })
             .where(eq(contacts.id, contact.id));
         }
-      } catch (err) {
-        log(`Error procesando email ${email.id}: ${err}`);
-        // Don't mark as failed — will retry next cycle
+
+        log(`Email enviado: "${subject}" → ${contact.email}`);
+      } catch (err: any) {
+        const newRetry = (email.retryCount || 0) + 1;
+        const isFinal = newRetry >= MAX_RETRIES;
+
+        log(
+          `Error email ${email.id} (intento ${newRetry}/${MAX_RETRIES}): ${err?.message || err}`
+        );
+        if (err?.stack) {
+          log(`Stack: ${err.stack}`);
+        }
+
+        await db
+          .update(sentEmails)
+          .set({
+            retryCount: newRetry,
+            status: isFinal ? "failed" : "pending",
+          })
+          .where(eq(sentEmails.id, email.id));
+
+        if (isFinal) {
+          log(`Email ${email.id} marcado como FAILED después de ${MAX_RETRIES} intentos`);
+        }
       }
     }
-  } catch (err) {
-    log(`Error en email scheduler: ${err}`);
+  } catch (err: any) {
+    log(`Error en email scheduler: ${err?.message || err}`);
   }
 }
 
@@ -123,7 +180,12 @@ async function processAbandonedEmails() {
     const [template] = await db
       .select()
       .from(emailTemplates)
-      .where(eq(emailTemplates.nombre, "abandono"));
+      .where(
+        and(
+          eq(emailTemplates.nombre, "abandono"),
+          eq(emailTemplates.isActive, true)
+        )
+      );
 
     if (!template) {
       log("Template 'abandono' no encontrado — correr seed");
@@ -146,12 +208,12 @@ async function processAbandonedEmails() {
           .where(eq(abandonedLeads.id, lead.id));
 
         log(`Email de abandono enviado a ${lead.email}`);
-      } catch (err) {
-        log(`Error enviando email de abandono a ${lead.email}: ${err}`);
+      } catch (err: any) {
+        log(`Error enviando email de abandono a ${lead.email}: ${err?.message || err}`);
       }
     }
-  } catch (err) {
-    log(`Error en processAbandonedEmails: ${err}`);
+  } catch (err: any) {
+    log(`Error en processAbandonedEmails: ${err?.message || err}`);
   }
 }
 
@@ -161,8 +223,8 @@ export function startEmailScheduler() {
     return;
   }
 
-  // Run every 15 minutes
-  cron.schedule("*/15 * * * *", () => {
+  // Run every 5 minutes for more responsive email delivery
+  cron.schedule("*/5 * * * *", () => {
     processEmailQueue();
     processAbandonedEmails();
   });
@@ -173,5 +235,5 @@ export function startEmailScheduler() {
     processAbandonedEmails();
   }, 10_000);
 
-  log("Email scheduler iniciado (cada 15 min)");
+  log("Email scheduler iniciado (cada 5 min)");
 }

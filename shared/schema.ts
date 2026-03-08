@@ -67,6 +67,7 @@ export const diagnostics = pgTable("diagnostics", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   sentToGhl: boolean("sent_to_ghl").default(false).notNull(),
   googleDriveUrl: text("google_drive_url"),
+  meetLink: text("meet_link"),
 });
 
 export type Diagnostic = typeof diagnostics.$inferSelect;
@@ -81,6 +82,7 @@ export const contacts = pgTable("contacts", {
   empresa: text("empresa").notNull(),
   telefono: text("telefono"),
   status: text("status").notNull().default("lead"), // lead | contacted | scheduled | converted
+  optedOut: boolean("opted_out").default(false).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -108,10 +110,11 @@ export const sentEmails = pgTable("sent_emails", {
   templateId: varchar("template_id").notNull(),
   subject: text("subject"),
   body: text("body"),
-  status: text("status").notNull().default("pending"), // pending | sent | opened | clicked | bounced
+  status: text("status").notNull().default("pending"), // pending | sent | opened | clicked | bounced | failed
   scheduledFor: timestamp("scheduled_for").notNull(),
   sentAt: timestamp("sent_at"),
   resendMessageId: text("resend_message_id"),
+  retryCount: integer("retry_count").default(0).notNull(),
 });
 
 export type SentEmail = typeof sentEmails.$inferSelect;

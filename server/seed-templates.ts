@@ -1,74 +1,133 @@
 import { db } from "./db";
 import { emailTemplates } from "@shared/schema";
+import { eq } from "drizzle-orm";
 
 const templates = [
   {
     nombre: "confirmacion",
-    subjectPrompt: "Genera un subject corto y profesional confirmando la sesión de diagnóstico tecnológico para la empresa {empresa}. Máximo 50 caracteres.",
-    bodyPrompt: `Genera un email de confirmación de sesión de diagnóstico.
-Datos: empresa={empresa}, industria={industria}, participante={participante}, fecha={fechaCita}, hora={horaCita}.
-Incluye:
-1. Agradecimiento por agendar
-2. Resumen breve de lo que analizaremos basado en su industria y objetivos
-3. Qué esperar de la sesión (45 min, evaluación técnica)
-4. Próximos pasos (recibirán un cuestionario previo)
-Tono: profesional pero cercano, genera confianza.`,
+    subjectPrompt: "Genera un subject confirmando la sesión de diagnóstico para {empresa}. Corto, profesional. Máximo 50 caracteres. Ejemplo: '{participante}, tu diagnóstico está confirmado'.",
+    bodyPrompt: `Genera un email de confirmación de sesión de diagnóstico tecnológico.
+
+INSTRUCCIONES ESPECÍFICAS:
+- Largo: máximo 150 palabras
+- Estructura: saludo → confirmación → qué esperar → cierre
+
+CONTENIDO OBLIGATORIO:
+1. Confirma la cita: fecha={fechaCita}, hora={horaCita}, duración=45 minutos
+2. Mención personalizada: "Vamos a analizar oportunidades de IA y automatización específicas para {industria}"
+3. Lo que recibirán antes de la sesión: "En los próximos días te enviaremos material relevante sobre tecnología aplicada a tu industria"
+4. Si hay meetLink disponible, incluir: "Link de la reunión: {meetLink}"
+5. Para reagendar: responder a este email
+
+TONO: directo, profesional pero cercano. Como un consultor tech que sabe lo que hace.`,
     sequenceOrder: 0,
-    delayDays: 0,
+    delayDays: 0, // Inmediato
   },
   {
-    nombre: "caso_uso",
-    subjectPrompt: "Genera un subject atractivo sobre un caso de uso de IA/automatización relevante para la industria {industria}. Máximo 50 caracteres.",
-    bodyPrompt: `Genera un email educativo con un caso de uso concreto de IA o automatización para la industria {industria}.
-Datos del cliente: herramientas actuales={herramientas}, áreas prioritarias={areaPrioridad}, nivel tech={nivelTech}, usa IA={usaIA}.
-Incluye:
-1. Un mini caso de estudio realista (no tiene que ser cliente real, pero sí verosímil)
-2. Métricas de mejora (ej: "redujo 40% el tiempo de procesamiento")
-3. Cómo esto se relaciona con sus áreas prioritarias
-4. Cierre: "En su sesión exploraremos oportunidades similares para {empresa}"
-Tono: educativo, genera valor, sin vender directamente.`,
+    nombre: "caso_exito",
+    subjectPrompt: "Genera un subject sobre un caso de éxito de IA/automatización relevante para {industria}. Que genere curiosidad. Máximo 55 caracteres. Ejemplo: 'Cómo una empresa de {industria} automatizó su operación'.",
+    bodyPrompt: `Genera un email educativo con un caso de éxito de IA o automatización para la industria {industria}.
+
+INSTRUCCIONES ESPECÍFICAS:
+- Largo: máximo 200 palabras
+- Estructura: gancho → problema → solución → resultado → conexión con su empresa
+
+CONTENIDO OBLIGATORIO:
+1. Abre con un dato o situación que capture atención sobre {industria}
+2. Describe un caso verosímil (puede ser ficticio pero realista) de una empresa similar:
+   - El problema que tenían (relacionado con sus áreas prioritarias: {areaPrioridad})
+   - La solución de IA/automatización implementada
+   - Resultado medible (ej: "redujo 40% tiempos de procesamiento", "aumentó 25% conversión")
+3. Puente: "En tu sesión del {fechaCita} exploraremos oportunidades similares para {empresa}"
+4. NO incluir CTA de venta — el valor ES el contenido
+
+CONTEXTO PARA PERSONALIZAR:
+- Herramientas actuales: {herramientas}
+- Nivel tech: {nivelTech}
+- Usa IA: {usaIA}
+- Objetivos: {objetivos}
+
+TONO: educativo, con sustancia. Como un artículo corto de blog que vale la pena leer.`,
     sequenceOrder: 1,
-    delayDays: 2,
+    delayDays: 1, // Día siguiente
   },
   {
-    nombre: "recordatorio",
-    subjectPrompt: "Genera un subject de recordatorio amigable para la sesión de diagnóstico del {fechaCita}. Máximo 50 caracteres.",
-    bodyPrompt: `Genera un email recordatorio para la sesión de diagnóstico.
-Datos: empresa={empresa}, participante={participante}, fecha={fechaCita}, hora={horaCita}.
-Incluye:
-1. Recordatorio amigable de la sesión
-2. Qué preparar: tener a mano info sobre herramientas actuales y procesos clave
-3. Duración: 45 minutos
-4. Que pueden reagendar si lo necesitan contactando a info@im3systems.com
-Tono: breve, útil, no presiona.`,
+    nombre: "insight_educativo",
+    subjectPrompt: "Genera un subject sobre insights de automatización/IA para {industria}. Que sea accionable. Máximo 55 caracteres. Ejemplo: '3 procesos en {industria} que ya no necesitan ser manuales'.",
+    bodyPrompt: `Genera un email con 3 insights accionables sobre IA y automatización para {industria}.
+
+INSTRUCCIONES ESPECÍFICAS:
+- Largo: máximo 200 palabras
+- Estructura: intro breve → 3 insights numerados → cierre
+
+CONTENIDO OBLIGATORIO:
+1. Intro: "En {industria}, estas son las 3 áreas donde más impacto está teniendo la tecnología:"
+2. Tres insights específicos y accionables:
+   - Cada uno con título en bold y 1-2 líneas de explicación
+   - Relacionados con sus áreas prioritarias ({areaPrioridad}) y objetivos ({objetivos})
+   - Incluir al menos un dato concreto o tendencia reciente
+   - Mencionar empresas que han implementado (pueden ser ficticias pero verosímiles) y empresas que no lo han hecho y cómo les ha afectado
+3. Cómo IM3 se diferencia: "Lo que hacemos diferente es que no solo identificamos oportunidades — diseñamos la hoja de ruta completa para implementarlas"
+4. Cierre: "El {fechaCita} profundizaremos en cómo aplicar esto en {empresa}"
+
+CONTEXTO:
+- Productos/servicios: {productos}
+- Volumen mensual: {volumenMensual}
+- Comodidad tech: {comodidadTech}
+- Familiaridad: automatización={familiaridad.automatizacion}, IA={familiaridad.ia}
+
+TONO: thought leadership. Como si fuera un consultor senior compartiendo lo que ve en el mercado.`,
     sequenceOrder: 2,
-    delayDays: 4,
+    delayDays: 3, // Día 3
   },
   {
-    nombre: "newsletter_bienvenida",
-    subjectPrompt: "Genera un subject de bienvenida al newsletter de tendencias tech de IM3 Systems. Corto, cálido, profesional. Máximo 50 caracteres.",
-    bodyPrompt: `Genera un email de bienvenida al newsletter semanal de IM3 Systems.
-Incluye:
-1. Agradecimiento breve por suscribirse
-2. Qué van a recibir: tendencias de IA y automatización, casos de uso reales, y 3 pasos accionables cada semana para aplicar en su empresa
-3. Que el contenido es práctico, no solo noticias — enfocado en lo que pueden implementar
-4. Firmado por el equipo de IM3 Systems
-5. Nota: pueden darse de baja en cualquier momento respondiendo a este email
-Tono: cercano, profesional, genera expectativa. NO incluir links de unsubscribe.`,
-    sequenceOrder: 100,
-    delayDays: 0,
+    nombre: "prep_agenda",
+    subjectPrompt: "Genera un subject de preparación para la sesión de mañana con {empresa}. Máximo 50 caracteres. Ejemplo: 'Mañana: tu sesión de diagnóstico IM3'.",
+    bodyPrompt: `Genera un email de preparación y agenda para la sesión de diagnóstico de mañana.
+
+INSTRUCCIONES ESPECÍFICAS:
+- Largo: máximo 130 palabras
+- Estructura: recordatorio → agenda → preparación → link
+
+CONTENIDO OBLIGATORIO:
+1. "Mañana a las {horaCita} tenemos tu sesión de diagnóstico"
+2. Agenda de la sesión (bullets):
+   - Auditoría de operaciones actuales y stack tecnológico
+   - Mapeo de oportunidades de IA y automatización
+   - Evaluación de viabilidad técnica
+   - Hoja de ruta sugerida con prioridades
+3. Qué tener a mano: "Piensa en tus herramientas actuales, procesos clave, y los cuellos de botella más grandes de tu operación"
+4. Si hay meetLink: "Link de la reunión: {meetLink}"
+5. Opción de reagendar: "Si necesitas mover la sesión, responde a este email"
+
+TONO: útil, estructurado, genera anticipación. No presiona.`,
+    sequenceOrder: 3,
+    delayDays: 0, // Calculado dinámicamente: fechaCita - 24h
+  },
+  {
+    nombre: "micro_recordatorio",
+    subjectPrompt: "fixed", // No se usa — E5 es template fijo
+    bodyPrompt: "fixed", // No se usa — E5 es template fijo
+    sequenceOrder: 4,
+    delayDays: 0, // Calculado dinámicamente: fechaCita - 1h
   },
   {
     nombre: "abandono",
-    subjectPrompt: "Genera un subject corto y empático para alguien que empezó a agendar su diagnóstico tecnológico pero no terminó. Máximo 50 caracteres. Algo como '¿Todavía pensando?' o 'Tu diagnóstico está pendiente'.",
-    bodyPrompt: `Genera un email de rescate para alguien que dejó su email pero no completó el formulario de diagnóstico tecnológico de IM3 Systems.
-Incluye:
-1. Tono empático, sin presión — "sabemos que a veces hay interrupciones"
-2. Brevísimo recordatorio de lo que obtienen: diagnóstico personalizado de IA y automatización, gratuito, 45 minutos
-3. Un mini caso de éxito verosímil (ej: "Una empresa de logística redujo 35% sus tiempos de procesamiento después de nuestro diagnóstico")
+    subjectPrompt: "Genera un subject empático para alguien que empezó a agendar pero no terminó. Máximo 50 caracteres. Ejemplo: '¿Todavía pensando?' o 'Tu diagnóstico está pendiente'.",
+    bodyPrompt: `Genera un email de rescate para alguien que dejó su email pero no completó el formulario de diagnóstico de IM3 Systems.
+
+INSTRUCCIONES ESPECÍFICAS:
+- Largo: máximo 120 palabras
+- Estructura: empatía → valor → caso de éxito → CTA
+
+CONTENIDO OBLIGATORIO:
+1. Empatía: "Sabemos que a veces hay interrupciones — tu diagnóstico quedó pendiente"
+2. Recordatorio de valor: diagnóstico personalizado de IA y automatización, gratuito, 45 minutos
+3. Mini caso de éxito: una empresa que después del diagnóstico implementó algo concreto con resultados medibles
 4. CTA claro: "Completar mi diagnóstico" con link a https://im3systems.com/booking
-5. Nota de escasez sutil: "Solo realizamos 2 auditorías por semana"
-Tono: cercano, sin vender demasiado, genera curiosidad.`,
+5. Escasez sutil: "Solo realizamos un número limitado de auditorías por semana"
+
+TONO: cercano, sin presión, genera curiosidad.`,
     sequenceOrder: 99,
     delayDays: 0,
   },
@@ -82,9 +141,21 @@ async function seed() {
 
   console.log("Seeding email templates...");
 
+  // Deactivate old templates
+  const existing = await db.select().from(emailTemplates);
+  if (existing.length > 0) {
+    console.log(`  Deactivating ${existing.length} old template(s)...`);
+    for (const t of existing) {
+      await db.update(emailTemplates)
+        .set({ isActive: false })
+        .where(eq(emailTemplates.id, t.id));
+    }
+  }
+
+  // Insert new templates
   for (const t of templates) {
     await db.insert(emailTemplates).values(t);
-    console.log(`  ✓ ${t.nombre} (day ${t.delayDays})`);
+    console.log(`  + ${t.nombre} (order: ${t.sequenceOrder})`);
   }
 
   console.log("Done!");

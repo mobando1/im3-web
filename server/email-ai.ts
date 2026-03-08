@@ -12,23 +12,25 @@ function getClient(): Anthropic | null {
   return client;
 }
 
-const SYSTEM_PROMPT = `Eres el equipo de IM3 Systems, una empresa de tecnología especializada en inteligencia artificial, automatización y desarrollo de software para empresas.
+const SYSTEM_PROMPT = `Eres el equipo de IM3 Systems, una empresa de tecnología especializada en inteligencia artificial, automatización y desarrollo de software para empresas en Latinoamérica.
 
 Tu tarea es generar emails profesionales y personalizados para clientes que agendaron una sesión de diagnóstico tecnológico.
 
 Reglas:
-- Tono: profesional pero cercano, no corporativo genérico
-- Idioma: español latinoamericano
-- Largo: conciso, máximo 200 palabras el body
-- No uses emojis excesivos (máximo 1-2 si es necesario)
-- Personaliza usando los datos reales del cliente
-- No inventes datos que no tengas
+- Tono: profesional pero cercano, como un consultor tech que sabe lo que hace. NO corporativo genérico.
+- Idioma: español latinoamericano (tuteo, no voseo)
+- Largo: sigue las instrucciones específicas de cada prompt
+- No uses emojis excesivos (máximo 1-2 si aplica)
+- Personaliza usando los datos reales del cliente — menciona su industria, herramientas, objetivos
+- No inventes datos que no tengas — si no hay dato, omite esa mención
 - El email debe ser HTML con estilos inline simples (sin CSS externo)
-- Usa una estructura limpia: saludo, contenido principal, cierre
-- Firma: "Equipo IM3 Systems"
-- Color primario de la marca: #2B7A78 (teal)`;
+- Estructura: wrapper div con max-width:600px, font-family:sans-serif
+- Color primario: #2B7A78 (teal) — úsalo para headers y links
+- Firma: "— Equipo IM3 Systems"
+- NO incluyas footer de unsubscribe — se agrega automáticamente
+- NO uses placeholders como {empresa} — usa los datos reales del contexto`;
 
-function buildContext(data: Partial<Diagnostic> | null): string {
+function buildContext(data: Partial<Diagnostic> | null, meetLink?: string): string {
   if (!data || !data.empresa) {
     return "CONTEXTO: Email genérico de IM3 Systems (sin datos específicos de cliente).";
   }
@@ -46,17 +48,79 @@ function buildContext(data: Partial<Diagnostic> | null): string {
   if (data.resultadoEsperado) lines.push(`- Resultado esperado: ${data.resultadoEsperado}`);
   if (data.productos) lines.push(`- Productos/Servicios: ${data.productos}`);
   if (data.volumenMensual) lines.push(`- Volumen mensual: ${data.volumenMensual}`);
+  if (data.clientePrincipal) lines.push(`- Cliente principal: ${data.clientePrincipal}`);
   if (data.herramientas) lines.push(`- Herramientas actuales: ${data.herramientas}`);
+  if (data.conectadas) lines.push(`- Herramientas conectadas: ${data.conectadas}`);
   if (data.nivelTech) lines.push(`- Nivel tecnológico: ${data.nivelTech}`);
   if (data.usaIA) lines.push(`- Usa IA: ${data.usaIA}`);
+  if (data.usaIAParaQue) lines.push(`- Para qué usa IA: ${data.usaIAParaQue}`);
+  if (data.comodidadTech) lines.push(`- Comodidad con tecnología: ${data.comodidadTech}`);
   if (data.areaPrioridad) lines.push(`- Áreas prioritarias: ${Array.isArray(data.areaPrioridad) ? data.areaPrioridad.join(", ") : data.areaPrioridad}`);
   if (data.presupuesto) lines.push(`- Presupuesto: ${data.presupuesto}`);
+  if (data.familiaridad && typeof data.familiaridad === "object") {
+    const f = data.familiaridad as any;
+    lines.push(`- Familiaridad — Automatización: ${f.automatizacion}, CRM: ${f.crm}, IA: ${f.ia}, Integración: ${f.integracion}, Desarrollo: ${f.desarrollo}`);
+  }
+  if (meetLink) lines.push(`- Link de reunión (Google Meet): ${meetLink}`);
+  if (data.meetLink) lines.push(`- Link de reunión (Google Meet): ${data.meetLink}`);
   return lines.join("\n");
+}
+
+/**
+ * Build the fixed HTML for the micro-reminder email (E5).
+ * No AI needed — just a simple template with variables.
+ */
+export function buildMicroReminderEmail(
+  participante: string,
+  horaCita: string,
+  meetLink: string | null,
+  contactId: string
+): { subject: string; body: string } {
+  const subject = `En 1 hora: tu diagnóstico IM3`;
+
+  const meetSection = meetLink
+    ? `<p style="margin:0 0 16px"><a href="${meetLink}" style="color:#2B7A78;font-weight:bold;font-size:16px">Unirse a la reunión</a></p>`
+    : "";
+
+  const body = `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+  <div style="background:#2B7A78;padding:16px 24px;border-radius:8px 8px 0 0">
+    <h1 style="color:#fff;font-size:18px;margin:0">IM3 Systems</h1>
+  </div>
+  <div style="padding:24px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+    <p style="margin:0 0 16px">${participante}, tu sesión de diagnóstico es en <strong>1 hora</strong> (${horaCita}).</p>
+    ${meetSection}
+    <p style="margin:0 0 16px;color:#666">Responde "confirmado" a este email si nos vemos. Si necesitas reagendar, también responde y lo coordinamos.</p>
+    <p style="margin:0;color:#999">— Equipo IM3 Systems</p>
+  </div>
+  <div style="padding:12px 24px;text-align:center">
+    <a href="${process.env.BASE_URL || "https://im3systems.com"}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">No recibir más emails</a>
+  </div>
+</div>`;
+
+  return { subject, body };
+}
+
+/**
+ * Add unsubscribe footer to AI-generated email HTML.
+ */
+function addUnsubscribeFooter(html: string, contactId: string): string {
+  const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+  const footer = `<div style="max-width:600px;margin:8px auto 0;text-align:center;padding:8px">
+  <a href="${baseUrl}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">No recibir más emails de esta secuencia</a>
+</div>`;
+
+  // Try to insert before closing </div> or append
+  if (html.includes("</div>")) {
+    const lastDiv = html.lastIndexOf("</div>");
+    return html.substring(0, lastDiv + 6) + footer;
+  }
+  return html + footer;
 }
 
 export async function generateEmailContent(
   template: EmailTemplate,
-  diagnosticData: Partial<Diagnostic> | null
+  diagnosticData: Partial<Diagnostic> | null,
+  contactId?: string
 ): Promise<{ subject: string; body: string }> {
   const anthropic = getClient();
   if (!anthropic) {
@@ -86,20 +150,25 @@ export async function generateEmailContent(
   // Generate body
   const bodyResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
-    max_tokens: 1000,
+    max_tokens: 1500,
     system: SYSTEM_PROMPT,
     messages: [
       {
         role: "user",
-        content: `${template.bodyPrompt}\n\n${context}\n\nGenera el email completo en HTML con estilos inline. Incluye un wrapper con max-width: 600px, font-family: sans-serif.`,
+        content: `${template.bodyPrompt}\n\n${context}\n\nGenera el email completo en HTML con estilos inline. Wrapper: max-width:600px, font-family:sans-serif. Header con background #2B7A78 y título blanco.`,
       },
     ],
   });
 
-  const body =
+  let body =
     bodyResponse.content[0].type === "text"
       ? bodyResponse.content[0].text.trim()
       : "<p>Error generando contenido</p>";
+
+  // Add unsubscribe footer if we have a contactId
+  if (contactId) {
+    body = addUnsubscribeFooter(body, contactId);
+  }
 
   log(`Email AI generado: "${subject}" para ${diagnosticData?.empresa || "suscriptor"}`);
 
