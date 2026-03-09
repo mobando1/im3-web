@@ -31,9 +31,10 @@ function parseFechaCita(fecha: string, hora: string): Date {
     }
   }
 
-  const date = new Date(`${fecha}T00:00:00`);
-  date.setHours(hours, minutes, 0, 0);
-  return date;
+  // Use Colombia timezone offset (UTC-5, no daylight saving)
+  const hh = String(hours).padStart(2, "0");
+  const mm = String(minutes).padStart(2, "0");
+  return new Date(`${fecha}T${hh}:${mm}:00-05:00`);
 }
 
 /**
@@ -240,6 +241,10 @@ export async function registerRoutes(
 
           const sequenceTemplates = templates.filter(t => t.sequenceOrder < 90);
 
+          if (sequenceTemplates.length === 0) {
+            log("⚠ No se encontraron templates activos — correr seed");
+          }
+
           // Parse appointment date for adaptive scheduling
           const now = new Date();
           const appointmentDate = parseFechaCita(data.fechaCita, data.horaCita);
@@ -375,7 +380,7 @@ export async function registerRoutes(
         // Reactivate
         await db
           .update(newsletterSubscribers)
-          .set({ isActive: true, unsubscribedAt: null, subscribedAt: new Date() })
+          .set({ isActive: true, unsubscribedAt: null })
           .where(eq(newsletterSubscribers.email, email));
       } else {
         await db.insert(newsletterSubscribers).values({ email });

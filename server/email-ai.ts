@@ -30,7 +30,7 @@ Reglas:
 - NO incluyas footer de unsubscribe — se agrega automáticamente
 - NO uses placeholders como {empresa} — usa los datos reales del contexto`;
 
-function buildContext(data: Partial<Diagnostic> | null, meetLink?: string): string {
+function buildContext(data: Partial<Diagnostic> | null): string {
   if (!data || !data.empresa) {
     return "CONTEXTO: Email genérico de IM3 Systems (sin datos específicos de cliente).";
   }
@@ -61,7 +61,6 @@ function buildContext(data: Partial<Diagnostic> | null, meetLink?: string): stri
     const f = data.familiaridad as any;
     lines.push(`- Familiaridad — Automatización: ${f.automatizacion}, CRM: ${f.crm}, IA: ${f.ia}, Integración: ${f.integracion}, Desarrollo: ${f.desarrollo}`);
   }
-  if (meetLink) lines.push(`- Link de reunión (Google Meet): ${meetLink}`);
   if (data.meetLink) lines.push(`- Link de reunión (Google Meet): ${data.meetLink}`);
   return lines.join("\n");
 }
@@ -143,7 +142,7 @@ export async function generateEmailContent(
   });
 
   const subject =
-    subjectResponse.content[0].type === "text"
+    subjectResponse.content?.[0]?.type === "text"
       ? subjectResponse.content[0].text.trim()
       : "Diagnóstico IM3 Systems";
 
@@ -161,7 +160,7 @@ export async function generateEmailContent(
   });
 
   let body =
-    bodyResponse.content[0].type === "text"
+    bodyResponse.content?.[0]?.type === "text"
       ? bodyResponse.content[0].text.trim()
       : "<p>Error generando contenido</p>";
 

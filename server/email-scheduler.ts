@@ -224,9 +224,9 @@ export function startEmailScheduler() {
   }
 
   // Run every 5 minutes for more responsive email delivery
-  cron.schedule("*/5 * * * *", () => {
-    processEmailQueue();
-    processAbandonedEmails();
+  cron.schedule("*/5 * * * *", async () => {
+    await processEmailQueue().catch(err => log(`Cron error queue: ${err}`));
+    await processAbandonedEmails().catch(err => log(`Cron error abandoned: ${err}`));
   });
 
   // Also run once at startup (after 10 seconds to let DB connect)

@@ -52,9 +52,10 @@ function parseDateTime(fecha: string, hora: string): Date {
     }
   }
 
-  const date = new Date(`${fecha}T00:00:00`);
-  date.setHours(hours, minutes, 0, 0);
-  return date;
+  // Use Colombia timezone offset (UTC-5, no daylight saving)
+  const hh = String(hours).padStart(2, "0");
+  const mm = String(minutes).padStart(2, "0");
+  return new Date(`${fecha}T${hh}:${mm}:00-05:00`);
 }
 
 /**
