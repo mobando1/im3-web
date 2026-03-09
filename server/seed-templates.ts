@@ -5,21 +5,23 @@ import { eq } from "drizzle-orm";
 const templates = [
   {
     nombre: "confirmacion",
-    subjectPrompt: "Genera un subject confirmando la sesión de diagnóstico para {empresa}. Corto, profesional. Máximo 50 caracteres. Ejemplo: '{participante}, tu diagnóstico está confirmado'.",
-    bodyPrompt: `Genera un email de confirmación de sesión de diagnóstico tecnológico.
+    subjectPrompt: "Genera un subject de bienvenida para {empresa} que acaba de agendar su diagnóstico. Cálido y profesional. Máximo 50 caracteres. Ejemplo: 'Bienvenido {participante} — tu diagnóstico está listo'.",
+    bodyPrompt: `Genera un email de BIENVENIDA y confirmación de sesión de diagnóstico tecnológico.
 
 INSTRUCCIONES ESPECÍFICAS:
-- Largo: máximo 150 palabras
-- Estructura: saludo → confirmación → qué esperar → cierre
+- Largo: máximo 180 palabras
+- Estructura: agradecimiento → quiénes somos → confirmación → qué esperar → cierre
 
 CONTENIDO OBLIGATORIO:
-1. Confirma la cita: fecha={fechaCita}, hora={horaCita}, duración=45 minutos
-2. Mención personalizada: "Vamos a analizar oportunidades de IA y automatización específicas para {industria}"
-3. Lo que recibirán antes de la sesión: "En los próximos días te enviaremos material relevante sobre tecnología aplicada a tu industria"
-4. Si hay meetLink disponible, incluir: "Link de la reunión: {meetLink}"
-5. Para reagendar: responder a este email
+1. Agradecimiento genuino: "Gracias por dar el primer paso" — el lead acaba de llenar un formulario largo, reconoce eso
+2. Quiénes somos (2-3 líneas máximo): IM3 Systems es una empresa de tecnología especializada en inteligencia artificial, automatización y desarrollo de software para empresas en Latinoamérica. No somos una consultora genérica — diseñamos e implementamos soluciones tecnológicas reales que transforman operaciones.
+3. Confirma la cita: fecha={fechaCita}, hora={horaCita}, duración=45 minutos
+4. Mención personalizada: "Vamos a analizar oportunidades de IA y automatización específicas para {industria}"
+5. Si hay meetLink disponible, incluir: "Link de la reunión: {meetLink}"
+6. Qué esperar: "En los próximos días te enviaremos contenido relevante sobre tecnología aplicada a tu industria para que llegues preparado a la sesión"
+7. Para reagendar: responder a este email
 
-TONO: directo, profesional pero cercano. Como un consultor tech que sabe lo que hace.`,
+TONO: cálido pero profesional. Como recibir a alguien que tomó una buena decisión. No corporativo, no vendedor.`,
     sequenceOrder: 0,
     delayDays: 0, // Inmediato
   },
