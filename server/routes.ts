@@ -45,7 +45,7 @@ function calculateEmailTime(
   templateName: string,
   now: Date,
   appointmentDate: Date,
-  daysUntilCall: number
+  hoursUntilCall: number
 ): Date | null {
   switch (templateName) {
     case "confirmacion":
@@ -53,33 +53,31 @@ function calculateEmailTime(
       return now;
 
     case "caso_exito":
-      // Send next morning at 10 AM, only if 2+ days until call
-      if (daysUntilCall < 2) return null;
+      // Send next morning at 10 AM Colombia, only if 36+ hours until call
+      if (hoursUntilCall < 36) return null;
       const nextMorning = new Date(now);
-      nextMorning.setDate(nextMorning.getDate() + 1);
-      nextMorning.setHours(10, 0, 0, 0);
+      nextMorning.setUTCDate(nextMorning.getUTCDate() + 1);
+      nextMorning.setUTCHours(15, 0, 0, 0); // 15:00 UTC = 10:00 AM Colombia
       return nextMorning;
 
     case "insight_educativo":
-      // Send day 3 at 10 AM, only if 5+ days until call
-      if (daysUntilCall < 5) return null;
+      // Send day 3 at 10 AM Colombia, only if 96+ hours until call
+      if (hoursUntilCall < 96) return null;
       const day3 = new Date(now);
-      day3.setDate(day3.getDate() + 3);
-      day3.setHours(10, 0, 0, 0);
+      day3.setUTCDate(day3.getUTCDate() + 3);
+      day3.setUTCHours(15, 0, 0, 0); // 15:00 UTC = 10:00 AM Colombia
       return day3;
 
     case "prep_agenda":
       // Send 24 hours before appointment
-      const prep = new Date(appointmentDate);
-      prep.setHours(prep.getHours() - 24);
+      const prep = new Date(appointmentDate.getTime() - 24 * 60 * 60 * 1000);
       // Don't send if it's already past or too close to now
       if (prep.getTime() <= now.getTime() + 2 * 60 * 60 * 1000) return null;
       return prep;
 
     case "micro_recordatorio":
       // Send 1 hour before appointment
-      const reminder = new Date(appointmentDate);
-      reminder.setHours(reminder.getHours() - 1);
+      const reminder = new Date(appointmentDate.getTime() - 60 * 60 * 1000);
       if (reminder.getTime() <= now.getTime()) return null;
       return reminder;
 
@@ -223,6 +221,14 @@ export async function registerRoutes(
     if (db && insertedId && data.email && isEmailConfigured()) {
       (async () => {
         try {
+          // Check for existing contact (prevent duplicates on double-submit)
+          const [existingContact] = await db.select().from(contacts)
+            .where(eq(contacts.email, data.email)).limit(1);
+          if (existingContact) {
+            log(`Contacto ${data.email} ya existe — saltando secuencia duplicada`);
+            return;
+          }
+
           // Create contact
           const [contact] = await db.insert(contacts).values({
             diagnosticId: insertedId!,
@@ -248,11 +254,11 @@ export async function registerRoutes(
           // Parse appointment date for adaptive scheduling
           const now = new Date();
           const appointmentDate = parseFechaCita(data.fechaCita, data.horaCita);
-          const daysUntilCall = Math.max(0, Math.floor((appointmentDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
+          const hoursUntilCall = Math.max(0, (appointmentDate.getTime() - now.getTime()) / (1000 * 60 * 60));
 
           let scheduled = 0;
           for (const template of sequenceTemplates) {
-            const scheduledFor = calculateEmailTime(template.nombre, now, appointmentDate, daysUntilCall);
+            const scheduledFor = calculateEmailTime(template.nombre, now, appointmentDate, hoursUntilCall);
             if (!scheduledFor) continue; // Skip this email (adaptive logic)
 
             await db.insert(sentEmails).values({
@@ -263,7 +269,7 @@ export async function registerRoutes(
             scheduled++;
           }
 
-          log(`Secuencia de ${scheduled} email(s) programada para ${data.email} (${daysUntilCall} días hasta la cita)`);
+          log(`Secuencia de ${scheduled} email(s) programada para ${data.email} (${Math.round(hoursUntilCall)}h hasta la cita)`);
         } catch (err) {
           log(`Error programando emails: ${err}`);
         }

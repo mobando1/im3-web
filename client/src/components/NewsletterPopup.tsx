@@ -36,6 +36,7 @@ export function NewsletterPopup() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
+      if (!res.ok) throw new Error("Server error");
       const data = await res.json();
 
       if (data.alreadySubscribed) {
@@ -112,6 +113,7 @@ export function useNewsletterSubscribe() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
       });
+      if (!res.ok) throw new Error("Server error");
       const data = await res.json();
 
       if (data.alreadySubscribed) {
