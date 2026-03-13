@@ -17,7 +17,7 @@ const AdminContacts = lazy(() => import("@/pages/admin/contacts"));
 const AdminContactDetail = lazy(() => import("@/pages/admin/contact-detail"));
 const AdminLayout = lazy(() => import("@/pages/admin/layout"));
 
-function ProtectedRoute({ children }: { children: React.ReactNode }) {
+function ProtectedAdmin({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
@@ -28,21 +28,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Redirect to="/admin/login" />;
   }
 
-  return <>{children}</>;
-}
-
-function AdminRoutes() {
   return (
-    <ProtectedRoute>
-      <AdminLayout>
-        <Switch>
-          <Route path="/admin" component={AdminDashboard} />
-          <Route path="/admin/contacts/:id" component={AdminContactDetail} />
-          <Route path="/admin/contacts" component={AdminContacts} />
-          <Route component={NotFound} />
-        </Switch>
-      </AdminLayout>
-    </ProtectedRoute>
+    <AdminLayout>
+      {children}
+    </AdminLayout>
   );
 }
 
@@ -54,7 +43,23 @@ function Router() {
         <Route path="/booking" component={Booking} />
         <Route path="/confirmed" component={Confirmed} />
         <Route path="/admin/login" component={AdminLogin} />
-        <Route path="/admin/:rest*" component={AdminRoutes} />
+        <Route path="/admin/contacts/:id">
+          {(params) => (
+            <ProtectedAdmin>
+              <AdminContactDetail />
+            </ProtectedAdmin>
+          )}
+        </Route>
+        <Route path="/admin/contacts">
+          <ProtectedAdmin>
+            <AdminContacts />
+          </ProtectedAdmin>
+        </Route>
+        <Route path="/admin">
+          <ProtectedAdmin>
+            <AdminDashboard />
+          </ProtectedAdmin>
+        </Route>
         <Route component={NotFound} />
       </Switch>
     </Suspense>
