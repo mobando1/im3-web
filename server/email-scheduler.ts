@@ -4,6 +4,7 @@ import { sentEmails, emailTemplates, contacts, diagnostics, abandonedLeads } fro
 import { eq, and, lte } from "drizzle-orm";
 import { generateEmailContent, buildMicroReminderEmail } from "./email-ai";
 import { sendEmail, isEmailConfigured } from "./email-sender";
+import { parseFechaCita } from "./date-utils";
 import { log } from "./index";
 
 const MAX_RETRIES = 3;
@@ -77,6 +78,28 @@ async function processEmailQueue() {
           .select()
           .from(diagnostics)
           .where(eq(diagnostics.id, contact.diagnosticId));
+
+        // Check if pre-meeting email should be expired (appointment already passed)
+        const PRE_MEETING_TEMPLATES = ["caso_exito", "insight_educativo", "prep_agenda", "micro_recordatorio"];
+        if (diagnostic?.fechaCita && diagnostic?.horaCita) {
+          const appointmentDate = parseFechaCita(diagnostic.fechaCita, diagnostic.horaCita);
+
+          if (PRE_MEETING_TEMPLATES.includes(template.nombre) && now > appointmentDate) {
+            log(`Email ${template.nombre} expirado — cita de ${contact.email} ya pasó`);
+            await db.update(sentEmails).set({ status: "expired" }).where(eq(sentEmails.id, email.id));
+            continue;
+          }
+
+          // Post-meeting follow-up: expire if more than 48h after appointment
+          if (template.nombre === "seguimiento_post") {
+            const hoursSinceMeeting = (now.getTime() - appointmentDate.getTime()) / (1000 * 60 * 60);
+            if (hoursSinceMeeting > 48) {
+              log(`Email seguimiento_post expirado — cita de ${contact.email} fue hace ${Math.round(hoursSinceMeeting)}h`);
+              await db.update(sentEmails).set({ status: "expired" }).where(eq(sentEmails.id, email.id));
+              continue;
+            }
+          }
+        }
 
         let subject: string;
         let body: string;

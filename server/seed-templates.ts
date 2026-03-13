@@ -19,7 +19,7 @@ CONTENIDO OBLIGATORIO:
 4. Mención personalizada: "Vamos a analizar oportunidades de IA y automatización específicas para {industria}"
 5. Si hay meetLink disponible, incluir: "Link de la reunión: {meetLink}"
 6. Qué esperar: "En los próximos días te enviaremos contenido relevante sobre tecnología aplicada a tu industria para que llegues preparado a la sesión"
-7. Para reagendar: responder a este email
+7. Para reagendar: "Si necesitas mover la sesión, puedes reagendar aquí: https://im3systems.com/booking"
 
 TONO: cálido pero profesional. Como recibir a alguien que tomó una buena decisión. No corporativo, no vendedor.`,
     sequenceOrder: 0,
@@ -100,7 +100,7 @@ CONTENIDO OBLIGATORIO:
    - Hoja de ruta sugerida con prioridades
 3. Qué tener a mano: "Piensa en tus herramientas actuales, procesos clave, y los cuellos de botella más grandes de tu operación"
 4. Si hay meetLink: "Link de la reunión: {meetLink}"
-5. Opción de reagendar: "Si necesitas mover la sesión, responde a este email"
+5. Para reagendar: "Si necesitas mover la sesión, puedes reagendar aquí: https://im3systems.com/booking"
 
 TONO: útil, estructurado, genera anticipación. No presiona.`,
     sequenceOrder: 3,
@@ -112,6 +112,35 @@ TONO: útil, estructurado, genera anticipación. No presiona.`,
     bodyPrompt: "fixed", // No se usa — E5 es template fijo
     sequenceOrder: 4,
     delayDays: 0, // Calculado dinámicamente: fechaCita - 1h
+  },
+  {
+    nombre: "seguimiento_post",
+    subjectPrompt: "Genera un subject de seguimiento post-reunión para {empresa}. Profesional y con momentum. Máximo 55 caracteres. Ejemplo: 'Próximos pasos para {empresa}' o 'Tu hoja de ruta, {participante}'.",
+    bodyPrompt: `Genera un email de SEGUIMIENTO enviado 2 horas después de la sesión de diagnóstico tecnológico con IM3 Systems.
+
+INSTRUCCIONES ESPECÍFICAS:
+- Largo: máximo 220 palabras
+- Estructura: agradecimiento → oportunidades detectadas → próximos pasos → CTA
+
+CONTENIDO OBLIGATORIO:
+1. Agradecimiento breve: "Gracias por tu tiempo en la sesión de hoy" — reconoce que invirtieron 45 minutos
+2. Resumen de oportunidades (2-3 bullets): basado en sus datos del diagnóstico, menciona oportunidades concretas de IA/automatización para su industria ({industria}) y áreas prioritarias ({areaPrioridad})
+3. Próximos pasos claros: "Esto es lo que recomendamos como siguiente paso:" — propón una hoja de ruta de 2-3 pasos concretos (evaluación técnica, prototipo, implementación)
+4. CTA: "¿Te gustaría agendar una sesión de seguimiento para revisar la propuesta?" con link: https://im3systems.com/booking
+5. Firma: "— Equipo IM3 Systems"
+
+IMPORTANTE: Este email se envía DESPUÉS de la reunión. Escribe en pasado sobre la sesión ("en nuestra conversación de hoy", "como vimos juntos"). NO menciones fecha ni hora de la cita pasada.
+
+CONTEXTO PARA PERSONALIZAR:
+- Herramientas actuales: {herramientas}
+- Nivel tech: {nivelTech}
+- Objetivos: {objetivos}
+- Área prioritaria: {areaPrioridad}
+- Industria: {industria}
+
+TONO: consultivo, con momentum. Como un consultor senior que acaba de tener una reunión productiva y quiere mantener el impulso. No vendedor, sino estratégico.`,
+    sequenceOrder: 5,
+    delayDays: 0, // Calculado dinámicamente: fechaCita + 2h
   },
   {
     nombre: "abandono",

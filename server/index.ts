@@ -3,6 +3,7 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startEmailScheduler } from "./email-scheduler";
+import { setupAuth } from "./auth";
 
 const app = express();
 const httpServer = createServer(app);
@@ -22,6 +23,9 @@ app.use(
 );
 
 app.use(express.urlencoded({ extended: false }));
+
+// Setup auth (session + passport) before routes
+setupAuth(app);
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

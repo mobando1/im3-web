@@ -1,41 +1,16 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { eq, asc, isNull } from "drizzle-orm";
+import { eq, asc, isNull, sql, and, gte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users } from "@shared/schema";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
 import { createCalendarEvent } from "./google-calendar";
 import { isEmailConfigured, sendEmail } from "./email-sender";
 import { generateEmailContent } from "./email-ai";
-
-/**
- * Parse fechaCita + horaCita into a Date object.
- */
-function parseFechaCita(fecha: string, hora: string): Date {
-  let hours = 0;
-  let minutes = 0;
-
-  const ampmMatch = hora.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
-  if (ampmMatch) {
-    hours = parseInt(ampmMatch[1]);
-    minutes = parseInt(ampmMatch[2]);
-    const period = ampmMatch[3].toUpperCase();
-    if (period === "PM" && hours !== 12) hours += 12;
-    if (period === "AM" && hours === 12) hours = 0;
-  } else {
-    const h24Match = hora.match(/(\d{1,2}):(\d{2})/);
-    if (h24Match) {
-      hours = parseInt(h24Match[1]);
-      minutes = parseInt(h24Match[2]);
-    }
-  }
-
-  // Use Colombia timezone offset (UTC-5, no daylight saving)
-  const hh = String(hours).padStart(2, "0");
-  const mm = String(minutes).padStart(2, "0");
-  return new Date(`${fecha}T${hh}:${mm}:00-05:00`);
-}
+import { parseFechaCita } from "./date-utils";
+import { requireAuth, hashPassword } from "./auth";
+import passport from "passport";
 
 /**
  * Calculate when to send each email based on template name,
@@ -80,6 +55,12 @@ function calculateEmailTime(
       const reminder = new Date(appointmentDate.getTime() - 60 * 60 * 1000);
       if (reminder.getTime() <= now.getTime()) return null;
       return reminder;
+
+    case "seguimiento_post":
+      // Send 2 hours after appointment
+      const followUp = new Date(appointmentDate.getTime() + 2 * 60 * 60 * 1000);
+      if (followUp.getTime() <= now.getTime()) return null;
+      return followUp;
 
     default:
       return null;
@@ -423,7 +404,7 @@ export async function registerRoutes(
   });
 
   // Regenerate Google Drive files for diagnostics that failed
-  app.post("/api/admin/regenerate-drive", async (req, res) => {
+  app.post("/api/admin/regenerate-drive", requireAuth, async (req, res) => {
     if (!db || !isGoogleDriveConfigured()) {
       res.status(400).json({ error: "DB or Google Drive not configured" });
       return;
@@ -494,12 +475,267 @@ export async function registerRoutes(
   });
 
   // Cleanup service account Drive storage (empty trash + delete empty folders)
-  app.post("/api/admin/cleanup-drive", async (req, res) => {
+  app.post("/api/admin/cleanup-drive", requireAuth, async (req, res) => {
     try {
       const result = await cleanupServiceAccountDrive();
       res.json(result);
     } catch (err: any) {
       res.status(500).json({ error: err?.message || String(err) });
+    }
+  });
+
+  // ========== AUTH ROUTES ==========
+
+  app.post("/api/auth/login", (req, res, next) => {
+    passport.authenticate("local", (err: any, user: any, info: any) => {
+      if (err) return next(err);
+      if (!user) return res.status(401).json({ error: info?.message || "Credenciales inválidas" });
+      req.logIn(user, (err) => {
+        if (err) return next(err);
+        res.json({ id: user.id, username: user.username });
+      });
+    })(req, res, next);
+  });
+
+  app.post("/api/auth/logout", (req, res) => {
+    req.logout((err) => {
+      if (err) return res.status(500).json({ error: "Error cerrando sesión" });
+      res.json({ success: true });
+    });
+  });
+
+  app.get("/api/auth/me", (req, res) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ error: "No autorizado" });
+    const user = req.user as any;
+    res.json({ id: user.id, username: user.username });
+  });
+
+  // ========== ADMIN API ENDPOINTS ==========
+
+  // Dashboard stats
+  app.get("/api/admin/stats", requireAuth, async (_req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const allContacts = await db.select().from(contacts);
+      const statusCounts = { lead: 0, contacted: 0, scheduled: 0, converted: 0 };
+      for (const c of allContacts) {
+        const s = c.status as keyof typeof statusCounts;
+        if (s in statusCounts) statusCounts[s]++;
+      }
+
+      const now = new Date();
+      const todayStart = new Date(now);
+      todayStart.setUTCHours(0, 0, 0, 0);
+      const weekStart = new Date(now);
+      weekStart.setUTCDate(weekStart.getUTCDate() - 7);
+
+      const allEmails = await db.select().from(sentEmails);
+      const sentToday = allEmails.filter(e => e.sentAt && e.sentAt >= todayStart).length;
+      const sentWeek = allEmails.filter(e => e.sentAt && e.sentAt >= weekStart).length;
+      const totalSent = allEmails.filter(e => e.status !== "pending" && e.status !== "failed" && e.status !== "expired").length;
+      const totalOpened = allEmails.filter(e => e.status === "opened" || e.status === "clicked").length;
+      const openRate = totalSent > 0 ? Math.round((totalOpened / totalSent) * 100) : 0;
+
+      const pendingAbandoned = await db.select().from(abandonedLeads)
+        .where(and(eq(abandonedLeads.converted, false), eq(abandonedLeads.emailSent, false)));
+
+      const activeSubscribers = await db.select().from(newsletterSubscribers)
+        .where(eq(newsletterSubscribers.isActive, true));
+
+      res.json({
+        contacts: {
+          total: allContacts.length,
+          ...statusCounts,
+        },
+        emails: {
+          sentToday,
+          sentWeek,
+          totalSent,
+          openRate,
+        },
+        abandonedLeads: pendingAbandoned.length,
+        newsletterSubscribers: activeSubscribers.length,
+      });
+    } catch (err: any) {
+      log(`Error admin stats: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo estadísticas" });
+    }
+  });
+
+  // Contacts list with filters
+  app.get("/api/admin/contacts", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const { status, search, page = "1", limit = "20" } = req.query as Record<string, string>;
+      const pageNum = Math.max(1, parseInt(page) || 1);
+      const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20));
+      const offset = (pageNum - 1) * limitNum;
+
+      // Build conditions
+      const conditions = [];
+      if (status) conditions.push(eq(contacts.status, status));
+      if (search) {
+        conditions.push(
+          or(
+            ilike(contacts.nombre, `%${search}%`),
+            ilike(contacts.empresa, `%${search}%`),
+            ilike(contacts.email, `%${search}%`)
+          )!
+        );
+      }
+
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+      const contactList = await db
+        .select()
+        .from(contacts)
+        .where(whereClause)
+        .orderBy(desc(contacts.createdAt))
+        .limit(limitNum)
+        .offset(offset);
+
+      // Get total count for pagination
+      const [{ value: total }] = await db
+        .select({ value: count() })
+        .from(contacts)
+        .where(whereClause);
+
+      // Get email counts per contact
+      const contactIds = contactList.map(c => c.id);
+      let emailCounts: Record<string, { sent: number; opened: number }> = {};
+
+      if (contactIds.length > 0) {
+        const emails = await db.select().from(sentEmails)
+          .where(sql`${sentEmails.contactId} IN (${sql.join(contactIds.map(id => sql`${id}`), sql`, `)})`);
+
+        for (const e of emails) {
+          if (!emailCounts[e.contactId]) emailCounts[e.contactId] = { sent: 0, opened: 0 };
+          if (e.status === "sent" || e.status === "opened" || e.status === "clicked") emailCounts[e.contactId].sent++;
+          if (e.status === "opened" || e.status === "clicked") emailCounts[e.contactId].opened++;
+        }
+      }
+
+      const enriched = contactList.map(c => ({
+        ...c,
+        emailsSent: emailCounts[c.id]?.sent || 0,
+        emailsOpened: emailCounts[c.id]?.opened || 0,
+      }));
+
+      res.json({
+        contacts: enriched,
+        pagination: {
+          page: pageNum,
+          limit: limitNum,
+          total,
+          totalPages: Math.ceil(total / limitNum),
+        },
+      });
+    } catch (err: any) {
+      log(`Error admin contacts: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo contactos" });
+    }
+  });
+
+  // Contact detail
+  app.get("/api/admin/contacts/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const contactId = req.params.id as string;
+
+    try {
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId));
+      if (!contact) return res.status(404).json({ error: "Contacto no encontrado" });
+
+      const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId));
+
+      const emails = await db
+        .select({
+          id: sentEmails.id,
+          subject: sentEmails.subject,
+          status: sentEmails.status,
+          scheduledFor: sentEmails.scheduledFor,
+          sentAt: sentEmails.sentAt,
+          templateId: sentEmails.templateId,
+        })
+        .from(sentEmails)
+        .where(eq(sentEmails.contactId, contact.id))
+        .orderBy(asc(sentEmails.scheduledFor));
+
+      // Get template names for emails
+      const templateIds = Array.from(new Set(emails.map(e => e.templateId)));
+      const templateNames: Record<string, string> = {};
+      if (templateIds.length > 0) {
+        const templates = await db.select().from(emailTemplates)
+          .where(sql`${emailTemplates.id} IN (${sql.join(templateIds.map(id => sql`${id}`), sql`, `)})`);
+        for (const t of templates) templateNames[t.id] = t.nombre;
+      }
+
+      const emailTimeline = emails.map(e => ({
+        ...e,
+        templateName: templateNames[e.templateId] || "unknown",
+      }));
+
+      res.json({ contact, diagnostic, emails: emailTimeline });
+    } catch (err: any) {
+      log(`Error admin contact detail: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo detalle" });
+    }
+  });
+
+  // Update contact status
+  app.patch("/api/admin/contacts/:id/status", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const contactId = req.params.id as string;
+
+    const { status } = req.body;
+    const validStatuses = ["lead", "contacted", "scheduled", "converted"];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: "Status inválido" });
+    }
+
+    try {
+      const [updated] = await db.update(contacts)
+        .set({ status })
+        .where(eq(contacts.id, contactId))
+        .returning();
+
+      if (!updated) return res.status(404).json({ error: "Contacto no encontrado" });
+
+      log(`Contact ${updated.email} status → ${status}`);
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error updating status: ${err?.message}`);
+      res.status(500).json({ error: "Error actualizando status" });
+    }
+  });
+
+  // Seed admin user (one-time setup)
+  app.post("/api/admin/setup", async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      // Check if any admin user exists
+      const existing = await db.select().from(users).limit(1);
+      if (existing.length > 0) {
+        return res.status(400).json({ error: "Admin ya existe" });
+      }
+
+      const { username, password } = req.body;
+      if (!username || !password) {
+        return res.status(400).json({ error: "Username y password requeridos" });
+      }
+
+      const hashedPassword = await hashPassword(password);
+      const [user] = await db.insert(users).values({
+        username,
+        password: hashedPassword,
+      }).returning();
+
+      log(`Admin user created: ${user.username}`);
+      res.json({ success: true, username: user.username });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
     }
   });
 
