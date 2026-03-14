@@ -6,7 +6,7 @@ import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { db } from "./db";
 import { users } from "@shared/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { Express, RequestHandler } from "express";
 
 const scryptAsync = promisify(scrypt);
@@ -23,14 +23,29 @@ export async function comparePasswords(supplied: string, stored: string): Promis
   return timingSafeEqual(buf, Buffer.from(hashed, "hex"));
 }
 
-export function setupAuth(app: Express) {
+export async function setupAuth(app: Express) {
+  // Create session table manually — connect-pg-simple's createTableIfMissing
+  // tries to read table.sql from its package dir, which doesn't exist in bundled builds
+  if (db) {
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS "session" (
+        "sid" varchar NOT NULL COLLATE "default",
+        "sess" json NOT NULL,
+        "expire" timestamp(6) NOT NULL,
+        CONSTRAINT "session_pkey" PRIMARY KEY ("sid")
+      );
+    `);
+    await db.execute(sql`
+      CREATE INDEX IF NOT EXISTS "IDX_session_expire" ON "session" ("expire");
+    `);
+  }
+
   const PgStore = connectPgSimple(session);
 
   app.use(
     session({
       store: new PgStore({
         conString: process.env.DATABASE_URL,
-        createTableIfMissing: true,
       }),
       secret: process.env.SESSION_SECRET || "im3-admin-secret-change-in-prod",
       resave: false,
