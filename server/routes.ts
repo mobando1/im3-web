@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications } from "@shared/schema";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
 import { createCalendarEvent } from "./google-calendar";
@@ -301,6 +301,36 @@ export async function registerRoutes(
           }
 
           log(`Secuencia de ${scheduled} email(s) programada para ${data.email} (${Math.round(hoursUntilCall)}h hasta la cita)`);
+
+          // Auto-create follow-up tasks
+          try {
+            await db.insert(tasks).values({
+              contactId: contact.id,
+              title: `Revisar diagnóstico de ${data.empresa}`,
+              priority: "high",
+              dueDate: new Date(),
+            });
+            const postCitaDate = new Date(appointmentDate.getTime() + 24 * 60 * 60 * 1000);
+            await db.insert(tasks).values({
+              contactId: contact.id,
+              title: `Follow-up post-cita con ${data.empresa}`,
+              priority: "medium",
+              dueDate: postCitaDate,
+            });
+            logActivity(contact.id, "task_created", "Tareas automáticas creadas para diagnóstico");
+          } catch (taskErr) {
+            log(`Error creating auto-tasks: ${taskErr}`);
+          }
+
+          // Create notification for new lead
+          try {
+            await db.insert(notifications).values({
+              type: "new_lead",
+              title: "Nuevo lead",
+              description: `${data.participante} de ${data.empresa} completó el diagnóstico`,
+              contactId: contact.id,
+            });
+          } catch (_) {}
         } catch (err) {
           log(`Error programando emails: ${err}`);
         }
@@ -351,6 +381,16 @@ export async function registerRoutes(
           const eventTypeMap: Record<string, string> = { opened: "email_opened", clicked: "email_clicked", bounced: "email_bounced" };
           const eventDescMap: Record<string, string> = { opened: "abrió un email", clicked: "hizo click en un email", bounced: "email rebotó" };
           logActivity(updatedEmail.contactId, eventTypeMap[newStatus] || newStatus, eventDescMap[newStatus] || newStatus, { emailId: updatedEmail.id, subject: updatedEmail.subject });
+
+          // Create notifications for engagement
+          if (newStatus === "clicked") {
+            db.insert(notifications).values({
+              type: "email_clicked",
+              title: "Email clickeado",
+              description: `Un contacto hizo click en "${updatedEmail.subject || "email"}"`,
+              contactId: updatedEmail.contactId,
+            }).catch(() => {});
+          }
         }
 
         // Recalculate lead score on engagement events
@@ -371,6 +411,15 @@ export async function registerRoutes(
               await db.update(contacts).set({ leadScore: score }).where(eq(contacts.id, contact.id));
               if (score !== oldScore) {
                 logActivity(contact.id, "score_changed", `Lead score: ${oldScore} → ${score}`, { oldScore, newScore: score });
+                // Hot lead notification
+                if (score > 60 && oldScore <= 60) {
+                  db.insert(notifications).values({
+                    type: "hot_lead",
+                    title: "Hot lead detectado",
+                    description: `${contact.nombre} (${contact.empresa}) alcanzó score ${score}`,
+                    contactId: contact.id,
+                  }).catch(() => {});
+                }
               }
             }
           } catch (scoreErr) {
@@ -753,6 +802,62 @@ export async function registerRoutes(
           .limit(5);
       } catch {}
 
+      // Revenue KPIs from deals
+      let pipelineValue = 0;
+      let dealsWonThisMonth = 0;
+      let dealsWonValue = 0;
+      let totalWon = 0;
+      let totalClosed = 0;
+      let avgDealSize = 0;
+      let staleDeals: any[] = [];
+      try {
+        const allDeals = await db.select().from(deals);
+        const openDeals = allDeals.filter(d => d.stage !== "closed_won" && d.stage !== "closed_lost");
+        pipelineValue = openDeals.reduce((sum, d) => sum + (d.value || 0), 0);
+
+        const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+        const wonDeals = allDeals.filter(d => d.stage === "closed_won");
+        totalWon = wonDeals.length;
+        totalClosed = wonDeals.length + allDeals.filter(d => d.stage === "closed_lost").length;
+        dealsWonThisMonth = wonDeals.filter(d => d.closedAt && d.closedAt >= monthStart).length;
+        dealsWonValue = wonDeals.filter(d => d.closedAt && d.closedAt >= monthStart).reduce((sum, d) => sum + (d.value || 0), 0);
+        avgDealSize = totalWon > 0 ? Math.round(wonDeals.reduce((sum, d) => sum + (d.value || 0), 0) / totalWon) : 0;
+
+        // Stale deals (no stage change in 7+ days, still open)
+        const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+        staleDeals = openDeals.filter(d => d.createdAt && d.createdAt < sevenDaysAgo).slice(0, 5);
+      } catch {}
+
+      // Unread notifications count
+      let unreadNotifications = 0;
+      try {
+        const [result] = await db.select({ value: count() }).from(notifications).where(eq(notifications.isRead, false));
+        unreadNotifications = result?.value || 0;
+      } catch {}
+
+      // Attention needed section
+      const attentionItems: any[] = [];
+      // Hot leads without recent notes
+      try {
+        const hotLeadContacts = allContacts.filter(c => c.leadScore > 60 && c.status !== "converted");
+        for (const hl of hotLeadContacts.slice(0, 5)) {
+          const recentNotes = await db.select().from(contactNotes)
+            .where(and(eq(contactNotes.contactId, hl.id), gte(contactNotes.createdAt, new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000))));
+          if (recentNotes.length === 0) {
+            attentionItems.push({ type: "hot_no_followup", contactId: hl.id, nombre: hl.nombre, empresa: hl.empresa, score: hl.leadScore });
+          }
+        }
+      } catch {}
+
+      // Overdue tasks
+      try {
+        const overdue = await db.select().from(tasks)
+          .where(and(eq(tasks.status, "pending"), lte(tasks.dueDate, now)));
+        for (const t of overdue.slice(0, 5)) {
+          attentionItems.push({ type: "task_overdue", taskId: t.id, title: t.title, contactId: t.contactId, dueDate: t.dueDate });
+        }
+      } catch {}
+
       res.json({
         kpis: {
           totalContacts,
@@ -763,11 +868,19 @@ export async function registerRoutes(
           pendingTasks,
           overdueTasks,
           hotLeads,
+          pipelineValue,
+          dealsWonThisMonth,
+          dealsWonValue,
+          winRate: totalClosed > 0 ? Math.round((totalWon / totalClosed) * 100) : 0,
+          avgDealSize,
+          unreadNotifications,
         },
         pipeline,
         emailPerformance,
         recentActivity,
         upcomingTasks,
+        attentionItems,
+        staleDeals,
       });
     } catch (err: any) {
       log(`Error admin dashboard: ${err?.message}`);
@@ -816,12 +929,82 @@ export async function registerRoutes(
     }
   });
 
+  // CSV Export (must be before :id route)
+  app.get("/api/admin/contacts/export", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const { status, search, minScore, maxScore, substatus: substatusFilter } = req.query as Record<string, string>;
+      const conditions = [];
+      if (status) conditions.push(eq(contacts.status, status));
+      if (substatusFilter) conditions.push(eq(contacts.substatus, substatusFilter));
+      if (search) {
+        conditions.push(
+          or(
+            ilike(contacts.nombre, `%${search}%`),
+            ilike(contacts.empresa, `%${search}%`),
+            ilike(contacts.email, `%${search}%`)
+          )!
+        );
+      }
+      if (minScore) conditions.push(gte(contacts.leadScore, parseInt(minScore)));
+      if (maxScore) conditions.push(lte(contacts.leadScore, parseInt(maxScore)));
+
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      const contactList = await db.select().from(contacts).where(whereClause).orderBy(desc(contacts.createdAt));
+
+      // Get email counts
+      const allEmails = await db.select().from(sentEmails);
+      const emailCounts: Record<string, { sent: number; opened: number }> = {};
+      for (const e of allEmails) {
+        if (!emailCounts[e.contactId]) emailCounts[e.contactId] = { sent: 0, opened: 0 };
+        if (e.status === "sent" || e.status === "opened" || e.status === "clicked") emailCounts[e.contactId].sent++;
+        if (e.status === "opened" || e.status === "clicked") emailCounts[e.contactId].opened++;
+      }
+
+      // Get diagnostics for industry
+      const diagIds = Array.from(new Set(contactList.map(c => c.diagnosticId)));
+      let diagMap: Record<string, { industria: string }> = {};
+      if (diagIds.length > 0) {
+        const diags = await db.select().from(diagnostics)
+          .where(sql`${diagnostics.id} IN (${sql.join(diagIds.map(id => sql`${id}`), sql`, `)})`);
+        for (const d of diags) diagMap[d.id] = { industria: d.industria };
+      }
+
+      const csvHeader = "Nombre,Empresa,Email,Teléfono,Industria,Status,Substatus,Lead Score,Emails Enviados,Emails Abiertos,Fecha Registro\n";
+      const csvRows = contactList.map(c => {
+        const ec = emailCounts[c.id] || { sent: 0, opened: 0 };
+        const industria = diagMap[c.diagnosticId]?.industria || "";
+        return [
+          `"${(c.nombre || "").replace(/"/g, '""')}"`,
+          `"${(c.empresa || "").replace(/"/g, '""')}"`,
+          `"${c.email}"`,
+          `"${c.telefono || ""}"`,
+          `"${industria.replace(/"/g, '""')}"`,
+          c.status,
+          c.substatus || "",
+          c.leadScore,
+          ec.sent,
+          ec.opened,
+          c.createdAt ? new Date(c.createdAt).toISOString().split("T")[0] : "",
+        ].join(",");
+      }).join("\n");
+
+      res.setHeader("Content-Type", "text/csv; charset=utf-8");
+      res.setHeader("Content-Disposition", "attachment; filename=contactos-im3.csv");
+      res.send("\uFEFF" + csvHeader + csvRows); // BOM for Excel
+    } catch (err: any) {
+      log(`Error exporting contacts: ${err?.message}`);
+      res.status(500).json({ error: "Error exportando contactos" });
+    }
+  });
+
   // Contacts list with filters
   app.get("/api/admin/contacts", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
 
     try {
-      const { status, search, page = "1", limit = "20" } = req.query as Record<string, string>;
+      const { status, search, page = "1", limit = "20", minScore, maxScore, substatus: substatusFilter, createdAfter, createdBefore, sortBy } = req.query as Record<string, string>;
       const pageNum = Math.max(1, parseInt(page) || 1);
       const limitNum = Math.min(100, Math.max(1, parseInt(limit) || 20));
       const offset = (pageNum - 1) * limitNum;
@@ -829,6 +1012,11 @@ export async function registerRoutes(
       // Build conditions
       const conditions = [];
       if (status) conditions.push(eq(contacts.status, status));
+      if (substatusFilter) conditions.push(eq(contacts.substatus, substatusFilter));
+      if (minScore) conditions.push(gte(contacts.leadScore, parseInt(minScore)));
+      if (maxScore) conditions.push(lte(contacts.leadScore, parseInt(maxScore)));
+      if (createdAfter) conditions.push(gte(contacts.createdAt, new Date(createdAfter)));
+      if (createdBefore) conditions.push(lte(contacts.createdAt, new Date(createdBefore)));
       if (search) {
         conditions.push(
           or(
@@ -1475,6 +1663,194 @@ export async function registerRoutes(
     } catch (err: any) {
       log(`Error regenerating AI insight: ${err?.message}`);
       res.status(500).json({ error: "Error regenerando análisis AI" });
+    }
+  });
+
+  // ============ DEALS CRUD ============
+
+  // List deals (with optional filters: stage, contactId)
+  app.get("/api/admin/deals", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const { stage, contactId } = req.query as Record<string, string>;
+      const conditions = [];
+      if (stage) conditions.push(eq(deals.stage, stage));
+      if (contactId) conditions.push(eq(deals.contactId, contactId));
+
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      const dealList = await db.select().from(deals).where(whereClause).orderBy(desc(deals.createdAt));
+
+      // Enrich with contact info
+      const contactIds = Array.from(new Set(dealList.map(d => d.contactId)));
+      let contactMap: Record<string, { nombre: string; empresa: string }> = {};
+      if (contactIds.length > 0) {
+        const contactList = await db.select().from(contacts)
+          .where(sql`${contacts.id} IN (${sql.join(contactIds.map(id => sql`${id}`), sql`, `)})`);
+        for (const c of contactList) contactMap[c.id] = { nombre: c.nombre, empresa: c.empresa };
+      }
+
+      const enriched = dealList.map(d => ({
+        ...d,
+        contactName: contactMap[d.contactId]?.nombre || "Unknown",
+        contactEmpresa: contactMap[d.contactId]?.empresa || "",
+      }));
+
+      res.json(enriched);
+    } catch (err: any) {
+      log(`Error listing deals: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo deals" });
+    }
+  });
+
+  // Create deal
+  app.post("/api/admin/deals", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const { contactId, title, value, stage, expectedCloseDate, notes } = req.body;
+      if (!contactId || !title) return res.status(400).json({ error: "contactId y title son requeridos" });
+
+      const [deal] = await db.insert(deals).values({
+        contactId,
+        title,
+        value: value || null,
+        stage: stage || "qualification",
+        expectedCloseDate: expectedCloseDate ? new Date(expectedCloseDate) : null,
+        notes: notes || null,
+      }).returning();
+
+      logActivity(contactId, "deal_created", `Deal creado: "${title}"${value ? ` — $${value}` : ""}`, { dealId: deal.id, stage: deal.stage });
+
+      // Create notification for new deal
+      await db.insert(notifications).values({
+        type: "deal_stage_changed",
+        title: `Nuevo deal: ${title}`,
+        description: `${value ? `$${value.toLocaleString()} — ` : ""}${stage || "qualification"}`,
+        contactId,
+      });
+
+      res.json(deal);
+    } catch (err: any) {
+      log(`Error creating deal: ${err?.message}`);
+      res.status(500).json({ error: "Error creando deal" });
+    }
+  });
+
+  // Update deal
+  app.patch("/api/admin/deals/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const dealId = req.params.id as string;
+      const { title, value, stage, lostReason, expectedCloseDate, closedAt, notes } = req.body;
+
+      const [existing] = await db.select().from(deals).where(eq(deals.id, dealId));
+      if (!existing) return res.status(404).json({ error: "Deal no encontrado" });
+
+      const updates: any = {};
+      if (title !== undefined) updates.title = title;
+      if (value !== undefined) updates.value = value;
+      if (stage !== undefined) updates.stage = stage;
+      if (lostReason !== undefined) updates.lostReason = lostReason;
+      if (expectedCloseDate !== undefined) updates.expectedCloseDate = expectedCloseDate ? new Date(expectedCloseDate) : null;
+      if (notes !== undefined) updates.notes = notes;
+
+      // Auto-set closedAt when moving to closed stages
+      if (stage === "closed_won" || stage === "closed_lost") {
+        updates.closedAt = closedAt ? new Date(closedAt) : new Date();
+      } else if (stage && stage !== "closed_won" && stage !== "closed_lost") {
+        updates.closedAt = null;
+      }
+
+      const [updated] = await db.update(deals).set(updates).where(eq(deals.id, dealId)).returning();
+
+      if (stage && stage !== existing.stage) {
+        logActivity(existing.contactId, "deal_stage_changed", `Deal "${existing.title}" movido de ${existing.stage} a ${stage}`, { dealId, oldStage: existing.stage, newStage: stage });
+
+        await db.insert(notifications).values({
+          type: "deal_stage_changed",
+          title: `Deal actualizado: ${existing.title}`,
+          description: `${existing.stage} → ${stage}${stage === "closed_won" && updated.value ? ` — $${updated.value.toLocaleString()}` : ""}`,
+          contactId: existing.contactId,
+        });
+      }
+
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error updating deal: ${err?.message}`);
+      res.status(500).json({ error: "Error actualizando deal" });
+    }
+  });
+
+  // Delete deal
+  app.delete("/api/admin/deals/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const dealId = req.params.id as string;
+      const [existing] = await db.select().from(deals).where(eq(deals.id, dealId));
+      if (!existing) return res.status(404).json({ error: "Deal no encontrado" });
+
+      await db.delete(deals).where(eq(deals.id, dealId));
+      logActivity(existing.contactId, "deal_deleted", `Deal eliminado: "${existing.title}"`);
+      res.json({ success: true });
+    } catch (err: any) {
+      log(`Error deleting deal: ${err?.message}`);
+      res.status(500).json({ error: "Error eliminando deal" });
+    }
+  });
+
+  // ============ NOTIFICATIONS ============
+
+  // List notifications (with optional unread filter)
+  app.get("/api/admin/notifications", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const { unread } = req.query as Record<string, string>;
+      const conditions = [];
+      if (unread === "true") conditions.push(eq(notifications.isRead, false));
+
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      const notifList = await db.select().from(notifications)
+        .where(whereClause)
+        .orderBy(desc(notifications.createdAt))
+        .limit(50);
+
+      const unreadCount = await db.select({ value: count() }).from(notifications)
+        .where(eq(notifications.isRead, false));
+
+      res.json({ notifications: notifList, unreadCount: unreadCount[0]?.value || 0 });
+    } catch (err: any) {
+      log(`Error listing notifications: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo notificaciones" });
+    }
+  });
+
+  // Mark notification as read
+  app.patch("/api/admin/notifications/:id/read", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      await db.update(notifications).set({ isRead: true }).where(eq(notifications.id, req.params.id as string));
+      res.json({ success: true });
+    } catch (err: any) {
+      log(`Error marking notification read: ${err?.message}`);
+      res.status(500).json({ error: "Error actualizando notificación" });
+    }
+  });
+
+  // Mark all notifications as read
+  app.post("/api/admin/notifications/mark-all-read", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      await db.update(notifications).set({ isRead: true }).where(eq(notifications.isRead, false));
+      res.json({ success: true });
+    } catch (err: any) {
+      log(`Error marking all read: ${err?.message}`);
+      res.status(500).json({ error: "Error actualizando notificaciones" });
     }
   });
 

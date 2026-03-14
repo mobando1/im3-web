@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { List, LayoutGrid, Mail } from "lucide-react";
+import { List, LayoutGrid, Mail, Filter, Download, X } from "lucide-react";
 
 type Contact = {
   id: string;
@@ -88,6 +88,10 @@ export default function Contacts() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
+  const [showFilters, setShowFilters] = useState(false);
+  const [minScore, setMinScore] = useState("");
+  const [maxScore, setMaxScore] = useState("");
+  const [substatusFilter, setSubstatusFilter] = useState("all");
   const [, navigate] = useLocation();
 
   const queryParams = new URLSearchParams();
@@ -95,6 +99,29 @@ export default function Contacts() {
   queryParams.set("limit", "20");
   if (statusFilter !== "all") queryParams.set("status", statusFilter);
   if (search) queryParams.set("search", search);
+  if (minScore) queryParams.set("minScore", minScore);
+  if (maxScore) queryParams.set("maxScore", maxScore);
+  if (substatusFilter !== "all") queryParams.set("substatus", substatusFilter);
+
+  const handleExport = () => {
+    const params = new URLSearchParams();
+    if (statusFilter !== "all") params.set("status", statusFilter);
+    if (search) params.set("search", search);
+    if (minScore) params.set("minScore", minScore);
+    if (maxScore) params.set("maxScore", maxScore);
+    if (substatusFilter !== "all") params.set("substatus", substatusFilter);
+    window.open(`/api/admin/contacts/export?${params.toString()}`, "_blank");
+  };
+
+  const hasActiveFilters = minScore !== "" || maxScore !== "" || substatusFilter !== "all";
+  const clearFilters = () => {
+    setMinScore("");
+    setMaxScore("");
+    setSubstatusFilter("all");
+    setStatusFilter("all");
+    setSearch("");
+    setPage(1);
+  };
 
   const { data, isLoading } = useQuery<ContactsResponse>({
     queryKey: [`/api/admin/contacts?${queryParams.toString()}`],
@@ -184,7 +211,57 @@ export default function Contacts() {
             </SelectContent>
           </Select>
         )}
+        <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className={`gap-1.5 border-gray-200 ${hasActiveFilters ? "text-[#2FA4A9] border-[#2FA4A9]/30 bg-[#2FA4A9]/5" : "text-gray-500"}`}>
+          <Filter className="w-4 h-4" />
+          Filtros
+          {hasActiveFilters && <span className="text-xs bg-[#2FA4A9] text-white rounded-full w-4 h-4 flex items-center justify-center">!</span>}
+        </Button>
+        <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5 border-gray-200 text-gray-500 hover:text-gray-900">
+          <Download className="w-4 h-4" />
+          CSV
+        </Button>
       </div>
+
+      {showFilters && (
+        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <p className="text-sm font-medium text-gray-700">Filtros avanzados</p>
+            {hasActiveFilters && (
+              <button onClick={clearFilters} className="text-xs text-red-500 hover:underline flex items-center gap-1">
+                <X className="w-3 h-3" /> Limpiar filtros
+              </button>
+            )}
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Lead Score minimo</label>
+              <Input type="number" placeholder="0" value={minScore} onChange={(e) => { setMinScore(e.target.value); setPage(1); }} className="bg-gray-50 border-gray-200 text-gray-900" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Lead Score maximo</label>
+              <Input type="number" placeholder="100" value={maxScore} onChange={(e) => { setMaxScore(e.target.value); setPage(1); }} className="bg-gray-50 border-gray-200 text-gray-900" />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Substatus</label>
+              <Select value={substatusFilter} onValueChange={(v) => { setSubstatusFilter(v); setPage(1); }}>
+                <SelectTrigger className="bg-gray-50 border-gray-200 text-gray-700">
+                  <SelectValue placeholder="Todos" />
+                </SelectTrigger>
+                <SelectContent className="bg-white border-gray-200">
+                  <SelectItem value="all">Todos</SelectItem>
+                  <SelectItem value="warm">Caliente</SelectItem>
+                  <SelectItem value="cold">Frio</SelectItem>
+                  <SelectItem value="interested">Interesado</SelectItem>
+                  <SelectItem value="no_response">Sin respuesta</SelectItem>
+                  <SelectItem value="proposal_sent">Propuesta enviada</SelectItem>
+                  <SelectItem value="delivering">En entrega</SelectItem>
+                  <SelectItem value="completed">Completado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* List View */}
       {view === "list" && (

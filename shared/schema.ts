@@ -201,3 +201,33 @@ export const aiInsightsCache = pgTable("ai_insights_cache", {
 });
 
 export type AiInsightCache = typeof aiInsightsCache.$inferSelect;
+
+// Deals / Opportunities (revenue tracking)
+export const deals = pgTable("deals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contactId: varchar("contact_id").notNull(),
+  title: text("title").notNull(),
+  value: integer("value"), // in USD
+  stage: text("stage").notNull().default("qualification"), // qualification | proposal | negotiation | closed_won | closed_lost
+  lostReason: text("lost_reason"),
+  expectedCloseDate: timestamp("expected_close_date"),
+  closedAt: timestamp("closed_at"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type Deal = typeof deals.$inferSelect;
+export type InsertDeal = typeof deals.$inferInsert;
+
+// In-app notifications
+export const notifications = pgTable("notifications", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  type: text("type").notNull(), // new_lead | email_opened | hot_lead | task_overdue | deal_stage_changed | email_clicked
+  title: text("title").notNull(),
+  description: text("description"),
+  contactId: varchar("contact_id"),
+  isRead: boolean("is_read").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type Notification = typeof notifications.$inferSelect;

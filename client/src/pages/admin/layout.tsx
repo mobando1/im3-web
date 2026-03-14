@@ -1,7 +1,9 @@
+import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { useQuery } from "@tanstack/react-query";
-import { LayoutDashboard, Users, CalendarDays, CheckSquare, LogOut } from "lucide-react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { LayoutDashboard, Users, CalendarDays, CheckSquare, LogOut, Bell } from "lucide-react";
 
 const navItems = [
   { label: "Dashboard", path: "/admin", icon: LayoutDashboard },
@@ -13,6 +15,39 @@ const navItems = [
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
   const { user, logout } = useAuth();
+
+  const queryClient = useQueryClient();
+  const [showNotifications, setShowNotifications] = useState(false);
+  const notifRef = useRef<HTMLDivElement>(null);
+
+  const { data: notifData } = useQuery<{ notifications: any[]; unreadCount: number }>({
+    queryKey: ["/api/admin/notifications"],
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("PATCH", `/api/admin/notifications/${id}/read`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/notifications"] }),
+  });
+
+  const markAllReadMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/admin/notifications/mark-all-read");
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/notifications"] }),
+  });
+
+  // Close on outside click
+  useEffect(() => {
+    function handleClick(e: MouseEvent) {
+      if (notifRef.current && !notifRef.current.contains(e.target as Node)) {
+        setShowNotifications(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, []);
 
   const { data: tasksList } = useQuery<any[]>({
     queryKey: ["/api/admin/tasks?status=pending"],
@@ -95,7 +130,59 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">
-        <div className="p-8 max-w-7xl">{children}</div>
+        {/* Top bar with notifications */}
+        <div className="flex items-center justify-end px-8 pt-4 pb-0">
+          <div className="relative" ref={notifRef}>
+            <button
+              onClick={() => setShowNotifications(!showNotifications)}
+              className="relative p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            >
+              <Bell className="w-5 h-5" />
+              {(notifData?.unreadCount || 0) > 0 && (
+                <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-4.5 h-4.5 min-w-[18px] h-[18px] flex items-center justify-center">
+                  {notifData!.unreadCount > 9 ? "9+" : notifData!.unreadCount}
+                </span>
+              )}
+            </button>
+
+            {showNotifications && (
+              <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-200 z-50 overflow-hidden">
+                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
+                  <p className="text-sm font-semibold text-gray-900">Notificaciones</p>
+                  {(notifData?.unreadCount || 0) > 0 && (
+                    <button onClick={() => markAllReadMutation.mutate()} className="text-xs text-[#2FA4A9] hover:underline">
+                      Marcar todas leidas
+                    </button>
+                  )}
+                </div>
+                <div className="max-h-80 overflow-y-auto">
+                  {(notifData?.notifications || []).length === 0 ? (
+                    <p className="text-sm text-gray-400 text-center py-8">Sin notificaciones</p>
+                  ) : (
+                    <ul className="divide-y divide-gray-50">
+                      {(notifData?.notifications || []).slice(0, 15).map((n: any) => (
+                        <li
+                          key={n.id}
+                          className={`px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${!n.isRead ? "bg-blue-50/50" : ""}`}
+                          onClick={() => {
+                            if (!n.isRead) markReadMutation.mutate(n.id);
+                            if (n.contactId) navigate(`/admin/contacts/${n.contactId}`);
+                            setShowNotifications(false);
+                          }}
+                        >
+                          <p className={`text-sm ${!n.isRead ? "font-medium text-gray-900" : "text-gray-600"}`}>{n.title}</p>
+                          {n.description && <p className="text-xs text-gray-400 mt-0.5">{n.description}</p>}
+                          <p className="text-xs text-gray-300 mt-1">{new Date(n.createdAt).toLocaleDateString("es-CO", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+        <div className="px-8 pb-8 max-w-7xl">{children}</div>
       </main>
     </div>
   );

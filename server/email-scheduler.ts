@@ -1,7 +1,7 @@
 import cron from "node-cron";
 import { db } from "./db";
-import { sentEmails, emailTemplates, contacts, diagnostics, abandonedLeads, activityLog } from "@shared/schema";
-import { eq, and, lte } from "drizzle-orm";
+import { sentEmails, emailTemplates, contacts, diagnostics, abandonedLeads, activityLog, notifications } from "@shared/schema";
+import { eq, and, lte, not } from "drizzle-orm";
 import { generateEmailContent, buildMicroReminderEmail } from "./email-ai";
 import { sendEmail, isEmailConfigured } from "./email-sender";
 import { parseFechaCita } from "./date-utils";
@@ -254,6 +254,117 @@ async function processAbandonedEmails() {
   }
 }
 
+/**
+ * Auto-update contact substatus based on email engagement patterns.
+ * Runs periodically to classify contacts as warm/cold/interested.
+ */
+async function updateContactSubstatuses() {
+  if (!db) return;
+
+  try {
+    // Get all active contacts (not opted out, not converted)
+    const activeContacts = await db.select().from(contacts)
+      .where(and(
+        eq(contacts.optedOut, false),
+        not(eq(contacts.status, "converted"))
+      ));
+
+    if (activeContacts.length === 0) return;
+
+    for (const contact of activeContacts) {
+      // Get all emails for this contact
+      const emails = await db.select().from(sentEmails)
+        .where(eq(sentEmails.contactId, contact.id));
+
+      const sentCount = emails.filter(e => ["sent", "opened", "clicked"].includes(e.status)).length;
+      const openedCount = emails.filter(e => e.status === "opened" || e.status === "clicked").length;
+      const clickedCount = emails.filter(e => e.status === "clicked").length;
+
+      let newSubstatus: string | null = null;
+
+      // Determine substatus based on engagement
+      if (clickedCount >= 1 || openedCount >= 2) {
+        newSubstatus = "interested";
+      } else if (contact.leadScore > 60) {
+        newSubstatus = "warm";
+      } else if (sentCount >= 3 && openedCount === 0) {
+        newSubstatus = "cold";
+      } else if (sentCount >= 2 && openedCount === 0) {
+        newSubstatus = "no_response";
+      }
+
+      // Only update if substatus changed and isn't manually set to a post-sale status
+      const manualStatuses = ["proposal_sent", "delivering", "completed"];
+      if (newSubstatus && newSubstatus !== contact.substatus && !manualStatuses.includes(contact.substatus || "")) {
+        await db.update(contacts)
+          .set({ substatus: newSubstatus })
+          .where(eq(contacts.id, contact.id));
+
+        // Log activity for cold leads
+        if (newSubstatus === "cold") {
+          try {
+            await db.insert(activityLog).values({
+              contactId: contact.id,
+              type: "status_changed",
+              description: `Substatus auto-actualizado a "frio" — ${sentCount} emails sin apertura`,
+            });
+          } catch (_) {}
+        }
+
+        // Create notification for cold leads
+        if (newSubstatus === "cold") {
+          try {
+            await db.insert(notifications).values({
+              type: "hot_lead",
+              title: `Lead frio: ${contact.nombre}`,
+              description: `${contact.empresa} — ${sentCount} emails sin abrir`,
+              contactId: contact.id,
+            });
+          } catch (_) {}
+        }
+      }
+    }
+  } catch (err: any) {
+    log(`Error updating substatuses: ${err?.message || err}`);
+  }
+}
+
+/**
+ * Check for overdue tasks and create notifications.
+ */
+async function checkOverdueTasks() {
+  if (!db) return;
+
+  try {
+    const { tasks } = await import("@shared/schema");
+    const now = new Date();
+    const overdueTasks = await db.select().from(tasks)
+      .where(and(eq(tasks.status, "pending"), lte(tasks.dueDate, now)));
+
+    for (const task of overdueTasks) {
+      if (!task.contactId) continue;
+      // Check if notification already exists for this task (avoid duplicates)
+      const existing = await db.select().from(notifications)
+        .where(and(
+          eq(notifications.type, "task_overdue"),
+          eq(notifications.contactId, task.contactId)
+        ))
+        .limit(1);
+
+      if (existing.length === 0) {
+        await db.insert(notifications).values({
+          type: "task_overdue",
+          title: `Tarea vencida: ${task.title}`,
+          description: task.dueDate ? `Vencio ${task.dueDate.toLocaleDateString("es-CO")}` : undefined,
+          contactId: task.contactId,
+        });
+      }
+    }
+  } catch (err: any) {
+    log(`Error checking overdue tasks: ${err?.message || err}`);
+  }
+}
+
 export function startEmailScheduler() {
   if (!isEmailConfigured()) {
     log("⚠ Email system not configured (missing ANTHROPIC_API_KEY or RESEND_API_KEY)");
@@ -264,6 +375,12 @@ export function startEmailScheduler() {
   cron.schedule("*/5 * * * *", async () => {
     await processEmailQueue().catch(err => log(`Cron error queue: ${err}`));
     await processAbandonedEmails().catch(err => log(`Cron error abandoned: ${err}`));
+  });
+
+  // Run substatus updates and overdue task checks every 30 minutes
+  cron.schedule("*/30 * * * *", async () => {
+    await updateContactSubstatuses().catch(err => log(`Cron error substatus: ${err}`));
+    await checkOverdueTasks().catch(err => log(`Cron error overdue: ${err}`));
   });
 
   // Also run once at startup (after 10 seconds to let DB connect)

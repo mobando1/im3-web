@@ -48,6 +48,8 @@ import {
   Shield,
   TrendingUp,
   Tag,
+  DollarSign,
+  Briefcase,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -88,6 +90,19 @@ type TaskItem = {
   contactId: string | null;
   contactName: string | null;
   completedAt: string | null;
+  createdAt: string;
+};
+
+type DealItem = {
+  id: string;
+  contactId: string;
+  title: string;
+  value: number | null;
+  stage: string;
+  lostReason: string | null;
+  expectedCloseDate: string | null;
+  closedAt: string | null;
+  notes: string | null;
   createdAt: string;
 };
 
@@ -252,6 +267,22 @@ const priorityLabels: Record<string, string> = {
   low: "Baja",
 };
 
+const dealStageLabels: Record<string, string> = {
+  qualification: "Calificacion",
+  proposal: "Propuesta",
+  negotiation: "Negociacion",
+  closed_won: "Ganado",
+  closed_lost: "Perdido",
+};
+
+const dealStageColors: Record<string, string> = {
+  qualification: "bg-blue-50 text-blue-700 border-blue-200",
+  proposal: "bg-amber-50 text-amber-700 border-amber-200",
+  negotiation: "bg-orange-50 text-orange-700 border-orange-200",
+  closed_won: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  closed_lost: "bg-red-50 text-red-700 border-red-200",
+};
+
 function getInitials(name: string): string {
   return name
     .split(" ")
@@ -300,6 +331,10 @@ export default function ContactDetailPage() {
   const [editEmailBody, setEditEmailBody] = useState("");
   const [newTaskTitle, setNewTaskTitle] = useState("");
   const [newTaskPriority, setNewTaskPriority] = useState("medium");
+  const [showDealForm, setShowDealForm] = useState(false);
+  const [newDealTitle, setNewDealTitle] = useState("");
+  const [newDealValue, setNewDealValue] = useState("");
+  const [newDealStage, setNewDealStage] = useState("qualification");
 
   const contactId = params?.id;
 
@@ -325,6 +360,11 @@ export default function ContactDetailPage() {
 
   const { data: contactTasks = [] } = useQuery<TaskItem[]>({
     queryKey: [`/api/admin/tasks?contactId=${contactId}`],
+    enabled: !!contactId,
+  });
+
+  const { data: contactDeals = [] } = useQuery<DealItem[]>({
+    queryKey: [`/api/admin/deals?contactId=${contactId}`],
     enabled: !!contactId,
   });
 
@@ -415,6 +455,45 @@ export default function ContactDetailPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/tasks?contactId=${contactId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/activity`] });
+    },
+  });
+
+  const createDealMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/admin/deals", {
+        contactId,
+        title: newDealTitle,
+        value: newDealValue ? parseInt(newDealValue) : null,
+        stage: newDealStage,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals?contactId=${contactId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/activity`] });
+      setNewDealTitle("");
+      setNewDealValue("");
+      setNewDealStage("qualification");
+      setShowDealForm(false);
+    },
+  });
+
+  const updateDealStageMutation = useMutation({
+    mutationFn: async ({ dealId, stage }: { dealId: string; stage: string }) => {
+      await apiRequest("PATCH", `/api/admin/deals/${dealId}`, { stage });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals?contactId=${contactId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/activity`] });
+    },
+  });
+
+  const deleteDealMutation = useMutation({
+    mutationFn: async (dealId: string) => {
+      await apiRequest("DELETE", `/api/admin/deals/${dealId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/deals?contactId=${contactId}`] });
       queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/activity`] });
     },
   });
@@ -810,6 +889,82 @@ export default function ContactDetailPage() {
               </Card>
             )}
           </div>
+
+          {/* Deals / Oportunidades */}
+          <Card className="bg-white border-gray-200 shadow-sm">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium flex items-center gap-2">
+                  <Briefcase className="w-4 h-4" /> Oportunidades ({contactDeals.length})
+                </CardTitle>
+                <Button variant="ghost" size="sm" onClick={() => setShowDealForm(!showDealForm)} className="text-[#2FA4A9] hover:text-[#238b8f] gap-1 text-xs">
+                  <Plus className="w-3.5 h-3.5" /> Deal
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {showDealForm && (
+                <div className="bg-gray-50 rounded-lg p-4 space-y-3 border border-gray-200">
+                  <Input placeholder="Titulo del deal..." value={newDealTitle} onChange={(e) => setNewDealTitle(e.target.value)} className="bg-white border-gray-200 text-gray-900" />
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <DollarSign className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                      <Input type="number" placeholder="Valor USD" value={newDealValue} onChange={(e) => setNewDealValue(e.target.value)} className="pl-9 bg-white border-gray-200 text-gray-900" />
+                    </div>
+                    <Select value={newDealStage} onValueChange={setNewDealStage}>
+                      <SelectTrigger className="w-40 bg-white border-gray-200 text-gray-700">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-white border-gray-200">
+                        {Object.entries(dealStageLabels).map(([k, v]) => (
+                          <SelectItem key={k} value={k}>{v}</SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setShowDealForm(false)} className="text-gray-500">Cancelar</Button>
+                    <Button size="sm" disabled={!newDealTitle.trim() || createDealMutation.isPending} onClick={() => createDealMutation.mutate()} className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white">Crear</Button>
+                  </div>
+                </div>
+              )}
+              {contactDeals.length === 0 && !showDealForm ? (
+                <p className="text-sm text-gray-400 text-center py-4">Sin oportunidades aun</p>
+              ) : (
+                <div className="space-y-2">
+                  {contactDeals.map((deal) => (
+                    <div key={deal.id} className="bg-gray-50 rounded-lg px-4 py-3 group">
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900 truncate">{deal.title}</p>
+                          <div className="flex items-center gap-2 mt-1">
+                            {deal.value != null && (
+                              <span className="text-sm font-semibold text-emerald-600">${deal.value.toLocaleString()}</span>
+                            )}
+                            <Select value={deal.stage} onValueChange={(stage) => updateDealStageMutation.mutate({ dealId: deal.id, stage })}>
+                              <SelectTrigger className="h-6 w-auto text-xs border-0 bg-transparent p-0 gap-1 focus:ring-0">
+                                <Badge variant="outline" className={`${dealStageColors[deal.stage] || ""} text-xs cursor-pointer`}>
+                                  {dealStageLabels[deal.stage] || deal.stage}
+                                </Badge>
+                              </SelectTrigger>
+                              <SelectContent className="bg-white border-gray-200">
+                                {Object.entries(dealStageLabels).map(([k, v]) => (
+                                  <SelectItem key={k} value={k}>{v}</SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <button onClick={() => deleteDealMutation.mutate(deal.id)} className="text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 shrink-0" title="Eliminar deal">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Notes Section */}
           <Card className="bg-white border-gray-200 shadow-sm">

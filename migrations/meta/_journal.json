@@ -22,6 +22,13 @@
       "when": 1773458480244,
       "tag": "0002_condemned_ultimo",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1773459838528,
+      "tag": "0003_goofy_switch",
+      "breakpoints": true
     }
   ]
 }

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Users, TrendingUp, Mail, Calendar, Eye, Clock, CheckSquare, Flame, AlertTriangle } from "lucide-react";
+import { Users, TrendingUp, Mail, Calendar, Eye, Clock, CheckSquare, Flame, AlertTriangle, DollarSign, Briefcase, Bell } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   BarChart,
@@ -29,6 +29,12 @@ type DashboardData = {
     pendingTasks: number;
     overdueTasks: number;
     hotLeads: number;
+    pipelineValue: number;
+    dealsWonThisMonth: number;
+    dealsWonValue: number;
+    winRate: number;
+    avgDealSize: number;
+    unreadNotifications: number;
   };
   pipeline: { lead: number; contacted: number; scheduled: number; converted: number };
   emailPerformance: Array<{ template: string; sent: number; opened: number; rate: number }>;
@@ -40,6 +46,24 @@ type DashboardData = {
     timestamp: string;
   }>;
   upcomingTasks: UpcomingTask[];
+  attentionItems: Array<{
+    type: string;
+    contactId?: string;
+    nombre?: string;
+    empresa?: string;
+    score?: number;
+    taskId?: string;
+    title?: string;
+    dueDate?: string;
+  }>;
+  staleDeals: Array<{
+    id: string;
+    title: string;
+    value: number | null;
+    stage: string;
+    contactId: string;
+    createdAt: string;
+  }>;
 };
 
 function relativeTime(timestamp: string): string {
@@ -108,7 +132,7 @@ export default function Dashboard() {
 
   if (!data) return null;
 
-  const { kpis, pipeline, emailPerformance, recentActivity, upcomingTasks } = data;
+  const { kpis, pipeline, emailPerformance, recentActivity, upcomingTasks, attentionItems, staleDeals } = data;
 
   const kpiCards = [
     {
@@ -205,6 +229,58 @@ export default function Dashboard() {
             </Card>
           );
         })}
+      </div>
+
+      {/* Row 1b: Revenue KPIs */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <Card className="bg-white border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+          <div className="h-1 bg-gradient-to-r from-emerald-500 to-emerald-600" />
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between mb-4">
+              <div className="bg-emerald-50 rounded-xl p-2.5">
+                <DollarSign className="w-5 h-5 text-emerald-600" />
+              </div>
+            </div>
+            <p className="text-3xl font-semibold text-gray-900">${kpis.pipelineValue.toLocaleString()}</p>
+            <p className="text-sm text-gray-500 mt-1">Pipeline activo</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-white border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+          <div className="h-1 bg-gradient-to-r from-green-500 to-green-600" />
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between mb-4">
+              <div className="bg-green-50 rounded-xl p-2.5">
+                <Briefcase className="w-5 h-5 text-green-600" />
+              </div>
+            </div>
+            <p className="text-3xl font-semibold text-gray-900">{kpis.dealsWonThisMonth}</p>
+            <p className="text-sm text-gray-500 mt-1">Deals ganados este mes {kpis.dealsWonValue > 0 && <span className="text-emerald-600 font-medium">(${kpis.dealsWonValue.toLocaleString()})</span>}</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-white border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+          <div className="h-1 bg-gradient-to-r from-teal-500 to-teal-600" />
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between mb-4">
+              <div className="bg-teal-50 rounded-xl p-2.5">
+                <TrendingUp className="w-5 h-5 text-teal-600" />
+              </div>
+            </div>
+            <p className="text-3xl font-semibold text-gray-900">{kpis.winRate}%</p>
+            <p className="text-sm text-gray-500 mt-1">Win rate</p>
+          </CardContent>
+        </Card>
+        <Card className="bg-white border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+          <div className="h-1 bg-gradient-to-r from-cyan-500 to-cyan-600" />
+          <CardContent className="p-5">
+            <div className="flex items-start justify-between mb-4">
+              <div className="bg-cyan-50 rounded-xl p-2.5">
+                <DollarSign className="w-5 h-5 text-cyan-600" />
+              </div>
+            </div>
+            <p className="text-3xl font-semibold text-gray-900">${kpis.avgDealSize.toLocaleString()}</p>
+            <p className="text-sm text-gray-500 mt-1">Ticket promedio</p>
+          </CardContent>
+        </Card>
       </div>
 
       {/* Row 2: Pipeline + Email Performance */}
@@ -384,6 +460,49 @@ export default function Dashboard() {
                   </li>
                 );
               })}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Requires Attention */}
+      {attentionItems && attentionItems.length > 0 && (
+        <Card className="bg-white border-red-200 shadow-sm">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-red-600 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4" /> Requiere Atencion
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ul className="divide-y divide-gray-100">
+              {attentionItems.map((item, idx) => (
+                <li
+                  key={idx}
+                  className="flex items-center gap-3 px-6 py-3 hover:bg-gray-50 cursor-pointer transition-colors"
+                  onClick={() => item.contactId && navigate(`/admin/contacts/${item.contactId}`)}
+                >
+                  {item.type === "hot_no_followup" ? (
+                    <>
+                      <Flame className="w-4 h-4 text-orange-500 shrink-0" />
+                      <span className="text-sm text-gray-700 flex-1">
+                        <span className="font-medium">{item.nombre}</span> ({item.empresa}) — score {item.score}, sin follow-up reciente
+                      </span>
+                    </>
+                  ) : item.type === "task_overdue" ? (
+                    <>
+                      <Clock className="w-4 h-4 text-red-500 shrink-0" />
+                      <span className="text-sm text-gray-700 flex-1">
+                        Tarea vencida: <span className="font-medium">{item.title}</span>
+                      </span>
+                      {item.dueDate && (
+                        <span className="text-xs text-red-500 shrink-0">
+                          {new Date(item.dueDate).toLocaleDateString("es-CO")}
+                        </span>
+                      )}
+                    </>
+                  ) : null}
+                </li>
+              ))}
             </ul>
           </CardContent>
         </Card>
