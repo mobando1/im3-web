@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import { db } from "./db";
-import { sentEmails, emailTemplates, contacts, diagnostics, abandonedLeads } from "@shared/schema";
+import { sentEmails, emailTemplates, contacts, diagnostics, abandonedLeads, activityLog } from "@shared/schema";
 import { eq, and, lte } from "drizzle-orm";
 import { generateEmailContent, buildMicroReminderEmail } from "./email-ai";
 import { sendEmail, isEmailConfigured } from "./email-sender";
@@ -151,6 +151,16 @@ async function processEmailQueue() {
             .set({ status: "contacted" })
             .where(eq(contacts.id, contact.id));
         }
+
+        // Log activity
+        try {
+          await db.insert(activityLog).values({
+            contactId: contact.id,
+            type: "email_sent",
+            description: `Email enviado: "${subject}"`,
+            metadata: { emailId: email.id, templateName: template.nombre, subject },
+          });
+        } catch (_) {}
 
         log(`Email enviado: "${subject}" → ${contact.email}`);
       } catch (err: any) {

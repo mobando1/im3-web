@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -35,6 +36,18 @@ import {
   Send,
   RefreshCw,
   Sparkles,
+  FileText,
+  Activity,
+  CheckSquare,
+  Square,
+  Plus,
+  Target,
+  ArrowRight,
+  AlertTriangle,
+  Brain,
+  Shield,
+  TrendingUp,
+  Tag,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -56,6 +69,42 @@ type ContactNote = {
   createdAt: string;
 };
 
+type ActivityEntry = {
+  id: string;
+  contactId: string;
+  type: string;
+  description: string;
+  metadata: Record<string, any> | null;
+  createdAt: string;
+};
+
+type TaskItem = {
+  id: string;
+  title: string;
+  description: string | null;
+  dueDate: string | null;
+  priority: string;
+  status: string;
+  contactId: string | null;
+  contactName: string | null;
+  completedAt: string | null;
+  createdAt: string;
+};
+
+type AiInsight = {
+  id: string;
+  contactId: string;
+  insight: {
+    summary: string;
+    nextActions: string[];
+    talkingPoints: string[];
+    riskLevel: string;
+    riskReason: string;
+    estimatedValue: string;
+  };
+  generatedAt: string;
+};
+
 type ContactDetail = {
   contact: {
     id: string;
@@ -64,7 +113,10 @@ type ContactDetail = {
     email: string;
     telefono: string | null;
     status: string;
+    substatus: string | null;
+    tags: string[] | null;
     optedOut: boolean;
+    leadScore: number;
     createdAt: string;
     diagnosticId: string;
   };
@@ -77,11 +129,35 @@ type ContactDetail = {
     herramientas: string;
     nivelTech: string;
     usaIA: string;
+    usaIAParaQue: string | null;
     areaPrioridad: string[];
     presupuesto: string;
     googleDriveUrl: string | null;
     meetLink: string | null;
     comodidadTech: string;
+    empresa: string;
+    anosOperacion: string;
+    ciudades: string;
+    participante: string;
+    email: string;
+    telefono: string | null;
+    resultadoEsperado: string;
+    productos: string;
+    volumenMensual: string;
+    clientePrincipal: string;
+    clientePrincipalOtro: string | null;
+    canalesAdquisicion: string[];
+    canalAdquisicionOtro: string | null;
+    canalPrincipal: string;
+    conectadas: string;
+    conectadasDetalle: string | null;
+    familiaridad: {
+      automatizacion: string;
+      crm: string;
+      ia: string;
+      integracion: string;
+      desarrollo: string;
+    } | null;
   } | null;
   emails: EmailItem[];
 };
@@ -110,6 +186,16 @@ const statusLabels: Record<string, string> = {
   converted: "Convertido",
 };
 
+const substatusLabels: Record<string, string> = {
+  warm: "Caliente",
+  cold: "Frio",
+  interested: "Interesado",
+  no_response: "Sin respuesta",
+  proposal_sent: "Propuesta enviada",
+  delivering: "En entrega",
+  completed: "Completado",
+};
+
 const templateLabels: Record<string, string> = {
   confirmacion: "Confirmacion",
   caso_exito: "Caso de Exito",
@@ -118,6 +204,52 @@ const templateLabels: Record<string, string> = {
   micro_recordatorio: "Recordatorio",
   seguimiento_post: "Seguimiento Post",
   abandono: "Rescate",
+};
+
+const activityIcons: Record<string, any> = {
+  form_submitted: FileText,
+  status_changed: ArrowRight,
+  email_sent: Mail,
+  email_opened: Eye,
+  email_clicked: ExternalLink,
+  email_bounced: X,
+  note_added: MessageSquarePlus,
+  note_deleted: Trash2,
+  contact_edited: Pencil,
+  task_created: Plus,
+  task_completed: CheckSquare,
+  score_changed: Target,
+  opted_out: X,
+  ai_insight_generated: Sparkles,
+};
+
+const activityColors: Record<string, string> = {
+  form_submitted: "bg-blue-50 text-blue-600",
+  status_changed: "bg-amber-50 text-amber-600",
+  email_sent: "bg-teal-50 text-teal-600",
+  email_opened: "bg-emerald-50 text-emerald-600",
+  email_clicked: "bg-green-50 text-green-600",
+  email_bounced: "bg-red-50 text-red-600",
+  note_added: "bg-purple-50 text-purple-600",
+  note_deleted: "bg-gray-50 text-gray-500",
+  contact_edited: "bg-orange-50 text-orange-600",
+  task_created: "bg-blue-50 text-blue-600",
+  task_completed: "bg-emerald-50 text-emerald-600",
+  score_changed: "bg-amber-50 text-amber-600",
+  opted_out: "bg-red-50 text-red-600",
+  ai_insight_generated: "bg-purple-50 text-purple-600",
+};
+
+const priorityColors: Record<string, string> = {
+  high: "bg-red-50 text-red-700 border-red-200",
+  medium: "bg-amber-50 text-amber-700 border-amber-200",
+  low: "bg-gray-50 text-gray-600 border-gray-200",
+};
+
+const priorityLabels: Record<string, string> = {
+  high: "Alta",
+  medium: "Media",
+  low: "Baja",
 };
 
 function getInitials(name: string): string {
@@ -134,13 +266,24 @@ function relativeDate(dateStr: string): string {
   const now = new Date();
   const date = new Date(dateStr);
   const diffMs = now.getTime() - date.getTime();
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
-  if (diffDays === 0) return "hoy";
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "ahora";
+  if (diffMin < 60) return `hace ${diffMin}m`;
+  const diffHours = Math.floor(diffMin / 60);
+  if (diffHours < 24) return `hace ${diffHours}h`;
+  const diffDays = Math.floor(diffHours / 24);
   if (diffDays === 1) return "hace 1 dia";
   if (diffDays < 30) return `hace ${diffDays} dias`;
   const diffMonths = Math.floor(diffDays / 30);
   if (diffMonths === 1) return "hace 1 mes";
   return `hace ${diffMonths} meses`;
+}
+
+function familiarityLevel(value: string): { width: string; color: string } {
+  const v = value?.toLowerCase() || "";
+  if (v === "alto" || v === "avanzado") return { width: "100%", color: "bg-emerald-500" };
+  if (v === "medio" || v === "intermedio") return { width: "66%", color: "bg-amber-500" };
+  return { width: "33%", color: "bg-gray-400" };
 }
 
 export default function ContactDetailPage() {
@@ -155,6 +298,8 @@ export default function ContactDetailPage() {
   const [editingEmailId, setEditingEmailId] = useState<string | null>(null);
   const [editEmailSubject, setEditEmailSubject] = useState("");
   const [editEmailBody, setEditEmailBody] = useState("");
+  const [newTaskTitle, setNewTaskTitle] = useState("");
+  const [newTaskPriority, setNewTaskPriority] = useState("medium");
 
   const contactId = params?.id;
 
@@ -168,21 +313,38 @@ export default function ContactDetailPage() {
     enabled: !!contactId,
   });
 
+  const { data: activities = [] } = useQuery<ActivityEntry[]>({
+    queryKey: [`/api/admin/contacts/${contactId}/activity`],
+    enabled: !!contactId,
+  });
+
+  const { data: aiInsight, isLoading: insightLoading } = useQuery<AiInsight>({
+    queryKey: [`/api/admin/contacts/${contactId}/ai-insight`],
+    enabled: !!contactId,
+  });
+
+  const { data: contactTasks = [] } = useQuery<TaskItem[]>({
+    queryKey: [`/api/admin/tasks?contactId=${contactId}`],
+    enabled: !!contactId,
+  });
+
   const statusMutation = useMutation({
-    mutationFn: async (newStatus: string) => {
-      await apiRequest("PATCH", `/api/admin/contacts/${contactId}/status`, { status: newStatus });
+    mutationFn: async ({ status, substatus }: { status: string; substatus?: string }) => {
+      await apiRequest("PATCH", `/api/admin/contacts/${contactId}/status`, { status, substatus });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/activity`] });
     },
   });
 
   const editMutation = useMutation({
-    mutationFn: async (data: { nombre: string; empresa: string; email: string; telefono: string }) => {
-      await apiRequest("PATCH", `/api/admin/contacts/${contactId}`, data);
+    mutationFn: async (updates: Record<string, any>) => {
+      await apiRequest("PATCH", `/api/admin/contacts/${contactId}`, updates);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/activity`] });
       setEditMode(false);
     },
   });
@@ -193,6 +355,7 @@ export default function ContactDetailPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/notes`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/activity`] });
       setNoteText("");
     },
   });
@@ -203,6 +366,7 @@ export default function ContactDetailPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/notes`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/activity`] });
     },
   });
 
@@ -222,6 +386,36 @@ export default function ContactDetailPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}`] });
+    },
+  });
+
+  const regenerateInsightMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", `/api/admin/contacts/${contactId}/ai-insight/regenerate`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/ai-insight`] });
+    },
+  });
+
+  const createTaskMutation = useMutation({
+    mutationFn: async (data: { title: string; priority: string; contactId: string }) => {
+      await apiRequest("POST", "/api/admin/tasks", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/tasks?contactId=${contactId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/activity`] });
+      setNewTaskTitle("");
+    },
+  });
+
+  const toggleTaskMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      await apiRequest("PATCH", `/api/admin/tasks/${id}`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/tasks?contactId=${contactId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/activity`] });
     },
   });
 
@@ -253,10 +447,7 @@ export default function ContactDetailPage() {
       <div className="space-y-6">
         <div className="h-8 bg-gray-100 rounded animate-pulse w-48" />
         <div className="h-40 bg-gray-100 rounded animate-pulse" />
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="h-64 bg-gray-100 rounded animate-pulse" />
-          <div className="h-64 bg-gray-100 rounded animate-pulse" />
-        </div>
+        <div className="h-96 bg-gray-100 rounded animate-pulse" />
       </div>
     );
   }
@@ -264,12 +455,17 @@ export default function ContactDetailPage() {
   if (!data) return null;
 
   const { contact, diagnostic, emails } = data;
-
   const sentCount = emails.filter(
     (e) => e.status === "sent" || e.status === "opened" || e.status === "clicked"
   ).length;
   const totalEmails = emails.length;
   const progressPercent = totalEmails > 0 ? (sentCount / totalEmails) * 100 : 0;
+
+  const riskColors: Record<string, string> = {
+    low: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    medium: "bg-amber-50 text-amber-700 border-amber-200",
+    high: "bg-red-50 text-red-700 border-red-200",
+  };
 
   return (
     <div className="space-y-6">
@@ -294,10 +490,19 @@ export default function ContactDetailPage() {
             <h2 className="text-2xl font-semibold text-gray-900 truncate">
               {contact.nombre}
             </h2>
-            <p className="text-sm text-gray-500">{contact.empresa}</p>
+            <div className="flex items-center gap-2 mt-0.5">
+              <p className="text-sm text-gray-500">{contact.empresa}</p>
+              <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                contact.leadScore > 60 ? "bg-red-50 text-red-600" :
+                contact.leadScore > 30 ? "bg-amber-50 text-amber-600" :
+                "bg-gray-100 text-gray-500"
+              }`}>
+                Score: {contact.leadScore}
+              </span>
+            </div>
           </div>
         </div>
-        <div className="flex items-center gap-3 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 flex-wrap">
           <Button
             variant="outline"
             size="sm"
@@ -315,9 +520,14 @@ export default function ContactDetailPage() {
           <Badge variant="outline" className={statusColors[contact.status] || ""}>
             {statusLabels[contact.status] || contact.status}
           </Badge>
+          {contact.substatus && (
+            <Badge variant="outline" className="bg-gray-50 text-gray-600 border-gray-200">
+              {substatusLabels[contact.substatus] || contact.substatus}
+            </Badge>
+          )}
           <Select
             value={contact.status}
-            onValueChange={(v) => statusMutation.mutate(v)}
+            onValueChange={(v) => statusMutation.mutate({ status: v })}
           >
             <SelectTrigger className="w-36 bg-white border-gray-200 text-gray-700">
               <SelectValue />
@@ -344,52 +554,26 @@ export default function ContactDetailPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Nombre</label>
-                <Input
-                  value={editData.nombre}
-                  onChange={(e) => setEditData({ ...editData, nombre: e.target.value })}
-                  className="bg-white border-gray-200"
-                />
+                <Input value={editData.nombre} onChange={(e) => setEditData({ ...editData, nombre: e.target.value })} className="bg-white border-gray-200" />
               </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Empresa</label>
-                <Input
-                  value={editData.empresa}
-                  onChange={(e) => setEditData({ ...editData, empresa: e.target.value })}
-                  className="bg-white border-gray-200"
-                />
+                <Input value={editData.empresa} onChange={(e) => setEditData({ ...editData, empresa: e.target.value })} className="bg-white border-gray-200" />
               </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Email</label>
-                <Input
-                  value={editData.email}
-                  onChange={(e) => setEditData({ ...editData, email: e.target.value })}
-                  className="bg-white border-gray-200"
-                />
+                <Input value={editData.email} onChange={(e) => setEditData({ ...editData, email: e.target.value })} className="bg-white border-gray-200" />
               </div>
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Telefono</label>
-                <Input
-                  value={editData.telefono}
-                  onChange={(e) => setEditData({ ...editData, telefono: e.target.value })}
-                  className="bg-white border-gray-200"
-                />
+                <Input value={editData.telefono} onChange={(e) => setEditData({ ...editData, telefono: e.target.value })} className="bg-white border-gray-200" />
               </div>
             </div>
             <div className="flex gap-2 mt-4">
-              <Button
-                size="sm"
-                onClick={() => editMutation.mutate(editData)}
-                disabled={editMutation.isPending}
-                className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white"
-              >
+              <Button size="sm" onClick={() => editMutation.mutate(editData)} disabled={editMutation.isPending} className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white">
                 {editMutation.isPending ? "Guardando..." : "Guardar"}
               </Button>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setEditMode(false)}
-                className="border-gray-200 text-gray-600"
-              >
+              <Button variant="outline" size="sm" onClick={() => setEditMode(false)} className="border-gray-200 text-gray-600">
                 Cancelar
               </Button>
             </div>
@@ -397,511 +581,681 @@ export default function ContactDetailPage() {
         </Card>
       )}
 
-      {/* 2-column grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Left column - Contact Info */}
-        <Card className="bg-white border-gray-200 shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">
-              Contacto
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="flex items-center gap-3">
-              <Mail className="w-4 h-4 text-gray-400 shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs text-gray-400">Email</p>
-                <div className="flex items-center gap-2">
-                  <a
-                    href={`mailto:${contact.email}`}
-                    className="text-sm text-[#2FA4A9] hover:underline truncate"
-                  >
-                    {contact.email}
-                  </a>
+      {/* TABS */}
+      <Tabs defaultValue="resumen" className="w-full">
+        <TabsList className="bg-gray-100 border border-gray-200">
+          <TabsTrigger value="resumen" className="gap-1.5 data-[state=active]:bg-white">
+            <Building2 className="w-3.5 h-3.5" /> Resumen
+          </TabsTrigger>
+          <TabsTrigger value="diagnostico" className="gap-1.5 data-[state=active]:bg-white">
+            <FileText className="w-3.5 h-3.5" /> Diagnostico
+          </TabsTrigger>
+          <TabsTrigger value="emails" className="gap-1.5 data-[state=active]:bg-white">
+            <Mail className="w-3.5 h-3.5" /> Emails ({totalEmails})
+          </TabsTrigger>
+          <TabsTrigger value="actividad" className="gap-1.5 data-[state=active]:bg-white">
+            <Activity className="w-3.5 h-3.5" /> Actividad
+          </TabsTrigger>
+          <TabsTrigger value="tareas" className="gap-1.5 data-[state=active]:bg-white">
+            <CheckSquare className="w-3.5 h-3.5" /> Tareas ({contactTasks.filter(t => t.status === "pending").length})
+          </TabsTrigger>
+        </TabsList>
+
+        {/* ===== TAB: RESUMEN ===== */}
+        <TabsContent value="resumen" className="space-y-6 mt-4">
+          {/* AI Insight Card */}
+          <Card className="bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200/50 shadow-sm">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xs text-purple-600 uppercase tracking-wider font-medium flex items-center gap-2">
+                  <Brain className="w-4 h-4" /> Analisis AI
+                </CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => regenerateInsightMutation.mutate()}
+                  disabled={regenerateInsightMutation.isPending}
+                  className="text-purple-600 hover:text-purple-800 gap-1.5 text-xs"
+                >
+                  {regenerateInsightMutation.isPending ? (
+                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3.5 h-3.5" />
+                  )}
+                  {regenerateInsightMutation.isPending ? "Analizando..." : "Regenerar"}
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent>
+              {insightLoading ? (
+                <div className="space-y-2 animate-pulse">
+                  <div className="h-4 bg-purple-100 rounded w-3/4" />
+                  <div className="h-4 bg-purple-100 rounded w-1/2" />
+                </div>
+              ) : aiInsight?.insight ? (
+                <div className="space-y-4">
+                  <p className="text-sm text-gray-700">{aiInsight.insight.summary}</p>
+
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <Badge variant="outline" className={`${riskColors[aiInsight.insight.riskLevel] || riskColors.medium} gap-1`}>
+                      <Shield className="w-3 h-3" />
+                      Riesgo: {aiInsight.insight.riskLevel === "low" ? "Bajo" : aiInsight.insight.riskLevel === "high" ? "Alto" : "Medio"}
+                    </Badge>
+                    <span className="text-xs text-gray-500 flex items-center gap-1">
+                      <TrendingUp className="w-3 h-3" />
+                      {aiInsight.insight.estimatedValue}
+                    </span>
+                  </div>
+
+                  {aiInsight.insight.riskReason && (
+                    <p className="text-xs text-gray-500 italic">{aiInsight.insight.riskReason}</p>
+                  )}
+
+                  {aiInsight.insight.nextActions.length > 0 && (
+                    <div>
+                      <p className="text-xs text-gray-500 font-medium mb-1.5">Proximos pasos:</p>
+                      <ul className="space-y-1">
+                        {aiInsight.insight.nextActions.map((action, i) => (
+                          <li key={i} className="text-sm text-gray-700 flex items-start gap-2">
+                            <span className="text-purple-500 mt-1 shrink-0">•</span>
+                            {action}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {aiInsight.insight.talkingPoints.length > 0 && (
+                    <div>
+                      <p className="text-xs text-gray-500 font-medium mb-1.5">Talking points para la llamada:</p>
+                      <ul className="space-y-1">
+                        {aiInsight.insight.talkingPoints.map((point, i) => (
+                          <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
+                            <span className="text-blue-500 mt-1 shrink-0">→</span>
+                            {point}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-4">
+                  <p className="text-sm text-gray-400">Sin analisis AI aun</p>
                   <button
-                    onClick={() => handleCopyEmail(contact.email)}
-                    className="text-gray-400 hover:text-gray-700 transition-colors"
-                    title="Copiar email"
+                    onClick={() => regenerateInsightMutation.mutate()}
+                    className="mt-2 text-xs text-purple-600 hover:underline flex items-center gap-1 mx-auto"
                   >
-                    {copied ? (
-                      <Check className="w-3.5 h-3.5 text-[#2FA4A9]" />
-                    ) : (
-                      <Copy className="w-3.5 h-3.5" />
-                    )}
+                    <Sparkles className="w-3 h-3" /> Generar analisis
                   </button>
                 </div>
-              </div>
-            </div>
+              )}
+            </CardContent>
+          </Card>
 
-            <div className="flex items-center gap-3">
-              <Phone className="w-4 h-4 text-gray-400 shrink-0" />
-              <div>
-                <p className="text-xs text-gray-400">Telefono</p>
-                <p className="text-sm text-gray-900">{contact.telefono || "\u2014"}</p>
-              </div>
-            </div>
+          {/* 2-column grid: Contact Info + Diagnostic Summary */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Contact Info */}
+            <Card className="bg-white border-gray-200 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">Contacto</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="flex items-center gap-3">
+                  <Mail className="w-4 h-4 text-gray-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-gray-400">Email</p>
+                    <div className="flex items-center gap-2">
+                      <a href={`mailto:${contact.email}`} className="text-sm text-[#2FA4A9] hover:underline truncate">{contact.email}</a>
+                      <button onClick={() => handleCopyEmail(contact.email)} className="text-gray-400 hover:text-gray-700 transition-colors" title="Copiar email">
+                        {copied ? <Check className="w-3.5 h-3.5 text-[#2FA4A9]" /> : <Copy className="w-3.5 h-3.5" />}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Phone className="w-4 h-4 text-gray-400 shrink-0" />
+                  <div><p className="text-xs text-gray-400">Telefono</p><p className="text-sm text-gray-900">{contact.telefono || "\u2014"}</p></div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <Building2 className="w-4 h-4 text-gray-400 shrink-0" />
+                  <div><p className="text-xs text-gray-400">Empresa</p><p className="text-sm text-gray-900">{contact.empresa}</p></div>
+                </div>
+                {diagnostic && (
+                  <div className="flex items-center gap-3">
+                    <Factory className="w-4 h-4 text-gray-400 shrink-0" />
+                    <div><p className="text-xs text-gray-400">Industria</p><p className="text-sm text-gray-900">{diagnostic.industria}</p></div>
+                  </div>
+                )}
+                {diagnostic?.fechaCita && (
+                  <div className="flex items-center gap-3">
+                    <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
+                    <div><p className="text-xs text-gray-400">Cita</p><p className="text-sm text-gray-900">{diagnostic.fechaCita} — {diagnostic.horaCita}</p></div>
+                  </div>
+                )}
+                <div className="flex items-center gap-3">
+                  <Clock className="w-4 h-4 text-gray-400 shrink-0" />
+                  <div><p className="text-xs text-gray-400">Creado</p><p className="text-sm text-gray-900">{relativeDate(contact.createdAt)}</p></div>
+                </div>
+                {diagnostic && (diagnostic.googleDriveUrl || diagnostic.meetLink) && (
+                  <>
+                    <div className="border-t border-gray-100" />
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {diagnostic.googleDriveUrl && (
+                        <Button variant="outline" size="sm" asChild className="border-gray-200 text-gray-600 hover:text-gray-900">
+                          <a href={diagnostic.googleDriveUrl} target="_blank" rel="noopener noreferrer"><ExternalLink className="w-3.5 h-3.5 mr-1.5" />Google Drive</a>
+                        </Button>
+                      )}
+                      {diagnostic.meetLink && (
+                        <Button variant="outline" size="sm" asChild className="border-gray-200 text-gray-600 hover:text-gray-900">
+                          <a href={diagnostic.meetLink} target="_blank" rel="noopener noreferrer"><ExternalLink className="w-3.5 h-3.5 mr-1.5" />Google Meet</a>
+                        </Button>
+                      )}
+                    </div>
+                  </>
+                )}
+                {/* Tags */}
+                {contact.tags && contact.tags.length > 0 && (
+                  <>
+                    <div className="border-t border-gray-100" />
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1.5 flex items-center gap-1"><Tag className="w-3 h-3" /> Tags</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {contact.tags.map((tag, i) => (
+                          <Badge key={i} variant="outline" className="text-xs bg-gray-50 text-gray-600 border-gray-200">{tag}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </CardContent>
+            </Card>
 
-            <div className="flex items-center gap-3">
-              <Building2 className="w-4 h-4 text-gray-400 shrink-0" />
-              <div>
-                <p className="text-xs text-gray-400">Empresa</p>
-                <p className="text-sm text-gray-900">{contact.empresa}</p>
-              </div>
-            </div>
-
+            {/* Diagnostic Summary */}
             {diagnostic && (
-              <div className="flex items-center gap-3">
-                <Factory className="w-4 h-4 text-gray-400 shrink-0" />
-                <div>
-                  <p className="text-xs text-gray-400">Industria</p>
-                  <p className="text-sm text-gray-900">{diagnostic.industria}</p>
-                </div>
-              </div>
+              <Card className="bg-white border-gray-200 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">Diagnostico Resumen</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="space-y-3">
+                    <InfoRow label="Empleados" value={diagnostic.empleados} />
+                    <InfoRow label="Nivel tech" value={diagnostic.nivelTech} />
+                    <InfoRow label="Usa IA" value={diagnostic.usaIA} />
+                    <InfoRow label="Comodidad tech" value={diagnostic.comodidadTech} />
+                    <InfoRow label="Presupuesto" value={diagnostic.presupuesto} />
+                  </div>
+                  <div className="border-t border-gray-100 pt-4 space-y-4">
+                    <div>
+                      <p className="text-xs text-gray-400 mb-2">Objetivos</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(diagnostic.objetivos || []).map((o, i) => (
+                          <Badge key={i} variant="outline" className="text-xs bg-[#2FA4A9]/10 text-[#2FA4A9] border-[#2FA4A9]/25">{o}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-400 mb-2">Areas prioritarias</p>
+                      <div className="flex flex-wrap gap-1.5">
+                        {(diagnostic.areaPrioridad || []).map((a, i) => (
+                          <Badge key={i} variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">{a}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                    {diagnostic.herramientas && (
+                      <div><p className="text-xs text-gray-400 mb-1">Herramientas</p><p className="text-sm text-gray-900">{diagnostic.herramientas}</p></div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
             )}
+          </div>
 
-            {diagnostic && diagnostic.fechaCita && (
-              <div className="flex items-center gap-3">
-                <Calendar className="w-4 h-4 text-gray-400 shrink-0" />
-                <div>
-                  <p className="text-xs text-gray-400">Cita</p>
-                  <p className="text-sm text-gray-900">
-                    {diagnostic.fechaCita} — {diagnostic.horaCita}
-                  </p>
-                </div>
-              </div>
-            )}
-
-            <div className="flex items-center gap-3">
-              <Clock className="w-4 h-4 text-gray-400 shrink-0" />
-              <div>
-                <p className="text-xs text-gray-400">Creado</p>
-                <p className="text-sm text-gray-900">{relativeDate(contact.createdAt)}</p>
-              </div>
-            </div>
-
-            {diagnostic && (diagnostic.googleDriveUrl || diagnostic.meetLink) && (
-              <>
-                <div className="border-t border-gray-100" />
-                <div className="flex items-center gap-2 flex-wrap">
-                  {diagnostic.googleDriveUrl && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      asChild
-                      className="border-gray-200 text-gray-600 hover:text-gray-900 hover:border-[#2FA4A9]/30 hover:bg-gray-50"
-                    >
-                      <a href={diagnostic.googleDriveUrl} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-                        Google Drive
-                      </a>
-                    </Button>
-                  )}
-                  {diagnostic.meetLink && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      asChild
-                      className="border-gray-200 text-gray-600 hover:text-gray-900 hover:border-[#2FA4A9]/30 hover:bg-gray-50"
-                    >
-                      <a href={diagnostic.meetLink} target="_blank" rel="noopener noreferrer">
-                        <ExternalLink className="w-3.5 h-3.5 mr-1.5" />
-                        Google Meet
-                      </a>
-                    </Button>
-                  )}
-                </div>
-              </>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Right column - Diagnostic */}
-        {diagnostic && (
+          {/* Notes Section */}
           <Card className="bg-white border-gray-200 shadow-sm">
             <CardHeader className="pb-3">
-              <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">
-                Diagnostico
+              <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium flex items-center gap-2">
+                <MessageSquarePlus className="w-4 h-4" /> Notas ({notes.length})
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="space-y-3">
-                <InfoRow label="Empleados" value={diagnostic.empleados} />
-                <InfoRow label="Nivel tech" value={diagnostic.nivelTech} />
-                <InfoRow label="Usa IA" value={diagnostic.usaIA} />
-                <InfoRow label="Comodidad tech" value={diagnostic.comodidadTech} />
-                <InfoRow label="Presupuesto" value={diagnostic.presupuesto} />
+              <div className="flex gap-2">
+                <Input placeholder="Agregar una nota..." value={noteText} onChange={(e) => setNoteText(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && noteText.trim()) noteMutation.mutate(noteText); }} className="bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400" />
+                <Button size="sm" disabled={!noteText.trim() || noteMutation.isPending} onClick={() => noteText.trim() && noteMutation.mutate(noteText)} className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white shrink-0"><Send className="w-4 h-4" /></Button>
               </div>
-
-              <div className="border-t border-gray-100 pt-4 space-y-4">
-                <div>
-                  <p className="text-xs text-gray-400 mb-2">Objetivos</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(diagnostic.objetivos || []).map((o, i) => (
-                      <Badge
-                        key={i}
-                        variant="outline"
-                        className="text-xs bg-[#2FA4A9]/10 text-[#2FA4A9] border-[#2FA4A9]/25"
-                      >
-                        {o}
-                      </Badge>
-                    ))}
-                  </div>
+              {notesLoading ? (
+                <div className="space-y-2">{[...Array(2)].map((_, i) => (<div key={i} className="h-16 bg-gray-50 rounded animate-pulse" />))}</div>
+              ) : notes.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-4">Sin notas aun</p>
+              ) : (
+                <div className="space-y-2">
+                  {notes.map((note) => (
+                    <div key={note.id} className="bg-gray-50 rounded-lg px-4 py-3 group">
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap flex-1">{note.content}</p>
+                        <button onClick={() => deleteNoteMutation.mutate(note.id)} className="text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 shrink-0 mt-0.5" title="Eliminar nota"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                      <p className="text-xs text-gray-400 mt-1">{relativeDate(note.createdAt)}</p>
+                    </div>
+                  ))}
                 </div>
-
-                <div>
-                  <p className="text-xs text-gray-400 mb-2">Areas prioritarias</p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {(diagnostic.areaPrioridad || []).map((a, i) => (
-                      <Badge
-                        key={i}
-                        variant="outline"
-                        className="text-xs bg-purple-50 text-purple-700 border-purple-200"
-                      >
-                        {a}
-                      </Badge>
-                    ))}
-                  </div>
-                </div>
-
-                {diagnostic.herramientas && (
-                  <div>
-                    <p className="text-xs text-gray-400 mb-1">Herramientas</p>
-                    <p className="text-sm text-gray-900">{diagnostic.herramientas}</p>
-                  </div>
-                )}
-              </div>
+              )}
             </CardContent>
           </Card>
-        )}
-      </div>
+        </TabsContent>
 
-      {/* Notes Section */}
-      <Card className="bg-white border-gray-200 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium flex items-center gap-2">
-            <MessageSquarePlus className="w-4 h-4" />
-            Notas ({notes.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {/* Add note */}
-          <div className="flex gap-2">
-            <Input
-              placeholder="Agregar una nota..."
-              value={noteText}
-              onChange={(e) => setNoteText(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && noteText.trim()) {
-                  noteMutation.mutate(noteText);
-                }
-              }}
-              className="bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400"
-            />
-            <Button
-              size="sm"
-              disabled={!noteText.trim() || noteMutation.isPending}
-              onClick={() => noteText.trim() && noteMutation.mutate(noteText)}
-              className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white shrink-0"
-            >
-              <Send className="w-4 h-4" />
-            </Button>
-          </div>
-
-          {/* Notes list */}
-          {notesLoading ? (
-            <div className="space-y-2">
-              {[...Array(2)].map((_, i) => (
-                <div key={i} className="h-16 bg-gray-50 rounded animate-pulse" />
-              ))}
-            </div>
-          ) : notes.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-4">Sin notas aun</p>
+        {/* ===== TAB: DIAGNOSTICO ===== */}
+        <TabsContent value="diagnostico" className="space-y-6 mt-4">
+          {!diagnostic ? (
+            <Card className="bg-white border-gray-200 shadow-sm">
+              <CardContent className="py-12 text-center text-gray-400">Sin datos de diagnostico</CardContent>
+            </Card>
           ) : (
-            <div className="space-y-2">
-              {notes.map((note) => (
-                <div
-                  key={note.id}
-                  className="bg-gray-50 rounded-lg px-4 py-3 group"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <p className="text-sm text-gray-700 whitespace-pre-wrap flex-1">{note.content}</p>
-                    <button
-                      onClick={() => deleteNoteMutation.mutate(note.id)}
-                      className="text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100 shrink-0 mt-0.5"
-                      title="Eliminar nota"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
+            <>
+              {/* Informacion General */}
+              <Card className="bg-white border-gray-200 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">Informacion General</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <DiagField label="Empresa" value={diagnostic.empresa} />
+                    <DiagField label="Industria" value={diagnostic.industria} />
+                    <DiagField label="Anos de operacion" value={diagnostic.anosOperacion} />
+                    <DiagField label="Empleados" value={diagnostic.empleados} />
+                    <DiagField label="Ciudades" value={diagnostic.ciudades} />
+                    <DiagField label="Participante" value={diagnostic.participante} />
+                    <DiagField label="Email" value={diagnostic.email} />
+                    <DiagField label="Telefono" value={diagnostic.telefono || "\u2014"} />
                   </div>
-                  <p className="text-xs text-gray-400 mt-1">
-                    {relativeDate(note.createdAt)}
-                  </p>
+                </CardContent>
+              </Card>
+
+              {/* Contexto y Objetivos */}
+              <Card className="bg-white border-gray-200 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">Contexto y Objetivos</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <p className="text-xs text-gray-400 mb-2">Objetivos seleccionados</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(diagnostic.objetivos || []).map((o, i) => (
+                        <Badge key={i} variant="outline" className="text-xs bg-[#2FA4A9]/10 text-[#2FA4A9] border-[#2FA4A9]/25">{o}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">Resultado esperado</p>
+                    <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">{diagnostic.resultadoEsperado}</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Modelo de Negocio */}
+              <Card className="bg-white border-gray-200 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">Modelo de Negocio</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="sm:col-span-2">
+                      <p className="text-xs text-gray-400 mb-1">Productos / Servicios</p>
+                      <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">{diagnostic.productos}</p>
+                    </div>
+                    <DiagField label="Volumen mensual" value={diagnostic.volumenMensual} />
+                    <DiagField label="Cliente principal" value={diagnostic.clientePrincipal + (diagnostic.clientePrincipalOtro ? ` (${diagnostic.clientePrincipalOtro})` : "")} />
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Adquisicion */}
+              <Card className="bg-white border-gray-200 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">Adquisicion de Clientes</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <p className="text-xs text-gray-400 mb-2">Canales de adquisicion</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(diagnostic.canalesAdquisicion || []).map((c, i) => (
+                        <Badge key={i} variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">{c}</Badge>
+                      ))}
+                      {diagnostic.canalAdquisicionOtro && (
+                        <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">{diagnostic.canalAdquisicionOtro}</Badge>
+                      )}
+                    </div>
+                  </div>
+                  <DiagField label="Canal principal" value={diagnostic.canalPrincipal} />
+                </CardContent>
+              </Card>
+
+              {/* Herramientas */}
+              <Card className="bg-white border-gray-200 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">Herramientas y Tecnologia</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <p className="text-xs text-gray-400 mb-1">Herramientas actuales</p>
+                    <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">{diagnostic.herramientas}</p>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <DiagField label="Nivel de conexion" value={diagnostic.conectadas} />
+                    {diagnostic.conectadasDetalle && <DiagField label="Detalle conexion" value={diagnostic.conectadasDetalle} />}
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Madurez Tecnologica */}
+              <Card className="bg-white border-gray-200 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">Madurez Tecnologica</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <DiagField label="Nivel tech" value={diagnostic.nivelTech} />
+                    <DiagField label="Usa IA" value={diagnostic.usaIA} />
+                    <DiagField label="Comodidad tech" value={diagnostic.comodidadTech} />
+                  </div>
+                  {diagnostic.usaIAParaQue && (
+                    <div>
+                      <p className="text-xs text-gray-400 mb-1">Para que usa IA</p>
+                      <p className="text-sm text-gray-700 bg-gray-50 rounded-lg p-3">{diagnostic.usaIAParaQue}</p>
+                    </div>
+                  )}
+                  {diagnostic.familiaridad && (
+                    <div>
+                      <p className="text-xs text-gray-400 mb-3">Familiaridad por area</p>
+                      <div className="space-y-3">
+                        {(["automatizacion", "crm", "ia", "integracion", "desarrollo"] as const).map((key) => {
+                          const val = diagnostic.familiaridad?.[key] || "Bajo";
+                          const level = familiarityLevel(val);
+                          return (
+                            <div key={key} className="flex items-center gap-3">
+                              <span className="text-xs text-gray-500 w-24 capitalize">{key === "ia" ? "IA" : key}</span>
+                              <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div className={`h-full rounded-full ${level.color} transition-all`} style={{ width: level.width }} />
+                              </div>
+                              <span className="text-xs text-gray-500 w-16">{val}</span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Prioridades e Inversion */}
+              <Card className="bg-white border-gray-200 shadow-sm">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">Prioridades e Inversion</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <p className="text-xs text-gray-400 mb-2">Areas prioritarias</p>
+                    <div className="flex flex-wrap gap-1.5">
+                      {(diagnostic.areaPrioridad || []).map((a, i) => (
+                        <Badge key={i} variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">{a}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                  <DiagField label="Presupuesto" value={diagnostic.presupuesto} />
+                </CardContent>
+              </Card>
+            </>
+          )}
+        </TabsContent>
+
+        {/* ===== TAB: EMAILS ===== */}
+        <TabsContent value="emails" className="space-y-6 mt-4">
+          {/* Sequence Progress */}
+          {totalEmails > 0 && (
+            <Card className="bg-white border-gray-200 shadow-sm">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">
+                  Secuencia de Emails ({sentCount}/{totalEmails} enviados)
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-6">
+                <Progress value={progressPercent} className="h-2 bg-gray-100" />
+                <div className="flex items-start overflow-x-auto pb-2">
+                  {emails.map((email, index) => {
+                    const isSent = email.status === "sent" || email.status === "opened" || email.status === "clicked";
+                    const isFailed = email.status === "failed" || email.status === "bounced";
+                    const isExpired = email.status === "expired";
+                    return (
+                      <div key={email.id} className="flex items-start flex-shrink-0">
+                        <div className="flex flex-col items-center w-24">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${isSent ? "border-[#2FA4A9] bg-[#2FA4A9]/10" : isFailed ? "border-red-400 bg-red-50" : isExpired ? "border-amber-400 bg-amber-50" : "border-gray-300 bg-gray-50"}`}>
+                            {isSent ? <Check className="w-4 h-4 text-[#2FA4A9]" /> : isFailed ? <X className="w-4 h-4 text-red-500" /> : isExpired ? <Clock className="w-3.5 h-3.5 text-amber-500" /> : <Circle className="w-3 h-3 text-gray-400" />}
+                          </div>
+                          <p className="text-[10px] text-gray-400 mt-2 text-center leading-tight">{templateLabels[email.templateName] || email.templateName}</p>
+                        </div>
+                        {index < emails.length - 1 && <div className={`h-px w-6 mt-4 ${isSent ? "bg-[#2FA4A9]" : "bg-gray-200"}`} />}
+                      </div>
+                    );
+                  })}
                 </div>
-              ))}
-            </div>
+              </CardContent>
+            </Card>
           )}
-        </CardContent>
-      </Card>
 
-      {/* Email Sequence Progress */}
-      {totalEmails > 0 && (
-        <Card className="bg-white border-gray-200 shadow-sm">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">
-              Secuencia de Emails ({sentCount}/{totalEmails} enviados)
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <Progress value={progressPercent} className="h-2 bg-gray-100" />
-
-            {/* Sequence steps */}
-            <div className="flex items-start overflow-x-auto pb-2">
-              {emails.map((email, index) => {
-                const isSent =
-                  email.status === "sent" || email.status === "opened" || email.status === "clicked";
-                const isFailed = email.status === "failed" || email.status === "bounced";
-                const isExpired = email.status === "expired";
-
-                return (
-                  <div key={email.id} className="flex items-start flex-shrink-0">
-                    <div className="flex flex-col items-center w-24">
-                      <div
-                        className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${
-                          isSent
-                            ? "border-[#2FA4A9] bg-[#2FA4A9]/10"
-                            : isFailed
-                              ? "border-red-400 bg-red-50"
-                              : isExpired
-                                ? "border-amber-400 bg-amber-50"
-                                : "border-gray-300 bg-gray-50"
-                        }`}
-                      >
-                        {isSent ? (
-                          <Check className="w-4 h-4 text-[#2FA4A9]" />
-                        ) : isFailed ? (
-                          <X className="w-4 h-4 text-red-500" />
-                        ) : isExpired ? (
-                          <Clock className="w-3.5 h-3.5 text-amber-500" />
-                        ) : (
-                          <Circle className="w-3 h-3 text-gray-400" />
-                        )}
-                      </div>
-                      <p className="text-[10px] text-gray-400 mt-2 text-center leading-tight">
-                        {templateLabels[email.templateName] || email.templateName}
-                      </p>
-                    </div>
-                    {index < emails.length - 1 && (
-                      <div
-                        className={`h-px w-6 mt-4 ${isSent ? "bg-[#2FA4A9]" : "bg-gray-200"}`}
-                      />
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Email Timeline (detailed with preview) */}
-      <Card className="bg-white border-gray-200 shadow-sm">
-        <CardHeader className="pb-3">
-          <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">
-            Conversacion de Emails ({emails.length})
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {emails.length === 0 ? (
-            <p className="text-gray-400 text-sm text-center py-4">No hay emails programados</p>
-          ) : (
-            <div className="space-y-0">
-              {emails.map((email, index) => {
-                const isSent =
-                  email.status === "sent" || email.status === "opened" || email.status === "clicked";
-                const isFailed = email.status === "failed" || email.status === "bounced";
-                const isExpired = email.status === "expired";
-                const isPending = email.status === "pending";
-                const isExpanded = expandedEmail === email.id;
-                const isEditing = editingEmailId === email.id;
-
-                return (
-                  <div key={email.id} className="flex gap-4 relative">
-                    {/* Timeline column */}
-                    <div className="flex flex-col items-center shrink-0">
-                      <div
-                        className={`w-3 h-3 rounded-full mt-1.5 z-10 ${
-                          isSent
-                            ? "bg-[#2FA4A9]"
-                            : isPending
-                              ? "bg-gray-300"
-                              : isExpired
-                                ? "bg-amber-400"
-                                : isFailed
-                                  ? "bg-red-400"
-                                  : "bg-gray-300"
-                        }`}
-                      />
-                      {index < emails.length - 1 && (
-                        <div className="w-px flex-1 bg-gray-200" />
-                      )}
-                    </div>
-
-                    {/* Content */}
-                    <div className="flex-1 min-w-0 pb-6">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-gray-900">
-                          {templateLabels[email.templateName] || email.templateName}
-                        </span>
-                        <Badge
-                          variant="outline"
-                          className={`text-xs ${emailStatusColors[email.status] || ""}`}
-                        >
-                          {email.status}
-                        </Badge>
-                        {/* Action buttons */}
-                        <div className="ml-auto flex items-center gap-1.5">
-                          {/* Expand/collapse */}
-                          <button
-                            onClick={() => setExpandedEmail(isExpanded ? null : email.id)}
-                            className="text-gray-400 hover:text-gray-700 transition-colors flex items-center gap-1 text-xs"
-                            title="Ver email"
-                          >
-                            <Eye className="w-3.5 h-3.5" />
-                            {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-                          </button>
-                          {/* Edit button for pending emails */}
-                          {isPending && email.body && (
-                            <button
-                              onClick={() => startEditEmail(email)}
-                              className="text-gray-400 hover:text-[#2FA4A9] transition-colors text-xs"
-                              title="Editar"
-                            >
-                              <Pencil className="w-3 h-3" />
-                            </button>
-                          )}
-                          {/* Regenerate button for pending emails */}
-                          {isPending && (
-                            <button
-                              onClick={() => regenerateMutation.mutate(email.id)}
-                              disabled={regenerateMutation.isPending}
-                              className="text-gray-400 hover:text-purple-600 transition-colors text-xs flex items-center gap-1"
-                              title={email.body ? "Regenerar con IA" : "Generar preview"}
-                            >
-                              {regenerateMutation.isPending ? (
-                                <RefreshCw className="w-3 h-3 animate-spin" />
-                              ) : (
-                                <Sparkles className="w-3 h-3" />
+          {/* Email Timeline */}
+          <Card className="bg-white border-gray-200 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">Conversacion de Emails ({emails.length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {emails.length === 0 ? (
+                <p className="text-gray-400 text-sm text-center py-4">No hay emails programados</p>
+              ) : (
+                <div className="space-y-0">
+                  {emails.map((email, index) => {
+                    const isSent = email.status === "sent" || email.status === "opened" || email.status === "clicked";
+                    const isFailed = email.status === "failed" || email.status === "bounced";
+                    const isExpired = email.status === "expired";
+                    const isPending = email.status === "pending";
+                    const isExpanded = expandedEmail === email.id;
+                    const isEditing = editingEmailId === email.id;
+                    return (
+                      <div key={email.id} className="flex gap-4 relative">
+                        <div className="flex flex-col items-center shrink-0">
+                          <div className={`w-3 h-3 rounded-full mt-1.5 z-10 ${isSent ? "bg-[#2FA4A9]" : isPending ? "bg-gray-300" : isExpired ? "bg-amber-400" : isFailed ? "bg-red-400" : "bg-gray-300"}`} />
+                          {index < emails.length - 1 && <div className="w-px flex-1 bg-gray-200" />}
+                        </div>
+                        <div className="flex-1 min-w-0 pb-6">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-sm font-medium text-gray-900">{templateLabels[email.templateName] || email.templateName}</span>
+                            <Badge variant="outline" className={`text-xs ${emailStatusColors[email.status] || ""}`}>{email.status}</Badge>
+                            <div className="ml-auto flex items-center gap-1.5">
+                              <button onClick={() => setExpandedEmail(isExpanded ? null : email.id)} className="text-gray-400 hover:text-gray-700 transition-colors flex items-center gap-1 text-xs" title="Ver email">
+                                <Eye className="w-3.5 h-3.5" />{isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                              </button>
+                              {isPending && email.body && <button onClick={() => startEditEmail(email)} className="text-gray-400 hover:text-[#2FA4A9] transition-colors text-xs" title="Editar"><Pencil className="w-3 h-3" /></button>}
+                              {isPending && (
+                                <button onClick={() => regenerateMutation.mutate(email.id)} disabled={regenerateMutation.isPending} className="text-gray-400 hover:text-purple-600 transition-colors text-xs flex items-center gap-1" title={email.body ? "Regenerar con IA" : "Generar preview"}>
+                                  {regenerateMutation.isPending ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                                </button>
                               )}
-                            </button>
+                            </div>
+                          </div>
+                          {email.subject && <p className="text-sm text-gray-600 mt-1 truncate">{email.subject}</p>}
+                          <p className="text-xs text-gray-400 mt-1">{email.sentAt ? `Enviado: ${new Date(email.sentAt).toLocaleString("es-CO")}` : `Programado: ${new Date(email.scheduledFor).toLocaleString("es-CO")}`}</p>
+                          {isExpanded && email.body && !isEditing && (
+                            <div className="mt-3 rounded-lg border border-gray-200 overflow-hidden">
+                              <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-100">
+                                <p className="text-xs text-gray-400 font-medium">Vista previa del email</p>
+                                {isPending && <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-600 border-amber-200">Pendiente de envio</Badge>}
+                              </div>
+                              <iframe srcDoc={email.body} sandbox="" className="w-full border-0 bg-white" style={{ minHeight: "250px" }} onLoad={(e) => { const iframe = e.target as HTMLIFrameElement; if (iframe.contentDocument) { iframe.style.height = (iframe.contentDocument.body.scrollHeight + 20) + "px"; } }} />
+                            </div>
+                          )}
+                          {isExpanded && !email.body && isPending && !isEditing && (
+                            <div className="mt-3 p-4 bg-gray-50 rounded-lg border border-gray-100 text-center">
+                              <p className="text-sm text-gray-400">Contenido aun no generado</p>
+                              <button onClick={() => regenerateMutation.mutate(email.id)} disabled={regenerateMutation.isPending} className="mt-2 text-xs text-[#2FA4A9] hover:underline flex items-center gap-1 mx-auto">
+                                <Sparkles className="w-3 h-3" />{regenerateMutation.isPending ? "Generando..." : "Generar preview ahora"}
+                              </button>
+                            </div>
+                          )}
+                          {isEditing && (
+                            <div className="mt-3 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
+                              <div><label className="text-xs text-gray-500 mb-1 block">Asunto</label><Input value={editEmailSubject} onChange={(e) => setEditEmailSubject(e.target.value)} className="bg-white border-gray-200 text-sm" /></div>
+                              <div><label className="text-xs text-gray-500 mb-1 block">Contenido</label><textarea value={editEmailBody} onChange={(e) => setEditEmailBody(e.target.value)} rows={8} className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#2FA4A9]/20 focus:border-[#2FA4A9]" /></div>
+                              <div className="flex gap-2">
+                                <Button size="sm" onClick={() => editEmailMutation.mutate({ emailId: email.id, subject: editEmailSubject, body: editEmailBody })} disabled={editEmailMutation.isPending} className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white">{editEmailMutation.isPending ? "Guardando..." : "Guardar"}</Button>
+                                <Button variant="outline" size="sm" onClick={() => setEditingEmailId(null)} className="border-gray-200 text-gray-600">Cancelar</Button>
+                              </div>
+                            </div>
                           )}
                         </div>
                       </div>
-                      {email.subject && (
-                        <p className="text-sm text-gray-600 mt-1 truncate">
-                          {email.subject}
-                        </p>
-                      )}
-                      <p className="text-xs text-gray-400 mt-1">
-                        {email.sentAt
-                          ? `Enviado: ${new Date(email.sentAt).toLocaleString("es-CO")}`
-                          : `Programado: ${new Date(email.scheduledFor).toLocaleString("es-CO")}`}
-                      </p>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-                      {/* Email body preview (rendered HTML) */}
-                      {isExpanded && email.body && !isEditing && (
-                        <div className="mt-3 rounded-lg border border-gray-200 overflow-hidden">
-                          <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-100">
-                            <p className="text-xs text-gray-400 font-medium">Vista previa del email</p>
-                            {isPending && (
-                              <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-600 border-amber-200">
-                                Pendiente de envio
-                              </Badge>
-                            )}
+        {/* ===== TAB: ACTIVIDAD ===== */}
+        <TabsContent value="actividad" className="space-y-6 mt-4">
+          <Card className="bg-white border-gray-200 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">
+                Timeline de Actividad ({activities.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {activities.length === 0 ? (
+                <p className="text-gray-400 text-sm text-center py-8">Sin actividad registrada aun</p>
+              ) : (
+                <div className="space-y-0">
+                  {activities.map((activity, index) => {
+                    const Icon = activityIcons[activity.type] || Circle;
+                    const colorClass = activityColors[activity.type] || "bg-gray-50 text-gray-500";
+                    return (
+                      <div key={activity.id} className="flex gap-4 relative">
+                        <div className="flex flex-col items-center shrink-0">
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center ${colorClass}`}>
+                            <Icon className="w-4 h-4" />
                           </div>
-                          <iframe
-                            srcDoc={email.body}
-                            sandbox=""
-                            className="w-full border-0 bg-white"
-                            style={{ minHeight: "250px" }}
-                            onLoad={(e) => {
-                              const iframe = e.target as HTMLIFrameElement;
-                              if (iframe.contentDocument) {
-                                iframe.style.height = (iframe.contentDocument.body.scrollHeight + 20) + "px";
-                              }
-                            }}
-                          />
+                          {index < activities.length - 1 && <div className="w-px flex-1 bg-gray-100" />}
                         </div>
-                      )}
+                        <div className="flex-1 min-w-0 pb-5">
+                          <p className="text-sm text-gray-700">{activity.description}</p>
+                          <p className="text-xs text-gray-400 mt-1">{relativeDate(activity.createdAt)}</p>
+                          {activity.metadata && Object.keys(activity.metadata).length > 0 && (
+                            <div className="mt-1.5 flex flex-wrap gap-1.5">
+                              {activity.metadata.oldStatus && activity.metadata.newStatus && (
+                                <span className="text-xs bg-gray-50 text-gray-500 px-2 py-0.5 rounded">
+                                  {activity.metadata.oldStatus} → {activity.metadata.newStatus}
+                                </span>
+                              )}
+                              {activity.metadata.oldScore !== undefined && activity.metadata.newScore !== undefined && (
+                                <span className="text-xs bg-gray-50 text-gray-500 px-2 py-0.5 rounded">
+                                  Score: {activity.metadata.oldScore} → {activity.metadata.newScore}
+                                </span>
+                              )}
+                              {activity.metadata.subject && (
+                                <span className="text-xs bg-gray-50 text-gray-500 px-2 py-0.5 rounded truncate max-w-xs">
+                                  &quot;{activity.metadata.subject}&quot;
+                                </span>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
 
-                      {/* No content yet message for pending emails */}
-                      {isExpanded && !email.body && isPending && !isEditing && (
-                        <div className="mt-3 p-4 bg-gray-50 rounded-lg border border-gray-100 text-center">
-                          <p className="text-sm text-gray-400">Contenido aun no generado</p>
-                          <button
-                            onClick={() => regenerateMutation.mutate(email.id)}
-                            disabled={regenerateMutation.isPending}
-                            className="mt-2 text-xs text-[#2FA4A9] hover:underline flex items-center gap-1 mx-auto"
-                          >
-                            <Sparkles className="w-3 h-3" />
-                            {regenerateMutation.isPending ? "Generando..." : "Generar preview ahora"}
-                          </button>
-                        </div>
-                      )}
+        {/* ===== TAB: TAREAS ===== */}
+        <TabsContent value="tareas" className="space-y-6 mt-4">
+          <Card className="bg-white border-gray-200 shadow-sm">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">
+                  Tareas ({contactTasks.filter(t => t.status === "pending").length} pendientes)
+                </CardTitle>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Add task inline */}
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Nueva tarea para este contacto..."
+                  value={newTaskTitle}
+                  onChange={(e) => setNewTaskTitle(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && newTaskTitle.trim() && contactId) {
+                      createTaskMutation.mutate({ title: newTaskTitle.trim(), priority: newTaskPriority, contactId });
+                    }
+                  }}
+                  className="bg-gray-50 border-gray-200 text-gray-900 placeholder:text-gray-400"
+                />
+                <Select value={newTaskPriority} onValueChange={setNewTaskPriority}>
+                  <SelectTrigger className="w-24 bg-white border-gray-200"><SelectValue /></SelectTrigger>
+                  <SelectContent className="bg-white border-gray-200">
+                    <SelectItem value="high">Alta</SelectItem>
+                    <SelectItem value="medium">Media</SelectItem>
+                    <SelectItem value="low">Baja</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Button
+                  size="sm"
+                  disabled={!newTaskTitle.trim() || createTaskMutation.isPending}
+                  onClick={() => contactId && newTaskTitle.trim() && createTaskMutation.mutate({ title: newTaskTitle.trim(), priority: newTaskPriority, contactId })}
+                  className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
 
-                      {/* Edit email form */}
-                      {isEditing && (
-                        <div className="mt-3 p-4 bg-gray-50 rounded-lg border border-gray-200 space-y-3">
-                          <div>
-                            <label className="text-xs text-gray-500 mb-1 block">Asunto</label>
-                            <Input
-                              value={editEmailSubject}
-                              onChange={(e) => setEditEmailSubject(e.target.value)}
-                              className="bg-white border-gray-200 text-sm"
-                            />
-                          </div>
-                          <div>
-                            <label className="text-xs text-gray-500 mb-1 block">Contenido</label>
-                            <textarea
-                              value={editEmailBody}
-                              onChange={(e) => setEditEmailBody(e.target.value)}
-                              rows={8}
-                              className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#2FA4A9]/20 focus:border-[#2FA4A9]"
-                            />
-                          </div>
-                          <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              onClick={() =>
-                                editEmailMutation.mutate({
-                                  emailId: email.id,
-                                  subject: editEmailSubject,
-                                  body: editEmailBody,
-                                })
-                              }
-                              disabled={editEmailMutation.isPending}
-                              className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white"
-                            >
-                              {editEmailMutation.isPending ? "Guardando..." : "Guardar"}
-                            </Button>
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              onClick={() => setEditingEmailId(null)}
-                              className="border-gray-200 text-gray-600"
-                            >
-                              Cancelar
-                            </Button>
-                          </div>
+              {contactTasks.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-8">Sin tareas para este contacto</p>
+              ) : (
+                <ul className="divide-y divide-gray-100">
+                  {contactTasks.map((task) => {
+                    const isCompleted = task.status === "completed";
+                    const overdue = task.status === "pending" && task.dueDate && new Date(task.dueDate) < new Date();
+                    return (
+                      <li key={task.id} className={`flex items-start gap-3 py-3 ${isCompleted ? "opacity-60" : ""}`}>
+                        <button
+                          onClick={() => toggleTaskMutation.mutate({ id: task.id, status: isCompleted ? "pending" : "completed" })}
+                          className="mt-0.5 shrink-0 text-gray-400 hover:text-[#2FA4A9] transition-colors"
+                        >
+                          {isCompleted ? <CheckSquare className="w-5 h-5 text-[#2FA4A9]" /> : <Square className="w-5 h-5" />}
+                        </button>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm font-medium ${isCompleted ? "line-through text-gray-400" : "text-gray-900"}`}>{task.title}</p>
+                          {task.description && <p className="text-xs text-gray-400 mt-0.5 truncate">{task.description}</p>}
+                          {task.dueDate && (
+                            <span className={`text-xs flex items-center gap-1 mt-1 ${overdue ? "text-red-500" : "text-gray-400"}`}>
+                              {overdue && <AlertTriangle className="w-3 h-3" />}
+                              <Calendar className="w-3 h-3" />
+                              {new Date(task.dueDate).toLocaleDateString("es-CO")}
+                            </span>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+                        <Badge variant="outline" className={`text-[10px] ${priorityColors[task.priority] || ""}`}>
+                          {priorityLabels[task.priority] || task.priority}
+                        </Badge>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }
@@ -911,6 +1265,15 @@ function InfoRow({ label, value }: { label: string; value: string }) {
     <div className="flex items-center justify-between">
       <span className="text-xs text-gray-400">{label}</span>
       <span className="text-sm text-gray-900">{value}</span>
+    </div>
+  );
+}
+
+function DiagField({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs text-gray-400 mb-0.5">{label}</p>
+      <p className="text-sm text-gray-900">{value}</p>
     </div>
   );
 }

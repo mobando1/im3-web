@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { log } from "./index";
-import type { EmailTemplate, Diagnostic } from "@shared/schema";
+import type { EmailTemplate, Diagnostic, Contact, SentEmail, ContactNote } from "@shared/schema";
 
 let client: Anthropic | null = null;
 
@@ -172,4 +172,104 @@ export async function generateEmailContent(
   log(`Email AI generado: "${subject}" para ${diagnosticData?.empresa || "suscriptor"}`);
 
   return { subject, body };
+}
+
+/**
+ * Generate AI insight for a contact — sales intelligence analysis.
+ */
+export async function generateContactInsight(
+  contact: Contact,
+  diagnostic: Partial<Diagnostic> | null,
+  emails: SentEmail[],
+  notes: ContactNote[]
+): Promise<{
+  summary: string;
+  nextActions: string[];
+  talkingPoints: string[];
+  riskLevel: string;
+  riskReason: string;
+  estimatedValue: string;
+}> {
+  const anthropic = getClient();
+  if (!anthropic) {
+    throw new Error("ANTHROPIC_API_KEY not configured");
+  }
+
+  const context = buildContext(diagnostic);
+
+  // Build engagement summary
+  const emailStats = {
+    total: emails.length,
+    sent: emails.filter(e => ["sent", "opened", "clicked"].includes(e.status)).length,
+    opened: emails.filter(e => e.status === "opened").length,
+    clicked: emails.filter(e => e.status === "clicked").length,
+    pending: emails.filter(e => e.status === "pending").length,
+    bounced: emails.filter(e => e.status === "bounced" || e.status === "failed").length,
+  };
+
+  const notesText = notes.length > 0
+    ? `NOTAS INTERNAS:\n${notes.map(n => `- ${n.content}`).join("\n")}`
+    : "Sin notas internas.";
+
+  const prompt = `Eres un analista de inteligencia comercial para IM3 Systems, consultora de automatización e IA en Latinoamérica.
+
+Analiza este lead y responde SOLO con un JSON válido (sin markdown, sin backticks, sin texto adicional).
+
+${context}
+
+ESTADO ACTUAL:
+- Status: ${contact.status}
+- Lead Score: ${contact.leadScore}/100
+- Opted out: ${contact.optedOut ? "Sí" : "No"}
+- Fecha de registro: ${contact.createdAt}
+
+ENGAGEMENT DE EMAILS:
+- Total programados: ${emailStats.total}
+- Enviados: ${emailStats.sent}
+- Abiertos: ${emailStats.opened}
+- Clicks: ${emailStats.clicked}
+- Pendientes: ${emailStats.pending}
+- Rebotados/fallidos: ${emailStats.bounced}
+
+${notesText}
+
+Responde con este JSON exacto:
+{
+  "summary": "Resumen de 2-3 oraciones del perfil del lead y su potencial",
+  "nextActions": ["Acción 1", "Acción 2", "Acción 3"],
+  "talkingPoints": ["Punto de conversación 1 personalizado", "Punto 2", "Punto 3"],
+  "riskLevel": "low|medium|high",
+  "riskReason": "Razón del nivel de riesgo en 1 oración",
+  "estimatedValue": "Estimación cualitativa del valor potencial (ej: 'Alto - empresa mediana con presupuesto significativo')"
+}`;
+
+  const response = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 1000,
+    messages: [{ role: "user", content: prompt }],
+  });
+
+  const text = response.content?.[0]?.type === "text" ? response.content[0].text.trim() : "{}";
+
+  try {
+    const parsed = JSON.parse(text);
+    return {
+      summary: parsed.summary || "Sin análisis disponible",
+      nextActions: parsed.nextActions || [],
+      talkingPoints: parsed.talkingPoints || [],
+      riskLevel: parsed.riskLevel || "medium",
+      riskReason: parsed.riskReason || "",
+      estimatedValue: parsed.estimatedValue || "",
+    };
+  } catch {
+    log(`Error parsing AI insight JSON: ${text.substring(0, 200)}`);
+    return {
+      summary: "Error generando análisis. Intenta regenerar.",
+      nextActions: [],
+      talkingPoints: [],
+      riskLevel: "medium",
+      riskReason: "No se pudo analizar",
+      estimatedValue: "Desconocido",
+    };
+  }
 }

@@ -82,6 +82,8 @@ export const contacts = pgTable("contacts", {
   empresa: text("empresa").notNull(),
   telefono: text("telefono"),
   status: text("status").notNull().default("lead"), // lead | contacted | scheduled | converted
+  substatus: text("substatus"), // warm, cold, interested, no_response, proposal_sent, delivering, completed
+  tags: json("tags").$type<string[]>().default([]),
   optedOut: boolean("opted_out").default(false).notNull(),
   leadScore: integer("lead_score").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -170,3 +172,32 @@ export const tasks = pgTable("tasks", {
 
 export type Task = typeof tasks.$inferSelect;
 export type InsertTask = typeof tasks.$inferInsert;
+
+// Activity log (audit trail for contact journey)
+export const activityLog = pgTable("activity_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contactId: varchar("contact_id").notNull(),
+  type: text("type").notNull(), // form_submitted | status_changed | email_sent | email_opened | email_clicked | email_bounced | note_added | note_deleted | contact_edited | task_created | task_completed | score_changed | opted_out
+  description: text("description").notNull(),
+  metadata: json("metadata").$type<Record<string, any>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ActivityLogEntry = typeof activityLog.$inferSelect;
+
+// AI insights cache (per-contact AI analysis)
+export const aiInsightsCache = pgTable("ai_insights_cache", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contactId: varchar("contact_id").notNull().unique(),
+  insight: json("insight").$type<{
+    summary: string;
+    nextActions: string[];
+    talkingPoints: string[];
+    riskLevel: string;
+    riskReason: string;
+    estimatedValue: string;
+  }>().notNull(),
+  generatedAt: timestamp("generated_at").defaultNow().notNull(),
+});
+
+export type AiInsightCache = typeof aiInsightsCache.$inferSelect;

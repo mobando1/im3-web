@@ -2,12 +2,12 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache } from "@shared/schema";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
 import { createCalendarEvent } from "./google-calendar";
 import { isEmailConfigured, sendEmail } from "./email-sender";
-import { generateEmailContent, buildMicroReminderEmail } from "./email-ai";
+import { generateEmailContent, buildMicroReminderEmail, generateContactInsight } from "./email-ai";
 import { parseFechaCita } from "./date-utils";
 import { requireAuth, hashPassword } from "./auth";
 import { calculateLeadScore } from "./lead-scoring";
@@ -72,6 +72,16 @@ export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
+  // Helper: log activity to audit trail (non-throwing)
+  async function logActivity(contactId: string, type: string, description: string, metadata?: Record<string, any>) {
+    if (!db) return;
+    try {
+      await db.insert(activityLog).values({ contactId, type, description, metadata: metadata || null });
+    } catch (err) {
+      log(`Error logging activity: ${err}`);
+    }
+  }
+
   // Diagnostic form submission
   app.post("/api/diagnostic", async (req, res) => {
     const data = req.body;
@@ -220,6 +230,9 @@ export async function registerRoutes(
             telefono: data.telefono || null,
           }).returning();
 
+          // Log form submission
+          logActivity(contact.id, "form_submitted", `Formulario diagnóstico completado por ${data.participante}`, { empresa: data.empresa, diagnosticId: insertedId });
+
           // Fetch full diagnostic for AI context and lead scoring
           const [diagForAI] = await db.select().from(diagnostics).where(eq(diagnostics.id, insertedId!));
 
@@ -227,6 +240,7 @@ export async function registerRoutes(
           try {
             const score = calculateLeadScore(contact, diagForAI || null, { sent: 0, opened: 0, clicked: 0 });
             await db.update(contacts).set({ leadScore: score }).where(eq(contacts.id, contact.id));
+            logActivity(contact.id, "score_changed", `Lead score inicial: ${score}`, { oldScore: 0, newScore: score });
           } catch (err) {
             log(`Error calculating lead score: ${err}`);
           }
@@ -332,11 +346,19 @@ export async function registerRoutes(
 
         log(`Email webhook: ${event.type} para ${messageId}`);
 
+        // Log activity for engagement events
+        if (updatedEmail) {
+          const eventTypeMap: Record<string, string> = { opened: "email_opened", clicked: "email_clicked", bounced: "email_bounced" };
+          const eventDescMap: Record<string, string> = { opened: "abrió un email", clicked: "hizo click en un email", bounced: "email rebotó" };
+          logActivity(updatedEmail.contactId, eventTypeMap[newStatus] || newStatus, eventDescMap[newStatus] || newStatus, { emailId: updatedEmail.id, subject: updatedEmail.subject });
+        }
+
         // Recalculate lead score on engagement events
         if (updatedEmail && (newStatus === "opened" || newStatus === "clicked")) {
           try {
             const [contact] = await db.select().from(contacts).where(eq(contacts.id, updatedEmail.contactId));
             if (contact) {
+              const oldScore = contact.leadScore;
               const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId));
               const contactEmails = await db.select().from(sentEmails).where(eq(sentEmails.contactId, contact.id));
               const emailSummary = { sent: 0, opened: 0, clicked: 0 };
@@ -347,6 +369,9 @@ export async function registerRoutes(
               }
               const score = calculateLeadScore(contact, diagnostic || null, emailSummary);
               await db.update(contacts).set({ leadScore: score }).where(eq(contacts.id, contact.id));
+              if (score !== oldScore) {
+                logActivity(contact.id, "score_changed", `Lead score: ${oldScore} → ${score}`, { oldScore, newScore: score });
+              }
             }
           } catch (scoreErr) {
             log(`Error recalculating lead score: ${scoreErr}`);
@@ -924,12 +949,23 @@ export async function registerRoutes(
     }
 
     try {
+      // Fetch old status for audit
+      const [current] = await db.select().from(contacts).where(eq(contacts.id, contactId));
+      if (!current) return res.status(404).json({ error: "Contacto no encontrado" });
+      const oldStatus = current.status;
+
+      const updateFields: Record<string, any> = { status };
+
+      // Accept optional substatus
+      const { substatus } = req.body;
+      if (substatus !== undefined) updateFields.substatus = substatus;
+
       const [updated] = await db.update(contacts)
-        .set({ status })
+        .set(updateFields)
         .where(eq(contacts.id, contactId))
         .returning();
 
-      if (!updated) return res.status(404).json({ error: "Contacto no encontrado" });
+      logActivity(contactId, "status_changed", `Status: ${oldStatus} → ${status}`, { oldStatus, newStatus: status, substatus: substatus || null });
 
       log(`Contact ${updated.email} status → ${status}`);
       res.json(updated);
@@ -944,12 +980,14 @@ export async function registerRoutes(
     if (!db) return res.status(500).json({ error: "DB not configured" });
     const contactId = req.params.id as string;
 
-    const { nombre, empresa, email, telefono } = req.body;
+    const { nombre, empresa, email, telefono, substatus, tags } = req.body;
     const updates: Record<string, any> = {};
     if (nombre !== undefined) updates.nombre = nombre;
     if (empresa !== undefined) updates.empresa = empresa;
     if (email !== undefined) updates.email = email;
     if (telefono !== undefined) updates.telefono = telefono;
+    if (substatus !== undefined) updates.substatus = substatus;
+    if (tags !== undefined) updates.tags = tags;
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: "No fields to update" });
@@ -962,6 +1000,8 @@ export async function registerRoutes(
         .returning();
 
       if (!updated) return res.status(404).json({ error: "Contacto no encontrado" });
+
+      logActivity(contactId, "contact_edited", `Información actualizada: ${Object.keys(updates).join(", ")}`, { changes: updates });
 
       log(`Contact ${updated.email} info updated`);
       res.json(updated);
@@ -1004,6 +1044,7 @@ export async function registerRoutes(
         authorId: (req.user as any)?.id || null,
       }).returning();
 
+      logActivity(contactId, "note_added", `Nota agregada`, { noteId: note.id });
       log(`Note added for contact ${contactId}`);
       res.json(note);
     } catch (err: any) {
@@ -1023,6 +1064,7 @@ export async function registerRoutes(
         .returning();
 
       if (!deleted) return res.status(404).json({ error: "Nota no encontrada" });
+      logActivity(req.params.id as string, "note_deleted", `Nota eliminada`, { noteId: noteId });
       res.json({ success: true });
     } catch (err: any) {
       log(`Error deleting note: ${err?.message}`);
@@ -1240,6 +1282,10 @@ export async function registerRoutes(
         contactId: contactId || null,
       }).returning();
 
+      if (task.contactId) {
+        logActivity(task.contactId, "task_created", `Tarea creada: ${task.title}`, { taskId: task.id });
+      }
+
       res.json(task);
     } catch (err: any) {
       log(`Error creating task: ${err?.message}`);
@@ -1271,6 +1317,11 @@ export async function registerRoutes(
         .returning();
 
       if (!updated) return res.status(404).json({ error: "Tarea no encontrada" });
+
+      if (updated.contactId && status === "completed") {
+        logActivity(updated.contactId, "task_completed", `Tarea completada: ${updated.title}`, { taskId: updated.id });
+      }
+
       res.json(updated);
     } catch (err: any) {
       log(`Error updating task: ${err?.message}`);
@@ -1325,6 +1376,108 @@ export async function registerRoutes(
     }
   });
 
+  // Activity log for a contact
+  app.get("/api/admin/contacts/:id/activity", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const contactId = req.params.id as string;
+
+    try {
+      const activities = await db.select().from(activityLog)
+        .where(eq(activityLog.contactId, contactId))
+        .orderBy(desc(activityLog.createdAt))
+        .limit(100);
+
+      res.json(activities);
+    } catch (err: any) {
+      log(`Error fetching activity: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo actividad" });
+    }
+  });
+
+  // AI insight for a contact (cached)
+  app.get("/api/admin/contacts/:id/ai-insight", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const contactId = req.params.id as string;
+
+    try {
+      // Check cache (valid for 24h)
+      const [cached] = await db.select().from(aiInsightsCache)
+        .where(eq(aiInsightsCache.contactId, contactId));
+
+      if (cached) {
+        const age = Date.now() - new Date(cached.generatedAt).getTime();
+        if (age < 24 * 60 * 60 * 1000) {
+          return res.json(cached);
+        }
+      }
+
+      // Generate new insight
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId));
+      if (!contact) return res.status(404).json({ error: "Contacto no encontrado" });
+
+      const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId));
+      const contactEmails = await db.select().from(sentEmails).where(eq(sentEmails.contactId, contactId));
+      const notes = await db.select().from(contactNotes).where(eq(contactNotes.contactId, contactId));
+
+      const insight = await generateContactInsight(contact, diagnostic || null, contactEmails, notes);
+
+      // Upsert cache
+      if (cached) {
+        await db.update(aiInsightsCache)
+          .set({ insight, generatedAt: new Date() })
+          .where(eq(aiInsightsCache.contactId, contactId));
+      } else {
+        await db.insert(aiInsightsCache).values({ contactId, insight });
+      }
+
+      const [result] = await db.select().from(aiInsightsCache)
+        .where(eq(aiInsightsCache.contactId, contactId));
+
+      res.json(result);
+    } catch (err: any) {
+      log(`Error generating AI insight: ${err?.message}`);
+      res.status(500).json({ error: "Error generando análisis AI" });
+    }
+  });
+
+  // Regenerate AI insight
+  app.post("/api/admin/contacts/:id/ai-insight/regenerate", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const contactId = req.params.id as string;
+
+    try {
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId));
+      if (!contact) return res.status(404).json({ error: "Contacto no encontrado" });
+
+      const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId));
+      const contactEmails = await db.select().from(sentEmails).where(eq(sentEmails.contactId, contactId));
+      const notes = await db.select().from(contactNotes).where(eq(contactNotes.contactId, contactId));
+
+      const insight = await generateContactInsight(contact, diagnostic || null, contactEmails, notes);
+
+      // Upsert cache
+      const [existing] = await db.select().from(aiInsightsCache)
+        .where(eq(aiInsightsCache.contactId, contactId));
+
+      if (existing) {
+        await db.update(aiInsightsCache)
+          .set({ insight, generatedAt: new Date() })
+          .where(eq(aiInsightsCache.contactId, contactId));
+      } else {
+        await db.insert(aiInsightsCache).values({ contactId, insight });
+      }
+
+      const [result] = await db.select().from(aiInsightsCache)
+        .where(eq(aiInsightsCache.contactId, contactId));
+
+      logActivity(contactId, "ai_insight_generated", "Análisis AI regenerado");
+      res.json(result);
+    } catch (err: any) {
+      log(`Error regenerating AI insight: ${err?.message}`);
+      res.status(500).json({ error: "Error regenerando análisis AI" });
+    }
+  });
+
   // Unsubscribe from email sequence
   app.get("/api/unsubscribe/:contactId", async (req, res) => {
     const { contactId } = req.params;
@@ -1339,6 +1492,7 @@ export async function registerRoutes(
         .set({ optedOut: true })
         .where(eq(contacts.id, contactId));
 
+      logActivity(contactId, "opted_out", "Contacto se dio de baja de emails");
       log(`Contact unsubscribed: ${contactId}`);
 
       res.send(`<html>

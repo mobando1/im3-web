@@ -15,6 +15,13 @@
       "when": 1773457477879,
       "tag": "0001_crazy_captain_universe",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1773458480244,
+      "tag": "0002_condemned_ultimo",
+      "breakpoints": true
     }
   ]
 }
