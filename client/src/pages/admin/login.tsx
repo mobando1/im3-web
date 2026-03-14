@@ -19,7 +19,7 @@ export default function AdminLogin() {
     e.preventDefault();
     try {
       await login({ username, password });
-      navigate("/admin");
+      // Navigation handled by isAuthenticated check on re-render
     } catch {
       // Error handled by loginError
     }
