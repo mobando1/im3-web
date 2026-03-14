@@ -15,13 +15,14 @@ const AdminLogin = lazy(() => import("@/pages/admin/login"));
 const AdminDashboard = lazy(() => import("@/pages/admin/dashboard"));
 const AdminContacts = lazy(() => import("@/pages/admin/contacts"));
 const AdminContactDetail = lazy(() => import("@/pages/admin/contact-detail"));
+const AdminCalendar = lazy(() => import("@/pages/admin/calendar"));
 const AdminLayout = lazy(() => import("@/pages/admin/layout"));
 
 function ProtectedAdmin({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
-    return <div className="min-h-screen bg-[hsl(var(--ink))]" />;
+    return <div className="min-h-screen bg-gray-50" />;
   }
 
   if (!isAuthenticated) {
@@ -49,6 +50,11 @@ function Router() {
               <AdminContactDetail />
             </ProtectedAdmin>
           )}
+        </Route>
+        <Route path="/admin/calendar">
+          <ProtectedAdmin>
+            <AdminCalendar />
+          </ProtectedAdmin>
         </Route>
         <Route path="/admin/contacts">
           <ProtectedAdmin>

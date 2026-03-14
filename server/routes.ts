@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, sql, and, gte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes } from "@shared/schema";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
 import { createCalendarEvent } from "./google-calendar";
@@ -797,6 +797,7 @@ export async function registerRoutes(
         .select({
           id: sentEmails.id,
           subject: sentEmails.subject,
+          body: sentEmails.body,
           status: sentEmails.status,
           scheduledFor: sentEmails.scheduledFor,
           sentAt: sentEmails.sentAt,
@@ -851,6 +852,182 @@ export async function registerRoutes(
     } catch (err: any) {
       log(`Error updating status: ${err?.message}`);
       res.status(500).json({ error: "Error actualizando status" });
+    }
+  });
+
+  // Update contact info
+  app.patch("/api/admin/contacts/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const contactId = req.params.id as string;
+
+    const { nombre, empresa, email, telefono } = req.body;
+    const updates: Record<string, any> = {};
+    if (nombre !== undefined) updates.nombre = nombre;
+    if (empresa !== undefined) updates.empresa = empresa;
+    if (email !== undefined) updates.email = email;
+    if (telefono !== undefined) updates.telefono = telefono;
+
+    if (Object.keys(updates).length === 0) {
+      return res.status(400).json({ error: "No fields to update" });
+    }
+
+    try {
+      const [updated] = await db.update(contacts)
+        .set(updates)
+        .where(eq(contacts.id, contactId))
+        .returning();
+
+      if (!updated) return res.status(404).json({ error: "Contacto no encontrado" });
+
+      log(`Contact ${updated.email} info updated`);
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error updating contact: ${err?.message}`);
+      res.status(500).json({ error: "Error actualizando contacto" });
+    }
+  });
+
+  // Contact notes - list
+  app.get("/api/admin/contacts/:id/notes", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const contactId = req.params.id as string;
+
+    try {
+      const notes = await db.select().from(contactNotes)
+        .where(eq(contactNotes.contactId, contactId))
+        .orderBy(desc(contactNotes.createdAt));
+      res.json(notes);
+    } catch (err: any) {
+      log(`Error fetching notes: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo notas" });
+    }
+  });
+
+  // Contact notes - create
+  app.post("/api/admin/contacts/:id/notes", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const contactId = req.params.id as string;
+    const { content } = req.body;
+
+    if (!content || !content.trim()) {
+      return res.status(400).json({ error: "Contenido requerido" });
+    }
+
+    try {
+      const [note] = await db.insert(contactNotes).values({
+        contactId,
+        content: content.trim(),
+        authorId: (req.user as any)?.id || null,
+      }).returning();
+
+      log(`Note added for contact ${contactId}`);
+      res.json(note);
+    } catch (err: any) {
+      log(`Error creating note: ${err?.message}`);
+      res.status(500).json({ error: "Error creando nota" });
+    }
+  });
+
+  // Contact notes - delete
+  app.delete("/api/admin/contacts/:id/notes/:noteId", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const noteId = req.params.noteId as string;
+
+    try {
+      const [deleted] = await db.delete(contactNotes)
+        .where(eq(contactNotes.id, noteId))
+        .returning();
+
+      if (!deleted) return res.status(404).json({ error: "Nota no encontrada" });
+      res.json({ success: true });
+    } catch (err: any) {
+      log(`Error deleting note: ${err?.message}`);
+      res.status(500).json({ error: "Error eliminando nota" });
+    }
+  });
+
+  // Email detail (body content)
+  app.get("/api/admin/emails/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const emailId = req.params.id as string;
+
+    try {
+      const [email] = await db.select().from(sentEmails).where(eq(sentEmails.id, emailId));
+      if (!email) return res.status(404).json({ error: "Email no encontrado" });
+
+      // Get template name
+      const [template] = await db.select().from(emailTemplates).where(eq(emailTemplates.id, email.templateId));
+
+      res.json({
+        ...email,
+        templateName: template?.nombre || "unknown",
+      });
+    } catch (err: any) {
+      log(`Error fetching email: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo email" });
+    }
+  });
+
+  // Update scheduled email (before sending)
+  app.patch("/api/admin/emails/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const emailId = req.params.id as string;
+
+    try {
+      const [email] = await db.select().from(sentEmails).where(eq(sentEmails.id, emailId));
+      if (!email) return res.status(404).json({ error: "Email no encontrado" });
+
+      if (email.status !== "pending") {
+        return res.status(400).json({ error: "Solo se pueden editar emails pendientes" });
+      }
+
+      const { subject, body } = req.body;
+      const updates: Record<string, any> = {};
+      if (subject !== undefined) updates.subject = subject;
+      if (body !== undefined) updates.body = body;
+
+      const [updated] = await db.update(sentEmails)
+        .set(updates)
+        .where(eq(sentEmails.id, emailId))
+        .returning();
+
+      log(`Email ${emailId} updated`);
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error updating email: ${err?.message}`);
+      res.status(500).json({ error: "Error actualizando email" });
+    }
+  });
+
+  // Calendar - upcoming appointments
+  app.get("/api/admin/calendar", requireAuth, async (_req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const allDiagnostics = await db.select().from(diagnostics).orderBy(desc(diagnostics.createdAt));
+      const allContacts = await db.select().from(contacts);
+      const contactMap: Record<string, { nombre: string; empresa: string; id: string }> = {};
+      for (const c of allContacts) {
+        contactMap[c.diagnosticId] = { nombre: c.nombre, empresa: c.empresa, id: c.id };
+      }
+
+      const appointments = allDiagnostics
+        .filter(d => d.fechaCita && d.horaCita)
+        .map(d => ({
+          id: d.id,
+          fechaCita: d.fechaCita,
+          horaCita: d.horaCita,
+          contactName: contactMap[d.id]?.nombre || "Unknown",
+          contactCompany: contactMap[d.id]?.empresa || "",
+          contactId: contactMap[d.id]?.id || "",
+          meetLink: d.meetLink,
+          googleDriveUrl: d.googleDriveUrl,
+        }));
+
+      res.json(appointments);
+    } catch (err: any) {
+      log(`Error fetching calendar: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo calendario" });
     }
   });
 

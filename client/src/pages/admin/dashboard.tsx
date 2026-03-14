@@ -53,11 +53,11 @@ function getGreeting(): string {
 
 function SkeletonCard({ className = "" }: { className?: string }) {
   return (
-    <Card className={`bg-[#111827]/80 border-[#1e293b] animate-pulse ${className}`}>
+    <Card className={`bg-white border-gray-200 animate-pulse ${className}`}>
       <CardContent className="p-6">
-        <div className="h-4 w-20 bg-[#1e293b] rounded mb-4" />
-        <div className="h-8 w-24 bg-[#1e293b] rounded mb-2" />
-        <div className="h-3 w-28 bg-[#1e293b] rounded" />
+        <div className="h-4 w-20 bg-gray-100 rounded mb-4" />
+        <div className="h-8 w-24 bg-gray-100 rounded mb-2" />
+        <div className="h-3 w-28 bg-gray-100 rounded" />
       </CardContent>
     </Card>
   );
@@ -74,8 +74,8 @@ export default function Dashboard() {
     return (
       <div className="space-y-6">
         <div>
-          <h2 className="text-2xl font-semibold text-white">{getGreeting()}</h2>
-          <p className="text-slate-400 text-sm mt-1">Aqui tienes el resumen de tu CRM</p>
+          <h2 className="text-2xl font-semibold text-gray-900">{getGreeting()}</h2>
+          <p className="text-gray-500 text-sm mt-1">Aqui tienes el resumen de tu CRM</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
           {[...Array(5)].map((_, i) => (
@@ -83,16 +83,13 @@ export default function Dashboard() {
           ))}
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <Card className="bg-[#111827]/80 border-[#1e293b] animate-pulse">
+          <Card className="bg-white border-gray-200 animate-pulse">
             <CardContent className="p-6 h-64" />
           </Card>
-          <Card className="bg-[#111827]/80 border-[#1e293b] animate-pulse">
+          <Card className="bg-white border-gray-200 animate-pulse">
             <CardContent className="p-6 h-64" />
           </Card>
         </div>
-        <Card className="bg-[#111827]/80 border-[#1e293b] animate-pulse">
-          <CardContent className="p-6 h-48" />
-        </Card>
       </div>
     );
   }
@@ -106,49 +103,49 @@ export default function Dashboard() {
       label: "Total contactos",
       value: kpis.totalContacts,
       icon: Users,
-      iconBg: "bg-blue-500/10",
-      iconColor: "text-blue-400",
-      accentColor: "from-blue-400 to-blue-600",
+      iconBg: "bg-blue-50",
+      iconColor: "text-blue-600",
+      accentColor: "from-blue-500 to-blue-600",
     },
     {
       label: "Tasa de conversion",
       value: `${kpis.conversionRate}%`,
       icon: TrendingUp,
-      iconBg: "bg-green-500/10",
-      iconColor: "text-green-400",
-      accentColor: "from-green-400 to-green-600",
+      iconBg: "bg-emerald-50",
+      iconColor: "text-emerald-600",
+      accentColor: "from-emerald-500 to-emerald-600",
     },
     {
       label: "Emails esta semana",
       value: kpis.emailsThisWeek,
       icon: Mail,
-      iconBg: "bg-[#2FA4A9]/10",
-      iconColor: "text-[#2FA4A9]",
-      accentColor: "from-[#2FA4A9] to-[#1a7a7e]",
+      iconBg: "bg-teal-50",
+      iconColor: "text-teal-600",
+      accentColor: "from-[#2FA4A9] to-[#238b8f]",
     },
     {
       label: "Proximas citas",
       value: kpis.upcomingAppointments,
       icon: Calendar,
-      iconBg: "bg-orange-500/10",
-      iconColor: "text-orange-400",
-      accentColor: "from-orange-400 to-orange-600",
+      iconBg: "bg-orange-50",
+      iconColor: "text-orange-600",
+      accentColor: "from-orange-500 to-orange-600",
     },
     {
       label: "Tasa de apertura",
       value: `${kpis.openRate}%`,
       icon: Eye,
-      iconBg: "bg-purple-500/10",
-      iconColor: "text-purple-400",
-      accentColor: "from-purple-400 to-purple-600",
+      iconBg: "bg-purple-50",
+      iconColor: "text-purple-600",
+      accentColor: "from-purple-500 to-purple-600",
     },
   ];
 
   const pipelineStages = [
-    { label: "Lead", count: pipeline.lead, color: "bg-[#3b82f6]", gradient: "from-[#3b82f6] to-[#2563eb]" },
-    { label: "Contactado", count: pipeline.contacted, color: "bg-[#eab308]", gradient: "from-[#eab308] to-[#ca8a04]" },
-    { label: "Agendado", count: pipeline.scheduled, color: "bg-[#f97316]", gradient: "from-[#f97316] to-[#ea580c]" },
-    { label: "Convertido", count: pipeline.converted, color: "bg-[#22c55e]", gradient: "from-[#22c55e] to-[#16a34a]" },
+    { label: "Lead", count: pipeline.lead, color: "bg-blue-500", gradient: "from-blue-500 to-blue-600" },
+    { label: "Contactado", count: pipeline.contacted, color: "bg-amber-500", gradient: "from-amber-500 to-amber-600" },
+    { label: "Agendado", count: pipeline.scheduled, color: "bg-orange-500", gradient: "from-orange-500 to-orange-600" },
+    { label: "Convertido", count: pipeline.converted, color: "bg-emerald-500", gradient: "from-emerald-500 to-emerald-600" },
   ];
 
   const pipelineTotal = kpis.totalContacts || 1;
@@ -162,8 +159,8 @@ export default function Dashboard() {
     <div className="space-y-6">
       {/* Greeting Header */}
       <div>
-        <h2 className="text-2xl font-semibold text-white">{getGreeting()}</h2>
-        <p className="text-slate-400 text-sm mt-1">Aqui tienes el resumen de tu CRM</p>
+        <h2 className="text-2xl font-semibold text-gray-900">{getGreeting()}</h2>
+        <p className="text-gray-500 text-sm mt-1">Aqui tienes el resumen de tu CRM</p>
       </div>
 
       {/* Row 1: KPI Cards */}
@@ -173,19 +170,17 @@ export default function Dashboard() {
           return (
             <Card
               key={kpi.label}
-              className="bg-[#111827]/80 border-[#1e293b] overflow-hidden"
+              className="bg-white border-gray-200 overflow-hidden shadow-sm hover:shadow-md transition-shadow"
             >
-              <div className={`h-0.5 bg-gradient-to-r ${kpi.accentColor}`} />
+              <div className={`h-1 bg-gradient-to-r ${kpi.accentColor}`} />
               <CardContent className="p-5">
                 <div className="flex items-start justify-between mb-4">
                   <div className={`${kpi.iconBg} rounded-xl p-2.5`}>
                     <Icon className={`w-5 h-5 ${kpi.iconColor}`} />
                   </div>
                 </div>
-                <p className="text-3xl font-semibold text-white">{kpi.value}</p>
-                <p className="text-sm text-slate-400 mt-1">
-                  {kpi.label}
-                </p>
+                <p className="text-3xl font-semibold text-gray-900">{kpi.value}</p>
+                <p className="text-sm text-gray-500 mt-1">{kpi.label}</p>
               </CardContent>
             </Card>
           );
@@ -195,9 +190,9 @@ export default function Dashboard() {
       {/* Row 2: Pipeline + Email Performance */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         {/* Pipeline Funnel */}
-        <Card className="bg-[#111827]/80 border-[#1e293b]">
+        <Card className="bg-white border-gray-200 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">
+            <CardTitle className="text-sm font-medium text-gray-500">
               Pipeline
             </CardTitle>
           </CardHeader>
@@ -207,12 +202,12 @@ export default function Dashboard() {
               return (
                 <div key={stage.label} className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-white font-medium">{stage.label}</span>
-                    <span className="text-slate-400 tabular-nums">
-                      {stage.count} <span className="text-slate-500">({pct}%)</span>
+                    <span className="text-gray-700 font-medium">{stage.label}</span>
+                    <span className="text-gray-500 tabular-nums">
+                      {stage.count} <span className="text-gray-400">({pct}%)</span>
                     </span>
                   </div>
-                  <div className="h-3 w-full rounded-full bg-white/5">
+                  <div className="h-2.5 w-full rounded-full bg-gray-100">
                     <div
                       className={`h-full rounded-full bg-gradient-to-r ${stage.gradient} transition-all`}
                       style={{ width: `${Math.max(pct, 2)}%` }}
@@ -225,9 +220,9 @@ export default function Dashboard() {
         </Card>
 
         {/* Email Performance */}
-        <Card className="bg-[#111827]/80 border-[#1e293b]">
+        <Card className="bg-white border-gray-200 shadow-sm">
           <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-slate-400">
+            <CardTitle className="text-sm font-medium text-gray-500">
               Email Performance
             </CardTitle>
           </CardHeader>
@@ -242,7 +237,7 @@ export default function Dashboard() {
                   <XAxis
                     type="number"
                     domain={[0, 100]}
-                    tick={{ fill: "#94a3b8", fontSize: 12 }}
+                    tick={{ fill: "#6b7280", fontSize: 12 }}
                     axisLine={false}
                     tickLine={false}
                     tickFormatter={(v: number) => `${v}%`}
@@ -251,28 +246,28 @@ export default function Dashboard() {
                     type="category"
                     dataKey="template"
                     width={120}
-                    tick={{ fill: "#94a3b8", fontSize: 12 }}
+                    tick={{ fill: "#6b7280", fontSize: 12 }}
                     axisLine={false}
                     tickLine={false}
                   />
                   <Tooltip
                     contentStyle={{
-                      backgroundColor: "#111827",
-                      border: "1px solid #1e293b",
+                      backgroundColor: "#fff",
+                      border: "1px solid #e5e7eb",
                       borderRadius: 10,
-                      color: "#fff",
+                      color: "#111827",
                       fontSize: 13,
                       padding: "8px 12px",
-                      boxShadow: "0 4px 20px rgba(0,0,0,0.4)",
+                      boxShadow: "0 4px 12px rgba(0,0,0,0.08)",
                     }}
-                    cursor={{ fill: "rgba(255,255,255,0.03)" }}
+                    cursor={{ fill: "rgba(0,0,0,0.03)" }}
                     formatter={(value: number) => [`${value}%`, "Open Rate"]}
                   />
                   <Bar dataKey="rate" fill="#2FA4A9" radius={[0, 4, 4, 0]} barSize={20} />
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <p className="text-sm text-slate-500 py-8 text-center">
+              <p className="text-sm text-gray-400 py-8 text-center">
                 Sin datos de email aun
               </p>
             )}
@@ -281,38 +276,38 @@ export default function Dashboard() {
       </div>
 
       {/* Row 3: Recent Activity */}
-      <Card className="bg-[#111827]/80 border-[#1e293b]">
+      <Card className="bg-white border-gray-200 shadow-sm">
         <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-slate-400">
+          <CardTitle className="text-sm font-medium text-gray-500">
             Actividad Reciente
           </CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {recentActivity.length > 0 ? (
-            <ul className="divide-y divide-[#1e293b]">
+            <ul className="divide-y divide-gray-100">
               {recentActivity.slice(0, 8).map((event, idx) => {
-                const isSent = event.type === "sent";
+                const isSent = event.type === "email_sent";
                 const ActivityIcon = isSent ? Mail : Eye;
 
                 return (
                   <li
                     key={idx}
-                    className="flex items-center gap-3 px-6 py-3.5 hover:bg-white/5 cursor-pointer transition-colors"
+                    className="flex items-center gap-3 px-6 py-3.5 hover:bg-gray-50 cursor-pointer transition-colors"
                     onClick={() => navigate(`/admin/contacts/${event.contactId}`)}
                   >
                     <div className="shrink-0">
-                      <div className={`rounded-full p-2 ${isSent ? "bg-blue-500/10" : "bg-green-500/10"}`}>
-                        <ActivityIcon className={`w-4 h-4 ${isSent ? "text-blue-400" : "text-green-400"}`} />
+                      <div className={`rounded-full p-2 ${isSent ? "bg-blue-50" : "bg-emerald-50"}`}>
+                        <ActivityIcon className={`w-4 h-4 ${isSent ? "text-blue-500" : "text-emerald-500"}`} />
                       </div>
                     </div>
-                    <span className="text-sm text-slate-400 flex-1 truncate">
+                    <span className="text-sm text-gray-600 flex-1 truncate">
                       {isSent ? (
-                        <>Email "{event.detail}" enviado a <span className="text-white font-medium">{event.contactName}</span></>
+                        <>Email "{event.detail}" enviado a <span className="text-gray-900 font-medium">{event.contactName}</span></>
                       ) : (
-                        <><span className="text-white font-medium">{event.contactName}</span> abrio email "{event.detail}"</>
+                        <><span className="text-gray-900 font-medium">{event.contactName}</span> abrio email "{event.detail}"</>
                       )}
                     </span>
-                    <span className="text-xs text-slate-500 shrink-0 flex items-center gap-1">
+                    <span className="text-xs text-gray-400 shrink-0 flex items-center gap-1">
                       <Clock className="w-3 h-3" />
                       {relativeTime(event.timestamp)}
                     </span>
@@ -321,7 +316,7 @@ export default function Dashboard() {
               })}
             </ul>
           ) : (
-            <p className="text-sm text-slate-500 py-8 text-center">
+            <p className="text-sm text-gray-400 py-8 text-center">
               Sin actividad reciente
             </p>
           )}

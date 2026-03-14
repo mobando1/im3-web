@@ -141,3 +141,15 @@ export const newsletterSubscribers = pgTable("newsletter_subscribers", {
 });
 
 export type NewsletterSubscriber = typeof newsletterSubscribers.$inferSelect;
+
+// Contact notes (internal CRM notes)
+export const contactNotes = pgTable("contact_notes", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contactId: varchar("contact_id").notNull(),
+  content: text("content").notNull(),
+  authorId: varchar("author_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ContactNote = typeof contactNotes.$inferSelect;
+export type InsertContactNote = typeof contactNotes.$inferInsert;
