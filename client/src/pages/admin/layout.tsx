@@ -1,10 +1,10 @@
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { Button } from "@/components/ui/button";
+import { LayoutDashboard, Users, LogOut } from "lucide-react";
 
 const navItems = [
-  { label: "Dashboard", path: "/admin", icon: "~" },
-  { label: "Contactos", path: "/admin/contacts", icon: ">" },
+  { label: "Dashboard", path: "/admin", icon: LayoutDashboard },
+  { label: "Contactos", path: "/admin/contacts", icon: Users },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -16,53 +16,73 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     navigate("/admin/login");
   };
 
+  const initials = user?.username
+    ? user.username.slice(0, 2).toUpperCase()
+    : "AD";
+
   return (
     <div className="min-h-screen bg-[hsl(var(--ink))] flex">
       {/* Sidebar */}
-      <aside className="w-56 bg-[hsl(var(--coal))] border-r border-[hsl(var(--coal-light))] flex flex-col">
-        <div className="p-4 border-b border-[hsl(var(--coal-light))]">
-          <h1 className="text-lg font-bold text-[hsl(var(--teal))]">IM3 Admin</h1>
-          <p className="text-xs text-[hsl(var(--paper-dark))] mt-0.5">{user?.username}</p>
+      <aside className="w-60 bg-[hsl(var(--coal))] border-r border-[hsl(var(--coal-light))] flex flex-col">
+        {/* Logo */}
+        <div className="p-5 border-b border-[hsl(var(--coal-light))]">
+          <div className="flex items-center gap-3">
+            <img src="/assets/im3-logo.png" alt="IM3" className="h-7" />
+            <span className="text-xs font-medium tracking-widest uppercase text-[hsl(var(--paper-dark))]">
+              CRM
+            </span>
+          </div>
         </div>
 
-        <nav className="flex-1 p-2 space-y-1">
+        {/* Navigation */}
+        <nav className="flex-1 py-4 px-2 space-y-1">
           {navItems.map((item) => {
-            const isActive = location === item.path ||
+            const Icon = item.icon;
+            const isActive =
+              location === item.path ||
               (item.path !== "/admin" && location.startsWith(item.path));
             return (
               <button
                 key={item.path}
                 onClick={() => navigate(item.path)}
-                className={`w-full text-left px-3 py-2 rounded-md text-sm transition-colors ${
+                className={`w-full flex items-center gap-3 py-2.5 px-4 rounded-md text-sm font-medium transition-colors ${
                   isActive
-                    ? "bg-[hsl(var(--teal))]/15 text-[hsl(var(--teal))]"
-                    : "text-[hsl(var(--paper-dark))] hover:text-[hsl(var(--paper))] hover:bg-[hsl(var(--ink))]/50"
+                    ? "border-l-2 border-[hsl(var(--teal))] bg-[hsl(var(--teal))]/10 text-[hsl(var(--teal))]"
+                    : "border-l-2 border-transparent text-[hsl(var(--paper-dark))] hover:text-[hsl(var(--paper))] hover:bg-[hsl(var(--ink))]/50"
                 }`}
               >
-                <span className="mr-2 font-mono">{item.icon}</span>
+                <Icon className="h-4 w-4 shrink-0" />
                 {item.label}
               </button>
             );
           })}
         </nav>
 
-        <div className="p-3 border-t border-[hsl(var(--coal-light))]">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={handleLogout}
-            className="w-full text-[hsl(var(--paper-dark))] hover:text-red-400 hover:bg-red-400/10"
-          >
-            Cerrar sesion
-          </Button>
+        {/* User section */}
+        <div className="p-4 border-t border-[hsl(var(--coal-light))]">
+          <div className="flex items-center gap-3">
+            <div className="h-8 w-8 rounded-full bg-[hsl(var(--teal))] flex items-center justify-center shrink-0">
+              <span className="text-xs font-bold text-[hsl(var(--ink))]">
+                {initials}
+              </span>
+            </div>
+            <span className="text-sm text-[hsl(var(--paper))] truncate flex-1">
+              {user?.username}
+            </span>
+            <button
+              onClick={handleLogout}
+              className="p-1.5 rounded-md text-[hsl(var(--paper-dark))] hover:text-red-400 hover:bg-red-400/10 transition-colors"
+              title="Cerrar sesion"
+            >
+              <LogOut className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </aside>
 
       {/* Main content */}
       <main className="flex-1 overflow-auto">
-        <div className="p-6 max-w-6xl">
-          {children}
-        </div>
+        <div className="p-8 max-w-7xl">{children}</div>
       </main>
     </div>
   );

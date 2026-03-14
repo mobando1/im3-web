@@ -563,6 +563,150 @@ export async function registerRoutes(
     }
   });
 
+  // Comprehensive dashboard
+  app.get("/api/admin/dashboard", requireAuth, async (_req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      // --- KPIs ---
+      const allContacts = await db.select().from(contacts);
+      const totalContacts = allContacts.length;
+      const convertedCount = allContacts.filter(c => c.status === "converted").length;
+      const conversionRate = totalContacts > 0 ? Math.round((convertedCount / totalContacts) * 100 * 10) / 10 : 0;
+
+      const now = new Date();
+      const weekStart = new Date(now);
+      weekStart.setUTCDate(weekStart.getUTCDate() - 7);
+
+      const allEmails = await db.select().from(sentEmails);
+      const emailsThisWeek = allEmails.filter(e => e.sentAt && e.sentAt >= weekStart).length;
+
+      const totalSent = allEmails.filter(e => e.status !== "pending" && e.status !== "failed" && e.status !== "expired").length;
+      const totalOpened = allEmails.filter(e => e.status === "opened" || e.status === "clicked").length;
+      const openRate = totalSent > 0 ? Math.round((totalOpened / totalSent) * 100 * 10) / 10 : 0;
+
+      // Upcoming appointments: contacts with status "scheduled" and fechaCita in the future
+      const scheduledContacts = allContacts.filter(c => c.status === "scheduled");
+      let upcomingAppointments = 0;
+      if (scheduledContacts.length > 0) {
+        const diagnosticIds = scheduledContacts.map(c => c.diagnosticId);
+        const diags = await db.select().from(diagnostics)
+          .where(sql`${diagnostics.id} IN (${sql.join(diagnosticIds.map(id => sql`${id}`), sql`, `)})`);
+        for (const d of diags) {
+          if (d.fechaCita) {
+            const citaDate = new Date(d.fechaCita);
+            if (citaDate >= now) upcomingAppointments++;
+          }
+        }
+      }
+
+      // --- Pipeline ---
+      const pipeline = { lead: 0, contacted: 0, scheduled: 0, converted: 0 };
+      for (const c of allContacts) {
+        const s = c.status as keyof typeof pipeline;
+        if (s in pipeline) pipeline[s]++;
+      }
+
+      // --- Email Performance (per template) ---
+      const allTemplates = await db.select().from(emailTemplates);
+      const templateMap: Record<string, string> = {};
+      for (const t of allTemplates) templateMap[t.id] = t.nombre;
+
+      const templateStats: Record<string, { sent: number; opened: number }> = {};
+      for (const e of allEmails) {
+        if (e.status === "pending" || e.status === "failed" || e.status === "expired") continue;
+        const tName = templateMap[e.templateId] || "unknown";
+        if (!templateStats[tName]) templateStats[tName] = { sent: 0, opened: 0 };
+        templateStats[tName].sent++;
+        if (e.status === "opened" || e.status === "clicked") templateStats[tName].opened++;
+      }
+
+      const emailPerformance = Object.entries(templateStats).map(([template, stats]) => ({
+        template,
+        sent: stats.sent,
+        opened: stats.opened,
+        rate: stats.sent > 0 ? Math.round((stats.opened / stats.sent) * 100 * 10) / 10 : 0,
+      }));
+
+      // --- Recent Activity (last 8 events) ---
+      const recentEmails = allEmails
+        .filter(e => e.status === "sent" || e.status === "opened" || e.status === "clicked")
+        .sort((a, b) => {
+          const dateA = a.sentAt ? a.sentAt.getTime() : 0;
+          const dateB = b.sentAt ? b.sentAt.getTime() : 0;
+          return dateB - dateA;
+        })
+        .slice(0, 8);
+
+      const contactMap: Record<string, { nombre: string; id: string }> = {};
+      for (const c of allContacts) contactMap[c.id] = { nombre: c.nombre, id: c.id };
+
+      const recentActivity = recentEmails.map(e => ({
+        type: e.status === "sent" ? "email_sent" : "email_opened",
+        contactName: contactMap[e.contactId]?.nombre || "Unknown",
+        contactId: e.contactId,
+        detail: templateMap[e.templateId] || "unknown",
+        timestamp: e.sentAt ? e.sentAt.toISOString() : "",
+      }));
+
+      res.json({
+        kpis: {
+          totalContacts,
+          conversionRate,
+          emailsThisWeek,
+          upcomingAppointments,
+          openRate,
+        },
+        pipeline,
+        emailPerformance,
+        recentActivity,
+      });
+    } catch (err: any) {
+      log(`Error admin dashboard: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo dashboard" });
+    }
+  });
+
+  // Contacts grouped by pipeline status
+  app.get("/api/admin/contacts/pipeline", requireAuth, async (_req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const allContacts = await db.select().from(contacts).orderBy(desc(contacts.createdAt));
+
+      // Get email counts for all contacts
+      const allEmails = await db.select().from(sentEmails);
+      const emailCounts: Record<string, { sent: number; opened: number }> = {};
+      for (const e of allEmails) {
+        if (!emailCounts[e.contactId]) emailCounts[e.contactId] = { sent: 0, opened: 0 };
+        if (e.status === "sent" || e.status === "opened" || e.status === "clicked") emailCounts[e.contactId].sent++;
+        if (e.status === "opened" || e.status === "clicked") emailCounts[e.contactId].opened++;
+      }
+
+      const grouped: Record<string, any[]> = { lead: [], contacted: [], scheduled: [], converted: [] };
+
+      for (const c of allContacts) {
+        const s = c.status as string;
+        if (s in grouped) {
+          grouped[s].push({
+            id: c.id,
+            nombre: c.nombre,
+            empresa: c.empresa,
+            email: c.email,
+            createdAt: c.createdAt,
+            emailsSent: emailCounts[c.id]?.sent || 0,
+            emailsOpened: emailCounts[c.id]?.opened || 0,
+          });
+        }
+      }
+
+      res.json(grouped);
+    } catch (err: any) {
+      log(`Error admin contacts pipeline: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo pipeline" });
+    }
+  });
+
   // Contacts list with filters
   app.get("/api/admin/contacts", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
