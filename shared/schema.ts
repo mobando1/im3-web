@@ -83,6 +83,7 @@ export const contacts = pgTable("contacts", {
   telefono: text("telefono"),
   status: text("status").notNull().default("lead"), // lead | contacted | scheduled | converted
   optedOut: boolean("opted_out").default(false).notNull(),
+  leadScore: integer("lead_score").default(0).notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -153,3 +154,19 @@ export const contactNotes = pgTable("contact_notes", {
 
 export type ContactNote = typeof contactNotes.$inferSelect;
 export type InsertContactNote = typeof contactNotes.$inferInsert;
+
+// Tasks (follow-up reminders)
+export const tasks = pgTable("tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contactId: varchar("contact_id"),
+  title: text("title").notNull(),
+  description: text("description"),
+  dueDate: timestamp("due_date"),
+  priority: text("priority").notNull().default("medium"), // low | medium | high
+  status: text("status").notNull().default("pending"), // pending | completed
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type Task = typeof tasks.$inferSelect;
+export type InsertTask = typeof tasks.$inferInsert;

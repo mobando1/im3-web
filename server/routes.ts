@@ -1,15 +1,16 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { eq, asc, isNull, sql, and, gte, ilike, or, desc, count } from "drizzle-orm";
+import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks } from "@shared/schema";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
 import { createCalendarEvent } from "./google-calendar";
 import { isEmailConfigured, sendEmail } from "./email-sender";
-import { generateEmailContent } from "./email-ai";
+import { generateEmailContent, buildMicroReminderEmail } from "./email-ai";
 import { parseFechaCita } from "./date-utils";
 import { requireAuth, hashPassword } from "./auth";
+import { calculateLeadScore } from "./lead-scoring";
 import passport from "passport";
 
 /**
@@ -219,6 +220,17 @@ export async function registerRoutes(
             telefono: data.telefono || null,
           }).returning();
 
+          // Fetch full diagnostic for AI context and lead scoring
+          const [diagForAI] = await db.select().from(diagnostics).where(eq(diagnostics.id, insertedId!));
+
+          // Calculate initial lead score
+          try {
+            const score = calculateLeadScore(contact, diagForAI || null, { sent: 0, opened: 0, clicked: 0 });
+            await db.update(contacts).set({ leadScore: score }).where(eq(contacts.id, contact.id));
+          } catch (err) {
+            log(`Error calculating lead score: ${err}`);
+          }
+
           // Get active sequence templates (exclude abandono at order 99)
           const templates = await db
             .select()
@@ -238,14 +250,38 @@ export async function registerRoutes(
           const hoursUntilCall = Math.max(0, (appointmentDate.getTime() - now.getTime()) / (1000 * 60 * 60));
 
           let scheduled = 0;
+
           for (const template of sequenceTemplates) {
             const scheduledFor = calculateEmailTime(template.nombre, now, appointmentDate, hoursUntilCall);
             if (!scheduledFor) continue; // Skip this email (adaptive logic)
+
+            // Pre-generate email content so admins can preview/edit before sending
+            let subject: string | null = null;
+            let body: string | null = null;
+            try {
+              if (template.nombre === "micro_recordatorio") {
+                const r = buildMicroReminderEmail(
+                  data.participante, data.horaCita,
+                  diagForAI?.meetLink || null, contact.id
+                );
+                subject = r.subject;
+                body = r.body;
+              } else {
+                const r = await generateEmailContent(template, diagForAI || null, contact.id);
+                subject = r.subject;
+                body = r.body;
+              }
+            } catch (err) {
+              log(`Pre-gen failed for ${template.nombre}: ${err}`);
+              // Fallback: cron will regenerate at send time
+            }
 
             await db.insert(sentEmails).values({
               contactId: contact.id,
               templateId: template.id,
               scheduledFor,
+              subject,
+              body,
             });
             scheduled++;
           }
@@ -288,12 +324,34 @@ export async function registerRoutes(
 
       const newStatus = statusMap[event.type];
       if (newStatus) {
-        await db
+        const [updatedEmail] = await db
           .update(sentEmails)
           .set({ status: newStatus })
-          .where(eq(sentEmails.resendMessageId, messageId));
+          .where(eq(sentEmails.resendMessageId, messageId))
+          .returning();
 
         log(`Email webhook: ${event.type} para ${messageId}`);
+
+        // Recalculate lead score on engagement events
+        if (updatedEmail && (newStatus === "opened" || newStatus === "clicked")) {
+          try {
+            const [contact] = await db.select().from(contacts).where(eq(contacts.id, updatedEmail.contactId));
+            if (contact) {
+              const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId));
+              const contactEmails = await db.select().from(sentEmails).where(eq(sentEmails.contactId, contact.id));
+              const emailSummary = { sent: 0, opened: 0, clicked: 0 };
+              for (const e of contactEmails) {
+                if (e.status === "sent" || e.status === "opened" || e.status === "clicked") emailSummary.sent++;
+                if (e.status === "opened") emailSummary.opened++;
+                if (e.status === "clicked") emailSummary.clicked++;
+              }
+              const score = calculateLeadScore(contact, diagnostic || null, emailSummary);
+              await db.update(contacts).set({ leadScore: score }).where(eq(contacts.id, contact.id));
+            }
+          } catch (scoreErr) {
+            log(`Error recalculating lead score: ${scoreErr}`);
+          }
+        }
       }
     } catch (err) {
       log(`Error procesando email webhook: ${err}`);
@@ -649,6 +707,27 @@ export async function registerRoutes(
         timestamp: e.sentAt ? e.sentAt.toISOString() : "",
       }));
 
+      // Pending tasks count
+      let pendingTasks = 0;
+      let overdueTasks = 0;
+      try {
+        const allTasks = await db.select().from(tasks).where(eq(tasks.status, "pending"));
+        pendingTasks = allTasks.length;
+        overdueTasks = allTasks.filter(t => t.dueDate && t.dueDate < now).length;
+      } catch {}
+
+      // Hot leads (score > 60)
+      const hotLeads = allContacts.filter(c => c.leadScore > 60).length;
+
+      // Upcoming tasks (next 5)
+      let upcomingTasks: any[] = [];
+      try {
+        upcomingTasks = await db.select().from(tasks)
+          .where(eq(tasks.status, "pending"))
+          .orderBy(asc(tasks.dueDate))
+          .limit(5);
+      } catch {}
+
       res.json({
         kpis: {
           totalContacts,
@@ -656,10 +735,14 @@ export async function registerRoutes(
           emailsThisWeek,
           upcomingAppointments,
           openRate,
+          pendingTasks,
+          overdueTasks,
+          hotLeads,
         },
         pipeline,
         emailPerformance,
         recentActivity,
+        upcomingTasks,
       });
     } catch (err: any) {
       log(`Error admin dashboard: ${err?.message}`);
@@ -694,6 +777,7 @@ export async function registerRoutes(
             empresa: c.empresa,
             email: c.email,
             createdAt: c.createdAt,
+            leadScore: c.leadScore,
             emailsSent: emailCounts[c.id]?.sent || 0,
             emailsOpened: emailCounts[c.id]?.opened || 0,
           });
@@ -999,6 +1083,58 @@ export async function registerRoutes(
     }
   });
 
+  // Regenerate email content with AI
+  app.post("/api/admin/emails/:id/regenerate", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const emailId = req.params.id as string;
+
+    try {
+      const [email] = await db.select().from(sentEmails).where(eq(sentEmails.id, emailId));
+      if (!email) return res.status(404).json({ error: "Email no encontrado" });
+      if (email.status !== "pending") {
+        return res.status(400).json({ error: "Solo se pueden regenerar emails pendientes" });
+      }
+
+      // Get template, contact, diagnostic
+      const [template] = await db.select().from(emailTemplates).where(eq(emailTemplates.id, email.templateId));
+      if (!template) return res.status(404).json({ error: "Template no encontrado" });
+
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, email.contactId));
+      if (!contact) return res.status(404).json({ error: "Contacto no encontrado" });
+
+      const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId));
+
+      let subject: string;
+      let body: string;
+
+      if (template.nombre === "micro_recordatorio") {
+        const r = buildMicroReminderEmail(
+          diagnostic?.participante || contact.nombre,
+          diagnostic?.horaCita || "",
+          diagnostic?.meetLink || null,
+          contact.id
+        );
+        subject = r.subject;
+        body = r.body;
+      } else {
+        const r = await generateEmailContent(template, diagnostic || null, contact.id);
+        subject = r.subject;
+        body = r.body;
+      }
+
+      const [updated] = await db.update(sentEmails)
+        .set({ subject, body })
+        .where(eq(sentEmails.id, emailId))
+        .returning();
+
+      log(`Email ${emailId} regenerated for ${contact.email}`);
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error regenerating email: ${err?.message}`);
+      res.status(500).json({ error: "Error regenerando email" });
+    }
+  });
+
   // Calendar - upcoming appointments
   app.get("/api/admin/calendar", requireAuth, async (_req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
@@ -1028,6 +1164,135 @@ export async function registerRoutes(
     } catch (err: any) {
       log(`Error fetching calendar: ${err?.message}`);
       res.status(500).json({ error: "Error obteniendo calendario" });
+    }
+  });
+
+  // Tasks - list with filters
+  app.get("/api/admin/tasks", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const { status, priority, contactId, filter } = req.query as Record<string, string>;
+      const conditions = [];
+
+      if (status) conditions.push(eq(tasks.status, status));
+      if (priority) conditions.push(eq(tasks.priority, priority));
+      if (contactId) conditions.push(eq(tasks.contactId, contactId));
+
+      if (filter === "today") {
+        const startOfDay = new Date();
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date();
+        endOfDay.setHours(23, 59, 59, 999);
+        conditions.push(gte(tasks.dueDate, startOfDay));
+        conditions.push(lte(tasks.dueDate, endOfDay));
+      } else if (filter === "overdue") {
+        conditions.push(eq(tasks.status, "pending"));
+        conditions.push(lte(tasks.dueDate, new Date()));
+      } else if (filter === "week") {
+        const endOfWeek = new Date();
+        endOfWeek.setDate(endOfWeek.getDate() + 7);
+        conditions.push(lte(tasks.dueDate, endOfWeek));
+      }
+
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+      const taskList = await db.select().from(tasks)
+        .where(whereClause)
+        .orderBy(asc(tasks.dueDate), desc(tasks.createdAt));
+
+      // Enrich with contact names
+      const contactIds = Array.from(new Set(taskList.filter(t => t.contactId).map(t => t.contactId!)));
+      const contactNames: Record<string, string> = {};
+      if (contactIds.length > 0) {
+        const contactList = await db.select({ id: contacts.id, nombre: contacts.nombre })
+          .from(contacts)
+          .where(sql`${contacts.id} IN (${sql.join(contactIds.map(id => sql`${id}`), sql`, `)})`);
+        for (const c of contactList) contactNames[c.id] = c.nombre;
+      }
+
+      const enriched = taskList.map(t => ({
+        ...t,
+        contactName: t.contactId ? (contactNames[t.contactId] || null) : null,
+      }));
+
+      res.json(enriched);
+    } catch (err: any) {
+      log(`Error fetching tasks: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo tareas" });
+    }
+  });
+
+  // Tasks - create
+  app.post("/api/admin/tasks", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    const { title, description, dueDate, priority, contactId } = req.body;
+    if (!title || !title.trim()) {
+      return res.status(400).json({ error: "Titulo requerido" });
+    }
+
+    try {
+      const [task] = await db.insert(tasks).values({
+        title: title.trim(),
+        description: description || null,
+        dueDate: dueDate ? new Date(dueDate) : null,
+        priority: priority || "medium",
+        contactId: contactId || null,
+      }).returning();
+
+      res.json(task);
+    } catch (err: any) {
+      log(`Error creating task: ${err?.message}`);
+      res.status(500).json({ error: "Error creando tarea" });
+    }
+  });
+
+  // Tasks - update/complete
+  app.patch("/api/admin/tasks/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const taskId = req.params.id as string;
+
+    const updates: Record<string, any> = {};
+    const { title, description, dueDate, priority, status } = req.body;
+    if (title !== undefined) updates.title = title;
+    if (description !== undefined) updates.description = description;
+    if (dueDate !== undefined) updates.dueDate = dueDate ? new Date(dueDate) : null;
+    if (priority !== undefined) updates.priority = priority;
+    if (status !== undefined) {
+      updates.status = status;
+      if (status === "completed") updates.completedAt = new Date();
+      if (status === "pending") updates.completedAt = null;
+    }
+
+    try {
+      const [updated] = await db.update(tasks)
+        .set(updates)
+        .where(eq(tasks.id, taskId))
+        .returning();
+
+      if (!updated) return res.status(404).json({ error: "Tarea no encontrada" });
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error updating task: ${err?.message}`);
+      res.status(500).json({ error: "Error actualizando tarea" });
+    }
+  });
+
+  // Tasks - delete
+  app.delete("/api/admin/tasks/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const taskId = req.params.id as string;
+
+    try {
+      const [deleted] = await db.delete(tasks)
+        .where(eq(tasks.id, taskId))
+        .returning();
+
+      if (!deleted) return res.status(404).json({ error: "Tarea no encontrada" });
+      res.json({ success: true });
+    } catch (err: any) {
+      log(`Error deleting task: ${err?.message}`);
+      res.status(500).json({ error: "Error eliminando tarea" });
     }
   });
 

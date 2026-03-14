@@ -33,6 +33,8 @@ import {
   ChevronDown,
   ChevronUp,
   Send,
+  RefreshCw,
+  Sparkles,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -211,6 +213,15 @@ export default function ContactDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}`] });
       setEditingEmailId(null);
+    },
+  });
+
+  const regenerateMutation = useMutation({
+    mutationFn: async (emailId: string) => {
+      await apiRequest("POST", `/api/admin/emails/${emailId}/regenerate`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}`] });
     },
   });
 
@@ -747,25 +758,43 @@ export default function ContactDetailPage() {
                         >
                           {email.status}
                         </Badge>
-                        {/* Expand/collapse button */}
-                        {(email.body || email.subject) && (
+                        {/* Action buttons */}
+                        <div className="ml-auto flex items-center gap-1.5">
+                          {/* Expand/collapse */}
                           <button
                             onClick={() => setExpandedEmail(isExpanded ? null : email.id)}
-                            className="text-gray-400 hover:text-gray-700 transition-colors ml-auto flex items-center gap-1 text-xs"
+                            className="text-gray-400 hover:text-gray-700 transition-colors flex items-center gap-1 text-xs"
+                            title="Ver email"
                           >
                             <Eye className="w-3.5 h-3.5" />
                             {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                           </button>
-                        )}
-                        {/* Edit button for pending emails */}
-                        {isPending && (
-                          <button
-                            onClick={() => startEditEmail(email)}
-                            className="text-gray-400 hover:text-[#2FA4A9] transition-colors text-xs flex items-center gap-1"
-                          >
-                            <Pencil className="w-3 h-3" />
-                          </button>
-                        )}
+                          {/* Edit button for pending emails */}
+                          {isPending && email.body && (
+                            <button
+                              onClick={() => startEditEmail(email)}
+                              className="text-gray-400 hover:text-[#2FA4A9] transition-colors text-xs"
+                              title="Editar"
+                            >
+                              <Pencil className="w-3 h-3" />
+                            </button>
+                          )}
+                          {/* Regenerate button for pending emails */}
+                          {isPending && (
+                            <button
+                              onClick={() => regenerateMutation.mutate(email.id)}
+                              disabled={regenerateMutation.isPending}
+                              className="text-gray-400 hover:text-purple-600 transition-colors text-xs flex items-center gap-1"
+                              title={email.body ? "Regenerar con IA" : "Generar preview"}
+                            >
+                              {regenerateMutation.isPending ? (
+                                <RefreshCw className="w-3 h-3 animate-spin" />
+                              ) : (
+                                <Sparkles className="w-3 h-3" />
+                              )}
+                            </button>
+                          )}
+                        </div>
                       </div>
                       {email.subject && (
                         <p className="text-sm text-gray-600 mt-1 truncate">
@@ -778,13 +807,44 @@ export default function ContactDetailPage() {
                           : `Programado: ${new Date(email.scheduledFor).toLocaleString("es-CO")}`}
                       </p>
 
-                      {/* Email body preview */}
+                      {/* Email body preview (rendered HTML) */}
                       {isExpanded && email.body && !isEditing && (
-                        <div className="mt-3 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                          <p className="text-xs text-gray-400 mb-2 font-medium">Contenido:</p>
-                          <div className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">
-                            {email.body}
+                        <div className="mt-3 rounded-lg border border-gray-200 overflow-hidden">
+                          <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-100">
+                            <p className="text-xs text-gray-400 font-medium">Vista previa del email</p>
+                            {isPending && (
+                              <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-600 border-amber-200">
+                                Pendiente de envio
+                              </Badge>
+                            )}
                           </div>
+                          <iframe
+                            srcDoc={email.body}
+                            sandbox=""
+                            className="w-full border-0 bg-white"
+                            style={{ minHeight: "250px" }}
+                            onLoad={(e) => {
+                              const iframe = e.target as HTMLIFrameElement;
+                              if (iframe.contentDocument) {
+                                iframe.style.height = (iframe.contentDocument.body.scrollHeight + 20) + "px";
+                              }
+                            }}
+                          />
+                        </div>
+                      )}
+
+                      {/* No content yet message for pending emails */}
+                      {isExpanded && !email.body && isPending && !isEditing && (
+                        <div className="mt-3 p-4 bg-gray-50 rounded-lg border border-gray-100 text-center">
+                          <p className="text-sm text-gray-400">Contenido aun no generado</p>
+                          <button
+                            onClick={() => regenerateMutation.mutate(email.id)}
+                            disabled={regenerateMutation.isPending}
+                            className="mt-2 text-xs text-[#2FA4A9] hover:underline flex items-center gap-1 mx-auto"
+                          >
+                            <Sparkles className="w-3 h-3" />
+                            {regenerateMutation.isPending ? "Generando..." : "Generar preview ahora"}
+                          </button>
                         </div>
                       )}
 

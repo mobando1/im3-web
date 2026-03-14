@@ -104,8 +104,12 @@ async function processEmailQueue() {
         let subject: string;
         let body: string;
 
-        // E5 micro_recordatorio: use fixed template (no AI)
-        if (template.nombre === "micro_recordatorio") {
+        if (email.subject && email.body) {
+          // Use pre-generated or admin-edited content
+          subject = email.subject;
+          body = email.body;
+        } else if (template.nombre === "micro_recordatorio") {
+          // E5 micro_recordatorio: use fixed template (no AI)
           const result = buildMicroReminderEmail(
             diagnostic?.participante || contact.nombre,
             diagnostic?.horaCita || "",
@@ -115,7 +119,7 @@ async function processEmailQueue() {
           subject = result.subject;
           body = result.body;
         } else {
-          // Generate content with AI
+          // Generate content with AI (fallback for legacy or failed pre-gen)
           const result = await generateEmailContent(
             template,
             diagnostic || null,

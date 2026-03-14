@@ -16,6 +16,7 @@ const AdminDashboard = lazy(() => import("@/pages/admin/dashboard"));
 const AdminContacts = lazy(() => import("@/pages/admin/contacts"));
 const AdminContactDetail = lazy(() => import("@/pages/admin/contact-detail"));
 const AdminCalendar = lazy(() => import("@/pages/admin/calendar"));
+const AdminTasks = lazy(() => import("@/pages/admin/tasks"));
 const AdminLayout = lazy(() => import("@/pages/admin/layout"));
 
 function ProtectedAdmin({ children }: { children: React.ReactNode }) {
@@ -50,6 +51,11 @@ function Router() {
               <AdminContactDetail />
             </ProtectedAdmin>
           )}
+        </Route>
+        <Route path="/admin/tasks">
+          <ProtectedAdmin>
+            <AdminTasks />
+          </ProtectedAdmin>
         </Route>
         <Route path="/admin/calendar">
           <ProtectedAdmin>

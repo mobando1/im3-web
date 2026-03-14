@@ -1,16 +1,23 @@
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
-import { LayoutDashboard, Users, CalendarDays, LogOut } from "lucide-react";
+import { useQuery } from "@tanstack/react-query";
+import { LayoutDashboard, Users, CalendarDays, CheckSquare, LogOut } from "lucide-react";
 
 const navItems = [
   { label: "Dashboard", path: "/admin", icon: LayoutDashboard },
   { label: "Contactos", path: "/admin/contacts", icon: Users },
+  { label: "Tareas", path: "/admin/tasks", icon: CheckSquare, showBadge: true },
   { label: "Calendario", path: "/admin/calendar", icon: CalendarDays },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
   const { user, logout } = useAuth();
+
+  const { data: tasksList } = useQuery<any[]>({
+    queryKey: ["/api/admin/tasks?status=pending"],
+  });
+  const pendingTaskCount = tasksList?.length || 0;
 
   const handleLogout = async () => {
     await logout();
@@ -53,7 +60,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
                 }`}
               >
                 <Icon className={`h-[18px] w-[18px] shrink-0 ${isActive ? "text-[#2FA4A9]" : ""}`} />
-                {item.label}
+                <span className="flex-1 text-left">{item.label}</span>
+                {(item as any).showBadge && pendingTaskCount > 0 && (
+                  <span className="text-[10px] font-semibold bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center">
+                    {pendingTaskCount > 9 ? "9+" : pendingTaskCount}
+                  </span>
+                )}
               </button>
             );
           })}

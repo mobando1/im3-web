@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
-import { Users, TrendingUp, Mail, Calendar, Eye, Clock } from "lucide-react";
+import { Users, TrendingUp, Mail, Calendar, Eye, Clock, CheckSquare, Flame, AlertTriangle } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   BarChart,
@@ -11,6 +11,14 @@ import {
   ResponsiveContainer,
 } from "recharts";
 
+type UpcomingTask = {
+  id: string;
+  title: string;
+  dueDate: string | null;
+  priority: string;
+  status: string;
+};
+
 type DashboardData = {
   kpis: {
     totalContacts: number;
@@ -18,6 +26,9 @@ type DashboardData = {
     emailsThisWeek: number;
     upcomingAppointments: number;
     openRate: number;
+    pendingTasks: number;
+    overdueTasks: number;
+    hotLeads: number;
   };
   pipeline: { lead: number; contacted: number; scheduled: number; converted: number };
   emailPerformance: Array<{ template: string; sent: number; opened: number; rate: number }>;
@@ -28,6 +39,7 @@ type DashboardData = {
     detail: string;
     timestamp: string;
   }>;
+  upcomingTasks: UpcomingTask[];
 };
 
 function relativeTime(timestamp: string): string {
@@ -77,7 +89,7 @@ export default function Dashboard() {
           <h2 className="text-2xl font-semibold text-gray-900">{getGreeting()}</h2>
           <p className="text-gray-500 text-sm mt-1">Aqui tienes el resumen de tu CRM</p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
           {[...Array(5)].map((_, i) => (
             <SkeletonCard key={i} />
           ))}
@@ -96,7 +108,7 @@ export default function Dashboard() {
 
   if (!data) return null;
 
-  const { kpis, pipeline, emailPerformance, recentActivity } = data;
+  const { kpis, pipeline, emailPerformance, recentActivity, upcomingTasks } = data;
 
   const kpiCards = [
     {
@@ -106,6 +118,14 @@ export default function Dashboard() {
       iconBg: "bg-blue-50",
       iconColor: "text-blue-600",
       accentColor: "from-blue-500 to-blue-600",
+    },
+    {
+      label: "Hot leads",
+      value: kpis.hotLeads,
+      icon: Flame,
+      iconBg: "bg-red-50",
+      iconColor: "text-red-500",
+      accentColor: "from-red-500 to-orange-500",
     },
     {
       label: "Tasa de conversion",
@@ -164,7 +184,7 @@ export default function Dashboard() {
       </div>
 
       {/* Row 1: KPI Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
         {kpiCards.map((kpi) => {
           const Icon = kpi.icon;
           return (
@@ -322,6 +342,52 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
+
+      {/* Row 4: Upcoming Tasks */}
+      {upcomingTasks && upcomingTasks.length > 0 && (
+        <Card className="bg-white border-gray-200 shadow-sm">
+          <CardHeader className="pb-2">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-gray-500">
+                Tareas Pendientes
+                {kpis.overdueTasks > 0 && (
+                  <span className="ml-2 text-xs text-red-500 font-normal">
+                    ({kpis.overdueTasks} vencidas)
+                  </span>
+                )}
+              </CardTitle>
+              <button
+                onClick={() => navigate("/admin/tasks")}
+                className="text-xs text-[#2FA4A9] hover:underline"
+              >
+                Ver todas
+              </button>
+            </div>
+          </CardHeader>
+          <CardContent className="p-0">
+            <ul className="divide-y divide-gray-100">
+              {upcomingTasks.map((task: UpcomingTask) => {
+                const overdue = task.dueDate && new Date(task.dueDate) < new Date();
+                return (
+                  <li
+                    key={task.id}
+                    className="flex items-center gap-3 px-6 py-3 hover:bg-gray-50 transition-colors"
+                  >
+                    <CheckSquare className={`w-4 h-4 shrink-0 ${overdue ? "text-red-400" : "text-gray-400"}`} />
+                    <span className="text-sm text-gray-700 flex-1 truncate">{task.title}</span>
+                    {task.dueDate && (
+                      <span className={`text-xs shrink-0 ${overdue ? "text-red-500" : "text-gray-400"}`}>
+                        {overdue && <AlertTriangle className="w-3 h-3 inline mr-1" />}
+                        {new Date(task.dueDate).toLocaleDateString("es-CO")}
+                      </span>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
     </div>
   );
 }

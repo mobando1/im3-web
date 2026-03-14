@@ -29,6 +29,7 @@ type Contact = {
   email: string;
   status: string;
   createdAt: string;
+  leadScore: number;
   emailsSent: number;
   emailsOpened: number;
 };
@@ -196,6 +197,7 @@ export default function Contacts() {
                     <TableHead className="text-gray-500 uppercase text-xs font-medium">Nombre</TableHead>
                     <TableHead className="text-gray-500 uppercase text-xs font-medium">Empresa</TableHead>
                     <TableHead className="text-gray-500 uppercase text-xs font-medium">Email</TableHead>
+                    <TableHead className="text-gray-500 uppercase text-xs font-medium">Score</TableHead>
                     <TableHead className="text-gray-500 uppercase text-xs font-medium">Status</TableHead>
                     <TableHead className="text-gray-500 uppercase text-xs font-medium">Emails</TableHead>
                     <TableHead className="text-gray-500 uppercase text-xs font-medium">Fecha</TableHead>
@@ -205,7 +207,7 @@ export default function Contacts() {
                   {isLoading ? (
                     [...Array(5)].map((_, i) => (
                       <TableRow key={i} className="border-gray-100">
-                        {[...Array(6)].map((_, j) => (
+                        {[...Array(7)].map((_, j) => (
                           <TableCell key={j}>
                             <div className="h-4 bg-gray-100 rounded animate-pulse w-20" />
                           </TableCell>
@@ -215,7 +217,7 @@ export default function Contacts() {
                   ) : data?.contacts.length === 0 ? (
                     <TableRow className="border-gray-100">
                       <TableCell
-                        colSpan={6}
+                        colSpan={7}
                         className="text-center text-gray-400 py-8"
                       >
                         No se encontraron contactos
@@ -246,6 +248,15 @@ export default function Contacts() {
                           </TableCell>
                           <TableCell className="text-gray-500 text-sm">
                             {contact.email}
+                          </TableCell>
+                          <TableCell>
+                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+                              contact.leadScore > 60 ? "bg-red-50 text-red-600" :
+                              contact.leadScore > 30 ? "bg-amber-50 text-amber-600" :
+                              "bg-gray-100 text-gray-500"
+                            }`}>
+                              {contact.leadScore}
+                            </span>
                           </TableCell>
                           <TableCell>
                             <Badge
@@ -369,7 +380,7 @@ export default function Contacts() {
                         <p className="text-xs text-gray-400 truncate mt-0.5">
                           {contact.email}
                         </p>
-                        <div className="mt-2">
+                        <div className="mt-2 flex items-center gap-1.5">
                           <Badge
                             variant="outline"
                             className="text-[10px] px-1.5 py-0 border-gray-200 text-gray-500 gap-1"
@@ -377,6 +388,15 @@ export default function Contacts() {
                             <Mail className="w-2.5 h-2.5" />
                             {contact.emailsSent}
                           </Badge>
+                          {contact.leadScore > 0 && (
+                            <span className={`text-[10px] font-semibold px-1.5 py-0 rounded-full ${
+                              contact.leadScore > 60 ? "bg-red-50 text-red-600" :
+                              contact.leadScore > 30 ? "bg-amber-50 text-amber-600" :
+                              "bg-gray-50 text-gray-500"
+                            }`}>
+                              {contact.leadScore}
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))
