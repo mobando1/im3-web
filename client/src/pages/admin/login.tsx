@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { Input } from "@/components/ui/input";
@@ -10,16 +10,19 @@ export default function AdminLogin() {
   const { login, isLoggingIn, loginError, isAuthenticated } = useAuth();
   const [, navigate] = useLocation();
 
-  if (isAuthenticated) {
-    navigate("/admin");
-    return null;
-  }
+  useEffect(() => {
+    if (isAuthenticated) {
+      navigate("/admin");
+    }
+  }, [isAuthenticated, navigate]);
+
+  if (isAuthenticated) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await login({ username, password });
-      // Navigation handled by isAuthenticated check on re-render
+      navigate("/admin");
     } catch {
       // Error handled by loginError
     }
