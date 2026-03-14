@@ -68,20 +68,20 @@ type ContactDetail = {
 };
 
 const statusColors: Record<string, string> = {
-  lead: "bg-blue-500/15 text-blue-400 border-blue-500/30",
-  contacted: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
-  scheduled: "bg-orange-500/15 text-orange-400 border-orange-500/30",
-  converted: "bg-green-500/15 text-green-400 border-green-500/30",
+  lead: "bg-blue-500/15 text-blue-400 border-blue-500/25",
+  contacted: "bg-amber-500/15 text-amber-400 border-amber-500/25",
+  scheduled: "bg-orange-500/15 text-orange-400 border-orange-500/25",
+  converted: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25",
 };
 
 const emailStatusColors: Record<string, string> = {
-  pending: "bg-gray-500/15 text-gray-400 border-gray-500/30",
-  sent: "bg-blue-500/15 text-blue-400 border-blue-500/30",
-  opened: "bg-green-500/15 text-green-400 border-green-500/30",
-  clicked: "bg-emerald-500/15 text-emerald-400 border-emerald-500/30",
-  bounced: "bg-red-500/15 text-red-400 border-red-500/30",
-  failed: "bg-red-500/15 text-red-400 border-red-500/30",
-  expired: "bg-yellow-500/15 text-yellow-400 border-yellow-500/30",
+  pending: "bg-slate-500/15 text-slate-400 border-slate-500/25",
+  sent: "bg-blue-500/15 text-blue-400 border-blue-500/25",
+  opened: "bg-emerald-500/15 text-emerald-400 border-emerald-500/25",
+  clicked: "bg-teal-500/15 text-teal-400 border-teal-500/25",
+  bounced: "bg-red-500/15 text-red-400 border-red-500/25",
+  failed: "bg-red-500/15 text-red-400 border-red-500/25",
+  expired: "bg-amber-500/15 text-amber-400 border-amber-500/25",
 };
 
 const templateLabels: Record<string, string> = {
@@ -150,11 +150,11 @@ export default function ContactDetailPage() {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <div className="h-8 bg-[hsl(var(--coal))] rounded animate-pulse w-48" />
-        <div className="h-40 bg-[hsl(var(--coal))] rounded animate-pulse" />
+        <div className="h-8 bg-[#1e293b] rounded animate-pulse w-48" />
+        <div className="h-40 bg-[#1e293b] rounded animate-pulse" />
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div className="h-64 bg-[hsl(var(--coal))] rounded animate-pulse" />
-          <div className="h-64 bg-[hsl(var(--coal))] rounded animate-pulse" />
+          <div className="h-64 bg-[#1e293b] rounded animate-pulse" />
+          <div className="h-64 bg-[#1e293b] rounded animate-pulse" />
         </div>
       </div>
     );
@@ -179,21 +179,21 @@ export default function ContactDetailPage() {
             variant="ghost"
             size="sm"
             onClick={() => navigate("/admin/contacts")}
-            className="text-[hsl(var(--paper-dark))] hover:text-[hsl(var(--paper))] shrink-0"
+            className="text-slate-400 hover:text-white shrink-0"
           >
             <ArrowLeft className="w-4 h-4 mr-1" />
             Contactos
           </Button>
-          <div className="w-14 h-14 rounded-full bg-[hsl(var(--teal))]/20 flex items-center justify-center shrink-0">
-            <span className="text-lg font-semibold text-[hsl(var(--teal))]">
+          <div className="w-14 h-14 rounded-full bg-gradient-to-br from-[#2FA4A9]/25 to-[#2FA4A9]/5 flex items-center justify-center shrink-0">
+            <span className="text-lg font-semibold text-[#2FA4A9]">
               {getInitials(contact.nombre)}
             </span>
           </div>
           <div className="min-w-0">
-            <h2 className="text-2xl font-bold text-[hsl(var(--paper))] truncate">
+            <h2 className="text-2xl font-semibold text-white truncate">
               {contact.nombre}
             </h2>
-            <p className="text-sm text-[hsl(var(--paper-dark))]">
+            <p className="text-sm text-slate-400">
               {contact.empresa}
             </p>
           </div>
@@ -202,7 +202,7 @@ export default function ContactDetailPage() {
           {contact.optedOut && (
             <Badge
               variant="outline"
-              className="bg-red-500/15 text-red-400 border-red-500/30"
+              className="bg-red-500/15 text-red-400 border-red-500/25"
             >
               Opted out
             </Badge>
@@ -217,28 +217,28 @@ export default function ContactDetailPage() {
             value={contact.status}
             onValueChange={(v) => statusMutation.mutate(v)}
           >
-            <SelectTrigger className="w-36 bg-[hsl(var(--ink))] border-[hsl(var(--coal-light))] text-[hsl(var(--paper))]">
+            <SelectTrigger className="w-36 bg-[#0c1220] border-[#1e293b] text-white">
               <SelectValue />
             </SelectTrigger>
-            <SelectContent className="bg-[hsl(var(--coal))] border-[hsl(var(--coal-light))]">
-              <SelectItem value="lead" className="text-[hsl(var(--paper))]">
+            <SelectContent className="bg-[#111827] border-[#1e293b]">
+              <SelectItem value="lead" className="text-slate-300">
                 Lead
               </SelectItem>
               <SelectItem
                 value="contacted"
-                className="text-[hsl(var(--paper))]"
+                className="text-slate-300"
               >
                 Contactado
               </SelectItem>
               <SelectItem
                 value="scheduled"
-                className="text-[hsl(var(--paper))]"
+                className="text-slate-300"
               >
                 Agendado
               </SelectItem>
               <SelectItem
                 value="converted"
-                className="text-[hsl(var(--paper))]"
+                className="text-slate-300"
               >
                 Convertido
               </SelectItem>
@@ -250,32 +250,32 @@ export default function ContactDetailPage() {
       {/* 2-column grid */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left column - Contact Info */}
-        <Card className="bg-[hsl(var(--coal))] border-[hsl(var(--coal-light))]">
+        <Card className="bg-[#111827]/80 border border-[#1e293b]">
           <CardHeader className="pb-3">
-            <CardTitle className="text-xs text-[hsl(var(--paper-dark))] uppercase tracking-wider">
+            <CardTitle className="text-xs text-slate-500 uppercase tracking-wider">
               Contacto
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
             {/* Email */}
             <div className="flex items-center gap-3">
-              <Mail className="w-4 h-4 text-[hsl(var(--paper-dark))] shrink-0" />
+              <Mail className="w-4 h-4 text-slate-500 shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-xs text-[hsl(var(--paper-dark))]">Email</p>
+                <p className="text-xs text-slate-500">Email</p>
                 <div className="flex items-center gap-2">
                   <a
                     href={`mailto:${contact.email}`}
-                    className="text-sm text-[hsl(var(--teal))] hover:underline truncate"
+                    className="text-sm text-[#2FA4A9] hover:underline truncate"
                   >
                     {contact.email}
                   </a>
                   <button
                     onClick={() => handleCopyEmail(contact.email)}
-                    className="text-[hsl(var(--paper-dark))] hover:text-[hsl(var(--paper))] transition-colors"
+                    className="text-slate-500 hover:text-white transition-colors"
                     title="Copiar email"
                   >
                     {copied ? (
-                      <Check className="w-3.5 h-3.5 text-[hsl(var(--teal))]" />
+                      <Check className="w-3.5 h-3.5 text-[#2FA4A9]" />
                     ) : (
                       <Copy className="w-3.5 h-3.5" />
                     )}
@@ -286,12 +286,12 @@ export default function ContactDetailPage() {
 
             {/* Phone */}
             <div className="flex items-center gap-3">
-              <Phone className="w-4 h-4 text-[hsl(var(--paper-dark))] shrink-0" />
+              <Phone className="w-4 h-4 text-slate-500 shrink-0" />
               <div>
-                <p className="text-xs text-[hsl(var(--paper-dark))]">
+                <p className="text-xs text-slate-500">
                   Telefono
                 </p>
-                <p className="text-sm text-[hsl(var(--paper))]">
+                <p className="text-sm text-white">
                   {contact.telefono || "\u2014"}
                 </p>
               </div>
@@ -299,10 +299,10 @@ export default function ContactDetailPage() {
 
             {/* Empresa */}
             <div className="flex items-center gap-3">
-              <Building2 className="w-4 h-4 text-[hsl(var(--paper-dark))] shrink-0" />
+              <Building2 className="w-4 h-4 text-slate-500 shrink-0" />
               <div>
-                <p className="text-xs text-[hsl(var(--paper-dark))]">Empresa</p>
-                <p className="text-sm text-[hsl(var(--paper))]">
+                <p className="text-xs text-slate-500">Empresa</p>
+                <p className="text-sm text-white">
                   {contact.empresa}
                 </p>
               </div>
@@ -311,12 +311,12 @@ export default function ContactDetailPage() {
             {/* Industria */}
             {diagnostic && (
               <div className="flex items-center gap-3">
-                <Factory className="w-4 h-4 text-[hsl(var(--paper-dark))] shrink-0" />
+                <Factory className="w-4 h-4 text-slate-500 shrink-0" />
                 <div>
-                  <p className="text-xs text-[hsl(var(--paper-dark))]">
+                  <p className="text-xs text-slate-500">
                     Industria
                   </p>
-                  <p className="text-sm text-[hsl(var(--paper))]">
+                  <p className="text-sm text-white">
                     {diagnostic.industria}
                   </p>
                 </div>
@@ -326,10 +326,10 @@ export default function ContactDetailPage() {
             {/* Cita */}
             {diagnostic && diagnostic.fechaCita && (
               <div className="flex items-center gap-3">
-                <Calendar className="w-4 h-4 text-[hsl(var(--paper-dark))] shrink-0" />
+                <Calendar className="w-4 h-4 text-slate-500 shrink-0" />
                 <div>
-                  <p className="text-xs text-[hsl(var(--paper-dark))]">Cita</p>
-                  <p className="text-sm text-[hsl(var(--paper))]">
+                  <p className="text-xs text-slate-500">Cita</p>
+                  <p className="text-sm text-white">
                     {diagnostic.fechaCita} — {diagnostic.horaCita}
                   </p>
                 </div>
@@ -338,10 +338,10 @@ export default function ContactDetailPage() {
 
             {/* Creado */}
             <div className="flex items-center gap-3">
-              <Clock className="w-4 h-4 text-[hsl(var(--paper-dark))] shrink-0" />
+              <Clock className="w-4 h-4 text-slate-500 shrink-0" />
               <div>
-                <p className="text-xs text-[hsl(var(--paper-dark))]">Creado</p>
-                <p className="text-sm text-[hsl(var(--paper))]">
+                <p className="text-xs text-slate-500">Creado</p>
+                <p className="text-sm text-white">
                   {relativeDate(contact.createdAt)}
                 </p>
               </div>
@@ -351,14 +351,14 @@ export default function ContactDetailPage() {
             {diagnostic &&
               (diagnostic.googleDriveUrl || diagnostic.meetLink) && (
                 <>
-                  <div className="border-t border-[hsl(var(--coal-light))]" />
+                  <div className="border-t border-[#1e293b]" />
                   <div className="flex items-center gap-2 flex-wrap">
                     {diagnostic.googleDriveUrl && (
                       <Button
                         variant="outline"
                         size="sm"
                         asChild
-                        className="border-[hsl(var(--coal-light))] text-[hsl(var(--paper-dark))] hover:text-[hsl(var(--paper))] hover:bg-[hsl(var(--coal-light))]/50"
+                        className="bg-[#0c1220] border-[#1e293b] text-slate-400 hover:text-white hover:border-[#2FA4A9]/30 hover:bg-white/5"
                       >
                         <a
                           href={diagnostic.googleDriveUrl}
@@ -375,7 +375,7 @@ export default function ContactDetailPage() {
                         variant="outline"
                         size="sm"
                         asChild
-                        className="border-[hsl(var(--coal-light))] text-[hsl(var(--paper-dark))] hover:text-[hsl(var(--paper))] hover:bg-[hsl(var(--coal-light))]/50"
+                        className="bg-[#0c1220] border-[#1e293b] text-slate-400 hover:text-white hover:border-[#2FA4A9]/30 hover:bg-white/5"
                       >
                         <a
                           href={diagnostic.meetLink}
@@ -395,9 +395,9 @@ export default function ContactDetailPage() {
 
         {/* Right column - Diagnostic */}
         {diagnostic && (
-          <Card className="bg-[hsl(var(--coal))] border-[hsl(var(--coal-light))]">
+          <Card className="bg-[#111827]/80 border border-[#1e293b]">
             <CardHeader className="pb-3">
-              <CardTitle className="text-xs text-[hsl(var(--paper-dark))] uppercase tracking-wider">
+              <CardTitle className="text-xs text-slate-500 uppercase tracking-wider">
                 Diagnostico
               </CardTitle>
             </CardHeader>
@@ -413,10 +413,10 @@ export default function ContactDetailPage() {
                 <InfoRow label="Presupuesto" value={diagnostic.presupuesto} />
               </div>
 
-              <div className="border-t border-[hsl(var(--coal-light))] pt-4 space-y-4">
+              <div className="border-t border-[#1e293b] pt-4 space-y-4">
                 {/* Objetivos */}
                 <div>
-                  <p className="text-xs text-[hsl(var(--paper-dark))] mb-2">
+                  <p className="text-xs text-slate-500 mb-2">
                     Objetivos
                   </p>
                   <div className="flex flex-wrap gap-1.5">
@@ -424,7 +424,7 @@ export default function ContactDetailPage() {
                       <Badge
                         key={i}
                         variant="outline"
-                        className="text-xs bg-[hsl(var(--teal))]/10 text-[hsl(var(--teal))] border-[hsl(var(--teal))]/30"
+                        className="text-xs bg-[#2FA4A9]/10 text-[#2FA4A9] border-[#2FA4A9]/25"
                       >
                         {o}
                       </Badge>
@@ -434,7 +434,7 @@ export default function ContactDetailPage() {
 
                 {/* Areas prioritarias */}
                 <div>
-                  <p className="text-xs text-[hsl(var(--paper-dark))] mb-2">
+                  <p className="text-xs text-slate-500 mb-2">
                     Areas prioritarias
                   </p>
                   <div className="flex flex-wrap gap-1.5">
@@ -442,7 +442,7 @@ export default function ContactDetailPage() {
                       <Badge
                         key={i}
                         variant="outline"
-                        className="text-xs bg-purple-500/10 text-purple-400 border-purple-500/30"
+                        className="text-xs bg-purple-500/10 text-purple-400 border-purple-500/25"
                       >
                         {a}
                       </Badge>
@@ -453,10 +453,10 @@ export default function ContactDetailPage() {
                 {/* Herramientas */}
                 {diagnostic.herramientas && (
                   <div>
-                    <p className="text-xs text-[hsl(var(--paper-dark))] mb-1">
+                    <p className="text-xs text-slate-500 mb-1">
                       Herramientas
                     </p>
-                    <p className="text-sm text-[hsl(var(--paper))]">
+                    <p className="text-sm text-white">
                       {diagnostic.herramientas}
                     </p>
                   </div>
@@ -469,16 +469,16 @@ export default function ContactDetailPage() {
 
       {/* Email Sequence Progress */}
       {totalEmails > 0 && (
-        <Card className="bg-[hsl(var(--coal))] border-[hsl(var(--coal-light))]">
+        <Card className="bg-[#111827]/80 border border-[#1e293b]">
           <CardHeader className="pb-3">
-            <CardTitle className="text-xs text-[hsl(var(--paper-dark))] uppercase tracking-wider">
+            <CardTitle className="text-xs text-slate-500 uppercase tracking-wider">
               Secuencia de Emails ({sentCount}/{totalEmails} enviados)
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-6">
             <Progress
               value={progressPercent}
-              className="h-2 bg-[hsl(var(--ink))]"
+              className="h-2 bg-[#1e293b]"
             />
 
             {/* Sequence steps */}
@@ -501,25 +501,25 @@ export default function ContactDetailPage() {
                       <div
                         className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${
                           isSent
-                            ? "border-[hsl(var(--teal))] bg-[hsl(var(--teal))]/20"
+                            ? "border-[#2FA4A9] bg-[#2FA4A9]/15"
                             : isFailed
-                              ? "border-red-500 bg-red-500/20"
+                              ? "border-red-500 bg-red-500/15"
                               : isExpired
-                                ? "border-yellow-500 bg-yellow-500/20"
-                                : "border-gray-500 bg-gray-500/20"
+                                ? "border-amber-500 bg-amber-500/15"
+                                : "border-slate-600 bg-slate-600/15"
                         }`}
                       >
                         {isSent ? (
-                          <Check className="w-4 h-4 text-[hsl(var(--teal))]" />
+                          <Check className="w-4 h-4 text-[#2FA4A9]" />
                         ) : isFailed ? (
                           <X className="w-4 h-4 text-red-500" />
                         ) : isExpired ? (
-                          <Clock className="w-3.5 h-3.5 text-yellow-500" />
+                          <Clock className="w-3.5 h-3.5 text-amber-500" />
                         ) : (
-                          <Circle className="w-3 h-3 text-gray-500" />
+                          <Circle className="w-3 h-3 text-slate-500" />
                         )}
                       </div>
-                      <p className="text-[10px] text-[hsl(var(--paper-dark))] mt-2 text-center leading-tight">
+                      <p className="text-[10px] text-slate-500 mt-2 text-center leading-tight">
                         {templateLabels[email.templateName] ||
                           email.templateName}
                       </p>
@@ -529,8 +529,8 @@ export default function ContactDetailPage() {
                       <div
                         className={`h-px w-6 mt-4 ${
                           isSent
-                            ? "bg-[hsl(var(--teal))]"
-                            : "bg-[hsl(var(--coal-light))]"
+                            ? "bg-[#2FA4A9]"
+                            : "bg-[#1e293b]"
                         }`}
                       />
                     )}
@@ -543,15 +543,15 @@ export default function ContactDetailPage() {
       )}
 
       {/* Email Timeline (detailed) */}
-      <Card className="bg-[hsl(var(--coal))] border-[hsl(var(--coal-light))]">
+      <Card className="bg-[#111827]/80 border border-[#1e293b]">
         <CardHeader className="pb-3">
-          <CardTitle className="text-xs text-[hsl(var(--paper-dark))] uppercase tracking-wider">
+          <CardTitle className="text-xs text-slate-500 uppercase tracking-wider">
             Timeline de Emails ({emails.length})
           </CardTitle>
         </CardHeader>
         <CardContent>
           {emails.length === 0 ? (
-            <p className="text-[hsl(var(--paper-dark))] text-sm">
+            <p className="text-slate-400 text-sm">
               No hay emails programados
             </p>
           ) : (
@@ -572,25 +572,25 @@ export default function ContactDetailPage() {
                       <div
                         className={`w-3 h-3 rounded-full mt-1.5 z-10 ${
                           isSent
-                            ? "bg-[hsl(var(--teal))]"
+                            ? "bg-[#2FA4A9]"
                             : email.status === "pending"
-                              ? "bg-gray-500"
+                              ? "bg-slate-500"
                               : isExpired
-                                ? "bg-yellow-500"
+                                ? "bg-amber-500"
                                 : isFailed
                                   ? "bg-red-500"
-                                  : "bg-gray-500"
+                                  : "bg-slate-500"
                         }`}
                       />
                       {index < emails.length - 1 && (
-                        <div className="w-px flex-1 bg-[hsl(var(--coal-light))]" />
+                        <div className="w-px flex-1 bg-[#1e293b]" />
                       )}
                     </div>
 
                     {/* Content */}
                     <div className="flex-1 min-w-0 pb-6">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium text-[hsl(var(--paper))]">
+                        <span className="text-sm font-medium text-white">
                           {templateLabels[email.templateName] ||
                             email.templateName}
                         </span>
@@ -602,11 +602,11 @@ export default function ContactDetailPage() {
                         </Badge>
                       </div>
                       {email.subject && (
-                        <p className="text-sm text-[hsl(var(--paper-dark))] mt-1 truncate">
+                        <p className="text-sm text-slate-400 mt-1 truncate">
                           {email.subject}
                         </p>
                       )}
-                      <p className="text-xs text-[hsl(var(--paper-dark))]/60 mt-1">
+                      <p className="text-xs text-slate-500 mt-1">
                         {email.sentAt
                           ? `Enviado: ${new Date(email.sentAt).toLocaleString("es-CO")}`
                           : `Programado: ${new Date(email.scheduledFor).toLocaleString("es-CO")}`}
@@ -626,8 +626,8 @@ export default function ContactDetailPage() {
 function InfoRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between">
-      <span className="text-xs text-[hsl(var(--paper-dark))]">{label}</span>
-      <span className="text-sm text-[hsl(var(--paper))]">{value}</span>
+      <span className="text-xs text-slate-500">{label}</span>
+      <span className="text-sm text-white">{value}</span>
     </div>
   );
 }
