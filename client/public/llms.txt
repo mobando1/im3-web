@@ -1,0 +1,99 @@
+# IM3 Systems
+
+> IM3 Systems es una empresa de desarrollo de software a medida, automatización de procesos e inteligencia artificial aplicada para PYMEs en Latinoamérica y España. Construimos sistemas operativos personalizados que eliminan trabajo manual, ordenan operaciones y generan control real del negocio.
+
+## Qué hacemos
+
+IM3 Systems construye tres tipos de soluciones tecnológicas para empresas:
+
+### Aplicaciones internas con inteligencia artificial
+Herramientas de software a medida para control operativo: reportes automatizados, checklists digitales, registros, flujos de trabajo internos y dashboards inteligentes. Reemplazan hojas de cálculo, WhatsApp y procesos manuales con software diseñado específicamente para la operación del cliente. Incluimos capacidades de IA como clasificación automática, predicciones y asistentes inteligentes.
+
+### Automatización de procesos empresariales con IA
+Conectamos apps y datos para eliminar tareas repetitivas y reducir errores. Integramos CRMs, POS, Google Sheets, ERPs y cualquier herramienta que el negocio ya utilice. Creamos flujos automáticos inteligentes que ahorran horas de trabajo diario usando inteligencia artificial para tomar decisiones y priorizar.
+
+### Chatbots, asistentes de IA y sistemas de control inteligentes
+Chatbots de ventas y atención al cliente en WhatsApp con IA. Asistentes internos para equipos. Dashboards con IA que no solo muestran datos sino que sugieren acciones. Conciliaciones automáticas, alertas predictivas y auditoría operativa potenciada por inteligencia artificial.
+
+### Diagnóstico operativo gratuito con recomendaciones de IA
+Análisis sin costo de la operación del negocio. Identificamos cuellos de botella, oportunidades de automatización e implementación de IA. Entregamos una hoja de ruta clara con prioridades. Sin compromiso.
+
+## Cómo trabajamos
+
+1. **Diagnóstico estratégico** (Gratuito): Analizamos la operación, detectamos oportunidades de automatización e IA, y definimos el sistema que realmente se necesita.
+2. **Desarrollo de la solución**: Diseñamos y construimos el sistema a medida con entregas semanales — interfaces, automatizaciones, integraciones con IA y flujos adaptados.
+3. **Implementación**: Integramos en la operación real, migramos datos, conectamos herramientas existentes.
+4. **Entrega y acompañamiento**: Documentamos todo, entrenamos al equipo, acompañamos las primeras semanas.
+
+## Para quién es IM3
+
+- Empresas que necesitan software a medida con inteligencia artificial para ordenar su operación
+- Negocios que quieren automatizar procesos repetitivos usando IA
+- PYMEs que buscan chatbots de WhatsApp, asistentes de IA o dashboards inteligentes
+- Empresas con operaciones complejas que necesitan control, trazabilidad y automatización
+- Equipos que quieren integrar inteligencia artificial en sus procesos existentes
+
+## Resultados documentados
+
+- 12+ sistemas construidos con IA integrada
+- 6 industrias atendidas (retail, logística, educación, manufactura, servicios, alimentos)
+- 100% de diagnósticos que continúan a implementación
+- MVP funcional en 4 a 8 semanas
+- Caso: Reducción de tiempo de cierre de 4 días a 4 horas
+- Caso: Reducción de pérdida de inventario de 8% a 0.5%
+- Caso: Adopción completa del equipo en 2 semanas
+- Caso: Chatbot de ventas en WhatsApp con respuesta 24/7
+- Caso: App de preselección de personal que filtra 200+ CVs automáticamente
+
+## Modelos de trabajo
+
+### Implementación completa (Done For You)
+IM3 se encarga de todo: diagnóstico, diseño, desarrollo y entrega del sistema funcionando con IA integrada. Ideal para empresas que buscan velocidad y garantía de ejecución.
+
+### Acompañamiento estratégico (Consultoría + Diseño)
+IM3 diseña la arquitectura (incluyendo componentes de IA) y guía al equipo técnico del cliente para que construyan con supervisión de calidad.
+
+## Tecnologías e inteligencia artificial
+
+- **Frontend**: React, TypeScript, Tailwind CSS
+- **Backend**: Node.js, Express, Python
+- **Bases de datos**: PostgreSQL, MongoDB
+- **IA y Machine Learning**: Claude (Anthropic), OpenAI GPT, modelos de clasificación, NLP, chatbots conversacionales
+- **Integraciones**: APIs REST, webhooks, Google Workspace, CRMs, POS, ERPs
+- **Cloud**: AWS, Google Cloud, Vercel
+
+## Preguntas frecuentes
+
+**¿IM3 Systems usa inteligencia artificial en sus proyectos?**
+Sí. Aplicamos IA donde genera valor práctico: chatbots de ventas y atención en WhatsApp, clasificación automática de datos, predicciones operativas, asistentes internos, análisis de patrones, y dashboards inteligentes que sugieren acciones.
+
+**¿Pueden construir un chatbot con IA para mi empresa?**
+Sí. Construimos chatbots de ventas y atención al cliente en WhatsApp y web, potenciados por inteligencia artificial. Responden consultas, califican leads y cierran ventas 24/7.
+
+**¿Cuánto toma una implementación típica?**
+Un MVP funcional suele estar listo en 4 a 8 semanas. Empezamos con lo que más impacta la operación.
+
+**¿El diagnóstico tiene algún costo?**
+No. El diagnóstico es 100% gratuito y sin compromiso.
+
+**¿Qué tipo de empresas atiende IM3?**
+PYMEs en Latinoamérica y España que necesitan software a medida, automatización de procesos o inteligencia artificial aplicada a su operación.
+
+## Blog
+
+IM3 Systems publica artículos sobre inteligencia artificial aplicada, automatización de procesos y tecnología para empresas. Temas incluyen:
+- Cómo implementar IA en operaciones empresariales
+- Casos de uso reales de automatización
+- Tendencias tecnológicas con aplicación práctica
+- Guías para PYMEs que quieren modernizar su operación
+
+Blog: https://www.im3systems.com/blog
+
+## Contacto
+
+- Web: https://www.im3systems.com
+- Email: info@im3systems.com
+- LinkedIn: https://www.linkedin.com/company/im3-systems
+- Diagnóstico gratuito: https://www.im3systems.com/booking
+- Idiomas: Español, English
+- Zona de servicio: Latinoamérica y España (servicio remoto disponible globalmente)
