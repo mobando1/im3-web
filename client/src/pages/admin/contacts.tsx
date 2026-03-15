@@ -21,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { List, LayoutGrid, Mail, Filter, Download, X, MessageCircle, Tag, UserX } from "lucide-react";
 
 type Contact = {
@@ -379,13 +380,20 @@ export default function Contacts() {
                             {contact.email}
                           </TableCell>
                           <TableCell>
-                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
-                              contact.leadScore > 60 ? "bg-red-50 text-red-600" :
-                              contact.leadScore > 30 ? "bg-amber-50 text-amber-600" :
-                              "bg-gray-100 text-gray-500"
-                            }`}>
-                              {contact.leadScore}
-                            </span>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <span className={`text-xs font-semibold px-2 py-0.5 rounded-full cursor-default ${
+                                  contact.leadScore > 60 ? "bg-red-50 text-red-600" :
+                                  contact.leadScore > 30 ? "bg-amber-50 text-amber-600" :
+                                  "bg-gray-100 text-gray-500"
+                                }`}>
+                                  {contact.leadScore}
+                                </span>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs">
+                                Lead Score: {contact.leadScore} — {contact.leadScore > 60 ? "Caliente" : contact.leadScore > 30 ? "Tibio" : "Frio"}
+                              </TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell>
                             <Badge
@@ -396,17 +404,24 @@ export default function Contacts() {
                             </Badge>
                           </TableCell>
                           <TableCell>
-                            <div className="flex items-center gap-2">
-                              <span className="text-gray-700 text-sm font-medium">
-                                {contact.emailsOpened}/{contact.emailsSent}
-                              </span>
-                              <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full bg-[#2FA4A9] rounded-full transition-all"
-                                  style={{ width: `${ratio}%` }}
-                                />
-                              </div>
-                            </div>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-2 cursor-default">
+                                  <span className="text-gray-700 text-sm font-medium">
+                                    {contact.emailsOpened}/{contact.emailsSent}
+                                  </span>
+                                  <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                    <div
+                                      className="h-full bg-[#2FA4A9] rounded-full transition-all"
+                                      style={{ width: `${ratio}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              </TooltipTrigger>
+                              <TooltipContent side="top" className="text-xs">
+                                {contact.emailsOpened} de {contact.emailsSent} emails abiertos ({Math.round(ratio)}%)
+                              </TooltipContent>
+                            </Tooltip>
                           </TableCell>
                           <TableCell className="text-gray-500 text-sm">
                             {new Date(contact.createdAt).toLocaleDateString("es-CO")}
@@ -576,12 +591,17 @@ export default function Contacts() {
                       <div
                         key={contact.id}
                         onClick={() => navigate(`/admin/contacts/${contact.id}`)}
-                        className="bg-white border border-gray-200 rounded-lg p-3 cursor-pointer transition-all hover:shadow-md hover:border-[#2FA4A9]/40"
+                        className="bg-white border border-gray-200 rounded-lg p-3 cursor-pointer transition-all duration-200 hover:shadow-md hover:border-[#2FA4A9]/40 hover:-translate-y-0.5"
                       >
-                        <p className="text-sm font-medium text-gray-900 truncate">
-                          {contact.nombre}
-                        </p>
-                        <p className="text-xs text-gray-500 truncate mt-0.5">
+                        <div className="flex items-center gap-2.5 mb-1.5">
+                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#2FA4A9]/20 to-[#2FA4A9]/5 text-[#2FA4A9] flex items-center justify-center text-[10px] font-semibold shrink-0">
+                            {getInitials(contact.nombre)}
+                          </div>
+                          <p className="text-sm font-medium text-gray-900 truncate">
+                            {contact.nombre}
+                          </p>
+                        </div>
+                        <p className="text-xs text-gray-500 truncate">
                           {contact.empresa}
                         </p>
                         <p className="text-xs text-gray-400 truncate mt-0.5">

@@ -221,7 +221,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
             )}
           </div>
         </div>
-        <div className="px-8 pb-8 max-w-7xl">{children}</div>
+        <div className="px-8 pb-8 max-w-7xl animate-in fade-in-0 duration-300">{children}</div>
         <CommandDialog open={searchOpen} onOpenChange={setSearchOpen}>
           <CommandInput placeholder="Buscar contactos, deals, tareas..." value={searchQuery} onValueChange={setSearchQuery} />
           <CommandList>

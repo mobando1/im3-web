@@ -570,24 +570,23 @@ export async function registerRoutes(
         .where(eq(newsletterSubscribers.email, email))
         .limit(1);
 
-      if (existing.length > 0 && existing[0].isActive) {
-        res.json({ success: true, alreadySubscribed: true });
-        return;
+      const alreadySubscribed = existing.length > 0 && existing[0].isActive;
+
+      // Handle newsletter subscriber record (create or reactivate)
+      if (!alreadySubscribed) {
+        if (existing.length > 0) {
+          // Reactivate
+          await db
+            .update(newsletterSubscribers)
+            .set({ isActive: true, unsubscribedAt: null })
+            .where(eq(newsletterSubscribers.email, email));
+        } else {
+          await db.insert(newsletterSubscribers).values({ email });
+        }
+        log(`Newsletter subscriber: ${email}`);
       }
 
-      if (existing.length > 0) {
-        // Reactivate
-        await db
-          .update(newsletterSubscribers)
-          .set({ isActive: true, unsubscribedAt: null })
-          .where(eq(newsletterSubscribers.email, email));
-      } else {
-        await db.insert(newsletterSubscribers).values({ email });
-      }
-
-      log(`Newsletter subscriber: ${email}`);
-
-      // Create CRM contact if one doesn't exist with this email
+      // ALWAYS ensure CRM contact exists (even if already subscribed)
       const existingContact = await db
         .select()
         .from(contacts)
@@ -619,8 +618,8 @@ export async function registerRoutes(
         logActivity(contactId, "newsletter_subscribed", `Se suscribió al newsletter con ${email}`);
       }
 
-      // Send welcome email (fixed template, no AI dependency)
-      if (process.env.RESEND_API_KEY) {
+      // Send welcome email only for new subscriptions
+      if (!alreadySubscribed && process.env.RESEND_API_KEY) {
         const welcomeSubject = "Bienvenido al newsletter de IM3 Systems";
         const welcomeHtml = `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
           <div style="background:#2B7A78;padding:24px 32px;border-radius:8px 8px 0 0">
@@ -656,7 +655,7 @@ export async function registerRoutes(
         ).catch((err) => log(`Error sending admin newsletter notification: ${err}`));
       }
 
-      res.json({ success: true });
+      res.json({ success: true, alreadySubscribed });
     } catch (err) {
       log(`Error newsletter subscribe: ${err}`);
       res.status(500).json({ error: "Error interno" });

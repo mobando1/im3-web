@@ -964,6 +964,49 @@ const Testimonials = () => {
   );
 };
 
+const clientCompanies = [
+  { name: "Passport2Fluency", initials: "P2F", color: "from-blue-500 to-indigo-600" },
+  { name: "Xtremcol", initials: "XC", color: "from-orange-500 to-red-600" },
+  { name: "La Glorieta", initials: "LG", color: "from-green-500 to-emerald-600" },
+  { name: "Grupo Santamaría", initials: "GS", color: "from-purple-500 to-violet-600" },
+  { name: "FreshBox", initials: "FB", color: "from-lime-500 to-green-600" },
+  { name: "Salomé Momentos", initials: "SM", color: "from-pink-500 to-rose-600" },
+  { name: "AMJ Solutions", initials: "AMJ", color: "from-cyan-500 to-blue-600" },
+];
+
+const ClientLogos = () => {
+  return (
+    <section className="py-6 sm:py-8 px-3 sm:px-4 md:px-8">
+      <div className="max-w-5xl mx-auto">
+        <Reveal>
+          <p className="text-center text-xs sm:text-sm font-semibold uppercase tracking-widest text-muted-foreground mb-6 sm:mb-8">
+            Empresas que confían en nosotros
+          </p>
+        </Reveal>
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
+          {clientCompanies.map((company, i) => (
+            <Reveal key={company.name} delay={i * 60}>
+              <div className="group relative flex items-center justify-center py-5 sm:py-6 px-4 rounded-xl border border-border/60 bg-card/50 transition-all duration-500 hover:border-border hover:shadow-md hover:scale-[1.03] cursor-default">
+                <div className="flex items-center gap-3 grayscale opacity-50 group-hover:grayscale-0 group-hover:opacity-100 transition-all duration-500">
+                  <div className={cn(
+                    "w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-gradient-to-br flex items-center justify-center shrink-0",
+                    company.color
+                  )}>
+                    <span className="text-white text-[10px] sm:text-xs font-bold">{company.initials}</span>
+                  </div>
+                  <span className="text-sm sm:text-base font-semibold text-foreground/80 group-hover:text-foreground transition-colors duration-500">
+                    {company.name}
+                  </span>
+                </div>
+              </div>
+            </Reveal>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+};
+
 const Offer = () => {
   const { t } = useI18n();
   const [, navigate] = useLocation();
@@ -1265,6 +1308,8 @@ export default function Home() {
         <SectionDivider variant="teal" />
         <Testimonials />
         <SectionDivider variant="dot" />
+        <ClientLogos />
+        <SectionDivider variant="teal" />
         <Offer />
         <SectionDivider variant="teal" />
         <BlogLatestPreview />
