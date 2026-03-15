@@ -400,7 +400,7 @@ export async function registerRoutes(
             const [contact] = await db.select().from(contacts).where(eq(contacts.id, updatedEmail.contactId));
             if (contact) {
               const oldScore = contact.leadScore;
-              const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId));
+              const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId!));
               const contactEmails = await db.select().from(sentEmails).where(eq(sentEmails.contactId, contact.id));
               const emailSummary = { sent: 0, opened: 0, clicked: 0 };
               for (const e of contactEmails) {
@@ -507,6 +507,28 @@ export async function registerRoutes(
       }
 
       log(`Newsletter subscriber: ${email}`);
+
+      // Create CRM contact if one doesn't exist with this email
+      const existingContact = await db
+        .select()
+        .from(contacts)
+        .where(eq(contacts.email, email))
+        .limit(1);
+
+      if (existingContact.length === 0) {
+        const namePart = email.split("@")[0].replace(/[._-]/g, " ");
+        const displayName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+
+        await db.insert(contacts).values({
+          email,
+          nombre: displayName,
+          empresa: "—",
+          status: "lead",
+          tags: ["newsletter"],
+          leadScore: 5,
+        });
+        log(`CRM contact created from newsletter: ${email}`);
+      }
 
       // Send welcome email (fixed template, no AI dependency)
       if (process.env.RESEND_API_KEY) {
@@ -975,7 +997,7 @@ export async function registerRoutes(
       const csvHeader = "Nombre,Empresa,Email,Teléfono,Industria,Status,Substatus,Lead Score,Emails Enviados,Emails Abiertos,Fecha Registro\n";
       const csvRows = contactList.map(c => {
         const ec = emailCounts[c.id] || { sent: 0, opened: 0 };
-        const industria = diagMap[c.diagnosticId]?.industria || "";
+        const industria = c.diagnosticId ? diagMap[c.diagnosticId]?.industria || "" : "";
         return [
           `"${(c.nombre || "").replace(/"/g, '""')}"`,
           `"${(c.empresa || "").replace(/"/g, '""')}"`,
@@ -1089,7 +1111,7 @@ export async function registerRoutes(
       const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId));
       if (!contact) return res.status(404).json({ error: "Contacto no encontrado" });
 
-      const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId));
+      const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId!));
 
       const emails = await db
         .select({
@@ -1333,7 +1355,7 @@ export async function registerRoutes(
       const [contact] = await db.select().from(contacts).where(eq(contacts.id, email.contactId));
       if (!contact) return res.status(404).json({ error: "Contacto no encontrado" });
 
-      const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId));
+      const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId!));
 
       let subject: string;
       let body: string;
@@ -1375,7 +1397,7 @@ export async function registerRoutes(
       const allContacts = await db.select().from(contacts);
       const contactMap: Record<string, { nombre: string; empresa: string; id: string }> = {};
       for (const c of allContacts) {
-        contactMap[c.diagnosticId] = { nombre: c.nombre, empresa: c.empresa, id: c.id };
+        if (c.diagnosticId) contactMap[c.diagnosticId] = { nombre: c.nombre, empresa: c.empresa, id: c.id };
       }
 
       const appointments = allDiagnostics
@@ -1604,7 +1626,7 @@ export async function registerRoutes(
       const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId));
       if (!contact) return res.status(404).json({ error: "Contacto no encontrado" });
 
-      const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId));
+      const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId!));
       const contactEmails = await db.select().from(sentEmails).where(eq(sentEmails.contactId, contactId));
       const notes = await db.select().from(contactNotes).where(eq(contactNotes.contactId, contactId));
 
@@ -1638,7 +1660,7 @@ export async function registerRoutes(
       const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId));
       if (!contact) return res.status(404).json({ error: "Contacto no encontrado" });
 
-      const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId));
+      const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId!));
       const contactEmails = await db.select().from(sentEmails).where(eq(sentEmails.contactId, contactId));
       const notes = await db.select().from(contactNotes).where(eq(contactNotes.contactId, contactId));
 
@@ -1866,7 +1888,7 @@ export async function registerRoutes(
       const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId));
       if (!contact) return res.status(404).json({ error: "Contacto no encontrado" });
 
-      const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId));
+      const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId!));
 
       const message = await generateWhatsAppMessage(contact, diagnostic || null);
 

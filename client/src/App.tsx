@@ -54,6 +54,7 @@ const AdminContactDetail = lazy(() => import("@/pages/admin/contact-detail"));
 const AdminCalendar = lazy(() => import("@/pages/admin/calendar"));
 const AdminTasks = lazy(() => import("@/pages/admin/tasks"));
 const AdminTemplates = lazy(() => import("@/pages/admin/templates"));
+const AdminPipeline = lazy(() => import("@/pages/admin/pipeline"));
 const AdminBlog = lazy(() => import("@/pages/admin/blog"));
 const AdminBlogEditor = lazy(() => import("@/pages/admin/blog-editor"));
 const Blog = lazy(() => import("@/pages/blog"));
@@ -120,6 +121,11 @@ function Router() {
         <Route path="/admin/calendar">
           <ProtectedAdmin>
             <AdminCalendar />
+          </ProtectedAdmin>
+        </Route>
+        <Route path="/admin/pipeline">
+          <ProtectedAdmin>
+            <AdminPipeline />
           </ProtectedAdmin>
         </Route>
         <Route path="/admin/templates">

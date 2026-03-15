@@ -3,12 +3,13 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { LayoutDashboard, Users, CalendarDays, CheckSquare, LogOut, Bell, Search, Briefcase, FileText, BookOpen } from "lucide-react";
+import { LayoutDashboard, Users, CalendarDays, CheckSquare, LogOut, Bell, Search, Briefcase, FileText, BookOpen, Columns3 } from "lucide-react";
 import { CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 
 const navItems = [
   { label: "Dashboard", path: "/admin", icon: LayoutDashboard },
   { label: "Contactos", path: "/admin/contacts", icon: Users },
+  { label: "Pipeline", path: "/admin/pipeline", icon: Columns3 },
   { label: "Blog", path: "/admin/blog", icon: BookOpen },
   { label: "Tareas", path: "/admin/tasks", icon: CheckSquare, showBadge: true },
   { label: "Calendario", path: "/admin/calendar", icon: CalendarDays },
