@@ -275,6 +275,120 @@ Responde con este JSON exacto:
 }
 
 /**
+ * Generate a daily news digest with 3 AI/automation/tech news summaries.
+ * Used for both blog post creation and newsletter email.
+ */
+export async function generateDailyNewsDigest(language: string = "es"): Promise<{
+  title: string;
+  excerpt: string;
+  htmlContent: string;
+  emailSubject: string;
+  emailHtml: string;
+  tags: string[];
+}> {
+  const anthropic = getClient();
+  if (!anthropic) {
+    throw new Error("ANTHROPIC_API_KEY not configured");
+  }
+
+  const today = new Date().toLocaleDateString("es-CO", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+
+  const blogResponse = await anthropic.messages.create({
+    model: "claude-sonnet-4-20250514",
+    max_tokens: 3000,
+    system: `Eres un analista tech de IM3 Systems que escribe un resumen diario de noticias sobre inteligencia artificial, automatización y tecnología para empresas en Latinoamérica.
+
+Reglas:
+- Idioma: español latinoamericano
+- Tono: informativo pero accesible, como un colega tech que te cuenta las noticias del día
+- Cada noticia debe incluir: qué pasó, por qué importa, y cómo una PYME podría aplicarlo
+- Usa datos y nombres reales de empresas/productos cuando sea posible
+- NO inventes noticias — basa tus resúmenes en tendencias y desarrollos reales recientes del mundo de IA y tech
+- Incluye una reflexión final breve conectando las 3 noticias`,
+    messages: [{
+      role: "user",
+      content: `Genera el resumen de 3 noticias tech del día (${today}).
+
+Responde SOLO con un JSON válido (sin markdown, sin backticks):
+{
+  "title": "Título del artículo (ej: '3 noticias tech del [fecha corta]')",
+  "excerpt": "Resumen de 1 oración del artículo completo",
+  "tags": ["tag1", "tag2", "tag3"],
+  "news": [
+    {
+      "headline": "Titular de la noticia",
+      "summary": "2-3 oraciones explicando qué pasó",
+      "takeaway": "1 oración sobre cómo aplica a una PYME"
+    }
+  ],
+  "closing": "Reflexión final de 2 oraciones conectando las 3 noticias"
+}`,
+    }],
+  });
+
+  const text = blogResponse.content?.[0]?.type === "text" ? blogResponse.content[0].text.trim() : "{}";
+  let parsed: any;
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    log(`Error parsing daily digest JSON: ${text.substring(0, 200)}`);
+    throw new Error("Failed to parse AI response for daily digest");
+  }
+
+  const news = parsed.news || [];
+  const title = parsed.title || `Resumen tech del día`;
+  const excerpt = parsed.excerpt || "Las 3 noticias tech más importantes del día.";
+  const tags = parsed.tags || ["noticias", "ia", "tecnología"];
+
+  // Build blog HTML content
+  const htmlContent = `<p><em>${excerpt}</em></p>
+${news.map((n: any, i: number) => `
+<h2>${i + 1}. ${n.headline}</h2>
+<p>${n.summary}</p>
+<p><strong>Para tu negocio:</strong> ${n.takeaway}</p>`).join("\n")}
+
+<h2>Reflexión del día</h2>
+<p>${parsed.closing || ""}</p>
+
+<p>¿Quieres implementar alguna de estas ideas en tu empresa? <a href="https://www.im3systems.com/booking">Agenda un diagnóstico gratuito</a> y exploramos juntos las oportunidades.</p>`;
+
+  // Build email HTML
+  const baseUrl = process.env.BASE_URL || "https://www.im3systems.com";
+  const emailHtml = `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+  <div style="background:#2B7A78;padding:20px 28px;border-radius:8px 8px 0 0">
+    <h1 style="color:#fff;font-size:18px;margin:0">IM3 Systems — Newsletter</h1>
+    <p style="color:rgba(255,255,255,0.8);font-size:13px;margin:6px 0 0">${today}</p>
+  </div>
+  <div style="padding:28px;border:1px solid #e5e5e5;border-top:none">
+    <p style="font-size:15px;color:#444;margin:0 0 20px">${excerpt}</p>
+    ${news.map((n: any, i: number) => `
+    <div style="margin-bottom:24px;padding-bottom:24px;${i < news.length - 1 ? "border-bottom:1px solid #eee" : ""}">
+      <h2 style="font-size:16px;color:#1a1a1a;margin:0 0 8px">${i + 1}. ${n.headline}</h2>
+      <p style="font-size:14px;color:#444;margin:0 0 8px;line-height:1.5">${n.summary}</p>
+      <p style="font-size:13px;color:#2B7A78;margin:0;font-weight:600">💡 ${n.takeaway}</p>
+    </div>`).join("")}
+    ${parsed.closing ? `<p style="font-size:14px;color:#666;margin:20px 0 0;font-style:italic">${parsed.closing}</p>` : ""}
+  </div>
+  <div style="padding:20px 28px;text-align:center;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px;background:#f9f9f9">
+    <a href="${baseUrl}/booking" style="background:#2B7A78;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px">Agenda tu diagnóstico gratis →</a>
+    <p style="font-size:11px;color:#999;margin:12px 0 0">
+      <a href="${baseUrl}/blog" style="color:#999;text-decoration:none">Leer en el blog</a> ·
+      <a href="${baseUrl}/api/newsletter/unsubscribe/{{EMAIL}}" style="color:#999;text-decoration:none">Desuscribirse</a>
+    </p>
+  </div>
+</div>`;
+
+  const emailSubject = `🔍 ${title} — IM3 Systems`;
+
+  return { title, excerpt, htmlContent, emailSubject, emailHtml, tags };
+}
+
+/**
  * Generate a personalized WhatsApp message for a contact.
  */
 export async function generateWhatsAppMessage(

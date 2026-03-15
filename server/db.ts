@@ -49,7 +49,18 @@ export async function runMigrations() {
         CONSTRAINT "blog_posts_slug_unique" UNIQUE("slug")
       );
     `);
-    console.log("✓ Blog tables ensured");
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "newsletter_sends" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "subject" text NOT NULL,
+        "content" text NOT NULL,
+        "blog_post_id" varchar,
+        "sent_at" timestamp DEFAULT now() NOT NULL,
+        "recipient_count" integer DEFAULT 0,
+        "status" text DEFAULT 'sent' NOT NULL
+      );
+    `);
+    console.log("✓ Database tables ensured");
   } catch (err) {
     console.error("✗ Migration failed:", err);
   }

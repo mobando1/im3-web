@@ -176,7 +176,7 @@ export default function BlogPostPage() {
                 prose-headings:font-bold prose-headings:text-foreground
                 prose-h2:text-2xl prose-h2:mt-10 prose-h2:mb-4
                 prose-h3:text-xl prose-h3:mt-8 prose-h3:mb-3
-                prose-p:text-muted-foreground prose-p:leading-relaxed
+                prose-p:text-muted-foreground prose-p:leading-relaxed prose-p:mb-5
                 prose-a:text-[#2FA4A9] prose-a:no-underline hover:prose-a:underline
                 prose-strong:text-foreground
                 prose-blockquote:border-l-[#2FA4A9] prose-blockquote:text-muted-foreground

@@ -145,6 +145,19 @@ export const newsletterSubscribers = pgTable("newsletter_subscribers", {
 
 export type NewsletterSubscriber = typeof newsletterSubscribers.$inferSelect;
 
+// Newsletter sends (tracks daily digest emails)
+export const newsletterSends = pgTable("newsletter_sends", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  subject: text("subject").notNull(),
+  content: text("content").notNull(),
+  blogPostId: varchar("blog_post_id"),
+  sentAt: timestamp("sent_at").defaultNow().notNull(),
+  recipientCount: integer("recipient_count").default(0),
+  status: text("status").notNull().default("sent"),
+});
+
+export type NewsletterSend = typeof newsletterSends.$inferSelect;
+
 // Contact notes (internal CRM notes)
 export const contactNotes = pgTable("contact_notes", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

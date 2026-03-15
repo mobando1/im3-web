@@ -419,6 +419,33 @@ export async function registerRoutes(
               contactId: updatedEmail.contactId,
             }).catch(() => {});
           }
+
+          // Email admin for bounces/complaints
+          if (newStatus === "bounced") {
+            const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
+            const eventLabel = event.type === "email.complained" ? "Complaint" : "Bounce";
+            // Get contact email for the notification
+            const [bounceContact] = await db.select().from(contacts).where(eq(contacts.id, updatedEmail.contactId));
+            const recipientEmail = bounceContact?.email || "desconocido";
+            sendEmail(
+              adminEmail,
+              `⚠️ Email ${eventLabel.toLowerCase()}: ${recipientEmail}`,
+              `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+                <div style="background:#f59e0b;padding:20px 28px;border-radius:8px 8px 0 0">
+                  <h1 style="color:#fff;font-size:18px;margin:0">⚠️ Email ${eventLabel}</h1>
+                </div>
+                <div style="padding:28px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+                  <table style="width:100%;border-collapse:collapse;font-size:14px">
+                    <tr><td style="padding:8px 0;color:#666">Tipo</td><td style="padding:8px 0;font-weight:600">${eventLabel}</td></tr>
+                    <tr><td style="padding:8px 0;color:#666">Destinatario</td><td style="padding:8px 0">${recipientEmail}</td></tr>
+                    <tr><td style="padding:8px 0;color:#666">Asunto</td><td style="padding:8px 0">${updatedEmail.subject || "N/A"}</td></tr>
+                    <tr><td style="padding:8px 0;color:#666">Resend ID</td><td style="padding:8px 0;font-size:12px;color:#999">${messageId}</td></tr>
+                  </table>
+                  <p style="font-size:13px;color:#666;margin:16px 0 0">Revisa la lista de contactos para verificar el email o desactivar envíos a este destinatario.</p>
+                </div>
+              </div>`
+            ).catch((err) => log(`Error sending bounce admin email: ${err}`));
+          }
         }
 
         // Recalculate lead score on engagement events
@@ -447,6 +474,31 @@ export async function registerRoutes(
                     description: `${contact.nombre} (${contact.empresa}) alcanzó score ${score}`,
                     contactId: contact.id,
                   }).catch(() => {});
+
+                  // Email admin about hot lead
+                  const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
+                  const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+                  sendEmail(
+                    adminEmail,
+                    `🔥 Hot lead: ${contact.nombre} — Score ${score}`,
+                    `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+                      <div style="background:#dc2626;padding:20px 28px;border-radius:8px 8px 0 0">
+                        <h1 style="color:#fff;font-size:18px;margin:0">🔥 Hot Lead Detectado</h1>
+                      </div>
+                      <div style="padding:28px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+                        <table style="width:100%;border-collapse:collapse;font-size:14px">
+                          <tr><td style="padding:8px 0;color:#666">Nombre</td><td style="padding:8px 0;font-weight:600">${contact.nombre}</td></tr>
+                          <tr><td style="padding:8px 0;color:#666">Empresa</td><td style="padding:8px 0">${contact.empresa}</td></tr>
+                          <tr><td style="padding:8px 0;color:#666">Email</td><td style="padding:8px 0">${contact.email}</td></tr>
+                          <tr><td style="padding:8px 0;color:#666">Score anterior</td><td style="padding:8px 0">${oldScore}</td></tr>
+                          <tr><td style="padding:8px 0;color:#666">Score actual</td><td style="padding:8px 0;font-weight:600;color:#dc2626">${score}</td></tr>
+                        </table>
+                        <div style="margin-top:20px;text-align:center">
+                          <a href="${baseUrl}/admin/contacts" style="background:#2B7A78;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px">Ver en CRM →</a>
+                        </div>
+                      </div>
+                    </div>`
+                  ).catch((err) => log(`Error sending hot lead admin email: ${err}`));
                 }
               }
             }
@@ -542,19 +594,29 @@ export async function registerRoutes(
         .where(eq(contacts.email, email))
         .limit(1);
 
+      let contactId: string | null = null;
+
       if (existingContact.length === 0) {
         const namePart = email.split("@")[0].replace(/[._-]/g, " ");
         const displayName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
 
-        await db.insert(contacts).values({
+        const [newContact] = await db.insert(contacts).values({
           email,
           nombre: displayName,
           empresa: "—",
           status: "lead",
           tags: ["newsletter"],
           leadScore: 5,
-        });
+        }).returning();
+        contactId = newContact?.id || null;
         log(`CRM contact created from newsletter: ${email}`);
+      } else {
+        contactId = existingContact[0].id;
+      }
+
+      // Log activity for newsletter subscription
+      if (contactId) {
+        logActivity(contactId, "newsletter_subscribed", `Se suscribió al newsletter con ${email}`);
       }
 
       // Send welcome email (fixed template, no AI dependency)
@@ -598,6 +660,20 @@ export async function registerRoutes(
     } catch (err) {
       log(`Error newsletter subscribe: ${err}`);
       res.status(500).json({ error: "Error interno" });
+    }
+  });
+
+  // Newsletter unsubscribe
+  app.get("/api/newsletter/unsubscribe/:email", async (req, res) => {
+    if (!db) return res.status(500).send("Error");
+    try {
+      const email = decodeURIComponent(req.params.email as string);
+      await db.update(newsletterSubscribers)
+        .set({ isActive: false, unsubscribedAt: new Date() })
+        .where(eq(newsletterSubscribers.email, email));
+      res.send(`<html><body style="font-family:sans-serif;text-align:center;padding:60px"><h2>Te has desuscrito</h2><p>Ya no recibirás el newsletter de IM3 Systems.</p><a href="https://www.im3systems.com">Volver al sitio</a></body></html>`);
+    } catch (err) {
+      res.status(500).send("Error procesando la solicitud");
     }
   });
 
