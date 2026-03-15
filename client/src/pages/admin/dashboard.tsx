@@ -102,7 +102,7 @@ function SkeletonCard({ className = "" }: { className?: string }) {
 export default function Dashboard() {
   const [, navigate] = useLocation();
 
-  const { data, isLoading } = useQuery<DashboardData>({
+  const { data, isLoading, isError, refetch } = useQuery<DashboardData>({
     queryKey: ["/api/admin/dashboard"],
   });
 
@@ -130,7 +130,25 @@ export default function Dashboard() {
     );
   }
 
-  if (!data) return null;
+  if (isError || !data) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h2 className="text-2xl font-semibold text-gray-900">{getGreeting()}</h2>
+          <p className="text-gray-500 text-sm mt-1">Aqui tienes el resumen de tu CRM</p>
+        </div>
+        <div className="flex flex-col items-center justify-center py-20 space-y-4">
+          <p className="text-gray-500">No se pudo cargar el dashboard.</p>
+          <button
+            onClick={() => refetch()}
+            className="px-4 py-2 bg-[#2FA4A9] text-white rounded-lg hover:bg-[#238b8f] transition-colors text-sm"
+          >
+            Reintentar
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const { kpis, pipeline, emailPerformance, recentActivity, upcomingTasks, attentionItems, staleDeals } = data;
 

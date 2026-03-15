@@ -2,7 +2,8 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories } from "@shared/schema";
+import { generateBlogContent, improveBlogContent } from "./blog-ai";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
 import { createCalendarEvent } from "./google-calendar";
@@ -2186,6 +2187,394 @@ export async function registerRoutes(
     } catch (err: any) {
       log(`Error deleting appointment: ${err?.message}`);
       res.status(500).json({ error: "Error eliminando cita" });
+    }
+  });
+
+  // ========== BLOG PUBLIC API ==========
+
+  // List published blog posts (with filters)
+  app.get("/api/blog/posts", async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const { category, search, language, page = "1", limit = "12" } = req.query;
+      const pageNum = Math.max(1, parseInt(page as string));
+      const limitNum = Math.min(50, Math.max(1, parseInt(limit as string)));
+      const offset = (pageNum - 1) * limitNum;
+
+      const conditions: any[] = [eq(blogPosts.status, "published")];
+      if (category) conditions.push(eq(blogPosts.categoryId, category as string));
+      if (language) conditions.push(eq(blogPosts.language, language as string));
+      if (search) {
+        conditions.push(
+          or(
+            ilike(blogPosts.title, `%${search}%`),
+            ilike(blogPosts.excerpt, `%${search}%`)
+          )
+        );
+      }
+
+      const where = conditions.length === 1 ? conditions[0] : and(...conditions);
+
+      const [posts, [{ total }]] = await Promise.all([
+        db.select().from(blogPosts).where(where).orderBy(desc(blogPosts.publishedAt)).limit(limitNum).offset(offset),
+        db.select({ total: count() }).from(blogPosts).where(where),
+      ]);
+
+      // Attach category info
+      const allCategories = await db.select().from(blogCategories);
+      const categoryMap: Record<string, any> = {};
+      allCategories.forEach(c => { categoryMap[c.id] = c; });
+
+      const enriched = posts.map(p => ({
+        ...p,
+        category: p.categoryId ? categoryMap[p.categoryId] || null : null,
+      }));
+
+      res.json({ posts: enriched, total, totalPages: Math.ceil(total / limitNum), page: pageNum });
+    } catch (err: any) {
+      log(`Error listing blog posts: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo posts" });
+    }
+  });
+
+  // Get single published blog post by slug
+  app.get("/api/blog/posts/:slug", async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const [post] = await db.select().from(blogPosts)
+        .where(and(eq(blogPosts.slug, req.params.slug as string), eq(blogPosts.status, "published")));
+
+      if (!post) return res.status(404).json({ error: "Post no encontrado" });
+
+      let category = null;
+      if (post.categoryId) {
+        const [cat] = await db.select().from(blogCategories).where(eq(blogCategories.id, post.categoryId));
+        category = cat || null;
+      }
+
+      // Get related posts (same category, exclude current)
+      let relatedPosts: any[] = [];
+      if (post.categoryId) {
+        relatedPosts = await db.select().from(blogPosts)
+          .where(and(
+            eq(blogPosts.status, "published"),
+            eq(blogPosts.categoryId, post.categoryId),
+            sql`${blogPosts.id} != ${post.id}`
+          ))
+          .orderBy(desc(blogPosts.publishedAt))
+          .limit(3);
+      }
+      if (relatedPosts.length < 3) {
+        const morePostIds = [post.id, ...relatedPosts.map(p => p.id)];
+        const morePosts = await db.select().from(blogPosts)
+          .where(and(
+            eq(blogPosts.status, "published"),
+            sql`${blogPosts.id} NOT IN (${sql.join(morePostIds.map(id => sql`${id}`), sql`, `)})`
+          ))
+          .orderBy(desc(blogPosts.publishedAt))
+          .limit(3 - relatedPosts.length);
+        relatedPosts = [...relatedPosts, ...morePosts];
+      }
+
+      res.json({ ...post, category, relatedPosts });
+    } catch (err: any) {
+      log(`Error getting blog post: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo post" });
+    }
+  });
+
+  // List blog categories
+  app.get("/api/blog/categories", async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const categories = await db.select().from(blogCategories).orderBy(asc(blogCategories.name));
+      res.json(categories);
+    } catch (err: any) {
+      log(`Error listing blog categories: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo categorías" });
+    }
+  });
+
+  // Latest 3 published posts (for homepage preview)
+  app.get("/api/blog/latest", async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const posts = await db.select().from(blogPosts)
+        .where(eq(blogPosts.status, "published"))
+        .orderBy(desc(blogPosts.publishedAt))
+        .limit(3);
+
+      const allCategories = await db.select().from(blogCategories);
+      const categoryMap: Record<string, any> = {};
+      allCategories.forEach(c => { categoryMap[c.id] = c; });
+
+      const enriched = posts.map(p => ({
+        ...p,
+        category: p.categoryId ? categoryMap[p.categoryId] || null : null,
+      }));
+
+      res.json(enriched);
+    } catch (err: any) {
+      log(`Error getting latest posts: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo posts" });
+    }
+  });
+
+  // Dynamic blog sitemap
+  app.get("/sitemap-blog.xml", async (req, res) => {
+    if (!db) return res.status(404).send("Not found");
+
+    try {
+      const posts = await db.select({ slug: blogPosts.slug, updatedAt: blogPosts.updatedAt })
+        .from(blogPosts)
+        .where(eq(blogPosts.status, "published"))
+        .orderBy(desc(blogPosts.publishedAt));
+
+      const urls = posts.map(p => `  <url>
+    <loc>https://www.im3systems.com/blog/${p.slug}</loc>
+    <lastmod>${p.updatedAt.toISOString().split("T")[0]}</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.7</priority>
+  </url>`).join("\n");
+
+      res.set("Content-Type", "application/xml");
+      res.send(`<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://www.im3systems.com/blog</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+${urls}
+</urlset>`);
+    } catch (err: any) {
+      log(`Error generating blog sitemap: ${err?.message}`);
+      res.status(500).send("Error generating sitemap");
+    }
+  });
+
+  // ========== BLOG ADMIN API ==========
+
+  // List all blog posts (admin)
+  app.get("/api/admin/blog/posts", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const { status, search } = req.query;
+      const conditions: any[] = [];
+      if (status) conditions.push(eq(blogPosts.status, status as string));
+      if (search) {
+        conditions.push(
+          or(ilike(blogPosts.title, `%${search}%`), ilike(blogPosts.excerpt, `%${search}%`))
+        );
+      }
+
+      const where = conditions.length === 0 ? undefined : conditions.length === 1 ? conditions[0] : and(...conditions);
+
+      const posts = await db.select().from(blogPosts).where(where).orderBy(desc(blogPosts.createdAt));
+
+      const allCategories = await db.select().from(blogCategories);
+      const categoryMap: Record<string, any> = {};
+      allCategories.forEach(c => { categoryMap[c.id] = c; });
+
+      const enriched = posts.map(p => ({
+        ...p,
+        category: p.categoryId ? categoryMap[p.categoryId] || null : null,
+      }));
+
+      res.json(enriched);
+    } catch (err: any) {
+      log(`Error listing admin blog posts: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo posts" });
+    }
+  });
+
+  // Get single blog post by ID (admin)
+  app.get("/api/admin/blog/posts/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const [post] = await db.select().from(blogPosts).where(eq(blogPosts.id, req.params.id as string));
+      if (!post) return res.status(404).json({ error: "Post no encontrado" });
+      res.json(post);
+    } catch (err: any) {
+      log(`Error getting blog post: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo post" });
+    }
+  });
+
+  // Create blog post
+  app.post("/api/admin/blog/posts", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const { title, slug, excerpt, content, categoryId, tags, featuredImageUrl, authorName, status, language, metaTitle, metaDescription, readTimeMinutes } = req.body;
+      if (!title || !slug || !excerpt || !content) return res.status(400).json({ error: "title, slug, excerpt y content son requeridos" });
+
+      const [post] = await db.insert(blogPosts).values({
+        title, slug, excerpt, content,
+        categoryId: categoryId || null,
+        tags: tags || [],
+        featuredImageUrl: featuredImageUrl || null,
+        authorName: authorName || "Equipo IM3",
+        status: status || "draft",
+        language: language || "es",
+        metaTitle: metaTitle || null,
+        metaDescription: metaDescription || null,
+        readTimeMinutes: readTimeMinutes || Math.ceil(content.replace(/<[^>]*>/g, "").split(/\s+/).length / 200),
+        publishedAt: status === "published" ? new Date() : null,
+      }).returning();
+
+      res.json(post);
+    } catch (err: any) {
+      if (err?.message?.includes("unique")) return res.status(400).json({ error: "El slug ya existe" });
+      log(`Error creating blog post: ${err?.message}`);
+      res.status(500).json({ error: "Error creando post" });
+    }
+  });
+
+  // Update blog post
+  app.patch("/api/admin/blog/posts/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const updates: any = { updatedAt: new Date() };
+      const fields = ["title", "slug", "excerpt", "content", "categoryId", "tags", "featuredImageUrl", "authorName", "status", "language", "metaTitle", "metaDescription", "readTimeMinutes"];
+      fields.forEach(f => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
+
+      // Auto-calculate read time if content changed
+      if (updates.content && !req.body.readTimeMinutes) {
+        updates.readTimeMinutes = Math.ceil(updates.content.replace(/<[^>]*>/g, "").split(/\s+/).length / 200);
+      }
+
+      const [updated] = await db.update(blogPosts).set(updates).where(eq(blogPosts.id, req.params.id as string)).returning();
+      res.json(updated);
+    } catch (err: any) {
+      if (err?.message?.includes("unique")) return res.status(400).json({ error: "El slug ya existe" });
+      log(`Error updating blog post: ${err?.message}`);
+      res.status(500).json({ error: "Error actualizando post" });
+    }
+  });
+
+  // Publish blog post
+  app.post("/api/admin/blog/posts/:id/publish", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const [updated] = await db.update(blogPosts)
+        .set({ status: "published", publishedAt: new Date(), updatedAt: new Date() })
+        .where(eq(blogPosts.id, req.params.id as string)).returning();
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error publishing blog post: ${err?.message}`);
+      res.status(500).json({ error: "Error publicando post" });
+    }
+  });
+
+  // Unpublish blog post
+  app.post("/api/admin/blog/posts/:id/unpublish", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const [updated] = await db.update(blogPosts)
+        .set({ status: "draft", updatedAt: new Date() })
+        .where(eq(blogPosts.id, req.params.id as string)).returning();
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error unpublishing blog post: ${err?.message}`);
+      res.status(500).json({ error: "Error despublicando post" });
+    }
+  });
+
+  // Delete blog post
+  app.delete("/api/admin/blog/posts/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      await db.delete(blogPosts).where(eq(blogPosts.id, req.params.id as string));
+      res.json({ success: true });
+    } catch (err: any) {
+      log(`Error deleting blog post: ${err?.message}`);
+      res.status(500).json({ error: "Error eliminando post" });
+    }
+  });
+
+  // Blog categories CRUD (admin)
+  app.get("/api/admin/blog/categories", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const categories = await db.select().from(blogCategories).orderBy(asc(blogCategories.name));
+      res.json(categories);
+    } catch (err: any) {
+      res.status(500).json({ error: "Error obteniendo categorías" });
+    }
+  });
+
+  app.post("/api/admin/blog/categories", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { name, slug, description } = req.body;
+      if (!name || !slug) return res.status(400).json({ error: "name y slug son requeridos" });
+      const [cat] = await db.insert(blogCategories).values({ name, slug, description: description || null }).returning();
+      res.json(cat);
+    } catch (err: any) {
+      if (err?.message?.includes("unique")) return res.status(400).json({ error: "El slug ya existe" });
+      res.status(500).json({ error: "Error creando categoría" });
+    }
+  });
+
+  app.patch("/api/admin/blog/categories/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const updates: any = {};
+      if (req.body.name !== undefined) updates.name = req.body.name;
+      if (req.body.slug !== undefined) updates.slug = req.body.slug;
+      if (req.body.description !== undefined) updates.description = req.body.description;
+      const [updated] = await db.update(blogCategories).set(updates).where(eq(blogCategories.id, req.params.id as string)).returning();
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: "Error actualizando categoría" });
+    }
+  });
+
+  app.delete("/api/admin/blog/categories/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      await db.delete(blogCategories).where(eq(blogCategories.id, req.params.id as string));
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: "Error eliminando categoría" });
+    }
+  });
+
+  // Blog AI assist
+  app.post("/api/admin/blog/ai/generate", requireAuth, async (req, res) => {
+    try {
+      const { prompt, language } = req.body;
+      if (!prompt) return res.status(400).json({ error: "prompt es requerido" });
+      const result = await generateBlogContent(prompt, language || "es");
+      if (!result) return res.status(500).json({ error: "Error generando contenido (API key no configurada o error)" });
+      res.json(result);
+    } catch (err: any) {
+      log(`Error AI blog generate: ${err?.message}`);
+      res.status(500).json({ error: "Error generando contenido" });
+    }
+  });
+
+  app.post("/api/admin/blog/ai/improve", requireAuth, async (req, res) => {
+    try {
+      const { content, instruction, language } = req.body;
+      if (!content || !instruction) return res.status(400).json({ error: "content e instruction son requeridos" });
+      const result = await improveBlogContent(content, instruction, language || "es");
+      if (!result) return res.status(500).json({ error: "Error mejorando contenido" });
+      res.json({ content: result });
+    } catch (err: any) {
+      log(`Error AI blog improve: ${err?.message}`);
+      res.status(500).json({ error: "Error mejorando contenido" });
     }
   });
 

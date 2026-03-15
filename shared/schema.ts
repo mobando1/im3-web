@@ -248,3 +248,51 @@ export const appointments = pgTable("appointments", {
 
 export type Appointment = typeof appointments.$inferSelect;
 export type InsertAppointment = typeof appointments.$inferInsert;
+
+// Blog categories
+export const blogCategories = pgTable("blog_categories", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type BlogCategory = typeof blogCategories.$inferSelect;
+export type InsertBlogCategory = typeof blogCategories.$inferInsert;
+
+export const insertBlogCategorySchema = createInsertSchema(blogCategories).pick({
+  name: true,
+  slug: true,
+  description: true,
+});
+
+// Blog posts
+export const blogPosts = pgTable("blog_posts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull(),
+  slug: text("slug").notNull().unique(),
+  excerpt: text("excerpt").notNull(),
+  content: text("content").notNull(),
+  categoryId: varchar("category_id"),
+  tags: json("tags").$type<string[]>().default([]),
+  featuredImageUrl: text("featured_image_url"),
+  authorName: text("author_name").notNull().default("Equipo IM3"),
+  status: text("status").notNull().default("draft"),
+  language: text("language").notNull().default("es"),
+  metaTitle: text("meta_title"),
+  metaDescription: text("meta_description"),
+  readTimeMinutes: integer("read_time_minutes").default(5),
+  publishedAt: timestamp("published_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type BlogPost = typeof blogPosts.$inferSelect;
+export type InsertBlogPost = typeof blogPosts.$inferInsert;
+
+export const insertBlogPostSchema = createInsertSchema(blogPosts).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
