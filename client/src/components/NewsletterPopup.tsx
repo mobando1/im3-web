@@ -63,7 +63,7 @@ export function NewsletterPopup() {
     <Dialog open={open} onOpenChange={(v) => { if (!v) dismiss(); }}>
       <DialogContent className="sm:max-w-[420px] p-0 rounded-2xl border-0 overflow-hidden shadow-2xl bg-transparent [&>button]:hidden">
         {/* Header with gradient */}
-        <div className="relative bg-gradient-to-br from-slate-900 via-slate-800 to-blue-900 px-6 pt-7 pb-6 text-center">
+        <div className="relative px-6 pt-7 pb-6 text-center" style={{ background: "linear-gradient(135deg, hsl(210 60% 11%), hsl(210 60% 18%), hsl(182 56% 30%))" }}>
           {/* Close button */}
           <button
             onClick={dismiss}
@@ -74,14 +74,14 @@ export function NewsletterPopup() {
 
           {/* Decorative dots */}
           <div className="absolute top-4 left-6 flex gap-1">
-            <div className="w-1.5 h-1.5 rounded-full bg-blue-400/30" />
-            <div className="w-1.5 h-1.5 rounded-full bg-blue-400/20" />
-            <div className="w-1.5 h-1.5 rounded-full bg-blue-400/10" />
+            <div className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--teal))]/30" />
+            <div className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--teal))]/20" />
+            <div className="w-1.5 h-1.5 rounded-full bg-[hsl(var(--teal))]/10" />
           </div>
 
           {/* Icon */}
-          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-blue-500/20 backdrop-blur-sm border border-blue-400/20 mb-4">
-            <Sparkles className="w-6 h-6 text-blue-400" />
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-[hsl(var(--teal))]/20 backdrop-blur-sm border border-[hsl(var(--teal))]/20 mb-4">
+            <Sparkles className="w-6 h-6 text-[hsl(var(--teal))]" />
           </div>
 
           {/* Title */}
@@ -99,8 +99,8 @@ export function NewsletterPopup() {
           <ul className="space-y-2.5">
             {benefits.map((benefit, i) => (
               <li key={i} className="flex items-start gap-2.5 text-sm text-[hsl(var(--text-primary))]">
-                <span className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-emerald-500/10 flex items-center justify-center">
-                  <Check className="w-3 h-3 text-emerald-500" />
+                <span className="mt-0.5 flex-shrink-0 w-5 h-5 rounded-full bg-[hsl(var(--teal))]/10 flex items-center justify-center">
+                  <Check className="w-3 h-3 text-[hsl(var(--teal))]" />
                 </span>
                 {benefit}
               </li>
@@ -117,13 +117,13 @@ export function NewsletterPopup() {
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder={t.newsletter.placeholder}
                 required
-                className="w-full pl-10 pr-4 py-3 rounded-xl border border-[hsl(var(--divider))] bg-background text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/30 focus:border-blue-500 transition-all"
+                className="w-full pl-10 pr-4 py-3 rounded-xl border border-[hsl(var(--divider))] bg-background text-sm focus:outline-none focus:ring-2 focus:ring-[hsl(var(--teal))]/30 focus:border-[hsl(var(--teal))] transition-all"
               />
             </div>
             <button
               type="submit"
               disabled={loading}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-blue-600 to-blue-500 text-white font-semibold text-sm hover:from-blue-500 hover:to-blue-400 transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-blue-500/25"
+              className="w-full py-3 rounded-xl bg-gradient-to-r from-[hsl(var(--teal))] to-[hsl(182,56%,48%)] text-white font-semibold text-sm hover:from-[hsl(182,56%,48%)] hover:to-[hsl(182,56%,52%)] transition-all disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg shadow-[hsl(var(--teal))]/25"
             >
               {t.newsletter.subscribe}
               <ArrowRight className="w-4 h-4" />
