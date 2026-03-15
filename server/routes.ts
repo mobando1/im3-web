@@ -2601,7 +2601,7 @@ ${urls}
   });
 
   // Seed blog with sample posts (one-time use)
-  app.post("/api/admin/blog/seed", async (req, res) => {
+  app.post("/api/admin/blog/seed", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
 
     try {
