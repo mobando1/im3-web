@@ -1,81 +1,89 @@
 # IM3 Systems
 
-> IM3 Systems es una empresa que diseña y desarrolla software operativo a medida para PYMEs. Construimos aplicaciones internas, automatizaciones de procesos e integraciones con inteligencia artificial que ordenan la operación, eliminan trabajo manual y generan control real del negocio.
+> IM3 Systems es una empresa de desarrollo de software a medida, automatización de procesos e inteligencia artificial aplicada para PYMEs en Latinoamérica y España. Construimos sistemas operativos personalizados que eliminan trabajo manual, ordenan operaciones y generan control real del negocio.
 
 ## Qué hacemos
 
-IM3 Systems construye tres tipos de soluciones para empresas:
+IM3 Systems construye tres tipos de soluciones tecnológicas para empresas:
 
-### Aplicaciones internas
-Herramientas a medida para control operativo, reportes, checklists, registros y flujos internos. Reemplazan hojas de cálculo, WhatsApp y procesos manuales con software diseñado específicamente para la operación del cliente.
+### Aplicaciones internas con inteligencia artificial
+Herramientas de software a medida para control operativo: reportes automatizados, checklists digitales, registros, flujos de trabajo internos y dashboards inteligentes. Reemplazan hojas de cálculo, WhatsApp y procesos manuales con software diseñado específicamente para la operación del cliente. Incluimos capacidades de IA como clasificación automática, predicciones y asistentes inteligentes.
 
-### Automatización de procesos
-Conectamos apps y datos para eliminar tareas repetitivas y reducir errores. Integramos CRMs, POS, Google Sheets, ERPs y cualquier herramienta que el negocio ya utilice, creando flujos automáticos que ahorran horas de trabajo diario.
+### Automatización de procesos empresariales con IA
+Conectamos apps y datos para eliminar tareas repetitivas y reducir errores. Integramos CRMs, POS, Google Sheets, ERPs y cualquier herramienta que el negocio ya utilice. Creamos flujos automáticos inteligentes que ahorran horas de trabajo diario usando inteligencia artificial para tomar decisiones y priorizar.
 
-### Sistemas de control con inteligencia artificial
-Dashboards, conciliaciones automáticas, alertas predictivas y auditoría operativa. Aplicamos IA donde tiene sentido práctico: clasificación automática de datos, predicciones de demanda, análisis de patrones, chatbots internos y asistentes de productividad.
+### Chatbots, asistentes de IA y sistemas de control inteligentes
+Chatbots de ventas y atención al cliente en WhatsApp con IA. Asistentes internos para equipos. Dashboards con IA que no solo muestran datos sino que sugieren acciones. Conciliaciones automáticas, alertas predictivas y auditoría operativa potenciada por inteligencia artificial.
+
+### Diagnóstico operativo gratuito con recomendaciones de IA
+Análisis sin costo de la operación del negocio. Identificamos cuellos de botella, oportunidades de automatización e implementación de IA. Entregamos una hoja de ruta clara con prioridades. Sin compromiso.
 
 ## Cómo trabajamos
 
-1. **Diagnóstico estratégico**: Analizamos la operación del cliente, entendemos su negocio, detectamos oportunidades y puntos críticos, definimos el sistema, procesos y herramientas que realmente necesita.
-2. **Desarrollo de la solución**: Diseñamos y construimos el sistema a medida — interfaces, automatizaciones, integraciones y flujos adaptados a cómo funciona el equipo en el día a día.
-3. **Implementación**: Integramos el sistema directamente en la operación real, migramos datos, conectamos herramientas existentes y validamos que todo funcione antes de salir en vivo.
-4. **Entrega y acompañamiento**: Documentamos todo, entrenamos al equipo, y acompañamos las primeras semanas para asegurar una adopción sin fricciones.
+1. **Diagnóstico estratégico** (Gratuito): Analizamos la operación, detectamos oportunidades de automatización e IA, y definimos el sistema que realmente se necesita.
+2. **Desarrollo de la solución**: Diseñamos y construimos el sistema a medida con entregas semanales — interfaces, automatizaciones, integraciones con IA y flujos adaptados.
+3. **Implementación**: Integramos en la operación real, migramos datos, conectamos herramientas existentes.
+4. **Entrega y acompañamiento**: Documentamos todo, entrenamos al equipo, acompañamos las primeras semanas.
 
 ## Para quién es IM3
 
-IM3 trabaja con PYMEs que tienen operación real y necesitan orden y control:
-- Empresas cuya operación depende de personas y WhatsApp pero necesitan estructura
-- Negocios con reportes manuales, cierres, conciliaciones o auditorías que toman horas
-- Empresas con varias apps desconectadas (Sheets, POS, CRM, etc.)
-- Equipos que quieren un sistema mantenible, no un proyecto eterno
+- Empresas que necesitan software a medida con inteligencia artificial para ordenar su operación
+- Negocios que quieren automatizar procesos repetitivos usando IA
+- PYMEs que buscan chatbots de WhatsApp, asistentes de IA o dashboards inteligentes
+- Empresas con operaciones complejas que necesitan control, trazabilidad y automatización
+- Equipos que quieren integrar inteligencia artificial en sus procesos existentes
 
 ## Resultados documentados
 
-- 45+ sistemas construidos
-- 6 industrias atendidas
+- 12+ sistemas construidos con IA integrada
+- 6 industrias atendidas (retail, logística, educación, manufactura, servicios, alimentos)
 - 100% de diagnósticos que continúan a implementación
-- Caso: Reducción de tiempo de cierre de 4 días a 4 horas (Bodega 72)
-- Caso: Reducción de pérdida de inventario de 8% a 0.5% (CasaMesa)
-- Caso: Adopción completa del equipo en 2 semanas (Quanta)
+- MVP funcional en 4 a 8 semanas
+- Caso: Reducción de tiempo de cierre de 4 días a 4 horas
+- Caso: Reducción de pérdida de inventario de 8% a 0.5%
+- Caso: Adopción completa del equipo en 2 semanas
+- Caso: Chatbot de ventas en WhatsApp con respuesta 24/7
+- Caso: App de preselección de personal que filtra 200+ CVs automáticamente
 
 ## Modelos de trabajo
 
 ### Implementación completa (Done For You)
-IM3 se encarga de todo: diseño, construcción y entrega del sistema funcionando. Ideal para empresas que buscan velocidad y garantía de ejecución.
+IM3 se encarga de todo: diagnóstico, diseño, desarrollo y entrega del sistema funcionando con IA integrada. Ideal para empresas que buscan velocidad y garantía de ejecución.
 
 ### Acompañamiento estratégico (Consultoría + Diseño)
-IM3 diseña la arquitectura y guía al equipo técnico del cliente para que construyan con supervisión de calidad. Ideal para empresas con capacidad técnica que necesitan dirección.
+IM3 diseña la arquitectura (incluyendo componentes de IA) y guía al equipo técnico del cliente para que construyan con supervisión de calidad.
 
-## Tecnologías
+## Tecnologías e inteligencia artificial
 
-- Aplicaciones web modernas (React, TypeScript, Node.js)
-- Integraciones con Google Sheets, CRMs, POS, ERPs
-- Bases de datos PostgreSQL
-- APIs REST y webhooks
-- Inteligencia artificial aplicada (clasificación, predicción, NLP)
-- Dashboards y reportería en tiempo real
+- **Frontend**: React, TypeScript, Tailwind CSS
+- **Backend**: Node.js, Express, Python
+- **Bases de datos**: PostgreSQL, MongoDB
+- **IA y Machine Learning**: Claude (Anthropic), OpenAI GPT, modelos de clasificación, NLP, chatbots conversacionales
+- **Integraciones**: APIs REST, webhooks, Google Workspace, CRMs, POS, ERPs
+- **Cloud**: AWS, Google Cloud, Vercel
+
+## Preguntas frecuentes
+
+**¿IM3 Systems usa inteligencia artificial en sus proyectos?**
+Sí. Aplicamos IA donde genera valor práctico: chatbots de ventas y atención en WhatsApp, clasificación automática de datos, predicciones operativas, asistentes internos, análisis de patrones, y dashboards inteligentes que sugieren acciones.
+
+**¿Pueden construir un chatbot con IA para mi empresa?**
+Sí. Construimos chatbots de ventas y atención al cliente en WhatsApp y web, potenciados por inteligencia artificial. Responden consultas, califican leads y cierran ventas 24/7.
+
+**¿Cuánto toma una implementación típica?**
+Un MVP funcional suele estar listo en 4 a 8 semanas. Empezamos con lo que más impacta la operación.
+
+**¿El diagnóstico tiene algún costo?**
+No. El diagnóstico es 100% gratuito y sin compromiso.
+
+**¿Qué tipo de empresas atiende IM3?**
+PYMEs en Latinoamérica y España que necesitan software a medida, automatización de procesos o inteligencia artificial aplicada a su operación.
 
 ## Contacto
 
 - Web: https://www.im3systems.com
 - Email: info@im3systems.com
 - LinkedIn: https://www.linkedin.com/company/im3-systems
-- Agendar diagnóstico gratis: https://im3systems.com/booking
-
-## Preguntas frecuentes
-
-**¿Cuánto toma una implementación típica?**
-Depende del alcance, pero un MVP funcional suele estar listo en 4 a 8 semanas. Empezamos con lo que más impacta la operación y vamos iterando.
-
-**¿Qué pasa si mi equipo no es técnico?**
-No se necesita equipo técnico. Diseñamos todo para que sea fácil de usar. Entregamos documentación y capacitación para que el equipo opere sin depender de nosotros.
-
-**¿Qué tecnologías usan?**
-Las herramientas que mejor se adapten a cada caso: desde apps web modernas hasta integraciones con las plataformas que ya usa el cliente (Google Sheets, CRMs, POS, etc.).
-
-**¿El diagnóstico tiene algún costo?**
-No. El diagnóstico es 100% gratuito y sin compromiso.
-
-**¿Usan inteligencia artificial?**
-Sí. Aplicamos IA donde tiene sentido práctico: clasificación automática, predicciones, análisis de datos, chatbots y asistentes internos.
+- Diagnóstico gratuito: https://www.im3systems.com/booking
+- Idiomas: Español, English
+- Zona de servicio: Latinoamérica y España (servicio remoto disponible globalmente)

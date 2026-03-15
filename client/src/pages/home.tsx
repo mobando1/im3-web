@@ -926,6 +926,7 @@ const Testimonials = () => {
             <button
               data-testid="testimonial-prev"
               onClick={goPrev}
+              aria-label="Testimonio anterior"
               className="w-10 h-10 rounded-full border border-[hsl(var(--teal))]/30 text-[hsl(var(--teal))] hover:bg-[hsl(var(--teal))]/10 flex items-center justify-center transition-all"
             >
               <ChevronRight className="w-4 h-4 rotate-180" />
@@ -950,6 +951,7 @@ const Testimonials = () => {
             <button
               data-testid="testimonial-next"
               onClick={goNext}
+              aria-label="Testimonio siguiente"
               className="w-10 h-10 rounded-full border border-[hsl(var(--teal))]/30 text-[hsl(var(--teal))] hover:bg-[hsl(var(--teal))]/10 flex items-center justify-center transition-all"
             >
               <ChevronRight className="w-4 h-4" />
@@ -1135,12 +1137,14 @@ const FAQ = () => {
                 <button
                   data-testid={`faq-toggle-${i}`}
                   onClick={() => setOpenIndex(openIndex === i ? null : i)}
+                  aria-expanded={openIndex === i}
+                  aria-controls={`faq-answer-${i}`}
                   className="w-full flex items-center justify-between p-3 sm:p-4 md:p-5 text-left hover:bg-[hsl(var(--surface-hover))] transition-colors"
                 >
                   <span className="font-semibold text-[hsl(var(--text-primary))] pr-4">{item.question}</span>
                   <ChevronDown className={cn("w-5 h-5 text-muted-foreground shrink-0 transition-transform duration-200", openIndex === i && "rotate-180")} />
                 </button>
-                <div className={cn("overflow-hidden transition-all duration-300", openIndex === i ? "max-h-60 opacity-100" : "max-h-0 opacity-0")}>
+                <div id={`faq-answer-${i}`} role="region" aria-labelledby={`faq-toggle-${i}`} className={cn("overflow-hidden transition-all duration-300", openIndex === i ? "max-h-60 opacity-100" : "max-h-0 opacity-0")}>
                   <p className="px-3 pb-3 sm:px-4 sm:pb-4 md:px-5 md:pb-5 text-muted-foreground leading-relaxed">{item.answer}</p>
                 </div>
               </div>

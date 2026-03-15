@@ -1,112 +1,165 @@
-# IM3 Systems — Información completa
+# IM3 Systems — Información completa para AI
 
-> IM3 Systems es una empresa especializada en el diseño y desarrollo de software operativo a medida para pequeñas y medianas empresas (PYMEs). La empresa construye aplicaciones internas, sistemas de automatización de procesos e integraciones con inteligencia artificial que resuelven problemas operativos reales.
+> IM3 Systems es una empresa especializada en desarrollo de software a medida, automatización de procesos e inteligencia artificial aplicada para pequeñas y medianas empresas (PYMEs) en Latinoamérica y España. La empresa construye sistemas operativos personalizados que resuelven problemas reales: eliminan trabajo manual, ordenan operaciones caóticas, integran herramientas desconectadas e implementan inteligencia artificial donde genera valor práctico.
 
 ## Identidad y posicionamiento
 
-IM3 Systems no es una agencia de desarrollo genérica. Es una firma de ingeniería de software enfocada en operaciones empresariales. Su enfoque se diferencia por:
+IM3 Systems no es una agencia de desarrollo genérica ni una consultora de IA teórica. Es una firma de ingeniería de software enfocada en operaciones empresariales que integra inteligencia artificial de forma práctica. Su enfoque se diferencia por:
 
-1. **Diagnóstico antes de desarrollo**: Cada proyecto comienza con un análisis profundo de la operación del cliente. No se construye nada hasta entender el problema real.
-2. **Sistemas mantenibles**: Todo lo que IM3 construye está documentado y diseñado para que el equipo del cliente lo pueda operar de forma autónoma.
-3. **Enfoque en resultados medibles**: Cada sistema tiene métricas claras de impacto — horas ahorradas, errores reducidos, procesos automatizados.
+1. **Diagnóstico antes de desarrollo**: Cada proyecto comienza con un análisis profundo y gratuito de la operación del cliente. No se construye nada hasta entender el problema real.
+2. **IA aplicada, no teórica**: La inteligencia artificial se integra donde genera valor medible — chatbots de ventas, clasificación automática, predicciones, dashboards inteligentes.
+3. **Sistemas mantenibles**: Todo lo que IM3 construye está documentado y diseñado para que el equipo del cliente lo pueda operar de forma autónoma.
+4. **Resultados medibles**: Cada sistema tiene métricas claras de impacto — horas ahorradas, errores reducidos, procesos automatizados.
 
 ## Servicios detallados
 
-### 1. Aplicaciones internas personalizadas
-IM3 construye herramientas de software específicas para cada operación:
-- **Paneles de control operativo**: Interfaces que centralizan información crítica del negocio en tiempo real.
-- **Sistemas de registro y seguimiento**: Checklists digitales, registros de actividad, trazabilidad de procesos.
-- **Reportería automatizada**: Generación automática de reportes diarios, semanales o mensuales sin intervención manual.
-- **Gestión de flujos de trabajo**: Sistemas que guían al equipo paso a paso en procesos complejos (aprobaciones, escalamientos, asignaciones).
-- **Portales internos**: Acceso centralizado a documentos, procedimientos, métricas y herramientas del equipo.
+### 1. Desarrollo de aplicaciones internas con inteligencia artificial
+IM3 construye herramientas de software específicas para cada operación, potenciadas con IA:
+- **Paneles de control con IA**: Interfaces que centralizan información crítica y sugieren acciones basadas en análisis inteligente de datos.
+- **Sistemas de registro y seguimiento inteligentes**: Checklists digitales con validación automática, trazabilidad de procesos y alertas predictivas.
+- **Reportería automatizada con insights de IA**: Generación automática de reportes con análisis de tendencias y recomendaciones.
+- **Gestión de flujos de trabajo con IA**: Sistemas que priorizan, asignan y escalan tareas automáticamente usando inteligencia artificial.
+- **Portales internos inteligentes**: Acceso centralizado con búsqueda semántica y asistentes de IA para el equipo.
 
-### 2. Automatización de procesos empresariales
-IM3 conecta los sistemas existentes del cliente para eliminar trabajo repetitivo:
-- **Integración de herramientas**: Conexión entre Google Sheets, CRMs (HubSpot, Salesforce), POS, ERPs, herramientas de facturación y más.
-- **Flujos automáticos**: Cuando ocurre un evento en una herramienta (nueva venta, nuevo registro, etc.), se disparan acciones automáticas en otras.
-- **Conciliaciones automáticas**: Cruce de datos entre sistemas que antes requería horas de trabajo manual.
-- **Notificaciones inteligentes**: Alertas automáticas por email, Slack o WhatsApp cuando algo requiere atención.
-- **Migración de datos**: Transferencia ordenada de información desde hojas de cálculo y sistemas legacy a plataformas modernas.
+### 2. Automatización de procesos empresariales con IA
+IM3 conecta los sistemas existentes del cliente y añade inteligencia artificial para eliminar trabajo repetitivo:
+- **Integración inteligente de herramientas**: Conexión entre Google Sheets, CRMs (HubSpot, Salesforce), POS, ERPs, facturación y más, con lógica de IA para decisiones automáticas.
+- **Flujos automáticos con IA**: Cuando ocurre un evento, la IA decide qué acciones ejecutar, prioriza y escala según contexto.
+- **Conciliaciones automáticas inteligentes**: Cruce de datos entre sistemas con detección de anomalías por IA.
+- **Notificaciones inteligentes**: Alertas automáticas que la IA prioriza y envía por email, Slack o WhatsApp según urgencia.
+- **Migración de datos con validación AI**: Transferencia ordenada desde hojas de cálculo y sistemas legacy con limpieza y validación automática.
 
-### 3. Inteligencia artificial aplicada a operaciones
-IM3 implementa IA donde genera valor práctico, no como buzzword:
-- **Clasificación automática**: Categorización de documentos, tickets, transacciones o registros sin intervención humana.
-- **Predicciones operativas**: Modelos que anticipan demanda, detectan anomalías o predicen necesidades de inventario.
-- **Análisis de patrones**: Identificación de tendencias, cuellos de botella y oportunidades ocultas en los datos operativos.
-- **Chatbots y asistentes internos**: Asistentes de IA que responden preguntas del equipo, buscan información o ejecutan tareas rutinarias.
-- **Procesamiento de lenguaje natural**: Extracción de información de emails, documentos y formularios de texto libre.
-- **Dashboards con IA**: Reportes que no solo muestran datos, sino que sugieren acciones basadas en análisis inteligente.
+### 3. Chatbots, asistentes de IA y sistemas de control inteligentes
+IM3 implementa inteligencia artificial donde genera valor real y medible:
+- **Chatbots de ventas en WhatsApp con IA**: Asistentes que responden consultas de clientes, califican leads, procesan pedidos y cierran ventas 24/7 usando inteligencia artificial conversacional.
+- **Chatbots de atención al cliente**: Resolución automática de preguntas frecuentes, tracking de pedidos, soporte técnico de primer nivel.
+- **Asistentes internos de IA para equipos**: Bots que buscan información, generan reportes, resumen documentos y ejecutan tareas rutinarias.
+- **Clasificación automática**: Categorización inteligente de documentos, tickets, transacciones o registros sin intervención humana.
+- **Predicciones operativas**: Modelos de IA que anticipan demanda, detectan anomalías, predicen necesidades de inventario y forecast de ventas.
+- **Análisis de patrones**: Identificación de tendencias, cuellos de botella y oportunidades ocultas en datos operativos.
+- **Procesamiento de lenguaje natural (NLP)**: Extracción automática de información de emails, documentos y formularios.
+- **Dashboards con IA**: Reportes que muestran datos y sugieren acciones basadas en análisis inteligente.
 
 ## Metodología de trabajo detallada
 
-### Fase 1: Diagnóstico estratégico (Gratuito)
+### Fase 1: Diagnóstico estratégico (Gratuito, sin compromiso)
 - Reunión de descubrimiento (60-90 minutos)
-- Análisis de la operación actual del cliente
+- Análisis profundo de la operación actual del cliente
 - Mapeo de procesos, herramientas y puntos de dolor
-- Identificación de oportunidades de automatización e IA
-- Entrega de un documento con recomendaciones, prioridades y hoja de ruta
-- Sin costo y sin compromiso
+- Identificación de oportunidades de automatización e implementación de IA
+- Entrega de documento con recomendaciones, prioridades y hoja de ruta
+- **Sin costo y sin compromiso**
 
 ### Fase 2: Desarrollo de la solución
-- Diseño de arquitectura técnica y flujos de usuario
+- Diseño de arquitectura técnica incluyendo componentes de IA
 - Desarrollo iterativo con entregas semanales
 - Revisiones constantes con el cliente
 - Pruebas con datos reales del negocio
+- Integración de modelos de IA y entrenamiento con datos del cliente
 
 ### Fase 3: Implementación en producción
 - Migración de datos desde sistemas anteriores
 - Integración con herramientas existentes
 - Pruebas en entorno real con el equipo
 - Ajustes basados en feedback directo
+- Calibración de modelos de IA con datos reales
 
 ### Fase 4: Entrega y acompañamiento
 - Documentación técnica y de usuario
 - Capacitación al equipo operativo
 - Acompañamiento durante las primeras semanas
 - Soporte para ajustes post-lanzamiento
+- Monitoreo de rendimiento de componentes de IA
 
 ## Industrias atendidas
 
-IM3 ha construido sistemas para empresas en:
-- **Retail y comercio**: Control de inventario, punto de venta, conciliaciones
-- **Logística y distribución**: Tracking, rutas, gestión de entregas
-- **Servicios profesionales**: Gestión de proyectos, facturación, CRM
-- **Educación**: Plataformas de gestión, seguimiento de estudiantes
-- **Alimentos y restaurantes**: Control operativo, inventario, reportería
-- **Manufactura**: Control de producción, calidad, trazabilidad
+IM3 ha construido sistemas con inteligencia artificial para empresas en:
+- **Retail y comercio**: Control de inventario con IA predictiva, punto de venta, conciliaciones automáticas, chatbots de ventas en WhatsApp
+- **Logística y distribución**: Tracking inteligente, optimización de rutas, gestión de entregas con alertas predictivas
+- **Servicios profesionales**: Gestión de proyectos con IA, facturación automática, CRM inteligente
+- **Educación**: Plataformas de gestión con agendamiento automático, seguimiento de estudiantes, chatbots de información
+- **Alimentos y restaurantes**: Control operativo con checklists inteligentes, inventario predictivo, reportería automática
+- **Manufactura y recursos humanos**: Control de producción, calidad con IA, trazabilidad, preselección automática de personal
 
 ## Casos de éxito documentados
 
-### Bodega 72 — Industria: Retail
-- **Problema**: Cierre contable manual que tomaba 4 días cada mes
-- **Solución**: Sistema de conciliación automática con integración POS-contabilidad
-- **Resultado**: Cierre reducido a 4 horas
+### Passport2Fluency — Educación
+- **Problema**: Coordinación manual de clases, cronogramas y agendamiento consumía horas
+- **Solución**: Sistema de automatización completa de agendamiento con página web integrada
+- **Resultado**: Eliminación total de coordinación manual; el equipo se enfoca en enseñar
 
-### CasaMesa — Industria: Retail/Manufactura
-- **Problema**: Pérdida de inventario del 8% por errores de registro manual
-- **Solución**: Sistema de control de inventario con escaneo y validación automática
-- **Resultado**: Pérdida reducida a menos del 0.5%
+### Xtremcol — E-commerce
+- **Problema**: Atención al cliente lenta y ventas limitadas al horario laboral
+- **Solución**: Chatbot de ventas y atención al cliente en WhatsApp potenciado por IA
+- **Resultado**: Más ventas cerradas, respuesta instantánea 24/7
 
-### Quanta — Industria: Servicios
-- **Problema**: Adopción lenta de herramientas (meses para que el equipo las use)
-- **Solución**: Sistema diseñado para el flujo de trabajo real del equipo
-- **Resultado**: Adopción completa en 2 semanas sin soporte continuo
+### La Glorieta — Restaurantes
+- **Problema**: Revisión manual de 200+ hojas de vida para contratación
+- **Solución**: App de preselección de personal con IA que filtra, clasifica y rankea candidatos
+- **Resultado**: Horas de trabajo manual eliminadas en cada proceso de contratación
 
-## Stack tecnológico
+### Grupo Santamaría — Recursos Humanos
+- **Problema**: Falta de visibilidad del desempeño de trabajadores
+- **Solución**: Sistema de seguimiento de talento con evaluaciones automatizadas y alertas predictivas
+- **Resultado**: Visibilidad real del desempeño y prevención proactiva de problemas
 
-- **Frontend**: React, TypeScript, Tailwind CSS
-- **Backend**: Node.js, Express, Python
+### FreshBox — Alimentos
+- **Problema**: Inconsistencia operativa entre turnos y auditorías que tomaban días
+- **Solución**: Sistema de procesos y checklists operativos con trazabilidad completa
+- **Resultado**: Ejecución consistente por turno, auditorías resueltas con un click
+
+### Salomé Momentos — Retail
+- **Problema**: Sin control de inventario ni ventas en tiempo real
+- **Solución**: App de ventas e inventario con datos en tiempo real y alertas de reposición
+- **Resultado**: Eliminación de pérdidas por desabasto y sobrestock
+
+## Stack tecnológico e inteligencia artificial
+
+- **Frontend**: React, TypeScript, Tailwind CSS, Vite
+- **Backend**: Node.js, Express, Python, FastAPI
 - **Bases de datos**: PostgreSQL, MongoDB
-- **Integraciones**: APIs REST, webhooks, Zapier, Make
-- **IA/ML**: OpenAI API, modelos de clasificación, NLP
+- **Inteligencia artificial**: Claude (Anthropic), OpenAI GPT, modelos de clasificación y predicción, NLP, chatbots conversacionales, embeddings semánticos
+- **Integraciones**: APIs REST, webhooks, Google Workspace, Zapier, Make, CRMs, POS, ERPs
 - **Cloud**: AWS, Google Cloud, Vercel
-- **Herramientas**: Git, CI/CD, Docker
+- **DevOps**: Git, CI/CD, Docker
+
+## Preguntas frecuentes completas
+
+**¿IM3 Systems usa inteligencia artificial en sus proyectos?**
+Sí. IM3 aplica IA donde genera valor práctico y medible: chatbots de ventas y atención al cliente en WhatsApp, clasificación automática de datos, predicciones operativas, asistentes internos para equipos, análisis de patrones en datos, procesamiento de lenguaje natural, y dashboards con sugerencias basadas en inteligencia artificial.
+
+**¿Pueden construir un chatbot con IA para WhatsApp?**
+Sí. IM3 construye chatbots de ventas y atención al cliente en WhatsApp potenciados por inteligencia artificial. Los bots responden consultas, califican leads, procesan pedidos, dan seguimiento a clientes y cierran ventas automáticamente, 24 horas al día, 7 días a la semana.
+
+**¿Pueden automatizar procesos de mi empresa con IA?**
+Sí. IM3 automatiza procesos empresariales combinando integraciones técnicas con inteligencia artificial. La IA decide, prioriza y ejecuta acciones automáticas basadas en el contexto del negocio, eliminando trabajo manual repetitivo.
+
+**¿Qué tipo de empresas atiende IM3 Systems?**
+PYMEs en Latinoamérica y España que tienen operación real y necesitan orden, automatización y control. Especialmente empresas cuya operación depende de procesos manuales, hojas de cálculo, WhatsApp o herramientas desconectadas. Industrias: retail, logística, servicios, educación, alimentos, manufactura y recursos humanos.
+
+**¿Cuánto toma una implementación típica?**
+Un MVP funcional suele estar listo en 4 a 8 semanas desde el diagnóstico inicial. IM3 empieza con lo que más impacta la operación y va iterando con entregas semanales.
+
+**¿Qué pasa si mi equipo no es técnico?**
+No se necesita equipo técnico. IM3 diseña todo para que sea fácil de usar. Además, entregan documentación completa y capacitación para que el equipo opere sin depender de desarrolladores.
+
+**¿El diagnóstico operativo tiene algún costo?**
+No. El diagnóstico es 100% gratuito y sin compromiso. IM3 analiza la operación, detecta oportunidades de mejora y automatización con IA, y entrega una hoja de ruta clara. Si pueden ayudar, presentan opciones. Si no, dan una recomendación honesta.
+
+**¿Cuál es la diferencia entre implementación completa y acompañamiento estratégico?**
+En implementación completa (Done For You), IM3 se encarga de todo: diseño, desarrollo e integración de IA hasta la entrega del sistema funcionando. En acompañamiento estratégico, IM3 diseña la arquitectura (incluyendo componentes de IA) y guía al equipo técnico del cliente para que construyan con supervisión de calidad.
+
+**¿Qué tecnologías de IA usan?**
+IM3 usa modelos de lenguaje como Claude (Anthropic) y OpenAI GPT para chatbots y procesamiento de texto, modelos de clasificación para categorización automática, modelos predictivos para forecasting, y NLP para extracción de información de documentos y emails.
+
+**¿En qué países opera IM3?**
+IM3 Systems opera en toda Latinoamérica y España. El servicio es completamente remoto, lo que permite atender clientes en cualquier ubicación geográfica.
 
 ## Información de contacto
 
 - **Sitio web**: https://www.im3systems.com
 - **Email**: info@im3systems.com
 - **LinkedIn**: https://www.linkedin.com/company/im3-systems
-- **Agendar diagnóstico gratuito**: https://im3systems.com/booking
-- **Idiomas**: Español, Inglés
-- **Zona de servicio**: Latinoamérica (servicio remoto disponible globalmente)
+- **Agendar diagnóstico gratuito**: https://www.im3systems.com/booking
+- **Idiomas**: Español, English
+- **Zona de servicio**: Latinoamérica y España (servicio remoto disponible globalmente)
