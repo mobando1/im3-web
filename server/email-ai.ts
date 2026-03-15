@@ -69,6 +69,37 @@ function buildContext(data: Partial<Diagnostic> | null): string {
  * Build the fixed HTML for the micro-reminder email (E5).
  * No AI needed — just a simple template with variables.
  */
+export function build6hReminderEmail(
+  participante: string,
+  horaCita: string,
+  meetLink: string | null,
+  contactId: string
+): { subject: string; body: string } {
+  const subject = `Tu llamada con IM3 es hoy`;
+
+  const meetSection = meetLink
+    ? `<p style="margin:0 0 16px"><a href="${meetLink}" style="color:#2B7A78;font-weight:bold;font-size:16px">Link de la reunión →</a></p>`
+    : "";
+
+  const body = `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+  <div style="background:#2B7A78;padding:16px 24px;border-radius:8px 8px 0 0">
+    <h1 style="color:#fff;font-size:18px;margin:0">IM3 Systems</h1>
+  </div>
+  <div style="padding:24px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+    <p style="margin:0 0 16px">${participante}, hoy tenemos tu sesión de diagnóstico a las <strong>${horaCita}</strong>.</p>
+    ${meetSection}
+    <p style="margin:0 0 16px">Recuerda tener a mano información sobre tus herramientas actuales y los procesos que más tiempo consumen en tu operación.</p>
+    <p style="margin:0 0 16px;color:#666">¿Tienes preguntas antes de la sesión? Responde este correo y te ayudamos.</p>
+    <p style="margin:0;color:#999">— Equipo IM3 Systems</p>
+  </div>
+  <div style="padding:12px 24px;text-align:center">
+    <a href="${process.env.BASE_URL || "https://im3systems.com"}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">No recibir más emails</a>
+  </div>
+</div>`;
+
+  return { subject, body };
+}
+
 export function buildMicroReminderEmail(
   participante: string,
   horaCita: string,

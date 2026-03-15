@@ -2,7 +2,7 @@ import cron from "node-cron";
 import { db } from "./db";
 import { sentEmails, emailTemplates, contacts, diagnostics, abandonedLeads, activityLog, notifications, newsletterSubscribers, newsletterSends, blogPosts, blogCategories } from "@shared/schema";
 import { eq, and, lte, not, gte, desc } from "drizzle-orm";
-import { generateEmailContent, buildMicroReminderEmail, generateDailyNewsDigest } from "./email-ai";
+import { generateEmailContent, build6hReminderEmail, buildMicroReminderEmail, generateDailyNewsDigest } from "./email-ai";
 import { sendEmail, isEmailConfigured } from "./email-sender";
 import { parseFechaCita } from "./date-utils";
 import { log } from "./index";
@@ -80,7 +80,7 @@ async function processEmailQueue() {
           .where(eq(diagnostics.id, contact.diagnosticId));
 
         // Check if pre-meeting email should be expired (appointment already passed)
-        const PRE_MEETING_TEMPLATES = ["caso_exito", "insight_educativo", "prep_agenda", "micro_recordatorio"];
+        const PRE_MEETING_TEMPLATES = ["caso_exito", "insight_educativo", "prep_agenda", "recordatorio_6h", "micro_recordatorio"];
         if (diagnostic?.fechaCita && diagnostic?.horaCita) {
           const appointmentDate = parseFechaCita(diagnostic.fechaCita, diagnostic.horaCita);
 
@@ -108,6 +108,16 @@ async function processEmailQueue() {
           // Use pre-generated or admin-edited content
           subject = email.subject;
           body = email.body;
+        } else if (template.nombre === "recordatorio_6h") {
+          // Recordatorio 6h: use fixed template (no AI)
+          const result = build6hReminderEmail(
+            diagnostic?.participante || contact.nombre,
+            diagnostic?.horaCita || "",
+            diagnostic?.meetLink || null,
+            contact.id
+          );
+          subject = result.subject;
+          body = result.body;
         } else if (template.nombre === "micro_recordatorio") {
           // E5 micro_recordatorio: use fixed template (no AI)
           const result = buildMicroReminderEmail(

@@ -107,16 +107,23 @@ TONO: útil, estructurado, genera anticipación. No presiona.`,
     delayDays: 0, // Calculado dinámicamente: fechaCita - 24h
   },
   {
+    nombre: "recordatorio_6h",
+    subjectPrompt: "fixed", // No se usa — template fijo
+    bodyPrompt: "fixed", // No se usa — template fijo
+    sequenceOrder: 4,
+    delayDays: 0, // Calculado dinámicamente: fechaCita - 6h
+  },
+  {
     nombre: "micro_recordatorio",
     subjectPrompt: "fixed", // No se usa — E5 es template fijo
     bodyPrompt: "fixed", // No se usa — E5 es template fijo
-    sequenceOrder: 4,
+    sequenceOrder: 5,
     delayDays: 0, // Calculado dinámicamente: fechaCita - 1h
   },
   {
     nombre: "seguimiento_post",
     subjectPrompt: "Genera un subject de seguimiento post-reunión para {empresa}. Profesional y con momentum. Máximo 55 caracteres. Ejemplo: 'Próximos pasos para {empresa}' o 'Tu hoja de ruta, {participante}'.",
-    bodyPrompt: `Genera un email de SEGUIMIENTO enviado 2 horas después de la sesión de diagnóstico tecnológico con IM3 Systems.
+    bodyPrompt: `Genera un email de SEGUIMIENTO enviado 5 horas después de la sesión de diagnóstico tecnológico con IM3 Systems.
 
 INSTRUCCIONES ESPECÍFICAS:
 - Largo: máximo 220 palabras
@@ -139,8 +146,8 @@ CONTEXTO PARA PERSONALIZAR:
 - Industria: {industria}
 
 TONO: consultivo, con momentum. Como un consultor senior que acaba de tener una reunión productiva y quiere mantener el impulso. No vendedor, sino estratégico.`,
-    sequenceOrder: 5,
-    delayDays: 0, // Calculado dinámicamente: fechaCita + 2h
+    sequenceOrder: 6,
+    delayDays: 0, // Calculado dinámicamente: fechaCita + 5h
   },
   {
     nombre: "abandono",
