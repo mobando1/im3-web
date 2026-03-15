@@ -76,7 +76,7 @@ export type InsertDiagnostic = typeof diagnostics.$inferInsert;
 // Contacts (normalized from diagnostics for email sequences)
 export const contacts = pgTable("contacts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  diagnosticId: varchar("diagnostic_id").notNull(),
+  diagnosticId: varchar("diagnostic_id"),
   email: text("email").notNull(),
   nombre: text("nombre").notNull(),
   empresa: text("empresa").notNull(),
