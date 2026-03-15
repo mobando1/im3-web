@@ -587,30 +587,34 @@ export async function registerRoutes(
       }
 
       // ALWAYS ensure CRM contact exists (even if already subscribed)
-      const existingContact = await db
-        .select()
-        .from(contacts)
-        .where(eq(contacts.email, email))
-        .limit(1);
-
       let contactId: string | null = null;
+      try {
+        const existingContact = await db
+          .select()
+          .from(contacts)
+          .where(eq(contacts.email, email))
+          .limit(1);
 
-      if (existingContact.length === 0) {
-        const namePart = email.split("@")[0].replace(/[._-]/g, " ");
-        const displayName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
+        if (existingContact.length === 0) {
+          const namePart = email.split("@")[0].replace(/[._-]/g, " ");
+          const displayName = namePart.charAt(0).toUpperCase() + namePart.slice(1);
 
-        const [newContact] = await db.insert(contacts).values({
-          email,
-          nombre: displayName,
-          empresa: "—",
-          status: "lead",
-          tags: ["newsletter"],
-          leadScore: 5,
-        }).returning();
-        contactId = newContact?.id || null;
-        log(`CRM contact created from newsletter: ${email}`);
-      } else {
-        contactId = existingContact[0].id;
+          const [newContact] = await db.insert(contacts).values({
+            email,
+            nombre: displayName,
+            empresa: "—",
+            status: "lead",
+            tags: ["newsletter"],
+            leadScore: 5,
+          }).returning();
+          contactId = newContact?.id || null;
+          log(`CRM contact created from newsletter: ${email} → id: ${contactId}`);
+        } else {
+          contactId = existingContact[0].id;
+          log(`CRM contact already exists for newsletter: ${email} → id: ${contactId}`);
+        }
+      } catch (contactErr) {
+        log(`ERROR creating CRM contact for newsletter ${email}: ${contactErr}`);
       }
 
       // Log activity for newsletter subscription
@@ -655,7 +659,7 @@ export async function registerRoutes(
         ).catch((err) => log(`Error sending admin newsletter notification: ${err}`));
       }
 
-      res.json({ success: true, alreadySubscribed });
+      res.json({ success: true, alreadySubscribed, contactCreated: !!contactId });
     } catch (err) {
       log(`Error newsletter subscribe: ${err}`);
       res.status(500).json({ error: "Error interno" });
