@@ -289,6 +289,7 @@ export const blogPosts = pgTable("blog_posts", {
   content: text("content").notNull(),
   categoryId: varchar("category_id"),
   tags: json("tags").$type<string[]>().default([]),
+  references: json("references").$type<Array<{ title: string; url: string; author?: string; date?: string }>>().default([]),
   featuredImageUrl: text("featured_image_url"),
   authorName: text("author_name").notNull().default("Equipo IM3"),
   status: text("status").notNull().default("draft"),

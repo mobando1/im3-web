@@ -22,6 +22,7 @@ type BlogPostData = {
   metaTitle: string | null;
   metaDescription: string | null;
   tags: string[];
+  references: Array<{ title: string; url: string; author?: string; date?: string }> | null;
   category: { id: string; name: string; slug: string } | null;
   relatedPosts: Array<{
     id: string;
@@ -185,6 +186,24 @@ export default function BlogPostPage() {
                 prose-img:rounded-xl"
               dangerouslySetInnerHTML={{ __html: post.content }}
             />
+
+            {/* References */}
+            {post.references && post.references.length > 0 && (
+              <div className="mt-10 pt-8 border-t border-border">
+                <h3 className="text-lg font-semibold text-foreground mb-4">Referencias</h3>
+                <ol className="list-decimal list-inside space-y-2">
+                  {post.references.map((ref, i) => (
+                    <li key={i} className="text-sm text-muted-foreground">
+                      <a href={ref.url} target="_blank" rel="noopener noreferrer" className="text-[#2FA4A9] hover:underline">
+                        {ref.title}
+                      </a>
+                      {ref.author && <span> — {ref.author}</span>}
+                      {ref.date && <span> ({ref.date})</span>}
+                    </li>
+                  ))}
+                </ol>
+              </div>
+            )}
 
             {/* Tags */}
             {post.tags && post.tags.length > 0 && (

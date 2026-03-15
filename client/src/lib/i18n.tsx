@@ -14,8 +14,8 @@ const translations = {
     },
     hero: {
       badge: "IM3 · SISTEMAS OPERATIVOS",
-      headline: "Software con inteligencia artificial para tu empresa",
-      subheadline: "Desarrollamos software a medida con IA para PYMEs: automatización inteligente, chatbots de WhatsApp y dashboards que eliminan trabajo manual.",
+      headline: "Sistemas con inteligencia artificial para tu negocio",
+      subheadline: "Diseñamos e implementamos sistemas a medida con IA: apps internas, automatización de procesos, dashboards operativos e integraciones inteligentes.",
       cta: "Solicitar diagnóstico gratis",
       secondary: "Ver qué hacemos",
       badges: {
@@ -179,8 +179,8 @@ const translations = {
     },
     hero: {
       badge: "IM3 · OPERATIONAL SYSTEMS",
-      headline: "Custom software with AI for your business",
-      subheadline: "We build custom software with AI for SMBs: intelligent automation, WhatsApp chatbots, and dashboards that eliminate manual work.",
+      headline: "AI-powered systems for your business",
+      subheadline: "We design and build custom systems with AI: internal apps, process automation, operational dashboards, and smart integrations.",
       cta: "Request free diagnosis",
       secondary: "See what we do",
       badges: {

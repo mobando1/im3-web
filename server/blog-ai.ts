@@ -40,6 +40,7 @@ export async function generateBlogContent(
   metaTitle: string;
   metaDescription: string;
   tags: string[];
+  references: Array<{ title: string; url: string; author?: string; date?: string }>;
 } | null> {
   const ai = getClient();
   if (!ai) return null;
@@ -67,8 +68,15 @@ Responde SOLO con un JSON válido (sin markdown, sin backticks) con esta estruct
   "content": "Contenido HTML completo del artículo (mínimo 800 palabras)",
   "metaTitle": "Título SEO (máximo 60 caracteres)",
   "metaDescription": "Meta descripción SEO (máximo 155 caracteres)",
-  "tags": ["tag1", "tag2", "tag3"]
-}`,
+  "tags": ["tag1", "tag2", "tag3"],
+  "references": [{"title": "Nombre de la fuente", "url": "https://...", "author": "Autor (opcional)", "date": "2024 (opcional)"}]
+}
+
+IMPORTANTE sobre referencias:
+- Incluye 2-5 fuentes relevantes que respalden el contenido
+- Solo sugiere URLs que estés razonablemente seguro que existen (sitios conocidos, papers, etc.)
+- Si no estás seguro de una URL exacta, usa el dominio principal del sitio
+- Las referencias dan credibilidad al artículo`,
         },
       ],
     });

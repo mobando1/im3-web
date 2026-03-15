@@ -60,6 +60,11 @@ export async function runMigrations() {
         "status" text DEFAULT 'sent' NOT NULL
       );
     `);
+    // Add references column to blog_posts
+    await pool.query(`
+      ALTER TABLE "blog_posts" ADD COLUMN IF NOT EXISTS "references" json DEFAULT '[]'::json;
+    `).catch(() => {});
+
     // Make diagnostic_id nullable (was NOT NULL in original migration,
     // but newsletter contacts don't have a diagnostic)
     await pool.query(`

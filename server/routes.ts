@@ -217,15 +217,15 @@ export async function registerRoutes(
         });
     }
 
-    // Schedule adaptive email sequence (non-blocking)
-    if (db && insertedId && data.email && isEmailConfigured()) {
+    // Create CRM contact (non-blocking, independent of email config)
+    if (db && insertedId && data.email) {
       (async () => {
         try {
           // Check for existing contact (prevent duplicates on double-submit)
           const [existingContact] = await db.select().from(contacts)
             .where(eq(contacts.email, data.email)).limit(1);
           if (existingContact) {
-            log(`Contacto ${data.email} ya existe — saltando secuencia duplicada`);
+            log(`Contacto ${data.email} ya existe — saltando creación duplicada`);
             return;
           }
 
@@ -241,7 +241,7 @@ export async function registerRoutes(
           // Log form submission
           logActivity(contact.id, "form_submitted", `Formulario diagnóstico completado por ${data.participante}`, { empresa: data.empresa, diagnosticId: insertedId });
 
-          // Fetch full diagnostic for AI context and lead scoring
+          // Fetch full diagnostic for lead scoring
           const [diagForAI] = await db.select().from(diagnostics).where(eq(diagnostics.id, insertedId!));
 
           // Calculate initial lead score
@@ -253,65 +253,9 @@ export async function registerRoutes(
             log(`Error calculating lead score: ${err}`);
           }
 
-          // Get active sequence templates (exclude abandono at order 99)
-          const templates = await db
-            .select()
-            .from(emailTemplates)
-            .where(eq(emailTemplates.isActive, true))
-            .orderBy(asc(emailTemplates.sequenceOrder));
-
-          const sequenceTemplates = templates.filter(t => t.sequenceOrder < 90);
-
-          if (sequenceTemplates.length === 0) {
-            log("⚠ No se encontraron templates activos — correr seed");
-          }
-
-          // Parse appointment date for adaptive scheduling
-          const now = new Date();
-          const appointmentDate = parseFechaCita(data.fechaCita, data.horaCita);
-          const hoursUntilCall = Math.max(0, (appointmentDate.getTime() - now.getTime()) / (1000 * 60 * 60));
-
-          let scheduled = 0;
-
-          for (const template of sequenceTemplates) {
-            const scheduledFor = calculateEmailTime(template.nombre, now, appointmentDate, hoursUntilCall);
-            if (!scheduledFor) continue; // Skip this email (adaptive logic)
-
-            // Pre-generate email content so admins can preview/edit before sending
-            let subject: string | null = null;
-            let body: string | null = null;
-            try {
-              if (template.nombre === "micro_recordatorio") {
-                const r = buildMicroReminderEmail(
-                  data.participante, data.horaCita,
-                  diagForAI?.meetLink || null, contact.id
-                );
-                subject = r.subject;
-                body = r.body;
-              } else {
-                const r = await generateEmailContent(template, diagForAI || null, contact.id);
-                subject = r.subject;
-                body = r.body;
-              }
-            } catch (err) {
-              log(`Pre-gen failed for ${template.nombre}: ${err}`);
-              // Fallback: cron will regenerate at send time
-            }
-
-            await db.insert(sentEmails).values({
-              contactId: contact.id,
-              templateId: template.id,
-              scheduledFor,
-              subject,
-              body,
-            });
-            scheduled++;
-          }
-
-          log(`Secuencia de ${scheduled} email(s) programada para ${data.email} (${Math.round(hoursUntilCall)}h hasta la cita)`);
-
           // Auto-create follow-up tasks
           try {
+            const appointmentDate = parseFechaCita(data.fechaCita, data.horaCita);
             await db.insert(tasks).values({
               contactId: contact.id,
               title: `Revisar diagnóstico de ${data.empresa}`,
@@ -340,34 +284,94 @@ export async function registerRoutes(
             });
           } catch (_) {}
 
-          // Send email notification to admin (non-blocking)
-          const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
-          const baseUrl = process.env.BASE_URL || "https://im3systems.com";
-          sendEmail(
-            adminEmail,
-            `🔔 Nuevo lead: ${data.participante} de ${data.empresa}`,
-            `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
-              <div style="background:#0F172A;padding:20px 28px;border-radius:8px 8px 0 0">
-                <h1 style="color:#fff;font-size:18px;margin:0">Nuevo Lead en IM3 CRM</h1>
-              </div>
-              <div style="padding:28px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
-                <table style="width:100%;border-collapse:collapse;font-size:14px">
-                  <tr><td style="padding:6px 0;color:#666;width:120px">Nombre</td><td style="padding:6px 0;font-weight:600">${data.participante}</td></tr>
-                  <tr><td style="padding:6px 0;color:#666">Empresa</td><td style="padding:6px 0;font-weight:600">${data.empresa}</td></tr>
-                  <tr><td style="padding:6px 0;color:#666">Email</td><td style="padding:6px 0">${data.email}</td></tr>
-                  ${data.telefono ? `<tr><td style="padding:6px 0;color:#666">Teléfono</td><td style="padding:6px 0">${data.telefono}</td></tr>` : ""}
-                  <tr><td style="padding:6px 0;color:#666">Industria</td><td style="padding:6px 0">${data.industria || "—"}</td></tr>
-                  <tr><td style="padding:6px 0;color:#666">Cita</td><td style="padding:6px 0">${data.fechaCita || "—"} ${data.horaCita || ""}</td></tr>
-                  <tr><td style="padding:6px 0;color:#666">Presupuesto</td><td style="padding:6px 0">${data.presupuesto || "—"}</td></tr>
-                </table>
-                <div style="margin-top:20px">
-                  <a href="${baseUrl}/admin/contacts/${contact.id}" style="display:inline-block;background:#3B82F6;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Ver en CRM →</a>
+          // Schedule email sequence (only if email system is configured)
+          if (isEmailConfigured()) {
+            try {
+              const templates = await db
+                .select()
+                .from(emailTemplates)
+                .where(eq(emailTemplates.isActive, true))
+                .orderBy(asc(emailTemplates.sequenceOrder));
+
+              const sequenceTemplates = templates.filter(t => t.sequenceOrder < 90);
+
+              if (sequenceTemplates.length === 0) {
+                log("⚠ No se encontraron templates activos — correr seed");
+              }
+
+              const now = new Date();
+              const appointmentDate = parseFechaCita(data.fechaCita, data.horaCita);
+              const hoursUntilCall = Math.max(0, (appointmentDate.getTime() - now.getTime()) / (1000 * 60 * 60));
+
+              let scheduled = 0;
+
+              for (const template of sequenceTemplates) {
+                const scheduledFor = calculateEmailTime(template.nombre, now, appointmentDate, hoursUntilCall);
+                if (!scheduledFor) continue;
+
+                let subject: string | null = null;
+                let body: string | null = null;
+                try {
+                  if (template.nombre === "micro_recordatorio") {
+                    const r = buildMicroReminderEmail(
+                      data.participante, data.horaCita,
+                      diagForAI?.meetLink || null, contact.id
+                    );
+                    subject = r.subject;
+                    body = r.body;
+                  } else {
+                    const r = await generateEmailContent(template, diagForAI || null, contact.id);
+                    subject = r.subject;
+                    body = r.body;
+                  }
+                } catch (err) {
+                  log(`Pre-gen failed for ${template.nombre}: ${err}`);
+                }
+
+                await db.insert(sentEmails).values({
+                  contactId: contact.id,
+                  templateId: template.id,
+                  scheduledFor,
+                  subject,
+                  body,
+                });
+                scheduled++;
+              }
+
+              log(`Secuencia de ${scheduled} email(s) programada para ${data.email} (${Math.round(hoursUntilCall)}h hasta la cita)`);
+            } catch (emailErr) {
+              log(`Error programando emails: ${emailErr}`);
+            }
+
+            // Send email notification to admin
+            const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
+            const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+            sendEmail(
+              adminEmail,
+              `🔔 Nuevo lead: ${data.participante} de ${data.empresa}`,
+              `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+                <div style="background:#0F172A;padding:20px 28px;border-radius:8px 8px 0 0">
+                  <h1 style="color:#fff;font-size:18px;margin:0">Nuevo Lead en IM3 CRM</h1>
                 </div>
-              </div>
-            </div>`
-          ).catch((err) => log(`Error sending admin notification: ${err}`));
+                <div style="padding:28px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+                  <table style="width:100%;border-collapse:collapse;font-size:14px">
+                    <tr><td style="padding:6px 0;color:#666;width:120px">Nombre</td><td style="padding:6px 0;font-weight:600">${data.participante}</td></tr>
+                    <tr><td style="padding:6px 0;color:#666">Empresa</td><td style="padding:6px 0;font-weight:600">${data.empresa}</td></tr>
+                    <tr><td style="padding:6px 0;color:#666">Email</td><td style="padding:6px 0">${data.email}</td></tr>
+                    ${data.telefono ? `<tr><td style="padding:6px 0;color:#666">Teléfono</td><td style="padding:6px 0">${data.telefono}</td></tr>` : ""}
+                    <tr><td style="padding:6px 0;color:#666">Industria</td><td style="padding:6px 0">${data.industria || "—"}</td></tr>
+                    <tr><td style="padding:6px 0;color:#666">Cita</td><td style="padding:6px 0">${data.fechaCita || "—"} ${data.horaCita || ""}</td></tr>
+                    <tr><td style="padding:6px 0;color:#666">Presupuesto</td><td style="padding:6px 0">${data.presupuesto || "—"}</td></tr>
+                  </table>
+                  <div style="margin-top:20px">
+                    <a href="${baseUrl}/admin/contacts/${contact.id}" style="display:inline-block;background:#3B82F6;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Ver en CRM →</a>
+                  </div>
+                </div>
+              </div>`
+            ).catch((err) => log(`Error sending admin notification: ${err}`));
+          }
         } catch (err) {
-          log(`Error programando emails: ${err}`);
+          log(`Error creando contacto CRM: ${err}`);
         }
       })();
     }
@@ -2563,13 +2567,14 @@ ${urls}
     if (!db) return res.status(500).json({ error: "DB not configured" });
 
     try {
-      const { title, slug, excerpt, content, categoryId, tags, featuredImageUrl, authorName, status, language, metaTitle, metaDescription, readTimeMinutes } = req.body;
+      const { title, slug, excerpt, content, categoryId, tags, references, featuredImageUrl, authorName, status, language, metaTitle, metaDescription, readTimeMinutes } = req.body;
       if (!title || !slug || !excerpt || !content) return res.status(400).json({ error: "title, slug, excerpt y content son requeridos" });
 
       const [post] = await db.insert(blogPosts).values({
         title, slug, excerpt, content,
         categoryId: categoryId || null,
         tags: tags || [],
+        references: references || [],
         featuredImageUrl: featuredImageUrl || null,
         authorName: authorName || "Equipo IM3",
         status: status || "draft",
@@ -2594,7 +2599,7 @@ ${urls}
 
     try {
       const updates: any = { updatedAt: new Date() };
-      const fields = ["title", "slug", "excerpt", "content", "categoryId", "tags", "featuredImageUrl", "authorName", "status", "language", "metaTitle", "metaDescription", "readTimeMinutes"];
+      const fields = ["title", "slug", "excerpt", "content", "categoryId", "tags", "references", "featuredImageUrl", "authorName", "status", "language", "metaTitle", "metaDescription", "readTimeMinutes"];
       fields.forEach(f => { if (req.body[f] !== undefined) updates[f] = req.body[f]; });
 
       // Auto-calculate read time if content changed

@@ -17,7 +17,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Badge } from "@/components/ui/badge";
 import {
   ArrowLeft, Save, Eye, Send, Sparkles, Bold, Italic, Heading2, Heading3,
-  List, ListOrdered, Quote, Code, Link2, ImageIcon, Undo, Redo, Loader2
+  List, ListOrdered, Quote, Code, Link2, ImageIcon, Undo, Redo, Loader2,
+  Plus, Trash2, ExternalLink
 } from "lucide-react";
 
 type BlogCategory = {
@@ -34,6 +35,7 @@ type BlogPost = {
   content: string;
   categoryId: string | null;
   tags: string[];
+  references: Array<{ title: string; url: string; author?: string; date?: string }>;
   featuredImageUrl: string | null;
   authorName: string;
   status: string;
@@ -81,10 +83,15 @@ export default function BlogEditor() {
   const [language, setLanguage] = useState("es");
   const [metaTitle, setMetaTitle] = useState("");
   const [metaDescription, setMetaDescription] = useState("");
+  const [references, setReferences] = useState<Array<{ title: string; url: string; author?: string; date?: string }>>([]);
   const [showPreview, setShowPreview] = useState(false);
   const [showAiDialog, setShowAiDialog] = useState(false);
   const [aiPrompt, setAiPrompt] = useState("");
   const [aiMode, setAiMode] = useState<"generate" | "improve">("generate");
+  const [showLinkDialog, setShowLinkDialog] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkText, setLinkText] = useState("");
+  const [linkAsRef, setLinkAsRef] = useState(false);
 
   const editor = useEditor({
     extensions: [
@@ -124,6 +131,7 @@ export default function BlogEditor() {
       setExcerpt(existingPost.excerpt);
       setCategoryId(existingPost.categoryId || "");
       setTagsStr((existingPost.tags || []).join(", "));
+      setReferences(existingPost.references || []);
       setFeaturedImageUrl(existingPost.featuredImageUrl || "");
       setAuthorName(existingPost.authorName);
       setLanguage(existingPost.language);
@@ -145,6 +153,7 @@ export default function BlogEditor() {
         title, slug, excerpt, content,
         categoryId: categoryId || null,
         tags: tagsStr.split(",").map(t => t.trim()).filter(Boolean),
+        references,
         featuredImageUrl: featuredImageUrl || null,
         authorName,
         status,
@@ -178,6 +187,7 @@ export default function BlogEditor() {
       if (data.metaTitle) setMetaTitle(data.metaTitle);
       if (data.metaDescription) setMetaDescription(data.metaDescription);
       if (data.tags) setTagsStr(data.tags.join(", "));
+      if (data.references) setReferences(data.references);
       setShowAiDialog(false);
       setAiPrompt("");
     },
@@ -199,11 +209,25 @@ export default function BlogEditor() {
     },
   });
 
-  const addLink = () => {
-    const url = prompt("URL del enlace:");
-    if (url && editor) {
-      editor.chain().focus().setLink({ href: url }).run();
+  const openLinkDialog = () => {
+    const selectedText = editor?.state.selection.empty ? "" : editor?.state.doc.textBetween(editor.state.selection.from, editor.state.selection.to) || "";
+    setLinkText(selectedText);
+    setLinkUrl("");
+    setLinkAsRef(false);
+    setShowLinkDialog(true);
+  };
+
+  const applyLink = () => {
+    if (!linkUrl || !editor) return;
+    if (editor.state.selection.empty && linkText) {
+      editor.chain().focus().insertContent(`<a href="${linkUrl}">${linkText}</a>`).run();
+    } else {
+      editor.chain().focus().setLink({ href: linkUrl }).run();
     }
+    if (linkAsRef) {
+      setReferences(prev => [...prev, { title: linkText || linkUrl, url: linkUrl }]);
+    }
+    setShowLinkDialog(false);
   };
 
   const addImage = () => {
@@ -271,6 +295,20 @@ export default function BlogEditor() {
                   className="prose prose-sm max-w-none"
                   dangerouslySetInnerHTML={{ __html: editor?.getHTML() || "" }}
                 />
+                {references.length > 0 && (
+                  <div className="mt-8 pt-6 border-t border-gray-200">
+                    <h3 className="text-lg font-semibold mb-3">Referencias</h3>
+                    <ol className="list-decimal list-inside space-y-1.5">
+                      {references.map((ref, i) => (
+                        <li key={i} className="text-sm text-gray-600">
+                          <a href={ref.url} target="_blank" rel="noopener noreferrer" className="text-[#2FA4A9] hover:underline">{ref.title}</a>
+                          {ref.author && <span> — {ref.author}</span>}
+                          {ref.date && <span> ({ref.date})</span>}
+                        </li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ) : (
@@ -305,7 +343,7 @@ export default function BlogEditor() {
                   <Code className="h-4 w-4" />
                 </ToolbarButton>
                 <div className="w-px h-5 bg-gray-200 mx-1" />
-                <ToolbarButton onClick={addLink} title="Enlace">
+                <ToolbarButton onClick={openLinkDialog} title="Enlace">
                   <Link2 className="h-4 w-4" />
                 </ToolbarButton>
                 <ToolbarButton onClick={addImage} title="Imagen">
@@ -444,8 +482,96 @@ export default function BlogEditor() {
               </div>
             </CardContent>
           </Card>
+
+          {/* References Card */}
+          <Card>
+            <CardContent className="p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Referencias</p>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setReferences(prev => [...prev, { title: "", url: "" }])}
+                  className="h-7 px-2 text-xs"
+                >
+                  <Plus className="h-3 w-3 mr-1" /> Agregar
+                </Button>
+              </div>
+              {references.length === 0 && (
+                <p className="text-xs text-gray-400">Sin referencias. Agrega fuentes para dar credibilidad al artículo.</p>
+              )}
+              {references.map((ref, i) => (
+                <div key={i} className="space-y-1.5 p-2.5 bg-gray-50 rounded-lg relative group">
+                  <button
+                    type="button"
+                    onClick={() => setReferences(prev => prev.filter((_, idx) => idx !== i))}
+                    className="absolute top-1.5 right-1.5 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-500 transition-all"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                  <Input
+                    value={ref.title}
+                    onChange={(e) => setReferences(prev => prev.map((r, idx) => idx === i ? { ...r, title: e.target.value } : r))}
+                    placeholder="Título de la fuente"
+                    className="text-xs h-7"
+                  />
+                  <Input
+                    value={ref.url}
+                    onChange={(e) => setReferences(prev => prev.map((r, idx) => idx === i ? { ...r, url: e.target.value } : r))}
+                    placeholder="https://..."
+                    className="text-xs h-7"
+                  />
+                  <div className="flex gap-1.5">
+                    <Input
+                      value={ref.author || ""}
+                      onChange={(e) => setReferences(prev => prev.map((r, idx) => idx === i ? { ...r, author: e.target.value || undefined } : r))}
+                      placeholder="Autor (opcional)"
+                      className="text-xs h-7 flex-1"
+                    />
+                    <Input
+                      value={ref.date || ""}
+                      onChange={(e) => setReferences(prev => prev.map((r, idx) => idx === i ? { ...r, date: e.target.value || undefined } : r))}
+                      placeholder="Fecha"
+                      className="text-xs h-7 w-24"
+                    />
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
         </div>
       </div>
+
+      {/* Link Dialog */}
+      <Dialog open={showLinkDialog} onOpenChange={setShowLinkDialog}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Link2 className="h-5 w-5 text-[#2FA4A9]" /> Insertar enlace
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div>
+              <Label className="text-xs text-gray-500">URL</Label>
+              <Input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://..." className="text-sm" />
+            </div>
+            <div>
+              <Label className="text-xs text-gray-500">Texto (opcional)</Label>
+              <Input value={linkText} onChange={(e) => setLinkText(e.target.value)} placeholder="Texto del enlace" className="text-sm" />
+            </div>
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input type="checkbox" checked={linkAsRef} onChange={(e) => setLinkAsRef(e.target.checked)} className="rounded border-gray-300" />
+              <span className="text-sm text-gray-600">Agregar también como referencia</span>
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowLinkDialog(false)}>Cancelar</Button>
+            <Button onClick={applyLink} disabled={!linkUrl} className="bg-[#2FA4A9] hover:bg-[#238b8f]">
+              <ExternalLink className="h-4 w-4 mr-1" /> Insertar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* AI Dialog */}
       <Dialog open={showAiDialog} onOpenChange={setShowAiDialog}>
