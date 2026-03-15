@@ -52,6 +52,13 @@ function calculateEmailTime(
       if (prep.getTime() <= now.getTime() + 2 * 60 * 60 * 1000) return null;
       return prep;
 
+    case "recordatorio_6h":
+      // Send 6 hours before appointment
+      if (hoursUntilCall < 2) return null;
+      const reminder6h = new Date(appointmentDate.getTime() - 6 * 60 * 60 * 1000);
+      if (reminder6h.getTime() <= now.getTime()) return null;
+      return reminder6h;
+
     case "micro_recordatorio":
       // Send 1 hour before appointment
       const reminder = new Date(appointmentDate.getTime() - 60 * 60 * 1000);
@@ -59,8 +66,8 @@ function calculateEmailTime(
       return reminder;
 
     case "seguimiento_post":
-      // Send 2 hours after appointment
-      const followUp = new Date(appointmentDate.getTime() + 2 * 60 * 60 * 1000);
+      // Send 5 hours after appointment
+      const followUp = new Date(appointmentDate.getTime() + 5 * 60 * 60 * 1000);
       if (followUp.getTime() <= now.getTime()) return null;
       return followUp;
 

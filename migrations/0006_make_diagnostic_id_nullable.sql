@@ -1,0 +1,1 @@
+ALTER TABLE "contacts" ALTER COLUMN "diagnostic_id" DROP NOT NULL;

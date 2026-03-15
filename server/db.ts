@@ -60,6 +60,12 @@ export async function runMigrations() {
         "status" text DEFAULT 'sent' NOT NULL
       );
     `);
+    // Make diagnostic_id nullable (was NOT NULL in original migration,
+    // but newsletter contacts don't have a diagnostic)
+    await pool.query(`
+      ALTER TABLE "contacts" ALTER COLUMN "diagnostic_id" DROP NOT NULL;
+    `).catch(() => {}); // Ignore if already nullable
+
     console.log("✓ Database tables ensured");
   } catch (err) {
     console.error("✗ Migration failed:", err);
