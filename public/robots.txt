@@ -2,6 +2,7 @@ User-agent: *
 Allow: /
 
 Sitemap: https://www.im3systems.com/sitemap.xml
+Sitemap: https://www.im3systems.com/sitemap-blog.xml
 
 # AI Search Engine Crawlers — Full access
 User-agent: GPTBot

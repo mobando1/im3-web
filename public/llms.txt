@@ -79,6 +79,16 @@ No. El diagnóstico es 100% gratuito y sin compromiso.
 **¿Qué tipo de empresas atiende IM3?**
 PYMEs en Latinoamérica y España que necesitan software a medida, automatización de procesos o inteligencia artificial aplicada a su operación.
 
+## Blog
+
+IM3 Systems publica artículos sobre inteligencia artificial aplicada, automatización de procesos y tecnología para empresas. Temas incluyen:
+- Cómo implementar IA en operaciones empresariales
+- Casos de uso reales de automatización
+- Tendencias tecnológicas con aplicación práctica
+- Guías para PYMEs que quieren modernizar su operación
+
+Blog: https://www.im3systems.com/blog
+
 ## Contacto
 
 - Web: https://www.im3systems.com
