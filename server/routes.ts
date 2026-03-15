@@ -2578,6 +2578,181 @@ ${urls}
     }
   });
 
+  // Seed blog with sample posts (one-time use)
+  app.post("/api/admin/blog/seed", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      // Check if posts already exist
+      const existing = await db.select({ total: count() }).from(blogPosts);
+      if (existing[0].total > 0) return res.json({ message: "Blog already seeded", count: existing[0].total });
+
+      // Create categories
+      const [catIA] = await db.insert(blogCategories).values({ name: "IA Aplicada", slug: "ia-aplicada", description: "Inteligencia artificial aplicada a negocios" }).returning();
+      const [catAuto] = await db.insert(blogCategories).values({ name: "Automatización", slug: "automatizacion", description: "Automatización de procesos empresariales" }).returning();
+      const [catTech] = await db.insert(blogCategories).values({ name: "Tendencias Tech", slug: "tendencias-tech", description: "Últimas tendencias en tecnología" }).returning();
+
+      const now = new Date();
+
+      // Post 1
+      await db.insert(blogPosts).values({
+        title: "Cómo la IA está transformando las PYMEs en Latinoamérica",
+        slug: "ia-transformando-pymes-latinoamerica",
+        excerpt: "La inteligencia artificial ya no es exclusiva de las grandes corporaciones. Descubre cómo las PYMEs en la región están usando IA para competir mejor.",
+        content: `<h2>La IA ya no es ciencia ficción para las PYMEs</h2>
+<p>Hace cinco años, hablar de inteligencia artificial en una PYME latinoamericana sonaba a ciencia ficción. Hoy, es una realidad que está cambiando las reglas del juego. Y no estamos hablando de robots o algoritmos complejos — estamos hablando de herramientas prácticas que resuelven problemas reales.</p>
+
+<h2>¿Qué están haciendo las PYMEs con IA?</h2>
+<p>Las empresas que están adoptando IA en la región lo hacen de formas muy concretas:</p>
+<ul>
+<li><strong>Chatbots de ventas en WhatsApp</strong> que atienden clientes 24/7, califican leads y cierran ventas sin intervención humana.</li>
+<li><strong>Automatización de procesos repetitivos</strong> como facturación, seguimiento de pedidos y gestión de inventario.</li>
+<li><strong>Dashboards inteligentes</strong> que no solo muestran datos, sino que sugieren qué hacer con ellos.</li>
+<li><strong>Clasificación automática</strong> de documentos, emails y solicitudes de clientes.</li>
+</ul>
+
+<h2>El mito del costo prohibitivo</h2>
+<p>Uno de los principales mitos es que implementar IA es caro. La realidad es que el costo de <strong>no</strong> implementarla es mayor. Cada hora que un empleado dedica a tareas repetitivas es una hora que no dedica a generar valor.</p>
+<blockquote><p>Una empresa de logística en Colombia automatizó su proceso de cotización con IA y redujo el tiempo de respuesta de 24 horas a 3 minutos. El resultado: 40% más de cierres en el primer mes.</p></blockquote>
+
+<h2>Por dónde empezar</h2>
+<p>No necesitas una transformación digital masiva. Empieza por identificar:</p>
+<ol>
+<li>¿Qué procesos consumen más tiempo de tu equipo?</li>
+<li>¿Dónde están los cuellos de botella en tu operación?</li>
+<li>¿Qué tareas son repetitivas y predecibles?</li>
+</ol>
+<p>Esas son exactamente las áreas donde la IA genera mayor impacto con menor inversión.</p>
+
+<h2>El momento es ahora</h2>
+<p>Las PYMEs que están adoptando IA hoy van a tener una ventaja competitiva difícil de alcanzar en dos años. No se trata de reemplazar personas — se trata de darles superpoderes para que se enfoquen en lo que realmente importa: hacer crecer el negocio.</p>`,
+        categoryId: catIA.id,
+        tags: ["inteligencia artificial", "pymes", "latinoamerica", "transformacion digital"],
+        authorName: "Equipo IM3",
+        status: "published",
+        language: "es",
+        metaTitle: "Cómo la IA está transformando las PYMEs en Latinoamérica",
+        metaDescription: "Descubre cómo las PYMEs en Latinoamérica están usando inteligencia artificial para automatizar procesos, vender más y competir mejor.",
+        readTimeMinutes: 5,
+        publishedAt: new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000),
+      });
+
+      // Post 2
+      await db.insert(blogPosts).values({
+        title: "5 procesos que toda empresa debería automatizar hoy",
+        slug: "5-procesos-automatizar-empresa",
+        excerpt: "Hay tareas que tus empleados hacen todos los días que podrían funcionar solas. Estos son los 5 procesos con mayor retorno al automatizarlos.",
+        content: `<h2>La automatización no es un lujo — es una necesidad</h2>
+<p>Si tu equipo pasa más de 2 horas al día en tareas repetitivas, estás quemando dinero. La automatización no se trata de reducir personal — se trata de liberar tiempo para que las personas se enfoquen en lo que genera valor.</p>
+
+<h2>1. Seguimiento de leads y clientes</h2>
+<p>¿Cuántos leads se pierden porque nadie les hizo seguimiento a tiempo? Un sistema automatizado puede:</p>
+<ul>
+<li>Enviar un email de bienvenida en el momento exacto en que alguien muestra interés</li>
+<li>Programar recordatorios automáticos para seguimiento</li>
+<li>Clasificar leads por nivel de interés usando IA</li>
+<li>Alertar al equipo de ventas cuando un lead está listo para cerrar</li>
+</ul>
+
+<h2>2. Facturación y cobros</h2>
+<p>La facturación manual es una de las principales fuentes de errores y atrasos. Automatizar este proceso significa:</p>
+<ul>
+<li>Facturas generadas automáticamente al completar un servicio</li>
+<li>Recordatorios de pago enviados sin intervención humana</li>
+<li>Conciliación automática entre pagos recibidos y facturas pendientes</li>
+</ul>
+
+<h2>3. Reportería y dashboards</h2>
+<p>Si alguien de tu equipo pasa horas armando reportes en Excel cada semana, eso debería estar automatizado. Un dashboard en tiempo real te da:</p>
+<ul>
+<li>Visibilidad inmediata del estado de la operación</li>
+<li>Alertas automáticas cuando algo se sale de rango</li>
+<li>Datos consolidados de múltiples fuentes sin copiar y pegar</li>
+</ul>
+
+<h2>4. Onboarding de clientes</h2>
+<p>El proceso de integrar un nuevo cliente puede estandarizarse:</p>
+<ul>
+<li>Envío automático de documentos y formularios</li>
+<li>Checklist digital que avanza solo al completar cada paso</li>
+<li>Notificaciones al equipo responsable en cada etapa</li>
+</ul>
+
+<h2>5. Atención al cliente con chatbots</h2>
+<p>El 70% de las consultas que recibe tu equipo de soporte son preguntas frecuentes. Un chatbot inteligente en WhatsApp puede resolver estas consultas 24/7, escalando a un humano solo cuando es necesario.</p>
+
+<h2>¿Por dónde empiezo?</h2>
+<p>Empieza por el proceso que más tiempo consume y que más se repite. Un diagnóstico rápido de tu operación puede revelar oportunidades que no sabías que tenías.</p>`,
+        categoryId: catAuto.id,
+        tags: ["automatización", "procesos", "productividad", "eficiencia"],
+        authorName: "Equipo IM3",
+        status: "published",
+        language: "es",
+        metaTitle: "5 procesos que toda empresa debería automatizar",
+        metaDescription: "Descubre los 5 procesos empresariales con mayor retorno al automatizarlos: leads, facturación, reportes, onboarding y atención al cliente.",
+        readTimeMinutes: 6,
+        publishedAt: new Date(now.getTime() - 5 * 24 * 60 * 60 * 1000),
+      });
+
+      // Post 3
+      await db.insert(blogPosts).values({
+        title: "Chatbots de WhatsApp con IA: por qué tu negocio necesita uno",
+        slug: "chatbots-whatsapp-ia-negocio",
+        excerpt: "WhatsApp es el canal #1 de comunicación en Latinoamérica. Un chatbot con IA puede transformar ese canal en tu mejor vendedor.",
+        content: `<h2>WhatsApp: el canal que tu negocio está subutilizando</h2>
+<p>En Latinoamérica, WhatsApp no es solo una app de mensajería — es la infraestructura de comunicación de negocios. Tus clientes ya están ahí. La pregunta es: ¿estás aprovechando ese canal al máximo?</p>
+
+<h2>¿Qué puede hacer un chatbot de WhatsApp con IA?</h2>
+<p>No estamos hablando de un bot que responde "Presione 1 para ventas". Un chatbot con inteligencia artificial puede:</p>
+<ul>
+<li><strong>Entender preguntas en lenguaje natural</strong> — "¿Tienen el modelo azul en talla M?" y responder con precisión</li>
+<li><strong>Calificar leads automáticamente</strong> — Identifica quién está listo para comprar y quién solo está explorando</li>
+<li><strong>Procesar pedidos</strong> — Desde tomar el pedido hasta confirmar el pago, sin intervención humana</li>
+<li><strong>Dar seguimiento post-venta</strong> — Preguntar cómo estuvo el servicio, ofrecer productos relacionados</li>
+<li><strong>Escalar a un humano</strong> — Cuando la consulta requiere atención personalizada, transfiere con todo el contexto</li>
+</ul>
+
+<h2>Resultados reales</h2>
+<blockquote><p>"Implementamos un chatbot de ventas en WhatsApp y en el primer mes cerramos un 35% más de ventas. Los clientes reciben respuesta inmediata, 24/7, y nuestro equipo solo interviene en los casos que realmente lo necesitan." — Cliente de IM3 Systems</p></blockquote>
+
+<h2>La ventaja competitiva</h2>
+<p>Mientras tu competencia tarda 4 horas en responder un WhatsApp, tu chatbot responde en 3 segundos. Esa diferencia es la que cierra ventas.</p>
+<p>Algunos datos que lo respaldan:</p>
+<ul>
+<li>El 82% de los consumidores espera respuesta inmediata en WhatsApp</li>
+<li>Los negocios que responden en menos de 5 minutos tienen 21x más probabilidad de cerrar la venta</li>
+<li>Un chatbot puede manejar cientos de conversaciones simultáneas sin perder calidad</li>
+</ul>
+
+<h2>¿Es complicado implementar uno?</h2>
+<p>No. Con la tecnología actual, un chatbot de WhatsApp con IA se puede tener funcionando en semanas, no meses. Lo importante es:</p>
+<ol>
+<li>Definir los flujos de conversación más importantes</li>
+<li>Entrenar la IA con información real de tu negocio</li>
+<li>Integrar con tus sistemas existentes (CRM, inventario, pagos)</li>
+<li>Iterar basándote en conversaciones reales</li>
+</ol>
+
+<h2>El mejor momento para empezar es ahora</h2>
+<p>Cada día sin chatbot es un día de ventas perdidas y clientes frustrados por la espera. La IA en WhatsApp no es el futuro — es el presente. Y los negocios que lo entienden primero son los que lideran.</p>`,
+        categoryId: catIA.id,
+        tags: ["chatbots", "whatsapp", "ia", "ventas", "atención al cliente"],
+        authorName: "Equipo IM3",
+        status: "published",
+        language: "es",
+        metaTitle: "Chatbots de WhatsApp con IA para negocios",
+        metaDescription: "Descubre cómo un chatbot de WhatsApp con inteligencia artificial puede transformar tu canal de ventas y atención al cliente 24/7.",
+        readTimeMinutes: 5,
+        publishedAt: new Date(now.getTime() - 8 * 24 * 60 * 60 * 1000),
+      });
+
+      res.json({ message: "Blog seeded with 3 categories and 3 posts", categories: 3, posts: 3 });
+    } catch (err: any) {
+      log(`Error seeding blog: ${err?.message}`);
+      res.status(500).json({ error: `Error seeding blog: ${err?.message}` });
+    }
+  });
+
   // Unsubscribe from email sequence
   app.get("/api/unsubscribe/:contactId", async (req, res) => {
     const { contactId } = req.params;
