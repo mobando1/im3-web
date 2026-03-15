@@ -332,6 +332,33 @@ export async function registerRoutes(
               contactId: contact.id,
             });
           } catch (_) {}
+
+          // Send email notification to admin (non-blocking)
+          const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
+          const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+          sendEmail(
+            adminEmail,
+            `🔔 Nuevo lead: ${data.participante} de ${data.empresa}`,
+            `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+              <div style="background:#2B7A78;padding:20px 28px;border-radius:8px 8px 0 0">
+                <h1 style="color:#fff;font-size:18px;margin:0">Nuevo Lead en IM3 CRM</h1>
+              </div>
+              <div style="padding:28px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+                <table style="width:100%;border-collapse:collapse;font-size:14px">
+                  <tr><td style="padding:6px 0;color:#666;width:120px">Nombre</td><td style="padding:6px 0;font-weight:600">${data.participante}</td></tr>
+                  <tr><td style="padding:6px 0;color:#666">Empresa</td><td style="padding:6px 0;font-weight:600">${data.empresa}</td></tr>
+                  <tr><td style="padding:6px 0;color:#666">Email</td><td style="padding:6px 0">${data.email}</td></tr>
+                  ${data.telefono ? `<tr><td style="padding:6px 0;color:#666">Teléfono</td><td style="padding:6px 0">${data.telefono}</td></tr>` : ""}
+                  <tr><td style="padding:6px 0;color:#666">Industria</td><td style="padding:6px 0">${data.industria || "—"}</td></tr>
+                  <tr><td style="padding:6px 0;color:#666">Cita</td><td style="padding:6px 0">${data.fechaCita || "—"} ${data.horaCita || ""}</td></tr>
+                  <tr><td style="padding:6px 0;color:#666">Presupuesto</td><td style="padding:6px 0">${data.presupuesto || "—"}</td></tr>
+                </table>
+                <div style="margin-top:20px">
+                  <a href="${baseUrl}/admin/contacts/${contact.id}" style="display:inline-block;background:#2B7A78;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Ver en CRM →</a>
+                </div>
+              </div>
+            </div>`
+          ).catch((err) => log(`Error sending admin notification: ${err}`));
         } catch (err) {
           log(`Error programando emails: ${err}`);
         }
@@ -549,6 +576,22 @@ export async function registerRoutes(
         sendEmail(email, welcomeSubject, welcomeHtml).catch((err) => {
           log(`Error sending newsletter welcome: ${err}`);
         });
+
+        // Notify admin about new subscriber (non-blocking)
+        const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
+        sendEmail(
+          adminEmail,
+          `📬 Nueva suscripción newsletter: ${email}`,
+          `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+            <div style="background:#2B7A78;padding:20px 28px;border-radius:8px 8px 0 0">
+              <h1 style="color:#fff;font-size:18px;margin:0">Nueva Suscripción Newsletter</h1>
+            </div>
+            <div style="padding:28px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+              <p style="font-size:14px;line-height:1.6;margin:0 0 16px"><strong>${email}</strong> se suscribió al newsletter de IM3 Systems.</p>
+              <p style="font-size:13px;color:#666;margin:0">Se creó un contacto en el CRM automáticamente.</p>
+            </div>
+          </div>`
+        ).catch((err) => log(`Error sending admin newsletter notification: ${err}`));
       }
 
       res.json({ success: true });
@@ -2597,6 +2640,29 @@ ${urls}
     } catch (err: any) {
       log(`Error AI blog improve: ${err?.message}`);
       res.status(500).json({ error: "Error mejorando contenido" });
+    }
+  });
+
+  // One-time: add featured images to blog posts
+  app.post("/api/admin/blog/add-images", async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const images: Record<string, string> = {
+        "ia-transformando-pymes-latinoamerica": "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&h=630&fit=crop&q=80",
+        "5-procesos-automatizar-empresa": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1200&h=630&fit=crop&q=80",
+        "chatbots-whatsapp-ia-negocio": "https://images.unsplash.com/photo-1611606063065-ee7946f0787a?w=1200&h=630&fit=crop&q=80",
+      };
+      const results = [];
+      for (const [slug, url] of Object.entries(images)) {
+        const [updated] = await db.update(blogPosts)
+          .set({ featuredImageUrl: url })
+          .where(eq(blogPosts.slug, slug))
+          .returning({ slug: blogPosts.slug, featuredImageUrl: blogPosts.featuredImageUrl });
+        if (updated) results.push(updated);
+      }
+      res.json({ updated: results.length, results });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
     }
   });
 
