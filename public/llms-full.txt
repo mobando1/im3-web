@@ -155,6 +155,17 @@ IM3 usa modelos de lenguaje como Claude (Anthropic) y OpenAI GPT para chatbots y
 **¿En qué países opera IM3?**
 IM3 Systems opera en toda Latinoamérica y España. El servicio es completamente remoto, lo que permite atender clientes en cualquier ubicación geográfica.
 
+## Blog
+
+IM3 Systems mantiene un blog activo con contenido educativo y práctico sobre tecnología empresarial. El blog cubre:
+
+- **IA aplicada para negocios**: Artículos sobre cómo implementar inteligencia artificial en operaciones reales — chatbots, automatización inteligente, análisis predictivo, y más.
+- **Automatización de procesos**: Casos de uso, guías paso a paso y comparativas de herramientas de automatización para PYMEs.
+- **Noticias tech con aplicación práctica**: Las últimas tendencias tecnológicas explicadas con enfoque en cómo aplicarlas en negocios reales.
+- **Casos de éxito y lecciones**: Historias detrás de implementaciones reales, qué funcionó, qué no, y qué aprendimos.
+
+URL del blog: https://www.im3systems.com/blog
+
 ## Información de contacto
 
 - **Sitio web**: https://www.im3systems.com
