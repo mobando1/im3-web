@@ -3,13 +3,15 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { LayoutDashboard, Users, CalendarDays, CheckSquare, LogOut, Bell } from "lucide-react";
+import { LayoutDashboard, Users, CalendarDays, CheckSquare, LogOut, Bell, Search, Briefcase, FileText } from "lucide-react";
+import { CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 
 const navItems = [
   { label: "Dashboard", path: "/admin", icon: LayoutDashboard },
   { label: "Contactos", path: "/admin/contacts", icon: Users },
   { label: "Tareas", path: "/admin/tasks", icon: CheckSquare, showBadge: true },
   { label: "Calendario", path: "/admin/calendar", icon: CalendarDays },
+  { label: "Plantillas", path: "/admin/templates", icon: FileText },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -19,6 +21,8 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   const queryClient = useQueryClient();
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
 
   const { data: notifData } = useQuery<{ notifications: any[]; unreadCount: number }>({
     queryKey: ["/api/admin/notifications"],
@@ -36,6 +40,32 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       await apiRequest("POST", "/api/admin/notifications/mark-all-read");
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/notifications"] }),
+  });
+
+  // Cmd+K shortcut
+  useEffect(() => {
+    const down = (e: KeyboardEvent) => {
+      if (e.key === "k" && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        setSearchOpen((open) => !open);
+      }
+    };
+    document.addEventListener("keydown", down);
+    return () => document.removeEventListener("keydown", down);
+  }, []);
+
+  const { data: searchResults } = useQuery<{
+    contacts: Array<{ id: string; nombre: string; empresa: string; email: string }>;
+    deals: Array<{ id: string; title: string; contactId: string; contactName: string }>;
+    tasks: Array<{ id: string; title: string; contactId: string; contactName: string }>;
+  }>({
+    queryKey: ["/api/admin/search", searchQuery],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/search?q=${encodeURIComponent(searchQuery)}`);
+      if (!res.ok) throw new Error("Search failed");
+      return res.json();
+    },
+    enabled: searchOpen && searchQuery.length >= 2,
   });
 
   // Close on outside click
@@ -131,7 +161,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Main content */}
       <main className="flex-1 overflow-auto">
         {/* Top bar with notifications */}
-        <div className="flex items-center justify-end px-8 pt-4 pb-0">
+        <div className="flex items-center justify-end px-8 pt-4 pb-0 gap-1">
+          <button
+            onClick={() => setSearchOpen(true)}
+            className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
+            title="Buscar (⌘K)"
+          >
+            <Search className="w-5 h-5" />
+          </button>
           <div className="relative" ref={notifRef}>
             <button
               onClick={() => setShowNotifications(!showNotifications)}
@@ -183,6 +220,51 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </div>
         </div>
         <div className="px-8 pb-8 max-w-7xl">{children}</div>
+        <CommandDialog open={searchOpen} onOpenChange={setSearchOpen}>
+          <CommandInput placeholder="Buscar contactos, deals, tareas..." value={searchQuery} onValueChange={setSearchQuery} />
+          <CommandList>
+            <CommandEmpty>No se encontraron resultados.</CommandEmpty>
+            {searchResults?.contacts && searchResults.contacts.length > 0 && (
+              <CommandGroup heading="Contactos">
+                {searchResults.contacts.map((c) => (
+                  <CommandItem key={c.id} onSelect={() => { navigate(`/admin/contacts/${c.id}`); setSearchOpen(false); setSearchQuery(""); }}>
+                    <Users className="mr-2 h-4 w-4 text-gray-400" />
+                    <div>
+                      <p className="text-sm font-medium">{c.nombre}</p>
+                      <p className="text-xs text-gray-400">{c.empresa} — {c.email}</p>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+            {searchResults?.deals && searchResults.deals.length > 0 && (
+              <CommandGroup heading="Deals">
+                {searchResults.deals.map((d) => (
+                  <CommandItem key={d.id} onSelect={() => { navigate(`/admin/contacts/${d.contactId}`); setSearchOpen(false); setSearchQuery(""); }}>
+                    <Briefcase className="mr-2 h-4 w-4 text-gray-400" />
+                    <div>
+                      <p className="text-sm font-medium">{d.title}</p>
+                      <p className="text-xs text-gray-400">{d.contactName}</p>
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+            {searchResults?.tasks && searchResults.tasks.length > 0 && (
+              <CommandGroup heading="Tareas">
+                {searchResults.tasks.map((t) => (
+                  <CommandItem key={t.id} onSelect={() => { if (t.contactId) navigate(`/admin/contacts/${t.contactId}`); setSearchOpen(false); setSearchQuery(""); }}>
+                    <CheckSquare className="mr-2 h-4 w-4 text-gray-400" />
+                    <div>
+                      <p className="text-sm font-medium">{t.title}</p>
+                      {t.contactName && <p className="text-xs text-gray-400">{t.contactName}</p>}
+                    </div>
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            )}
+          </CommandList>
+        </CommandDialog>
       </main>
     </div>
   );

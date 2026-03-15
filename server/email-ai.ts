@@ -273,3 +273,32 @@ Responde con este JSON exacto:
     };
   }
 }
+
+/**
+ * Generate a personalized WhatsApp message for a contact.
+ */
+export async function generateWhatsAppMessage(
+  contact: Contact,
+  diagnostic: Partial<Diagnostic> | null
+): Promise<string> {
+  const anthropic = getClient();
+  if (!anthropic) {
+    // Fallback message
+    return `Hola ${contact.nombre}, soy del equipo de IM3 Systems. Queria hacer seguimiento sobre tu diagnostico tecnologico. ¿Tienes un momento para conversar?`;
+  }
+
+  const context = buildContext(diagnostic);
+
+  const response = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 300,
+    system: `Genera un mensaje corto de WhatsApp (máximo 3 oraciones) en español latinoamericano. Tono: profesional pero cercano, como un consultor tech amigable. NO uses emojis excesivos (máximo 1). NO uses formato HTML. Texto plano solamente. Empieza con "Hola {nombre}". Firma como "— Equipo IM3 Systems". El mensaje debe ser relevante al status actual del contacto y sus datos.`,
+    messages: [{
+      role: "user",
+      content: `Genera un mensaje de WhatsApp para este contacto.\n\nStatus: ${contact.status}\nSubstatus: ${contact.substatus || "ninguno"}\n\n${context}`,
+    }],
+  });
+
+  const text = response.content?.[0]?.type === "text" ? response.content[0].text.trim() : "";
+  return text || `Hola ${contact.nombre}, soy del equipo de IM3 Systems. Queria hacer seguimiento. ¿Tienes un momento?`;
+}

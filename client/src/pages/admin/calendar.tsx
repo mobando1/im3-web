@@ -1,10 +1,12 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar as CalendarIcon, Clock, ExternalLink, Video, ChevronLeft, ChevronRight } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Calendar as CalendarIcon, Clock, ExternalLink, Video, ChevronLeft, ChevronRight, Plus, Trash2, X } from "lucide-react";
 import { useState, useMemo } from "react";
+import { apiRequest } from "@/lib/queryClient";
 
 type Appointment = {
   id: string;
@@ -15,6 +17,18 @@ type Appointment = {
   contactId: string;
   meetLink: string | null;
   googleDriveUrl: string | null;
+};
+
+type ManualAppointment = {
+  id: string;
+  contactId: string | null;
+  title: string;
+  date: string;
+  time: string;
+  duration: number;
+  notes: string | null;
+  meetLink: string | null;
+  createdAt: string;
 };
 
 function parseDateString(fechaCita: string): Date | null {
@@ -50,6 +64,48 @@ export default function CalendarPage() {
     queryKey: ["/api/admin/calendar"],
   });
 
+  const { data: manualAppointments = [] } = useQuery<ManualAppointment[]>({
+    queryKey: ["/api/admin/appointments"],
+  });
+
+  const queryClient = useQueryClient();
+  const [showCreate, setShowCreate] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newDate, setNewDate] = useState("");
+  const [newTime, setNewTime] = useState("10:00");
+  const [newDuration, setNewDuration] = useState("45");
+  const [newNotes, setNewNotes] = useState("");
+
+  const createMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/admin/appointments", {
+        title: newTitle,
+        date: newDate,
+        time: newTime,
+        duration: parseInt(newDuration),
+        notes: newNotes || undefined,
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/appointments"] });
+      setShowCreate(false);
+      setNewTitle("");
+      setNewDate("");
+      setNewTime("10:00");
+      setNewDuration("45");
+      setNewNotes("");
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/appointments/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/appointments"] });
+    },
+  });
+
   const appointmentsByDate = useMemo(() => {
     const map: Record<string, Appointment[]> = {};
     for (const apt of appointments) {
@@ -59,8 +115,22 @@ export default function CalendarPage() {
       if (!map[key]) map[key] = [];
       map[key].push(apt);
     }
+    for (const ma of manualAppointments) {
+      const key = ma.date;
+      if (!map[key]) map[key] = [];
+      map[key].push({
+        id: `manual-${ma.id}`,
+        fechaCita: ma.date,
+        horaCita: ma.time,
+        contactName: ma.title,
+        contactCompany: "",
+        contactId: ma.contactId || "",
+        meetLink: ma.meetLink,
+        googleDriveUrl: null,
+      });
+    }
     return map;
-  }, [appointments]);
+  }, [appointments, manualAppointments]);
 
   // Calendar grid
   const firstDay = new Date(currentMonth.year, currentMonth.month, 1);
@@ -95,7 +165,17 @@ export default function CalendarPage() {
   // Upcoming appointments for the sidebar
   const upcoming = useMemo(() => {
     const now = new Date();
-    return appointments
+    const converted: Appointment[] = manualAppointments.map((ma) => ({
+      id: `manual-${ma.id}`,
+      fechaCita: ma.date,
+      horaCita: ma.time,
+      contactName: ma.title,
+      contactCompany: "",
+      contactId: ma.contactId || "",
+      meetLink: ma.meetLink,
+      googleDriveUrl: null,
+    }));
+    return [...appointments, ...converted]
       .filter((a) => {
         const d = parseDateString(a.fechaCita);
         return d && d.getTime() >= now.getTime() - 24 * 60 * 60 * 1000;
@@ -106,11 +186,61 @@ export default function CalendarPage() {
         return da - db;
       })
       .slice(0, 10);
-  }, [appointments]);
+  }, [appointments, manualAppointments]);
 
   return (
     <div className="space-y-6">
-      <h2 className="text-2xl font-bold text-gray-900">Calendario</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold text-gray-900">Calendario</h2>
+        <Button size="sm" onClick={() => setShowCreate(true)} className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white gap-1.5">
+          <Plus className="w-4 h-4" /> Nueva Cita
+        </Button>
+      </div>
+
+      {showCreate && (
+        <Card className="bg-white border-gray-200 shadow-sm">
+          <CardHeader className="pb-3">
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-sm font-medium text-gray-700">Nueva Cita</CardTitle>
+              <button onClick={() => setShowCreate(false)} className="text-gray-400 hover:text-gray-700">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="sm:col-span-2">
+                <label className="text-xs text-gray-500 mb-1 block">Titulo</label>
+                <Input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Reunion de seguimiento..." className="bg-white border-gray-200 text-gray-900" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Fecha</label>
+                <Input type="date" value={newDate} onChange={(e) => setNewDate(e.target.value)} className="bg-white border-gray-200 text-gray-900" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Hora</label>
+                <Input type="time" value={newTime} onChange={(e) => setNewTime(e.target.value)} className="bg-white border-gray-200 text-gray-900" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Duracion (min)</label>
+                <Input type="number" value={newDuration} onChange={(e) => setNewDuration(e.target.value)} className="bg-white border-gray-200 text-gray-900" />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Notas</label>
+                <Input value={newNotes} onChange={(e) => setNewNotes(e.target.value)} placeholder="Opcional..." className="bg-white border-gray-200 text-gray-900" />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => createMutation.mutate()} disabled={!newTitle.trim() || !newDate || createMutation.isPending} className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white">
+                {createMutation.isPending ? "Creando..." : "Crear Cita"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setShowCreate(false)} className="border-gray-200 text-gray-600">
+                Cancelar
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Calendar grid */}
@@ -210,8 +340,24 @@ export default function CalendarPage() {
                   className="rounded-lg border border-gray-100 p-3 hover:border-[#2FA4A9]/30 transition-colors cursor-pointer"
                   onClick={() => apt.contactId && navigate(`/admin/contacts/${apt.contactId}`)}
                 >
-                  <p className="text-sm font-medium text-gray-900 truncate">{apt.contactName}</p>
-                  <p className="text-xs text-gray-500 truncate">{apt.contactCompany}</p>
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900 truncate">{apt.contactName}</p>
+                      <p className="text-xs text-gray-500 truncate">{apt.contactCompany}</p>
+                    </div>
+                    {apt.id.startsWith("manual-") && (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const realId = apt.id.replace("manual-", "");
+                          deleteMutation.mutate(realId);
+                        }}
+                        className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0 mt-0.5"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                  </div>
                   <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
                     <span className="flex items-center gap-1">
                       <CalendarIcon className="w-3 h-3" />

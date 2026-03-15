@@ -231,3 +231,20 @@ export const notifications = pgTable("notifications", {
 });
 
 export type Notification = typeof notifications.$inferSelect;
+
+// Appointments (manually created meetings)
+export const appointments = pgTable("appointments", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contactId: varchar("contact_id"),
+  title: text("title").notNull(),
+  date: text("date").notNull(), // YYYY-MM-DD
+  time: text("time").notNull(), // HH:MM or HH:MM AM/PM
+  duration: integer("duration").notNull().default(45), // minutes
+  notes: text("notes"),
+  meetLink: text("meet_link"),
+  googleCalendarEventId: text("google_calendar_event_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type Appointment = typeof appointments.$inferSelect;
+export type InsertAppointment = typeof appointments.$inferInsert;

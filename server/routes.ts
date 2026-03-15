@@ -2,12 +2,12 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments } from "@shared/schema";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
 import { createCalendarEvent } from "./google-calendar";
 import { isEmailConfigured, sendEmail } from "./email-sender";
-import { generateEmailContent, buildMicroReminderEmail, generateContactInsight } from "./email-ai";
+import { generateEmailContent, buildMicroReminderEmail, generateContactInsight, generateWhatsAppMessage } from "./email-ai";
 import { parseFechaCita } from "./date-utils";
 import { requireAuth, hashPassword } from "./auth";
 import { calculateLeadScore } from "./lead-scoring";
@@ -1851,6 +1851,341 @@ export async function registerRoutes(
     } catch (err: any) {
       log(`Error marking all read: ${err?.message}`);
       res.status(500).json({ error: "Error actualizando notificaciones" });
+    }
+  });
+
+  // ============ WHATSAPP ============
+
+  // Generate personalized WhatsApp message for a contact
+  app.post("/api/admin/contacts/:id/whatsapp-message", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const contactId = req.params.id as string;
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId));
+      if (!contact) return res.status(404).json({ error: "Contacto no encontrado" });
+
+      const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId));
+
+      const message = await generateWhatsAppMessage(contact, diagnostic || null);
+
+      // Format phone for WhatsApp (remove spaces, dashes, add +57 if needed)
+      let phone = (contact.telefono || "").replace(/[\s\-\(\)]/g, "");
+      if (phone && !phone.startsWith("+")) {
+        if (phone.startsWith("57")) phone = "+" + phone;
+        else phone = "+57" + phone;
+      }
+
+      // Log activity
+      logActivity(contactId, "whatsapp_sent", `Mensaje WhatsApp generado para ${contact.nombre}`, { phone, messagePreview: message.substring(0, 100) });
+
+      res.json({ message, phone, whatsappUrl: phone ? `https://wa.me/${phone.replace("+", "")}?text=${encodeURIComponent(message)}` : null });
+    } catch (err: any) {
+      log(`Error generating WhatsApp message: ${err?.message}`);
+      res.status(500).json({ error: "Error generando mensaje WhatsApp" });
+    }
+  });
+
+  // ============ GLOBAL SEARCH ============
+
+  app.get("/api/admin/search", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const q = (req.query.q as string || "").trim();
+      if (!q || q.length < 2) return res.json({ contacts: [], deals: [], tasks: [] });
+
+      const pattern = `%${q}%`;
+
+      const contactResults = await db.select({
+        id: contacts.id,
+        nombre: contacts.nombre,
+        empresa: contacts.empresa,
+        email: contacts.email,
+        status: contacts.status,
+        leadScore: contacts.leadScore,
+      }).from(contacts)
+        .where(or(ilike(contacts.nombre, pattern), ilike(contacts.empresa, pattern), ilike(contacts.email, pattern))!)
+        .orderBy(desc(contacts.createdAt))
+        .limit(8);
+
+      const dealResults = await db.select({
+        id: deals.id,
+        title: deals.title,
+        value: deals.value,
+        stage: deals.stage,
+        contactId: deals.contactId,
+      }).from(deals)
+        .where(ilike(deals.title, pattern))
+        .orderBy(desc(deals.createdAt))
+        .limit(5);
+
+      const taskResults = await db.select({
+        id: tasks.id,
+        title: tasks.title,
+        status: tasks.status,
+        contactId: tasks.contactId,
+      }).from(tasks)
+        .where(ilike(tasks.title, pattern))
+        .orderBy(desc(tasks.createdAt))
+        .limit(5);
+
+      res.json({ contacts: contactResults, deals: dealResults, tasks: taskResults });
+    } catch (err: any) {
+      log(`Error global search: ${err?.message}`);
+      res.status(500).json({ error: "Error en búsqueda" });
+    }
+  });
+
+  // ============ EMAIL TEMPLATES MANAGEMENT ============
+
+  app.get("/api/admin/templates", requireAuth, async (_req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const templates = await db.select().from(emailTemplates).orderBy(asc(emailTemplates.sequenceOrder));
+      res.json(templates);
+    } catch (err: any) {
+      log(`Error listing templates: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo templates" });
+    }
+  });
+
+  app.patch("/api/admin/templates/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { subjectPrompt, bodyPrompt, isActive } = req.body;
+      const updates: any = {};
+      if (subjectPrompt !== undefined) updates.subjectPrompt = subjectPrompt;
+      if (bodyPrompt !== undefined) updates.bodyPrompt = bodyPrompt;
+      if (isActive !== undefined) updates.isActive = isActive;
+
+      const [updated] = await db.update(emailTemplates).set(updates).where(eq(emailTemplates.id, req.params.id as string)).returning();
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error updating template: ${err?.message}`);
+      res.status(500).json({ error: "Error actualizando template" });
+    }
+  });
+
+  app.post("/api/admin/templates/:id/preview", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [template] = await db.select().from(emailTemplates).where(eq(emailTemplates.id, req.params.id as string));
+      if (!template) return res.status(404).json({ error: "Template no encontrado" });
+
+      // Generate preview with sample data
+      const sampleData = {
+        empresa: "Empresa Demo",
+        industria: "Tecnología",
+        participante: "Juan Pérez",
+        email: "demo@ejemplo.com",
+        empleados: "11-50",
+        objetivos: ["Automatizar procesos", "Implementar CRM"],
+        herramientas: "Excel, Google Workspace",
+        nivelTech: "Medio",
+        usaIA: "No",
+        areaPrioridad: ["Ventas", "Operaciones"],
+        presupuesto: "$1,000 - $5,000 USD",
+        fechaCita: "2026-03-20",
+        horaCita: "10:00 AM",
+      };
+
+      const { subject, body } = await generateEmailContent(template, sampleData as any);
+      res.json({ subject, body });
+    } catch (err: any) {
+      log(`Error previewing template: ${err?.message}`);
+      res.status(500).json({ error: "Error generando preview" });
+    }
+  });
+
+  app.post("/api/admin/templates/:id/test-send", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { email } = req.body;
+      if (!email) return res.status(400).json({ error: "Email requerido" });
+
+      const [template] = await db.select().from(emailTemplates).where(eq(emailTemplates.id, req.params.id as string));
+      if (!template) return res.status(404).json({ error: "Template no encontrado" });
+
+      const sampleData = {
+        empresa: "Empresa Demo",
+        industria: "Tecnología",
+        participante: "Juan Pérez",
+        objetivos: ["Automatizar procesos"],
+        herramientas: "Excel",
+        nivelTech: "Medio",
+        presupuesto: "$1,000 - $5,000 USD",
+      };
+
+      const { subject, body } = await generateEmailContent(template, sampleData as any);
+      await sendEmail(email, `[TEST] ${subject}`, body);
+      res.json({ success: true, subject });
+    } catch (err: any) {
+      log(`Error test-sending template: ${err?.message}`);
+      res.status(500).json({ error: "Error enviando test" });
+    }
+  });
+
+  // ============ BULK CONTACT ACTIONS ============
+
+  app.post("/api/admin/contacts/bulk", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const { ids, action, payload } = req.body as { ids: string[]; action: string; payload?: any };
+      if (!ids || !Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: "IDs requeridos" });
+
+      let affected = 0;
+
+      for (const id of ids) {
+        try {
+          switch (action) {
+            case "change_status":
+              if (payload?.status) {
+                await db.update(contacts).set({ status: payload.status, substatus: payload.substatus || null }).where(eq(contacts.id, id));
+                logActivity(id, "status_changed", `Status cambiado a "${payload.status}" (acción masiva)`);
+                affected++;
+              }
+              break;
+            case "add_tag":
+              if (payload?.tag) {
+                const [c] = await db.select().from(contacts).where(eq(contacts.id, id));
+                if (c) {
+                  const currentTags = (c.tags as string[]) || [];
+                  if (!currentTags.includes(payload.tag)) {
+                    await db.update(contacts).set({ tags: [...currentTags, payload.tag] }).where(eq(contacts.id, id));
+                    logActivity(id, "contact_edited", `Tag agregado: "${payload.tag}" (acción masiva)`);
+                    affected++;
+                  }
+                }
+              }
+              break;
+            case "opt_out":
+              await db.update(contacts).set({ optedOut: true }).where(eq(contacts.id, id));
+              logActivity(id, "opted_out", "Opt-out via acción masiva");
+              affected++;
+              break;
+          }
+        } catch (err) {
+          log(`Bulk action error for ${id}: ${err}`);
+        }
+      }
+
+      res.json({ success: true, affected });
+    } catch (err: any) {
+      log(`Error bulk action: ${err?.message}`);
+      res.status(500).json({ error: "Error en acción masiva" });
+    }
+  });
+
+  // ============ APPOINTMENTS ============
+
+  app.get("/api/admin/appointments", requireAuth, async (_req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const appts = await db.select().from(appointments).orderBy(desc(appointments.createdAt));
+
+      // Enrich with contact info
+      const contactIds = Array.from(new Set(appts.filter(a => a.contactId).map(a => a.contactId!)));
+      let contactMap: Record<string, { nombre: string; empresa: string }> = {};
+      if (contactIds.length > 0) {
+        const contactList = await db.select().from(contacts)
+          .where(sql`${contacts.id} IN (${sql.join(contactIds.map(id => sql`${id}`), sql`, `)})`);
+        for (const c of contactList) contactMap[c.id] = { nombre: c.nombre, empresa: c.empresa };
+      }
+
+      const enriched = appts.map(a => ({
+        ...a,
+        contactName: a.contactId ? contactMap[a.contactId]?.nombre || "" : "",
+        contactCompany: a.contactId ? contactMap[a.contactId]?.empresa || "" : "",
+      }));
+
+      res.json(enriched);
+    } catch (err: any) {
+      log(`Error listing appointments: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo citas" });
+    }
+  });
+
+  app.post("/api/admin/appointments", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const { contactId, title, date, time, duration, notes } = req.body;
+      if (!title || !date || !time) return res.status(400).json({ error: "title, date y time son requeridos" });
+
+      // Try to create Google Calendar event
+      let meetLink: string | null = null;
+      let eventId: string | null = null;
+      try {
+        const calResult = await createCalendarEvent({
+          diagnosticId: `appt-${Date.now()}`,
+          empresa: title,
+          participante: "",
+          email: "",
+          fechaCita: date,
+          horaCita: time,
+        });
+        if (calResult) {
+          meetLink = calResult.meetLink;
+          eventId = calResult.eventId;
+        }
+      } catch (err) {
+        log(`Calendar event creation failed for appointment: ${err}`);
+      }
+
+      const [appt] = await db.insert(appointments).values({
+        contactId: contactId || null,
+        title,
+        date,
+        time,
+        duration: duration || 45,
+        notes: notes || null,
+        meetLink,
+        googleCalendarEventId: eventId,
+      }).returning();
+
+      if (contactId) {
+        logActivity(contactId, "task_created", `Cita creada: "${title}" — ${date} ${time}`);
+      }
+
+      res.json(appt);
+    } catch (err: any) {
+      log(`Error creating appointment: ${err?.message}`);
+      res.status(500).json({ error: "Error creando cita" });
+    }
+  });
+
+  app.patch("/api/admin/appointments/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const { title, date, time, duration, notes, contactId } = req.body;
+      const updates: any = {};
+      if (title !== undefined) updates.title = title;
+      if (date !== undefined) updates.date = date;
+      if (time !== undefined) updates.time = time;
+      if (duration !== undefined) updates.duration = duration;
+      if (notes !== undefined) updates.notes = notes;
+      if (contactId !== undefined) updates.contactId = contactId;
+
+      const [updated] = await db.update(appointments).set(updates).where(eq(appointments.id, req.params.id as string)).returning();
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error updating appointment: ${err?.message}`);
+      res.status(500).json({ error: "Error actualizando cita" });
+    }
+  });
+
+  app.delete("/api/admin/appointments/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      await db.delete(appointments).where(eq(appointments.id, req.params.id as string));
+      res.json({ success: true });
+    } catch (err: any) {
+      log(`Error deleting appointment: ${err?.message}`);
+      res.status(500).json({ error: "Error eliminando cita" });
     }
   });
 

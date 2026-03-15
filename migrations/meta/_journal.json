@@ -29,6 +29,13 @@
       "when": 1773459838528,
       "tag": "0003_goofy_switch",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1773543126262,
+      "tag": "0004_legal_skullbuster",
+      "breakpoints": true
     }
   ]
 }

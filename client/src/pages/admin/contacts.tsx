@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
+import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -20,13 +21,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { List, LayoutGrid, Mail, Filter, Download, X } from "lucide-react";
+import { List, LayoutGrid, Mail, Filter, Download, X, MessageCircle, Tag, UserX } from "lucide-react";
 
 type Contact = {
   id: string;
   nombre: string;
   empresa: string;
   email: string;
+  telefono: string | null;
   status: string;
   createdAt: string;
   leadScore: number;
@@ -93,6 +95,30 @@ export default function Contacts() {
   const [maxScore, setMaxScore] = useState("");
   const [substatusFilter, setSubstatusFilter] = useState("all");
   const [, navigate] = useLocation();
+  const queryClient = useQueryClient();
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [bulkTag, setBulkTag] = useState("");
+  const [bulkStatus, setBulkStatus] = useState("contacted");
+
+  const bulkMutation = useMutation({
+    mutationFn: async (data: { ids: string[]; action: string; payload: any }) => {
+      await apiRequest("POST", "/api/admin/contacts/bulk", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries();
+      setSelectedIds(new Set());
+      setBulkTag("");
+    },
+  });
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const queryParams = new URLSearchParams();
   queryParams.set("page", String(page));
@@ -139,6 +165,15 @@ export default function Contacts() {
     },
     enabled: view === "pipeline",
   });
+
+  const toggleSelectAll = () => {
+    if (!data?.contacts) return;
+    if (selectedIds.size === data.contacts.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(data.contacts.map(c => c.id)));
+    }
+  };
 
   const paginationStart = data ? (data.pagination.page - 1) * data.pagination.limit + 1 : 0;
   const paginationEnd = data
@@ -271,6 +306,14 @@ export default function Contacts() {
               <Table>
                 <TableHeader>
                   <TableRow className="border-gray-100 hover:bg-transparent">
+                    <TableHead className="w-10">
+                      <input
+                        type="checkbox"
+                        checked={data?.contacts ? selectedIds.size === data.contacts.length && data.contacts.length > 0 : false}
+                        onChange={toggleSelectAll}
+                        className="rounded border-gray-300 text-[#2FA4A9] focus:ring-[#2FA4A9]"
+                      />
+                    </TableHead>
                     <TableHead className="text-gray-500 uppercase text-xs font-medium">Nombre</TableHead>
                     <TableHead className="text-gray-500 uppercase text-xs font-medium">Empresa</TableHead>
                     <TableHead className="text-gray-500 uppercase text-xs font-medium">Email</TableHead>
@@ -278,13 +321,14 @@ export default function Contacts() {
                     <TableHead className="text-gray-500 uppercase text-xs font-medium">Status</TableHead>
                     <TableHead className="text-gray-500 uppercase text-xs font-medium">Emails</TableHead>
                     <TableHead className="text-gray-500 uppercase text-xs font-medium">Fecha</TableHead>
+                    <TableHead className="w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
                     [...Array(5)].map((_, i) => (
                       <TableRow key={i} className="border-gray-100">
-                        {[...Array(7)].map((_, j) => (
+                        {[...Array(9)].map((_, j) => (
                           <TableCell key={j}>
                             <div className="h-4 bg-gray-100 rounded animate-pulse w-20" />
                           </TableCell>
@@ -294,7 +338,7 @@ export default function Contacts() {
                   ) : data?.contacts.length === 0 ? (
                     <TableRow className="border-gray-100">
                       <TableCell
-                        colSpan={7}
+                        colSpan={9}
                         className="text-center text-gray-400 py-8"
                       >
                         No se encontraron contactos
@@ -310,6 +354,14 @@ export default function Contacts() {
                           onClick={() => navigate(`/admin/contacts/${contact.id}`)}
                           className="border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors"
                         >
+                          <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
+                            <input
+                              type="checkbox"
+                              checked={selectedIds.has(contact.id)}
+                              onChange={() => toggleSelect(contact.id)}
+                              className="rounded border-gray-300 text-[#2FA4A9] focus:ring-[#2FA4A9]"
+                            />
+                          </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-3">
                               <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#2FA4A9]/20 to-[#2FA4A9]/5 text-[#2FA4A9] flex items-center justify-center text-xs font-semibold shrink-0">
@@ -359,6 +411,20 @@ export default function Contacts() {
                           <TableCell className="text-gray-500 text-sm">
                             {new Date(contact.createdAt).toLocaleDateString("es-CO")}
                           </TableCell>
+                          <TableCell className="w-10">
+                            {contact.telefono && (
+                              <a
+                                href={`https://wa.me/${contact.telefono.replace(/\D/g, "")}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                onClick={(e) => e.stopPropagation()}
+                                className="text-gray-300 hover:text-green-600 transition-colors"
+                                title="WhatsApp"
+                              >
+                                <MessageCircle className="w-4 h-4" />
+                              </a>
+                            )}
+                          </TableCell>
                         </TableRow>
                       );
                     })
@@ -399,6 +465,70 @@ export default function Contacts() {
                   </Button>
                 </div>
               )}
+            </div>
+          )}
+
+          {selectedIds.size > 0 && (
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white rounded-xl shadow-2xl border border-gray-200 px-6 py-3 flex items-center gap-4">
+              <span className="text-sm font-medium text-gray-700">
+                {selectedIds.size} seleccionado{selectedIds.size > 1 ? "s" : ""}
+              </span>
+              <div className="h-6 w-px bg-gray-200" />
+              <Select value={bulkStatus} onValueChange={setBulkStatus}>
+                <SelectTrigger className="w-36 h-8 text-xs bg-white border-gray-200">
+                  <SelectValue placeholder="Cambiar status" />
+                </SelectTrigger>
+                <SelectContent className="bg-white border-gray-200">
+                  <SelectItem value="lead">Lead</SelectItem>
+                  <SelectItem value="contacted">Contactado</SelectItem>
+                  <SelectItem value="scheduled">Agendado</SelectItem>
+                  <SelectItem value="converted">Convertido</SelectItem>
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                onClick={() => bulkMutation.mutate({ ids: Array.from(selectedIds), action: "change_status", payload: { status: bulkStatus } })}
+                disabled={bulkMutation.isPending}
+                className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white text-xs h-8"
+              >
+                Aplicar
+              </Button>
+              <div className="h-6 w-px bg-gray-200" />
+              <div className="flex items-center gap-1.5">
+                <Input
+                  placeholder="Tag..."
+                  value={bulkTag}
+                  onChange={(e) => setBulkTag(e.target.value)}
+                  className="w-24 h-8 text-xs bg-white border-gray-200"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => bulkTag.trim() && bulkMutation.mutate({ ids: Array.from(selectedIds), action: "add_tag", payload: { tag: bulkTag } })}
+                  disabled={!bulkTag.trim() || bulkMutation.isPending}
+                  className="h-8 text-xs border-gray-200 gap-1"
+                >
+                  <Tag className="w-3 h-3" />
+                  Tag
+                </Button>
+              </div>
+              <div className="h-6 w-px bg-gray-200" />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => bulkMutation.mutate({ ids: Array.from(selectedIds), action: "opt_out", payload: {} })}
+                disabled={bulkMutation.isPending}
+                className="h-8 text-xs border-red-200 text-red-600 hover:bg-red-50 gap-1"
+              >
+                <UserX className="w-3 h-3" />
+                Opt Out
+              </Button>
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="text-gray-400 hover:text-gray-700 ml-2"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
           )}
         </>
