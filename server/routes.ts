@@ -2733,34 +2733,47 @@ ${urls}
   app.post("/api/admin/seed-templates", async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
-      // Deactivate all existing templates
+      // Deactivate ALL existing templates
       const existing = await db.select().from(emailTemplates);
       for (const t of existing) {
         await db.update(emailTemplates).set({ isActive: false }).where(eq(emailTemplates.id, t.id));
       }
-      // Insert only recordatorio_6h (the new one) with correct prompts
-      // Also re-insert all others with updated sequence orders
-      const newTemplates = [
-        { nombre: "recordatorio_6h", subjectPrompt: "fixed", bodyPrompt: "fixed", sequenceOrder: 4, delayDays: 0 },
-      ];
-      // Update sequence orders on existing active templates
-      for (const t of existing) {
-        if (t.nombre === "micro_recordatorio") {
-          await db.update(emailTemplates).set({ sequenceOrder: 5, isActive: true }).where(eq(emailTemplates.id, t.id));
-        } else if (t.nombre === "seguimiento_post") {
-          await db.update(emailTemplates).set({ sequenceOrder: 6, isActive: true }).where(eq(emailTemplates.id, t.id));
-        } else {
-          // Re-activate all others as-is
-          await db.update(emailTemplates).set({ isActive: true }).where(eq(emailTemplates.id, t.id));
+
+      // Only activate the 8 correct templates with proper sequence orders
+      const wanted: Record<string, number> = {
+        confirmacion: 0,
+        caso_exito: 1,
+        insight_educativo: 2,
+        prep_agenda: 3,
+        recordatorio_6h: 4,
+        micro_recordatorio: 5,
+        seguimiento_post: 6,
+        abandono: 99,
+      };
+
+      // For each wanted template, find the LATEST one by name and activate with correct order
+      const activated: string[] = [];
+      for (const [nombre, order] of Object.entries(wanted)) {
+        const matches = existing.filter(t => t.nombre === nombre);
+        if (matches.length > 0) {
+          // Activate the last one (most recent), keep others deactivated
+          const latest = matches[matches.length - 1];
+          await db.update(emailTemplates).set({ isActive: true, sequenceOrder: order }).where(eq(emailTemplates.id, latest.id));
+          activated.push(nombre);
         }
       }
-      // Insert the new template
-      for (const t of newTemplates) {
-        await db.insert(emailTemplates).values(t);
+
+      // Insert recordatorio_6h if it doesn't exist yet
+      if (!activated.includes("recordatorio_6h")) {
+        await db.insert(emailTemplates).values({
+          nombre: "recordatorio_6h", subjectPrompt: "fixed", bodyPrompt: "fixed", sequenceOrder: 4, delayDays: 0,
+        });
+        activated.push("recordatorio_6h");
       }
+
       // Get final state
       const final = await db.select().from(emailTemplates).where(eq(emailTemplates.isActive, true)).orderBy(asc(emailTemplates.sequenceOrder));
-      res.json({ success: true, templates: final.map(t => ({ nombre: t.nombre, order: t.sequenceOrder })) });
+      res.json({ success: true, active: final.map(t => ({ nombre: t.nombre, order: t.sequenceOrder })) });
     } catch (err: any) {
       res.status(500).json({ error: err.message });
     }
