@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startEmailScheduler } from "./email-scheduler";
 import { setupAuth } from "./auth";
+import { runMigrations } from "./db";
 
 const app = express();
 const httpServer = createServer(app);
@@ -62,6 +63,9 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Run database migrations
+  await runMigrations();
+
   // Setup auth (session + passport) before routes
   await setupAuth(app);
 
