@@ -353,7 +353,7 @@ const Hero = () => {
             </Reveal>
             
             <Reveal delay={100}>
-              <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-display font-bold leading-[1.15] tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-white to-gray-400">
+              <h1 className="text-2xl sm:text-4xl md:text-5xl lg:text-6xl font-display font-bold leading-[1.2] tracking-tight text-transparent bg-clip-text bg-gradient-to-br from-white via-white to-gray-400">
                 {t.hero.headline}
               </h1>
             </Reveal>
@@ -1307,8 +1307,8 @@ export default function Home() {
         <TargetAudience />
         <SectionDivider variant="teal" />
         <Testimonials />
-        <SectionDivider variant="dot" />
-        <ClientLogos />
+        {/* <SectionDivider variant="dot" />
+        <ClientLogos /> */}
         <SectionDivider variant="teal" />
         <Offer />
         <SectionDivider variant="teal" />
