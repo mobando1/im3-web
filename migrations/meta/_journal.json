@@ -36,6 +36,13 @@
       "when": 1773543126262,
       "tag": "0004_legal_skullbuster",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1773728900000,
+      "tag": "0005_thick_veda",
+      "breakpoints": true
     }
   ]
 }
