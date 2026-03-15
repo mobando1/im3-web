@@ -36,10 +36,10 @@ INSTRUCCIONES ESPECÍFICAS:
 
 CONTENIDO OBLIGATORIO:
 1. Abre con un dato o situación que capture atención sobre {industria}
-2. Describe tendencias reales del sector — NO inventes nombres de empresas ni cifras específicas ficticias. Usa frases como "empresas del sector", "negocios similares en {industria}":
-   - El problema que tenían (relacionado con sus áreas prioritarias: {areaPrioridad})
-   - La solución de IA/automatización implementada
-   - Resultado medible (ej: "redujo 40% tiempos de procesamiento", "aumentó 25% conversión")
+2. Describe tendencias reales del sector con FUENTES VERIFICABLES (cita McKinsey, Gartner, Forrester, Deloitte, HBR, etc.):
+   - El problema que enfrentan empresas de {industria} (relacionado con {areaPrioridad})
+   - La solución de IA/automatización que están adoptando en el sector
+   - Resultado con fuente (ej: "según McKinsey (2024), las empresas que automatizan procesos reducen costos operativos entre 20-40%")
 3. Puente: "En tu sesión del {fechaCita} exploraremos oportunidades similares para {empresa}"
 4. NO incluir CTA de venta — el valor ES el contenido
 
@@ -67,8 +67,8 @@ CONTENIDO OBLIGATORIO:
 2. Tres insights específicos y accionables:
    - Cada uno con título en bold y 1-2 líneas de explicación
    - Relacionados con sus áreas prioritarias ({areaPrioridad}) y objetivos ({objetivos})
-   - Incluir al menos una tendencia reciente verificable del sector
-   - Hablar en términos generales del sector, NO inventar nombres de empresas ni datos ficticios
+   - Incluir al menos una estadística con fuente verificable (McKinsey, Gartner, Forrester, Deloitte, HBR, Statista)
+   - Ejemplo: "Según Gartner (2024), el 75% de las empresas adoptarán IA generativa para 2026"
 3. Cómo IM3 se diferencia: "Lo que hacemos diferente es que no solo identificamos oportunidades — diseñamos la hoja de ruta completa para implementarlas"
 4. Cierre: "El {fechaCita} profundizaremos en cómo aplicar esto en {empresa}"
 

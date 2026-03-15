@@ -29,7 +29,7 @@ Reglas:
 - Color primario header: background con linear-gradient(135deg,#0F172A,#1E293B) — azul oscuro tech
 - Color para links y CTAs: #3B82F6 (azul vibrante)
 - Color para botones CTA: background:#3B82F6, color:#fff
-- Los casos de éxito deben ser tendencias generales de la industria, NO inventes nombres de empresas específicas ni datos exactos ficticios. Usa frases como "empresas del sector", "negocios similares"
+- Cuando menciones datos, estadísticas o tendencias, SIEMPRE cita la fuente real (ej: "según McKinsey (2024)", "Gartner reporta que...", "un estudio de Harvard Business Review"). Solo usa fuentes verificables como McKinsey, Gartner, Forrester, Deloitte, BCG, HBR, MIT, Statista, Bloomberg, Reuters. Si no estás seguro de un dato específico, habla en términos generales del sector sin inventar cifras
 - Firma: "— Equipo IM3 Systems"
 - NO incluyas footer de unsubscribe — se agrega automáticamente
 - NO uses placeholders como {empresa} — usa los datos reales del contexto`;
@@ -336,6 +336,14 @@ export async function generateDailyNewsDigest(language: string = "es"): Promise<
     day: "numeric",
   });
 
+  // Fetch real news from RSS feeds
+  const { fetchTechNews } = await import("./news-scraper");
+  const realNews = await fetchTechNews();
+
+  const newsContext = realNews.length > 0
+    ? `\n\nNOTICIAS REALES DE ESTA SEMANA (fuentes verificables):\n${realNews.map((n, i) => `${i + 1}. "${n.title}" — ${n.source} (${n.link})\n   ${n.description}`).join("\n\n")}\n\nIMPORTANTE: Selecciona las 3 noticias más relevantes de la lista anterior. Usa los titulares y fuentes REALES. Incluye el link original en el campo "sourceUrl" y la fuente en "sourceName".`
+    : "\n\nNo se pudieron obtener noticias de RSS. Genera basándote en tendencias recientes verificables de IA/tech, citando fuentes reales (TechCrunch, MIT Technology Review, etc.).";
+
   const blogResponse = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 3000,
@@ -345,12 +353,12 @@ Reglas:
 - Idioma: español latinoamericano
 - Tono: informativo pero accesible, como un colega tech que te cuenta las noticias más relevantes de la semana
 - Cada noticia debe incluir: qué pasó, por qué importa, y cómo una PYME podría aplicarlo
-- Usa datos y nombres reales de empresas/productos cuando sea posible
-- NO inventes noticias — basa tus resúmenes en tendencias y desarrollos reales recientes del mundo de IA y tech
+- SIEMPRE incluye la fuente real y el link original de cada noticia
+- Basa tus resúmenes en las noticias reales proporcionadas — NO inventes
 - Incluye una reflexión final breve conectando las 3 noticias`,
     messages: [{
       role: "user",
-      content: `Genera el resumen de las 3 noticias tech más relevantes de esta semana (${today}).
+      content: `Genera el resumen de las 3 noticias tech más relevantes de esta semana (${today}).${newsContext}
 
 Responde SOLO con un JSON válido (sin markdown, sin backticks):
 {
@@ -359,9 +367,11 @@ Responde SOLO con un JSON válido (sin markdown, sin backticks):
   "tags": ["tag1", "tag2", "tag3"],
   "news": [
     {
-      "headline": "Titular de la noticia",
+      "headline": "Titular de la noticia (basado en el real)",
       "summary": "2-3 oraciones explicando qué pasó",
-      "takeaway": "1 oración sobre cómo aplica a una PYME"
+      "takeaway": "1 oración sobre cómo aplica a una PYME",
+      "sourceName": "Nombre de la fuente (ej: TechCrunch)",
+      "sourceUrl": "URL del artículo original"
     }
   ],
   "closing": "Reflexión final de 2 oraciones conectando las 3 noticias"
@@ -379,18 +389,19 @@ Responde SOLO con un JSON válido (sin markdown, sin backticks):
   }
 
   const news = parsed.news || [];
-  const title = parsed.title || `Resumen tech del día`;
-  const excerpt = parsed.excerpt || "Las 3 noticias tech más importantes del día.";
+  const title = parsed.title || `Resumen tech semanal`;
+  const excerpt = parsed.excerpt || "Las 3 noticias tech más importantes de la semana.";
   const tags = parsed.tags || ["noticias", "ia", "tecnología"];
 
-  // Build blog HTML content
+  // Build blog HTML content with source links
   const htmlContent = `<p><em>${excerpt}</em></p>
 ${news.map((n: any, i: number) => `
 <h2>${i + 1}. ${n.headline}</h2>
 <p>${n.summary}</p>
-<p><strong>Para tu negocio:</strong> ${n.takeaway}</p>`).join("\n")}
+<p><strong>Para tu negocio:</strong> ${n.takeaway}</p>
+${n.sourceUrl ? `<p><small>Fuente: <a href="${n.sourceUrl}" target="_blank" rel="noopener">${n.sourceName || "Ver artículo original"}</a></small></p>` : ""}`).join("\n")}
 
-<h2>Reflexión del día</h2>
+<h2>Reflexión de la semana</h2>
 <p>${parsed.closing || ""}</p>
 
 <p>¿Quieres implementar alguna de estas ideas en tu empresa? <a href="https://www.im3systems.com/booking">Agenda un diagnóstico gratuito</a> y exploramos juntos las oportunidades.</p>`;
@@ -408,7 +419,8 @@ ${news.map((n: any, i: number) => `
     <div style="margin-bottom:24px;padding-bottom:24px;${i < news.length - 1 ? "border-bottom:1px solid #eee" : ""}">
       <h2 style="font-size:16px;color:#1a1a1a;margin:0 0 8px">${i + 1}. ${n.headline}</h2>
       <p style="font-size:14px;color:#444;margin:0 0 8px;line-height:1.5">${n.summary}</p>
-      <p style="font-size:13px;color:#3B82F6;margin:0;font-weight:600">💡 ${n.takeaway}</p>
+      <p style="font-size:13px;color:#3B82F6;margin:0 0 6px;font-weight:600">💡 ${n.takeaway}</p>
+      ${n.sourceUrl ? `<p style="font-size:12px;color:#999;margin:0"><a href="${n.sourceUrl}" style="color:#999;text-decoration:underline" target="_blank">Fuente: ${n.sourceName || "Ver artículo"}</a></p>` : ""}
     </div>`).join("")}
     ${parsed.closing ? `<p style="font-size:14px;color:#666;margin:20px 0 0;font-style:italic">${parsed.closing}</p>` : ""}
   </div>
