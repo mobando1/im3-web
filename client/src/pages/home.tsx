@@ -33,6 +33,7 @@ import {
 } from "lucide-react";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { NewsletterPopup, useNewsletterSubscribe } from "@/components/NewsletterPopup";
+import { BlogLatestPreview } from "@/components/blog/BlogLatestPreview";
 const im3Logo = "/assets/im3-logo.png";
 
 const InteractiveHeroWidget = lazy(() => import("@/components/InteractiveHeroWidget").then(m => ({ default: m.InteractiveHeroWidget })));
@@ -1266,6 +1267,8 @@ export default function Home() {
         <SectionDivider variant="dot" />
         <Offer />
         <SectionDivider variant="teal" />
+        <BlogLatestPreview />
+        <SectionDivider variant="dot" />
         <FAQ />
         <SectionDivider variant="dot" />
         <NewsletterSection />

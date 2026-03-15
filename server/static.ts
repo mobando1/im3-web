@@ -1,6 +1,9 @@
 import express, { type Express } from "express";
 import fs from "fs";
 import path from "path";
+import { db } from "./db";
+import { blogPosts, blogCategories } from "@shared/schema";
+import { eq, desc } from "drizzle-orm";
 
 const BOT_USER_AGENTS = [
   'googlebot', 'bingbot', 'yandexbot', 'duckduckbot', 'slurp',
@@ -156,6 +159,65 @@ function getCrawlerContent(): string {
   `;
 }
 
+async function getBlogListingContent(): Promise<string> {
+  if (!db) return "";
+  const posts = await db.select().from(blogPosts)
+    .where(eq(blogPosts.status, "published"))
+    .orderBy(desc(blogPosts.publishedAt))
+    .limit(20);
+
+  const articles = posts.map(p => `
+    <article>
+      <h2><a href="/blog/${p.slug}">${p.title}</a></h2>
+      <p>${p.excerpt}</p>
+      <time datetime="${p.publishedAt?.toISOString() || ""}">${p.publishedAt?.toLocaleDateString("es-CO") || ""}</time>
+    </article>`).join("\n");
+
+  return `<main>
+    <h1>Blog — IM3 Systems</h1>
+    <p>Artículos sobre inteligencia artificial, automatización y tecnología para empresas.</p>
+    ${articles}
+  </main>`;
+}
+
+async function getBlogPostContent(slug: string): Promise<string | null> {
+  if (!db) return null;
+  const [post] = await db.select().from(blogPosts)
+    .where(eq(blogPosts.slug, slug));
+
+  if (!post || post.status !== "published") return null;
+
+  let categoryName = "";
+  if (post.categoryId) {
+    const [cat] = await db.select().from(blogCategories).where(eq(blogCategories.id, post.categoryId));
+    if (cat) categoryName = cat.name;
+  }
+
+  return `<main>
+    <article>
+      <h1>${post.title}</h1>
+      ${categoryName ? `<p>Categoría: ${categoryName}</p>` : ""}
+      <p>Por ${post.authorName} · ${post.publishedAt?.toLocaleDateString("es-CO") || ""} · ${post.readTimeMinutes} min lectura</p>
+      <p>${post.excerpt}</p>
+      ${post.content}
+      <script type="application/ld+json">
+      ${JSON.stringify({
+        "@context": "https://schema.org",
+        "@type": "Article",
+        "headline": post.title,
+        "description": post.metaDescription || post.excerpt,
+        "datePublished": post.publishedAt?.toISOString(),
+        "dateModified": post.updatedAt.toISOString(),
+        "author": { "@type": "Person", "name": post.authorName },
+        "publisher": { "@type": "Organization", "name": "IM3 Systems", "@id": "https://www.im3systems.com/#organization" },
+        "image": post.featuredImageUrl || "https://www.im3systems.com/assets/im3-og.png",
+        "mainEntityOfPage": `https://www.im3systems.com/blog/${post.slug}`
+      })}
+      </script>
+    </article>
+  </main>`;
+}
+
 export function serveStatic(app: Express) {
   const distPath = path.resolve(__dirname, "public");
   if (!fs.existsSync(distPath)) {
@@ -167,20 +229,52 @@ export function serveStatic(app: Express) {
   app.use(express.static(distPath));
 
   // fall through to index.html if the file doesn't exist
-  app.use("/{*path}", (req, res) => {
+  app.use("/{*path}", async (req, res) => {
     const indexPath = path.resolve(distPath, "index.html");
     const userAgent = req.headers['user-agent'] || '';
 
     // For bots/crawlers: inject static HTML content so they can index the page
-    if (isBot(userAgent) && (req.path === '/' || req.path === '/booking')) {
-      let html = fs.readFileSync(indexPath, 'utf-8');
-      // Inject crawlable content inside the root div
-      html = html.replace(
-        '<div id="root"></div>',
-        `<div id="root">${getCrawlerContent()}</div>`
-      );
-      res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
-      return;
+    if (isBot(userAgent)) {
+      if (req.path === '/' || req.path === '/booking') {
+        let html = fs.readFileSync(indexPath, 'utf-8');
+        html = html.replace(
+          '<div id="root"></div>',
+          `<div id="root">${getCrawlerContent()}</div>`
+        );
+        res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
+        return;
+      }
+
+      // Blog listing for crawlers
+      if (req.path === '/blog') {
+        try {
+          const blogContent = await getBlogListingContent();
+          let html = fs.readFileSync(indexPath, 'utf-8');
+          html = html.replace(
+            '<div id="root"></div>',
+            `<div id="root">${blogContent}</div>`
+          );
+          res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
+          return;
+        } catch (_) { /* fall through to SPA */ }
+      }
+
+      // Individual blog post for crawlers
+      const blogMatch = req.path.match(/^\/blog\/([a-z0-9-]+)$/);
+      if (blogMatch) {
+        try {
+          const postContent = await getBlogPostContent(blogMatch[1]);
+          if (postContent) {
+            let html = fs.readFileSync(indexPath, 'utf-8');
+            html = html.replace(
+              '<div id="root"></div>',
+              `<div id="root">${postContent}</div>`
+            );
+            res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
+            return;
+          }
+        } catch (_) { /* fall through to SPA */ }
+      }
     }
 
     res.sendFile(indexPath);

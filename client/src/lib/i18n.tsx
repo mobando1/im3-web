@@ -151,6 +151,13 @@ const translations = {
       error: "Algo falló. Intenta de nuevo.",
       dismiss: "Paso por ahora",
     },
+    blog: {
+      sectionTitle: "Desde el blog",
+      sectionSubtitle: "Artículos sobre IA, automatización y tecnología para empresas",
+      viewAll: "Ver todos los artículos",
+      readMore: "Leer más",
+      minRead: "min lectura",
+    },
     footer: {
       copyright: "IM3 Systems",
       whatWeDo: "Qué hacemos",
@@ -308,6 +315,13 @@ const translations = {
       alreadySubscribed: "You're already subscribed.",
       error: "Something went wrong. Try again.",
       dismiss: "Skip for now",
+    },
+    blog: {
+      sectionTitle: "From the blog",
+      sectionSubtitle: "Articles on AI, automation, and technology for businesses",
+      viewAll: "View all articles",
+      readMore: "Read more",
+      minRead: "min read",
     },
     footer: {
       copyright: "IM3 Systems",
