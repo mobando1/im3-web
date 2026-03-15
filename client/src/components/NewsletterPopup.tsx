@@ -4,9 +4,6 @@ import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { useI18n } from "@/lib/i18n";
 import { toast } from "sonner";
 
-const LS_DISMISSED = "newsletter_popup_dismissed";
-const LS_SUBSCRIBED = "newsletter_subscribed";
-
 export function NewsletterPopup() {
   const { t } = useI18n();
   const [open, setOpen] = useState(false);
@@ -14,15 +11,12 @@ export function NewsletterPopup() {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (localStorage.getItem(LS_DISMISSED) || localStorage.getItem(LS_SUBSCRIBED)) return;
-
     const timer = setTimeout(() => setOpen(true), 8000);
     return () => clearTimeout(timer);
   }, []);
 
   const dismiss = () => {
     setOpen(false);
-    localStorage.setItem(LS_DISMISSED, "1");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -45,7 +39,6 @@ export function NewsletterPopup() {
         toast.success(t.newsletter.success);
       }
 
-      localStorage.setItem(LS_SUBSCRIBED, "1");
       setOpen(false);
     } catch {
       toast.error(t.newsletter.error);
@@ -120,7 +113,6 @@ export function useNewsletterSubscribe() {
         toast.info(t.newsletter.alreadySubscribed);
       } else {
         toast.success(t.newsletter.success);
-        localStorage.setItem(LS_SUBSCRIBED, "1");
       }
       return true;
     } catch {
