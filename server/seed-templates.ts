@@ -36,7 +36,7 @@ INSTRUCCIONES ESPECÍFICAS:
 
 CONTENIDO OBLIGATORIO:
 1. Abre con un dato o situación que capture atención sobre {industria}
-2. Describe un caso verosímil (puede ser ficticio pero realista) de una empresa similar:
+2. Describe tendencias reales del sector — NO inventes nombres de empresas ni cifras específicas ficticias. Usa frases como "empresas del sector", "negocios similares en {industria}":
    - El problema que tenían (relacionado con sus áreas prioritarias: {areaPrioridad})
    - La solución de IA/automatización implementada
    - Resultado medible (ej: "redujo 40% tiempos de procesamiento", "aumentó 25% conversión")
@@ -67,8 +67,8 @@ CONTENIDO OBLIGATORIO:
 2. Tres insights específicos y accionables:
    - Cada uno con título en bold y 1-2 líneas de explicación
    - Relacionados con sus áreas prioritarias ({areaPrioridad}) y objetivos ({objetivos})
-   - Incluir al menos un dato concreto o tendencia reciente
-   - Mencionar empresas que han implementado (pueden ser ficticias pero verosímiles) y empresas que no lo han hecho y cómo les ha afectado
+   - Incluir al menos una tendencia reciente verificable del sector
+   - Hablar en términos generales del sector, NO inventar nombres de empresas ni datos ficticios
 3. Cómo IM3 se diferencia: "Lo que hacemos diferente es que no solo identificamos oportunidades — diseñamos la hoja de ruta completa para implementarlas"
 4. Cierre: "El {fechaCita} profundizaremos en cómo aplicar esto en {empresa}"
 
@@ -161,7 +161,7 @@ INSTRUCCIONES ESPECÍFICAS:
 CONTENIDO OBLIGATORIO:
 1. Empatía: "Sabemos que a veces hay interrupciones — tu diagnóstico quedó pendiente"
 2. Recordatorio de valor: diagnóstico personalizado de IA y automatización, gratuito, 45 minutos
-3. Mini caso de éxito: una empresa que después del diagnóstico implementó algo concreto con resultados medibles
+3. Beneficio concreto: qué tipo de resultados logran las empresas que completan el diagnóstico (en términos generales, sin inventar nombres ni cifras específicas)
 4. CTA claro: "Completar mi diagnóstico" con link a https://im3systems.com/booking
 5. Escasez sutil: "Solo realizamos un número limitado de auditorías por semana"
 

@@ -49,7 +49,7 @@ export function NewsletterPopup() {
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) dismiss(); }}>
-      <DialogContent className="sm:max-w-sm rounded-2xl border-[hsl(var(--divider))] bg-[hsl(var(--surface))] p-5">
+      <DialogContent className="sm:max-w-sm rounded-2xl border-[hsl(var(--divider))] bg-[hsl(var(--surface))] p-4 sm:p-5">
         <div className="space-y-3">
           <p className="text-lg font-display font-bold text-[hsl(var(--text-primary))] leading-snug">
             {t.newsletter.popupTitle}

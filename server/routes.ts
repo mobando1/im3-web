@@ -347,7 +347,7 @@ export async function registerRoutes(
             adminEmail,
             `🔔 Nuevo lead: ${data.participante} de ${data.empresa}`,
             `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
-              <div style="background:#2B7A78;padding:20px 28px;border-radius:8px 8px 0 0">
+              <div style="background:#0F172A;padding:20px 28px;border-radius:8px 8px 0 0">
                 <h1 style="color:#fff;font-size:18px;margin:0">Nuevo Lead en IM3 CRM</h1>
               </div>
               <div style="padding:28px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
@@ -361,7 +361,7 @@ export async function registerRoutes(
                   <tr><td style="padding:6px 0;color:#666">Presupuesto</td><td style="padding:6px 0">${data.presupuesto || "—"}</td></tr>
                 </table>
                 <div style="margin-top:20px">
-                  <a href="${baseUrl}/admin/contacts/${contact.id}" style="display:inline-block;background:#2B7A78;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Ver en CRM →</a>
+                  <a href="${baseUrl}/admin/contacts/${contact.id}" style="display:inline-block;background:#3B82F6;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Ver en CRM →</a>
                 </div>
               </div>
             </div>`
@@ -501,7 +501,7 @@ export async function registerRoutes(
                           <tr><td style="padding:8px 0;color:#666">Score actual</td><td style="padding:8px 0;font-weight:600;color:#dc2626">${score}</td></tr>
                         </table>
                         <div style="margin-top:20px;text-align:center">
-                          <a href="${baseUrl}/admin/contacts" style="background:#2B7A78;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px">Ver en CRM →</a>
+                          <a href="${baseUrl}/admin/contacts" style="background:#3B82F6;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px">Ver en CRM →</a>
                         </div>
                       </div>
                     </div>`
@@ -633,11 +633,11 @@ export async function registerRoutes(
       if (!alreadySubscribed && process.env.RESEND_API_KEY) {
         const welcomeSubject = "Bienvenido al newsletter de IM3 Systems";
         const welcomeHtml = `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
-          <div style="background:#2B7A78;padding:24px 32px;border-radius:8px 8px 0 0">
+          <div style="background:#0F172A;padding:24px 32px;border-radius:8px 8px 0 0">
             <h1 style="color:#fff;font-size:22px;margin:0">IM3 Systems</h1>
           </div>
           <div style="padding:32px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
-            <h2 style="color:#2B7A78;font-size:20px;margin:0 0 16px">¡Gracias por suscribirte!</h2>
+            <h2 style="color:#0F172A;font-size:20px;margin:0 0 16px">¡Gracias por suscribirte!</h2>
             <p style="line-height:1.6;margin:0 0 16px">Cada semana recibirás las tendencias más relevantes en inteligencia artificial, automatización y tecnología aplicada a empresas.</p>
             <p style="line-height:1.6;margin:0 0 16px">No solo noticias — te compartiremos <strong>3 pasos concretos</strong> que puedes implementar en tu empresa esa misma semana.</p>
             <p style="line-height:1.6;margin:0 0 24px">Nuestro objetivo: que en 2 minutos de lectura obtengas valor real para tu operación.</p>
@@ -655,7 +655,7 @@ export async function registerRoutes(
           adminEmail,
           `📬 Nueva suscripción newsletter: ${email}`,
           `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
-            <div style="background:#2B7A78;padding:20px 28px;border-radius:8px 8px 0 0">
+            <div style="background:#0F172A;padding:20px 28px;border-radius:8px 8px 0 0">
               <h1 style="color:#fff;font-size:18px;margin:0">Nueva Suscripción Newsletter</h1>
             </div>
             <div style="padding:28px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
@@ -2729,66 +2729,6 @@ ${urls}
     }
   });
 
-  // TEMP: Seed email templates (remove after use)
-  app.post("/api/admin/seed-templates", async (req, res) => {
-    if (!db) return res.status(500).json({ error: "DB not configured" });
-    try {
-      // Deactivate ALL existing templates
-      const existing = await db.select().from(emailTemplates);
-      for (const t of existing) {
-        await db.update(emailTemplates).set({ isActive: false }).where(eq(emailTemplates.id, t.id));
-      }
-
-      // Only activate the 8 correct templates with proper sequence orders
-      const wanted: Record<string, number> = {
-        confirmacion: 0,
-        caso_exito: 1,
-        insight_educativo: 2,
-        prep_agenda: 3,
-        recordatorio_6h: 4,
-        micro_recordatorio: 5,
-        seguimiento_post: 6,
-        abandono: 99,
-      };
-
-      // For each wanted template, find the LATEST one by name and activate with correct order
-      const activated: string[] = [];
-      for (const [nombre, order] of Object.entries(wanted)) {
-        const matches = existing.filter(t => t.nombre === nombre);
-        if (matches.length > 0) {
-          // Activate the last one (most recent), keep others deactivated
-          const latest = matches[matches.length - 1];
-          await db.update(emailTemplates).set({ isActive: true, sequenceOrder: order }).where(eq(emailTemplates.id, latest.id));
-          activated.push(nombre);
-        }
-      }
-
-      // Insert missing templates
-      const missingTemplates: Record<string, { subjectPrompt: string; bodyPrompt: string }> = {
-        recordatorio_6h: { subjectPrompt: "fixed", bodyPrompt: "fixed" },
-        seguimiento_post: {
-          subjectPrompt: "Genera un subject de seguimiento post-reunión para {empresa}. Profesional y con momentum. Máximo 55 caracteres.",
-          bodyPrompt: "Genera un email de SEGUIMIENTO enviado 5 horas después de la sesión de diagnóstico tecnológico con IM3 Systems. Máximo 220 palabras. Estructura: agradecimiento, oportunidades detectadas, próximos pasos, CTA a https://im3systems.com/booking",
-        },
-      };
-      for (const [nombre, prompts] of Object.entries(missingTemplates)) {
-        if (!activated.includes(nombre)) {
-          await db.insert(emailTemplates).values({
-            nombre, subjectPrompt: prompts.subjectPrompt, bodyPrompt: prompts.bodyPrompt,
-            sequenceOrder: wanted[nombre], delayDays: 0,
-          });
-          activated.push(nombre);
-        }
-      }
-
-      // Get final state
-      const final = await db.select().from(emailTemplates).where(eq(emailTemplates.isActive, true)).orderBy(asc(emailTemplates.sequenceOrder));
-      res.json({ success: true, active: final.map(t => ({ nombre: t.nombre, order: t.sequenceOrder })) });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
   // Seed blog with sample posts (one-time use)
   app.post("/api/admin/blog/seed", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
@@ -2984,7 +2924,7 @@ ${urls}
       res.send(`<html>
         <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
         <body style="font-family:sans-serif;max-width:500px;margin:60px auto;text-align:center;color:#333">
-          <h2 style="color:#2B7A78">Te has dado de baja</h2>
+          <h2 style="color:#0F172A">Te has dado de baja</h2>
           <p>No recibirás más emails de esta secuencia.</p>
           <p style="color:#999;font-size:14px">— Equipo IM3 Systems</p>
         </body>

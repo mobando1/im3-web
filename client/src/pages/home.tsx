@@ -570,7 +570,7 @@ const Services = () => {
           </Reveal>
         </div>
 
-        <div className="grid md:grid-cols-3 gap-3 sm:gap-4 md:gap-6">
+        <div className="grid md:grid-cols-3 gap-2 sm:gap-4 md:gap-6">
           {cards.map((card, i) => (
             <Reveal key={i} delay={i * 100}>
               <div className="bg-[hsl(var(--surface))] p-5 sm:p-7 rounded-2xl border border-[hsl(var(--divider))] hover:shadow-lg transition-all duration-300 hover:border-[hsl(var(--teal))] group h-full">
@@ -595,7 +595,7 @@ const LeadMagnet = () => {
   return (
     <section id="diagnostico" className="py-6 px-3 sm:px-4 md:px-8">
       <Reveal>
-        <div className="max-w-5xl mx-auto bg-gradient-to-r from-[hsl(var(--lead-from))] to-[hsl(var(--lead-to))] rounded-2xl sm:rounded-3xl p-6 sm:p-8 md:p-12 border border-[hsl(var(--lead-border))] flex flex-col md:flex-row items-center justify-between gap-6 sm:gap-8 shadow-sm">
+        <div className="max-w-5xl mx-auto bg-gradient-to-r from-[hsl(var(--lead-from))] to-[hsl(var(--lead-to))] rounded-2xl sm:rounded-3xl p-4 sm:p-6 md:p-12 border border-[hsl(var(--lead-border))] flex flex-col md:flex-row items-center justify-between gap-4 sm:gap-8 shadow-sm">
           <div className="md:w-2/3">
             <div className="inline-block px-3 py-1 bg-[hsl(var(--surface))] text-[hsl(var(--teal))] text-xs font-bold rounded-full mb-4 shadow-sm">{t.leadMagnet.badge}</div>
             <h3 className="text-xl sm:text-2xl md:text-3xl font-bold text-[hsl(var(--text-primary))] mb-3 sm:mb-4">{t.leadMagnet.title}</h3>
@@ -696,7 +696,7 @@ const Process = () => {
 
           <Reveal delay={total * 120}>
             <div className={cn(
-              "flex items-center gap-3 pt-4 pl-[22px] transition-all duration-500",
+              "flex items-center gap-3 pt-4 pl-5 sm:pl-[22px] transition-all duration-500",
               hoveredStep === total - 1 ? "opacity-100" : "opacity-30"
             )}>
               <div className="flex items-center gap-2">
@@ -729,7 +729,7 @@ const TargetAudience = () => {
 
         <div className="grid md:grid-cols-2 gap-4 sm:gap-6 md:gap-8">
           <Reveal>
-            <div className="bg-[hsl(var(--hero-bg))] text-white p-6 sm:p-8 md:p-10 rounded-2xl sm:rounded-[2rem] shadow-xl relative overflow-hidden h-full">
+            <div className="bg-[hsl(var(--hero-bg))] text-white p-4 sm:p-6 md:p-10 rounded-2xl sm:rounded-[2rem] shadow-xl relative overflow-hidden h-full">
                <div className="absolute top-0 right-0 w-32 sm:w-48 md:w-64 h-32 sm:h-48 md:h-64 bg-[hsl(var(--teal))] opacity-20 blur-[80px] rounded-full"></div>
                <div className="flex items-center gap-3 mb-7">
                  <CheckCircle2 className="w-7 h-7 text-[hsl(var(--teal))] shrink-0" strokeWidth={2} />
@@ -741,7 +741,7 @@ const TargetAudience = () => {
                      <div className="w-5 h-5 rounded-full border-2 border-[hsl(var(--teal))]/60 flex items-center justify-center shrink-0 mt-0.5">
                        <Check className="w-3 h-3 text-[hsl(var(--teal))]" strokeWidth={3} />
                      </div>
-                     <span className="text-gray-300 leading-relaxed text-[15px]">{item}</span>
+                     <span className="text-gray-300 leading-relaxed text-sm sm:text-[15px]">{item}</span>
                    </li>
                  ))}
                </ul>
@@ -749,7 +749,7 @@ const TargetAudience = () => {
           </Reveal>
 
           <Reveal delay={200}>
-            <div className="bg-[hsl(var(--surface))] p-6 sm:p-8 md:p-10 rounded-2xl sm:rounded-[2rem] border border-[hsl(var(--divider))] shadow-sm h-full">
+            <div className="bg-[hsl(var(--surface))] p-4 sm:p-6 md:p-10 rounded-2xl sm:rounded-[2rem] border border-[hsl(var(--divider))] shadow-sm h-full">
                <div className="flex items-center gap-3 mb-7">
                  <XCircle className="w-7 h-7 text-[hsl(var(--icon-fg-red))]/80 shrink-0" strokeWidth={2} />
                  <h3 className="text-lg sm:text-xl font-bold text-[hsl(var(--text-tertiary))]">{t.targetAudience.notForYou}</h3>
@@ -760,7 +760,7 @@ const TargetAudience = () => {
                      <div className="w-5 h-5 rounded-full border-2 border-[hsl(var(--icon-fg-red))]/30 flex items-center justify-center shrink-0 mt-0.5">
                        <X className="w-3 h-3 text-[hsl(var(--icon-fg-red))]/60" strokeWidth={3} />
                      </div>
-                     <span className="text-muted-foreground leading-relaxed text-[15px]">{item}</span>
+                     <span className="text-muted-foreground leading-relaxed text-sm sm:text-[15px]">{item}</span>
                    </li>
                  ))}
                </ul>
@@ -983,7 +983,7 @@ const ClientLogos = () => {
             Empresas que confían en nosotros
           </p>
         </Reveal>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 sm:gap-5">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-4 md:gap-5">
           {clientCompanies.map((company, i) => (
             <Reveal key={company.name} delay={i * 60}>
               <div className="group relative flex items-center justify-center py-5 sm:py-6 px-4 rounded-xl border border-border/60 bg-card/50 transition-all duration-500 hover:border-border hover:shadow-md hover:scale-[1.03] cursor-default">
@@ -992,7 +992,7 @@ const ClientLogos = () => {
                     "w-8 h-8 sm:w-9 sm:h-9 rounded-lg bg-gradient-to-br flex items-center justify-center shrink-0",
                     company.color
                   )}>
-                    <span className="text-white text-[10px] sm:text-xs font-bold">{company.initials}</span>
+                    <span className="text-white text-xs font-bold">{company.initials}</span>
                   </div>
                   <span className="text-sm sm:text-base font-semibold text-foreground/80 group-hover:text-foreground transition-colors duration-500">
                     {company.name}
@@ -1022,7 +1022,7 @@ const Offer = () => {
 
       <div className="max-w-4xl mx-auto grid md:grid-cols-2 gap-4 sm:gap-6 md:gap-8 mb-8">
         <Reveal delay={100}>
-          <div className="bg-[hsl(var(--surface))] p-6 sm:p-8 rounded-2xl border border-[hsl(var(--divider))] h-full hover:border-[hsl(var(--teal))] transition-all hover:shadow-lg flex flex-col">
+          <div className="bg-[hsl(var(--surface))] p-4 sm:p-6 md:p-8 rounded-2xl border border-[hsl(var(--divider))] h-full hover:border-[hsl(var(--teal))] transition-all hover:shadow-lg flex flex-col">
             <div className="w-12 h-12 bg-[hsl(var(--icon-bg-blue))] rounded-xl flex items-center justify-center text-[hsl(var(--icon-fg-blue))] mb-6">
               <Zap className="w-6 h-6" />
             </div>
@@ -1040,7 +1040,7 @@ const Offer = () => {
         </Reveal>
 
         <Reveal delay={200}>
-          <div className="bg-[hsl(var(--surface))] p-6 sm:p-8 rounded-2xl border border-[hsl(var(--divider))] h-full hover:border-[hsl(var(--teal))] transition-all hover:shadow-lg flex flex-col">
+          <div className="bg-[hsl(var(--surface))] p-4 sm:p-6 md:p-8 rounded-2xl border border-[hsl(var(--divider))] h-full hover:border-[hsl(var(--teal))] transition-all hover:shadow-lg flex flex-col">
             <div className="w-12 h-12 bg-[hsl(var(--icon-bg-amber))] rounded-xl flex items-center justify-center text-[hsl(var(--icon-fg-amber))] mb-6">
               <Users className="w-6 h-6" />
             </div>
@@ -1059,7 +1059,7 @@ const Offer = () => {
       </div>
 
       <Reveal delay={300}>
-        <div className="max-w-3xl mx-auto bg-[hsl(var(--surface-raised))] rounded-2xl p-6 sm:p-8 text-center border border-[hsl(var(--divider))]">
+        <div className="max-w-3xl mx-auto bg-[hsl(var(--surface-raised))] rounded-2xl p-4 sm:p-6 md:p-8 text-center border border-[hsl(var(--divider))]">
           <h3 className="text-lg font-bold mb-2 text-[hsl(var(--text-primary))]">{t.offer.noSalesPressure}</h3>
           <p className="text-muted-foreground mb-6 max-w-lg mx-auto">
             {t.offer.noSalesPressureDesc}
@@ -1097,7 +1097,7 @@ const NewsletterSection = () => {
           <p className="text-sm text-muted-foreground mb-5 max-w-md mx-auto">{t.newsletter.sectionDescription}</p>
 
           {!done ? (
-            <form onSubmit={handleSubmit} className="flex gap-2 max-w-sm mx-auto">
+            <form onSubmit={handleSubmit} className="flex gap-2 w-full max-w-sm mx-auto">
               <input
                 type="email"
                 value={email}
@@ -1143,7 +1143,7 @@ const Contact = () => {
           <div className="flex flex-col sm:flex-row justify-center gap-4">
             <button 
               onClick={() => navigate("/booking")}
-              className="group relative bg-[hsl(var(--teal))] text-white px-8 py-4 rounded-xl font-bold hover:translate-y-[-2px] hover:shadow-[0_10px_25px_-6px_rgba(47,164,169,0.6)] transition-all flex items-center justify-center gap-2 overflow-hidden cta-glow"
+              className="group relative bg-[hsl(var(--teal))] text-white px-5 sm:px-8 py-3 sm:py-4 rounded-xl font-bold hover:translate-y-[-2px] hover:shadow-[0_10px_25px_-6px_rgba(47,164,169,0.6)] transition-all flex items-center justify-center gap-2 overflow-hidden cta-glow"
             >
               <span className="relative z-10 flex items-center justify-center gap-2">
                 <Calendar className="w-5 h-5" /> {t.contact.scheduleCall} <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-1.5" />
@@ -1152,7 +1152,7 @@ const Contact = () => {
             </button>
             <button 
               onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-              className="bg-[hsl(var(--surface))] border border-[hsl(var(--divider))] text-[hsl(var(--text-primary))] px-8 py-4 rounded-xl font-bold hover:bg-[hsl(var(--surface-hover))] transition-all flex items-center justify-center gap-2"
+              className="bg-[hsl(var(--surface))] border border-[hsl(var(--divider))] text-[hsl(var(--text-primary))] px-5 sm:px-8 py-3 sm:py-4 rounded-xl font-bold hover:bg-[hsl(var(--surface-hover))] transition-all flex items-center justify-center gap-2"
             >
               {t.contact.backToTop} <ArrowUpRight className="w-5 h-5" />
             </button>
@@ -1216,7 +1216,7 @@ const Footer = () => {
   return (
     <footer className="py-5 px-3 sm:px-4 md:px-8 border-t border-[hsl(var(--divider))] bg-[hsl(var(--surface))]">
       <div className="max-w-7xl mx-auto">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 sm:gap-8 mb-8">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6 md:gap-8 mb-8">
           <div className="col-span-2 md:col-span-1">
             <img 
               src={im3Logo} 

@@ -106,7 +106,7 @@ export default function BlogPostPage() {
 
       {/* Header */}
       <header className="border-b border-border">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <Link href="/">
             <span className="flex items-center gap-3 cursor-pointer">
               <img src="/assets/im3-logo.png" alt="IM3" className={`h-7 ${isDark ? "brightness-0 invert" : ""}`} />
@@ -121,7 +121,7 @@ export default function BlogPostPage() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-12">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
         <div className="grid grid-cols-1 lg:grid-cols-[1fr_250px] gap-12">
           {/* Article */}
           <article className="max-w-3xl">
@@ -165,7 +165,7 @@ export default function BlogPostPage() {
               <img
                 src={post.featuredImageUrl}
                 alt={post.title}
-                className="w-full rounded-2xl mb-10 max-h-[400px] object-cover"
+                className="w-full rounded-2xl mb-10 max-h-[250px] sm:max-h-[400px] object-cover"
               />
             )}
 

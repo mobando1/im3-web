@@ -357,7 +357,7 @@ async function updateContactSubstatuses() {
                     <tr><td style="padding:8px 0;color:#666">Score</td><td style="padding:8px 0;font-weight:600;color:#dc2626">${contact.leadScore}</td></tr>
                   </table>
                   <div style="margin-top:20px;text-align:center">
-                    <a href="${baseUrl}/admin/contacts" style="background:#2B7A78;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px">Ver en CRM →</a>
+                    <a href="${baseUrl}/admin/contacts" style="background:#3B82F6;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px">Ver en CRM →</a>
                   </div>
                 </div>
               </div>`
@@ -417,7 +417,7 @@ async function checkOverdueTasks() {
                 ${task.description ? `<p style="font-size:14px;color:#666;margin:0 0 12px">${task.description}</p>` : ""}
                 ${task.dueDate ? `<p style="font-size:14px;color:#dc2626;margin:0 0 20px">Venció: ${task.dueDate.toLocaleDateString("es-CO")}</p>` : ""}
                 <div style="text-align:center">
-                  <a href="${baseUrl}/admin/contacts" style="background:#2B7A78;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px">Ver en CRM →</a>
+                  <a href="${baseUrl}/admin/contacts" style="background:#3B82F6;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px">Ver en CRM →</a>
                 </div>
               </div>
             </div>`

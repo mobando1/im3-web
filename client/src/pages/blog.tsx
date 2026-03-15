@@ -55,7 +55,7 @@ export default function BlogPage() {
     <div className="min-h-screen bg-background font-sans">
       {/* Header */}
       <header className="border-b border-border">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <Link href="/">
             <span className="flex items-center gap-3 cursor-pointer">
               <img src="/assets/im3-logo.png" alt="IM3" className={`h-7 ${isDark ? "brightness-0 invert" : ""}`} />
@@ -70,10 +70,10 @@ export default function BlogPage() {
         </div>
       </header>
 
-      <main className="max-w-6xl mx-auto px-6 py-12">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8 sm:py-12">
         {/* Title */}
         <div className="text-center mb-10">
-          <h1 className="text-4xl font-bold text-foreground mb-3">Blog</h1>
+          <h1 className="text-3xl sm:text-4xl font-bold text-foreground mb-3">Blog</h1>
           <p className="text-lg text-muted-foreground max-w-xl mx-auto">
             Artículos sobre IA, automatización y tecnología para empresas
           </p>
@@ -136,7 +136,7 @@ export default function BlogPage() {
             )}
 
             {/* Grid */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 md:gap-6">
               {gridPosts.map(post => (
                 <BlogPostCard key={post.id} {...post} />
               ))}
@@ -176,7 +176,7 @@ export default function BlogPage() {
         )}
 
         {/* Newsletter CTA */}
-        <div className="mt-20 text-center p-10 rounded-2xl bg-gradient-to-br from-[#2FA4A9]/10 to-transparent border border-[#2FA4A9]/20">
+        <div className="mt-12 sm:mt-20 text-center p-5 sm:p-8 md:p-10 rounded-2xl bg-gradient-to-br from-[#2FA4A9]/10 to-transparent border border-[#2FA4A9]/20">
           <h2 className="text-2xl font-bold text-foreground mb-2">No te pierdas ningún artículo</h2>
           <p className="text-muted-foreground mb-6">Recibe las últimas novedades sobre IA y automatización directo en tu inbox.</p>
           <Link href="/#newsletter">

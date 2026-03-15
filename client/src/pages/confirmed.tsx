@@ -258,7 +258,7 @@ export default function Confirmed() {
             className="mb-14 relative"
           >
             {/* Visual Confirmation Status */}
-            <div className="mb-10 relative w-20 h-20" aria-label="Sesión confirmada">
+            <div className="mb-10 relative w-16 h-16 sm:w-20 sm:h-20" aria-label="Sesión confirmada">
                <svg className="w-full h-full" viewBox="0 0 80 80" fill="none" role="img" aria-label="Confirmación verificada">
                  <motion.circle cx="40" cy="40" r="38" stroke="currentColor" strokeWidth="1" className="text-border" />
                  <motion.circle
@@ -424,7 +424,7 @@ export default function Confirmed() {
               </div>
 
               <div>
-                <div className="bg-card border border-border p-6 md:p-8">
+                <div className="bg-card border border-border p-4 sm:p-6 md:p-8">
                   <h3 className="text-base sm:text-lg font-medium mb-2 text-foreground">Qué recibirás después de la auditoría</h3>
                   <p className="text-sm text-muted-foreground mb-6">Tras la sesión elaboramos un diagnóstico inicial, donde podrás ver:</p>
 
@@ -477,7 +477,7 @@ export default function Confirmed() {
                   initial="hidden"
                   whileInView="visible"
                   viewport={{ once: true, margin: "-5%" }}
-                  className="grid grid-cols-1 md:grid-cols-2 gap-5 mb-6"
+                  className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 md:gap-5 mb-6"
                 >
                   {[
                     { title: "Apps a Medida", id: "SYS-01", type: "control" },
@@ -524,7 +524,7 @@ export default function Confirmed() {
 
               <motion.div variants={containerVariants} className="space-y-6">
                 {/* Preparation Card */}
-                <motion.div variants={itemVariants} className="bg-card border border-border p-6 md:p-8">
+                <motion.div variants={itemVariants} className="bg-card border border-border p-4 sm:p-6 md:p-8">
                   <h3 className="text-base sm:text-lg font-medium mb-2 text-foreground">Requerimientos de entrada</h3>
                   <p className="text-muted-foreground text-sm max-w-md">No necesitas preparar presentaciones. Solo necesitamos tu experiencia directa sobre la operación actual.</p>
                 </motion.div>

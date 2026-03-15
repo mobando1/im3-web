@@ -23,9 +23,13 @@ Reglas:
 - No uses emojis excesivos (máximo 1-2 si aplica)
 - Personaliza usando los datos reales del cliente — menciona su industria, herramientas, objetivos
 - No inventes datos que no tengas — si no hay dato, omite esa mención
-- El email debe ser HTML con estilos inline simples (sin CSS externo)
-- Estructura: wrapper div con max-width:600px, font-family:sans-serif
-- Color primario: #2B7A78 (teal) — úsalo para headers y links
+- El email debe ser HTML PURO con estilos inline simples (sin CSS externo)
+- IMPORTANTE: NO envuelvas el HTML en bloques de código markdown (no uses \`\`\`html). Devuelve SOLO el HTML directo.
+- Estructura: wrapper div con max-width:600px, font-family:'Segoe UI',Roboto,sans-serif
+- Color primario header: background con linear-gradient(135deg,#0F172A,#1E293B) — azul oscuro tech
+- Color para links y CTAs: #3B82F6 (azul vibrante)
+- Color para botones CTA: background:#3B82F6, color:#fff
+- Los casos de éxito deben ser tendencias generales de la industria, NO inventes nombres de empresas específicas ni datos exactos ficticios. Usa frases como "empresas del sector", "negocios similares"
 - Firma: "— Equipo IM3 Systems"
 - NO incluyas footer de unsubscribe — se agrega automáticamente
 - NO uses placeholders como {empresa} — usa los datos reales del contexto`;
@@ -78,11 +82,11 @@ export function build6hReminderEmail(
   const subject = `Tu llamada con IM3 es hoy`;
 
   const meetSection = meetLink
-    ? `<p style="margin:0 0 16px"><a href="${meetLink}" style="color:#2B7A78;font-weight:bold;font-size:16px">Link de la reunión →</a></p>`
+    ? `<p style="margin:0 0 16px"><a href="${meetLink}" style="color:#3B82F6;font-weight:bold;font-size:16px">Link de la reunión →</a></p>`
     : "";
 
-  const body = `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
-  <div style="background:#2B7A78;padding:16px 24px;border-radius:8px 8px 0 0">
+  const body = `<div style="max-width:600px;margin:0 auto;font-family:'Segoe UI',Roboto,sans-serif;color:#1a1a1a">
+  <div style="background:linear-gradient(135deg,#0F172A,#1E293B);padding:16px 24px;border-radius:8px 8px 0 0">
     <h1 style="color:#fff;font-size:18px;margin:0">IM3 Systems</h1>
   </div>
   <div style="padding:24px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
@@ -109,11 +113,11 @@ export function buildMicroReminderEmail(
   const subject = `En 1 hora: tu diagnóstico IM3`;
 
   const meetSection = meetLink
-    ? `<p style="margin:0 0 16px"><a href="${meetLink}" style="color:#2B7A78;font-weight:bold;font-size:16px">Unirse a la reunión</a></p>`
+    ? `<p style="margin:0 0 16px"><a href="${meetLink}" style="color:#3B82F6;font-weight:bold;font-size:16px">Unirse a la reunión →</a></p>`
     : "";
 
-  const body = `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
-  <div style="background:#2B7A78;padding:16px 24px;border-radius:8px 8px 0 0">
+  const body = `<div style="max-width:600px;margin:0 auto;font-family:'Segoe UI',Roboto,sans-serif;color:#1a1a1a">
+  <div style="background:linear-gradient(135deg,#0F172A,#1E293B);padding:16px 24px;border-radius:8px 8px 0 0">
     <h1 style="color:#fff;font-size:18px;margin:0">IM3 Systems</h1>
   </div>
   <div style="padding:24px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
@@ -185,7 +189,7 @@ export async function generateEmailContent(
     messages: [
       {
         role: "user",
-        content: `${template.bodyPrompt}\n\n${context}\n\nGenera el email completo en HTML con estilos inline. Wrapper: max-width:600px, font-family:sans-serif. Header con background #2B7A78 y título blanco.`,
+        content: `${template.bodyPrompt}\n\n${context}\n\nGenera el email completo en HTML PURO con estilos inline. NO uses bloques de código markdown. Devuelve SOLO el HTML directo sin \`\`\`html ni \`\`\`. Wrapper: max-width:600px, font-family:'Segoe UI',Roboto,sans-serif. Header con background:linear-gradient(135deg,#0F172A,#1E293B) y título blanco. Links y CTAs en color #3B82F6.`,
       },
     ],
   });
@@ -194,6 +198,9 @@ export async function generateEmailContent(
     bodyResponse.content?.[0]?.type === "text"
       ? bodyResponse.content[0].text.trim()
       : "<p>Error generando contenido</p>";
+
+  // Strip markdown code block wrappers if AI included them
+  body = body.replace(/^```html\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
 
   // Add unsubscribe footer if we have a contactId
   if (contactId) {
@@ -390,10 +397,10 @@ ${news.map((n: any, i: number) => `
 
   // Build email HTML
   const baseUrl = process.env.BASE_URL || "https://www.im3systems.com";
-  const emailHtml = `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
-  <div style="background:#2B7A78;padding:20px 28px;border-radius:8px 8px 0 0">
+  const emailHtml = `<div style="max-width:600px;margin:0 auto;font-family:'Segoe UI',Roboto,sans-serif;color:#1a1a1a">
+  <div style="background:linear-gradient(135deg,#0F172A,#1E293B);padding:20px 28px;border-radius:8px 8px 0 0">
     <h1 style="color:#fff;font-size:18px;margin:0">IM3 Systems — Newsletter</h1>
-    <p style="color:rgba(255,255,255,0.8);font-size:13px;margin:6px 0 0">${today}</p>
+    <p style="color:rgba(255,255,255,0.7);font-size:13px;margin:6px 0 0">${today}</p>
   </div>
   <div style="padding:28px;border:1px solid #e5e5e5;border-top:none">
     <p style="font-size:15px;color:#444;margin:0 0 20px">${excerpt}</p>
@@ -401,12 +408,12 @@ ${news.map((n: any, i: number) => `
     <div style="margin-bottom:24px;padding-bottom:24px;${i < news.length - 1 ? "border-bottom:1px solid #eee" : ""}">
       <h2 style="font-size:16px;color:#1a1a1a;margin:0 0 8px">${i + 1}. ${n.headline}</h2>
       <p style="font-size:14px;color:#444;margin:0 0 8px;line-height:1.5">${n.summary}</p>
-      <p style="font-size:13px;color:#2B7A78;margin:0;font-weight:600">💡 ${n.takeaway}</p>
+      <p style="font-size:13px;color:#3B82F6;margin:0;font-weight:600">💡 ${n.takeaway}</p>
     </div>`).join("")}
     ${parsed.closing ? `<p style="font-size:14px;color:#666;margin:20px 0 0;font-style:italic">${parsed.closing}</p>` : ""}
   </div>
   <div style="padding:20px 28px;text-align:center;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px;background:#f9f9f9">
-    <a href="${baseUrl}/booking" style="background:#2B7A78;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px">Agenda tu diagnóstico gratis →</a>
+    <a href="${baseUrl}/booking" style="background:#3B82F6;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px">Agenda tu diagnóstico gratis →</a>
     <p style="font-size:11px;color:#999;margin:12px 0 0">
       <a href="${baseUrl}/blog" style="color:#999;text-decoration:none">Leer en el blog</a> ·
       <a href="${baseUrl}/api/newsletter/unsubscribe/{{EMAIL}}" style="color:#999;text-decoration:none">Desuscribirse</a>
