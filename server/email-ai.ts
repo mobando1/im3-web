@@ -275,8 +275,8 @@ Responde con este JSON exacto:
 }
 
 /**
- * Generate a daily news digest with 3 AI/automation/tech news summaries.
- * Used for both blog post creation and newsletter email.
+ * Generate a weekly news digest with 3 AI/automation/tech news summaries.
+ * Used for both blog post creation and weekly newsletter email.
  */
 export async function generateDailyNewsDigest(language: string = "es"): Promise<{
   title: string;
@@ -301,22 +301,22 @@ export async function generateDailyNewsDigest(language: string = "es"): Promise<
   const blogResponse = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 3000,
-    system: `Eres un analista tech de IM3 Systems que escribe un resumen diario de noticias sobre inteligencia artificial, automatización y tecnología para empresas en Latinoamérica.
+    system: `Eres un analista tech de IM3 Systems que escribe un resumen semanal de noticias sobre inteligencia artificial, automatización y tecnología para empresas en Latinoamérica.
 
 Reglas:
 - Idioma: español latinoamericano
-- Tono: informativo pero accesible, como un colega tech que te cuenta las noticias del día
+- Tono: informativo pero accesible, como un colega tech que te cuenta las noticias más relevantes de la semana
 - Cada noticia debe incluir: qué pasó, por qué importa, y cómo una PYME podría aplicarlo
 - Usa datos y nombres reales de empresas/productos cuando sea posible
 - NO inventes noticias — basa tus resúmenes en tendencias y desarrollos reales recientes del mundo de IA y tech
 - Incluye una reflexión final breve conectando las 3 noticias`,
     messages: [{
       role: "user",
-      content: `Genera el resumen de 3 noticias tech del día (${today}).
+      content: `Genera el resumen de las 3 noticias tech más relevantes de esta semana (${today}).
 
 Responde SOLO con un JSON válido (sin markdown, sin backticks):
 {
-  "title": "Título del artículo (ej: '3 noticias tech del [fecha corta]')",
+  "title": "Título del artículo (ej: 'Resumen tech semanal — [fecha corta]')",
   "excerpt": "Resumen de 1 oración del artículo completo",
   "tags": ["tag1", "tag2", "tag3"],
   "news": [

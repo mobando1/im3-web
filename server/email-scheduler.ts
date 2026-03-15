@@ -436,11 +436,11 @@ async function generateAndSendDailyNewsletter() {
       .limit(1);
 
     if (existing.length > 0) {
-      log("Newsletter diario ya enviado hoy — omitiendo");
+      log("Newsletter semanal ya enviado esta semana — omitiendo");
       return;
     }
 
-    log("Generando newsletter diario...");
+    log("Generando newsletter semanal...");
 
     // Generate content with AI
     const digest = await generateDailyNewsDigest("es");
@@ -486,7 +486,7 @@ async function generateAndSendDailyNewsletter() {
       .where(eq(newsletterSubscribers.isActive, true));
 
     if (subscribers.length === 0) {
-      log("No hay suscriptores activos — blog post publicado sin envío de email");
+      log("No hay suscriptores activos — blog post publicado sin envio de email");
       await db.insert(newsletterSends).values({
         subject: digest.emailSubject,
         content: digest.emailHtml,
@@ -519,9 +519,9 @@ async function generateAndSendDailyNewsletter() {
       status: "sent",
     });
 
-    log(`Newsletter diario enviado a ${sentCount}/${subscribers.length} suscriptores`);
+    log(`Newsletter semanal enviado a ${sentCount}/${subscribers.length} suscriptores`);
   } catch (err: any) {
-    log(`Error en newsletter diario: ${err?.message || err}`);
+    log(`Error en newsletter semanal: ${err?.message || err}`);
   }
 }
 
@@ -543,8 +543,8 @@ export function startEmailScheduler() {
     await checkOverdueTasks().catch(err => log(`Cron error overdue: ${err}`));
   });
 
-  // Daily newsletter at 7:00 AM Colombia time (12:00 UTC)
-  cron.schedule("0 12 * * *", async () => {
+  // Weekly newsletter every Monday at 7:00 AM Colombia time (12:00 UTC)
+  cron.schedule("0 12 * * 1", async () => {
     await generateAndSendDailyNewsletter().catch(err => log(`Cron error newsletter: ${err}`));
   });
 
@@ -554,5 +554,5 @@ export function startEmailScheduler() {
     processAbandonedEmails();
   }, 10_000);
 
-  log("Email scheduler iniciado (cada 5 min, newsletter diario 7AM COT)");
+  log("Email scheduler iniciado (cada 5 min, newsletter semanal lunes 7AM COT)");
 }
