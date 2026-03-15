@@ -2763,12 +2763,22 @@ ${urls}
         }
       }
 
-      // Insert recordatorio_6h if it doesn't exist yet
-      if (!activated.includes("recordatorio_6h")) {
-        await db.insert(emailTemplates).values({
-          nombre: "recordatorio_6h", subjectPrompt: "fixed", bodyPrompt: "fixed", sequenceOrder: 4, delayDays: 0,
-        });
-        activated.push("recordatorio_6h");
+      // Insert missing templates
+      const missingTemplates: Record<string, { subjectPrompt: string; bodyPrompt: string }> = {
+        recordatorio_6h: { subjectPrompt: "fixed", bodyPrompt: "fixed" },
+        seguimiento_post: {
+          subjectPrompt: "Genera un subject de seguimiento post-reunión para {empresa}. Profesional y con momentum. Máximo 55 caracteres.",
+          bodyPrompt: "Genera un email de SEGUIMIENTO enviado 5 horas después de la sesión de diagnóstico tecnológico con IM3 Systems. Máximo 220 palabras. Estructura: agradecimiento, oportunidades detectadas, próximos pasos, CTA a https://im3systems.com/booking",
+        },
+      };
+      for (const [nombre, prompts] of Object.entries(missingTemplates)) {
+        if (!activated.includes(nombre)) {
+          await db.insert(emailTemplates).values({
+            nombre, subjectPrompt: prompts.subjectPrompt, bodyPrompt: prompts.bodyPrompt,
+            sequenceOrder: wanted[nombre], delayDays: 0,
+          });
+          activated.push(nombre);
+        }
       }
 
       // Get final state
