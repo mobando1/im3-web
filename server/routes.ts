@@ -2643,29 +2643,6 @@ ${urls}
     }
   });
 
-  // One-time: add featured images to blog posts
-  app.post("/api/admin/blog/add-images", async (req, res) => {
-    if (!db) return res.status(500).json({ error: "DB not configured" });
-    try {
-      const images: Record<string, string> = {
-        "ia-transformando-pymes-latinoamerica": "https://images.unsplash.com/photo-1677442136019-21780ecad995?w=1200&h=630&fit=crop&q=80",
-        "5-procesos-automatizar-empresa": "https://images.unsplash.com/photo-1551288049-bebda4e38f71?w=1200&h=630&fit=crop&q=80",
-        "chatbots-whatsapp-ia-negocio": "https://images.unsplash.com/photo-1611606063065-ee7946f0787a?w=1200&h=630&fit=crop&q=80",
-      };
-      const results = [];
-      for (const [slug, url] of Object.entries(images)) {
-        const [updated] = await db.update(blogPosts)
-          .set({ featuredImageUrl: url })
-          .where(eq(blogPosts.slug, slug))
-          .returning({ slug: blogPosts.slug, featuredImageUrl: blogPosts.featuredImageUrl });
-        if (updated) results.push(updated);
-      }
-      res.json({ updated: results.length, results });
-    } catch (err: any) {
-      res.status(500).json({ error: err.message });
-    }
-  });
-
   // Seed blog with sample posts (one-time use)
   app.post("/api/admin/blog/seed", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
