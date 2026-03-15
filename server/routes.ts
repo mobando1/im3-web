@@ -2729,6 +2729,43 @@ ${urls}
     }
   });
 
+  // TEMP: Seed email templates (remove after use)
+  app.post("/api/admin/seed-templates", async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      // Deactivate all existing templates
+      const existing = await db.select().from(emailTemplates);
+      for (const t of existing) {
+        await db.update(emailTemplates).set({ isActive: false }).where(eq(emailTemplates.id, t.id));
+      }
+      // Insert only recordatorio_6h (the new one) with correct prompts
+      // Also re-insert all others with updated sequence orders
+      const newTemplates = [
+        { nombre: "recordatorio_6h", subjectPrompt: "fixed", bodyPrompt: "fixed", sequenceOrder: 4, delayDays: 0 },
+      ];
+      // Update sequence orders on existing active templates
+      for (const t of existing) {
+        if (t.nombre === "micro_recordatorio") {
+          await db.update(emailTemplates).set({ sequenceOrder: 5, isActive: true }).where(eq(emailTemplates.id, t.id));
+        } else if (t.nombre === "seguimiento_post") {
+          await db.update(emailTemplates).set({ sequenceOrder: 6, isActive: true }).where(eq(emailTemplates.id, t.id));
+        } else {
+          // Re-activate all others as-is
+          await db.update(emailTemplates).set({ isActive: true }).where(eq(emailTemplates.id, t.id));
+        }
+      }
+      // Insert the new template
+      for (const t of newTemplates) {
+        await db.insert(emailTemplates).values(t);
+      }
+      // Get final state
+      const final = await db.select().from(emailTemplates).where(eq(emailTemplates.isActive, true)).orderBy(asc(emailTemplates.sequenceOrder));
+      res.json({ success: true, templates: final.map(t => ({ nombre: t.nombre, order: t.sequenceOrder })) });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // Seed blog with sample posts (one-time use)
   app.post("/api/admin/blog/seed", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
