@@ -8,7 +8,7 @@ import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
 import { createCalendarEvent } from "./google-calendar";
 import { isEmailConfigured, sendEmail } from "./email-sender";
-import { generateEmailContent, buildMicroReminderEmail, generateContactInsight, generateWhatsAppMessage } from "./email-ai";
+import { generateEmailContent, buildMicroReminderEmail, build6hReminderEmail, generateDailyNewsDigest, generateContactInsight, generateWhatsAppMessage } from "./email-ai";
 import { parseFechaCita } from "./date-utils";
 import { requireAuth, hashPassword } from "./auth";
 import { calculateLeadScore } from "./lead-scoring";
@@ -2179,6 +2179,83 @@ export async function registerRoutes(
     } catch (err: any) {
       log(`Error test-sending template: ${err?.message}`);
       res.status(500).json({ error: "Error enviando test" });
+    }
+  });
+
+  // ============ TEST FULL EMAIL SEQUENCE ============
+
+  app.post("/api/admin/test-full-sequence", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const targetEmail = "info@im3systems.com";
+
+    const sampleData: any = {
+      empresa: "Café & Aroma S.A.S",
+      industria: "Alimentos y bebidas",
+      participante: "Marcela Torres",
+      anosOperacion: "8",
+      empleados: "12",
+      ciudades: "Medellín",
+      objetivos: ["Automatizar pedidos", "Control de inventario"],
+      resultadoEsperado: "Reducir pérdidas de inventario y agilizar pedidos de proveedores",
+      productos: "Café de especialidad, bebidas artesanales, pastelería",
+      herramientas: "Excel, WhatsApp Business",
+      nivelTech: "Básico",
+      usaIA: "No",
+      comodidadTech: "Media",
+      areaPrioridad: ["Inventario", "Ventas"],
+      presupuesto: "$1,000 - $5,000 USD",
+      fechaCita: "2026-03-17",
+      horaCita: "10:00 AM",
+      meetLink: "https://meet.google.com/abc-defg-hij",
+    };
+
+    try {
+      // Get all templates ordered by sequence
+      const templates = await db.select().from(emailTemplates)
+        .orderBy(emailTemplates.sequenceOrder);
+
+      const results: string[] = [];
+      const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+      let step = 1;
+
+      for (const template of templates) {
+        if (template.sequenceOrder === 99) continue; // skip abandono
+
+        let subject: string;
+        let body: string;
+
+        if (template.nombre === "recordatorio_6h") {
+          subject = "Tu sesión de diagnóstico es en 6 horas";
+          body = build6hReminderEmail(sampleData.participante, sampleData.horaCita, sampleData.meetLink);
+        } else if (template.nombre === "micro_recordatorio") {
+          subject = "¡Tu sesión empieza en 1 hora!";
+          body = buildMicroReminderEmail(sampleData.participante, sampleData.meetLink);
+        } else {
+          const generated = await generateEmailContent(template, sampleData);
+          subject = generated.subject;
+          body = generated.body;
+        }
+
+        const prefix = `[TEST ${step}/8]`;
+        await sendEmail(targetEmail, `${prefix} ${subject}`, body);
+        results.push(`${prefix} ${template.nombre}: ${subject}`);
+        log(`Sent ${prefix} ${template.nombre} to ${targetEmail}`);
+        step++;
+        await delay(5000);
+      }
+
+      // Newsletter
+      log("Generating test newsletter...");
+      const digest = await generateDailyNewsDigest("es");
+      const newsletterHtml = digest.emailHtml.replace("{{EMAIL}}", encodeURIComponent(targetEmail));
+      await sendEmail(targetEmail, `[TEST ${step}/8] ${digest.emailSubject}`, newsletterHtml);
+      results.push(`[TEST ${step}/8] Newsletter: ${digest.emailSubject}`);
+      log(`Sent [TEST ${step}/8] Newsletter to ${targetEmail}`);
+
+      res.json({ success: true, sent: results });
+    } catch (err: any) {
+      log(`Error in test-full-sequence: ${err?.message}`);
+      res.status(500).json({ error: err?.message || "Error enviando secuencia" });
     }
   });
 

@@ -64,6 +64,7 @@ export default function TemplatesPage() {
   const [testEmail, setTestEmail] = useState("");
   const [testSendingId, setTestSendingId] = useState<string | null>(null);
   const [testResult, setTestResult] = useState<string | null>(null);
+  const [sendingFullSequence, setSendingFullSequence] = useState(false);
 
   const { data: templates = [], isLoading } = useQuery<Template[]>({
     queryKey: ["/api/admin/templates"],
@@ -91,6 +92,23 @@ export default function TemplatesPage() {
     onSettled: () => setPreviewingId(null),
   });
 
+  const fullSequenceMutation = useMutation({
+    mutationFn: async () => {
+      setSendingFullSequence(true);
+      const res = await apiRequest("POST", "/api/admin/test-full-sequence");
+      return res.json();
+    },
+    onSuccess: (data: { sent: string[] }) => {
+      setTestResult(`Secuencia enviada: ${data.sent.length} emails a info@im3systems.com`);
+      setTimeout(() => setTestResult(null), 10000);
+    },
+    onError: (err: any) => {
+      setTestResult(`Error: ${err?.message || "Error enviando secuencia"}`);
+      setTimeout(() => setTestResult(null), 10000);
+    },
+    onSettled: () => setSendingFullSequence(false),
+  });
+
   const testSendMutation = useMutation({
     mutationFn: async ({ id, email }: { id: string; email: string }) => {
       setTestSendingId(id);
@@ -116,10 +134,27 @@ export default function TemplatesPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Plantillas de Email</h2>
-        <p className="text-sm text-gray-400 mt-0.5">Secuencia automática de emails para nurturing de leads</p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Plantillas de Email</h2>
+          <p className="text-sm text-gray-400 mt-0.5">Secuencia automática de emails para nurturing de leads</p>
+        </div>
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => fullSequenceMutation.mutate()}
+          disabled={sendingFullSequence}
+          className="shrink-0"
+        >
+          <MailCheck className="w-4 h-4 mr-1.5" />
+          {sendingFullSequence ? "Enviando secuencia..." : "Enviar secuencia completa de prueba"}
+        </Button>
       </div>
+      {testResult && (
+        <div className="bg-teal-50 text-teal-700 text-sm px-4 py-2 rounded-lg border border-teal-200">
+          {testResult}
+        </div>
+      )}
 
       {/* Mini flow map */}
       {!isLoading && sorted.length > 0 && (
