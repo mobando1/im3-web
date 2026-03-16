@@ -564,5 +564,15 @@ export function startEmailScheduler() {
     processAbandonedEmails();
   }, 10_000);
 
+  // Catch-up: if today is Monday and newsletter hasn't been sent yet, send it now
+  // (handles server restarts/deploys that cause the cron to miss its window)
+  setTimeout(async () => {
+    const now = new Date();
+    if (now.getUTCDay() === 1) { // Monday in UTC
+      log("Monday catch-up: checking if newsletter was sent today...");
+      await generateAndSendDailyNewsletter().catch(err => log(`Catch-up newsletter error: ${err}`));
+    }
+  }, 15_000);
+
   log("Email scheduler iniciado (cada 5 min, newsletter semanal lunes 7AM COT)");
 }
