@@ -37,7 +37,17 @@ import {
   Store,
   Bot,
   MessageSquare,
-  Workflow
+  Workflow,
+  Truck,
+  Factory,
+  Briefcase,
+  Send,
+  Brain,
+  TrendingUp,
+  CheckCircle,
+  Table2,
+  Mail,
+  CheckSquare
 } from "lucide-react";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { NewsletterPopup, useNewsletterSubscribe } from "@/components/NewsletterPopup";
@@ -1118,6 +1128,365 @@ const TechStack = () => {
   );
 };
 
+const WhatsAppDemo = () => {
+  const { t } = useI18n();
+  const [visibleCount, setVisibleCount] = useState(0);
+  const [isTyping, setIsTyping] = useState(false);
+  const messages = t.whatsappDemo.messages as Array<{ from: string; text: string }>;
+
+  useEffect(() => {
+    if (visibleCount >= messages.length) {
+      const resetTimer = setTimeout(() => { setVisibleCount(0); }, 5000);
+      return () => clearTimeout(resetTimer);
+    }
+    const next = messages[visibleCount];
+    if (next.from === "bot") {
+      setIsTyping(true);
+      const typingTimer = setTimeout(() => {
+        setIsTyping(false);
+        setVisibleCount(c => c + 1);
+      }, 1500);
+      return () => clearTimeout(typingTimer);
+    }
+    const timer = setTimeout(() => setVisibleCount(c => c + 1), 1200);
+    return () => clearTimeout(timer);
+  }, [visibleCount, messages]);
+
+  return (
+    <section className="py-6 sm:py-8 px-3 sm:px-4 md:px-8">
+      <div className="max-w-5xl mx-auto">
+        <Reveal>
+          <div className="text-center mb-6 sm:mb-8">
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-display font-bold text-[hsl(var(--text-primary))] mb-2">{t.whatsappDemo.title}</h2>
+            <p className="text-sm text-muted-foreground">{t.whatsappDemo.subtitle}</p>
+          </div>
+        </Reveal>
+        <Reveal delay={100}>
+          <div className="max-w-sm mx-auto">
+            {/* Phone frame */}
+            <div className="rounded-2xl border border-border/60 bg-card overflow-hidden shadow-xl">
+              {/* WhatsApp header */}
+              <div className="bg-[#075E54] px-4 py-3 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-[#25D366] flex items-center justify-center">
+                  <Bot className="w-4 h-4 text-white" />
+                </div>
+                <div>
+                  <p className="text-white text-sm font-semibold">{t.whatsappDemo.botName}</p>
+                  <p className="text-green-200 text-[11px]">online</p>
+                </div>
+                <CheckCircle className="w-4 h-4 text-[#25D366] ml-auto" />
+              </div>
+              {/* Chat body */}
+              <div className="bg-[#ECE5DD] dark:bg-[#0B141A] p-3 min-h-[320px] space-y-2 relative overflow-hidden" style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%239C92AC' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")" }}>
+                {messages.slice(0, visibleCount).map((msg, i) => (
+                  <div key={i} className={cn("flex", msg.from === "bot" ? "justify-start" : "justify-end")}>
+                    <div className={cn(
+                      "max-w-[80%] rounded-xl px-3 py-2 text-[13px] leading-relaxed shadow-sm",
+                      msg.from === "bot"
+                        ? "bg-white dark:bg-[#202C33] text-gray-800 dark:text-gray-200 rounded-tl-sm"
+                        : "bg-[#DCF8C6] dark:bg-[#005C4B] text-gray-800 dark:text-gray-200 rounded-tr-sm"
+                    )}>
+                      {msg.text}
+                    </div>
+                  </div>
+                ))}
+                {isTyping && (
+                  <div className="flex justify-start">
+                    <div className="bg-white dark:bg-[#202C33] rounded-xl rounded-tl-sm px-4 py-2.5 shadow-sm">
+                      <div className="flex gap-1">
+                        <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+                        <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+                        <div className="w-2 h-2 rounded-full bg-gray-400 animate-bounce" style={{ animationDelay: "300ms" }} />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+};
+
+const BeforeAfter = () => {
+  const { t } = useI18n();
+  const beforeIcons = [Table2, MessageSquare, Brain, CheckSquare];
+  const afterIcons = [Gauge, Bot, TrendingUp, CheckCircle];
+
+  return (
+    <section className="py-6 sm:py-8 px-3 sm:px-4 md:px-8">
+      <div className="max-w-5xl mx-auto">
+        <Reveal>
+          <div className="text-center mb-6 sm:mb-8">
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-display font-bold text-[hsl(var(--text-primary))] mb-2">{t.beforeAfter.title}</h2>
+            <p className="text-sm text-muted-foreground">{t.beforeAfter.subtitle}</p>
+          </div>
+        </Reveal>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {/* Before column */}
+          <Reveal delay={0}>
+            <div className="rounded-xl border border-red-200/40 bg-red-50/30 dark:bg-red-950/10 dark:border-red-800/20 p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <XCircle className="w-5 h-5 text-red-400" />
+                <h3 className="text-base font-bold text-red-500">{t.beforeAfter.before}</h3>
+              </div>
+              <div className="space-y-3">
+                {(t.beforeAfter.items as any[]).map((item: any, i: number) => {
+                  const Icon = beforeIcons[i];
+                  return (
+                    <div key={i} className="flex items-center gap-3 opacity-60">
+                      <Icon className="w-4 h-4 text-red-400 shrink-0" />
+                      <p className="text-sm text-[hsl(var(--text-secondary))] line-through decoration-red-300">{item.before}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </Reveal>
+          {/* After column */}
+          <Reveal delay={200}>
+            <div className="rounded-xl border border-[hsl(var(--teal))]/30 bg-[hsl(var(--teal))]/5 p-5">
+              <div className="flex items-center gap-2 mb-4">
+                <CheckCircle className="w-5 h-5 text-[hsl(var(--teal))]" />
+                <h3 className="text-base font-bold text-[hsl(var(--teal))]">{t.beforeAfter.after}</h3>
+              </div>
+              <div className="space-y-3">
+                {(t.beforeAfter.items as any[]).map((item: any, i: number) => {
+                  const Icon = afterIcons[i];
+                  return (
+                    <div key={i} className="flex items-center gap-3">
+                      <Icon className="w-4 h-4 text-[hsl(var(--teal))] shrink-0" />
+                      <p className="text-sm font-medium text-[hsl(var(--text-primary))]">{item.after}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          </Reveal>
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const industryIconMap: Record<string, any> = {
+  store: Store, truck: Truck, graduation: GraduationCap,
+  factory: Factory, briefcase: Briefcase, utensils: Utensils,
+};
+
+const IndustriesGrid = () => {
+  const { t } = useI18n();
+
+  return (
+    <section className="py-6 sm:py-8 px-3 sm:px-4 md:px-8">
+      <div className="max-w-5xl mx-auto">
+        <Reveal>
+          <div className="text-center mb-6 sm:mb-8">
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-display font-bold text-[hsl(var(--text-primary))] mb-2">{t.industries.title}</h2>
+            <p className="text-sm text-muted-foreground">{t.industries.subtitle}</p>
+          </div>
+        </Reveal>
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          {(t.industries.items as any[]).map((ind: any, i: number) => {
+            const Icon = industryIconMap[ind.icon] || Building2;
+            return (
+              <Reveal key={ind.name} delay={i * 80}>
+                <div className="group p-4 sm:p-5 rounded-xl border border-border/60 bg-card/50 hover:border-[hsl(var(--teal))]/40 hover:shadow-lg transition-all duration-400 text-center h-full">
+                  <div className="w-11 h-11 rounded-xl bg-[hsl(var(--teal))]/10 flex items-center justify-center mx-auto mb-3 group-hover:bg-[hsl(var(--teal))]/20 transition-colors">
+                    <Icon className="w-5 h-5 text-[hsl(var(--teal))]" />
+                  </div>
+                  <h3 className="text-sm font-bold text-[hsl(var(--text-primary))] mb-1">{ind.name}</h3>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{ind.desc}</p>
+                </div>
+              </Reveal>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const integrationTools = [
+  { name: "Google Calendar", icon: Calendar },
+  { name: "Google Drive", icon: Layers },
+  { name: "WhatsApp", icon: MessageSquare },
+  { name: "Gmail", icon: Mail },
+  { name: "Google Sheets", icon: Table2 },
+  { name: "CRMs", icon: Users },
+  { name: "ERPs", icon: Building2 },
+  { name: "Slack", icon: Send },
+  { name: "Dashboards", icon: Gauge },
+  { name: "APIs", icon: Link2 },
+];
+
+const IntegrationLogos = () => {
+  const { t } = useI18n();
+
+  return (
+    <section className="py-6 sm:py-8 px-3 sm:px-4 md:px-8">
+      <div className="max-w-5xl mx-auto">
+        <Reveal>
+          <div className="text-center mb-6 sm:mb-8">
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-display font-bold text-[hsl(var(--text-primary))] mb-2">{t.integrations.title}</h2>
+            <p className="text-sm text-muted-foreground">{t.integrations.subtitle}</p>
+          </div>
+        </Reveal>
+        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+          {integrationTools.map((tool, i) => {
+            const Icon = tool.icon;
+            return (
+              <Reveal key={tool.name} delay={i * 50}>
+                <div className="group flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border/60 bg-card/50 hover:border-[hsl(var(--teal))]/40 hover:shadow-md transition-all duration-300 cursor-default">
+                  <Icon className="w-4 h-4 text-muted-foreground group-hover:text-[hsl(var(--teal))] transition-colors" />
+                  <span className="text-xs sm:text-sm font-medium text-[hsl(var(--text-secondary))] group-hover:text-[hsl(var(--text-primary))] transition-colors">{tool.name}</span>
+                </div>
+              </Reveal>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const AIShowcase = () => {
+  const { t } = useI18n();
+  const [activeDemo, setActiveDemo] = useState(0);
+  const [scoreProgress, setScoreProgress] = useState(0);
+  const [insightStep, setInsightStep] = useState(0);
+  const [emailChars, setEmailChars] = useState(0);
+
+  const emailPreview = "Hola María, basado en tu diagnóstico para FreshBox, preparé un resumen de cómo podemos optimizar tus procesos operativos...";
+  const insights = ["Lead caliente — score 82/100", "3 emails abiertos en la última semana", "Recomendar: agendar demo personalizada", "Industria: Alimentos — alto potencial"];
+  const scoreFactors = [
+    { label: "Presupuesto $5k+", pts: 25 },
+    { label: "50+ empleados", pts: 15 },
+    { label: "Usa IA", pts: 10 },
+    { label: "3 áreas prioritarias", pts: 10 },
+    { label: "2 emails abiertos", pts: 10 },
+    { label: "Cita agendada", pts: 15 },
+  ];
+
+  useEffect(() => {
+    const timer = setInterval(() => setActiveDemo(d => (d + 1) % 3), 6000);
+    return () => clearInterval(timer);
+  }, []);
+
+  useEffect(() => {
+    setScoreProgress(0); setInsightStep(0); setEmailChars(0);
+    if (activeDemo === 0) {
+      let c = 0;
+      const t = setInterval(() => { c += 2; setEmailChars(c); if (c >= emailPreview.length) clearInterval(t); }, 40);
+      return () => clearInterval(t);
+    }
+    if (activeDemo === 1) {
+      let s = 0;
+      const t = setInterval(() => { s++; setScoreProgress(s); if (s >= scoreFactors.length) clearInterval(t); }, 700);
+      return () => clearInterval(t);
+    }
+    if (activeDemo === 2) {
+      let s = 0;
+      const t = setInterval(() => { s++; setInsightStep(s); if (s >= insights.length) clearInterval(t); }, 900);
+      return () => clearInterval(t);
+    }
+  }, [activeDemo]);
+
+  const totalScore = scoreFactors.slice(0, scoreProgress).reduce((s, f) => s + f.pts, 0);
+
+  return (
+    <section className="py-6 sm:py-8 px-3 sm:px-4 md:px-8">
+      <div className="max-w-5xl mx-auto">
+        <Reveal>
+          <div className="text-center mb-6 sm:mb-8">
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-display font-bold text-[hsl(var(--text-primary))] mb-2">{t.aiShowcase.title}</h2>
+            <p className="text-sm text-muted-foreground">{t.aiShowcase.subtitle}</p>
+          </div>
+        </Reveal>
+        {/* Tab selector */}
+        <div className="flex justify-center gap-2 mb-6">
+          {[t.aiShowcase.email.title, t.aiShowcase.scoring.title, t.aiShowcase.insights.title].map((label, i) => (
+            <button key={i} onClick={() => setActiveDemo(i)} className={cn(
+              "px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all",
+              activeDemo === i ? "bg-[hsl(var(--teal))] text-white shadow-md" : "bg-card border border-border/60 text-muted-foreground hover:text-[hsl(var(--text-primary))]"
+            )}>{label}</button>
+          ))}
+        </div>
+        {/* Demo area */}
+        <Reveal delay={100}>
+          <div className="max-w-lg mx-auto rounded-xl border border-border/60 bg-card p-5 min-h-[220px]">
+            {activeDemo === 0 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Mail className="w-4 h-4 text-[hsl(var(--teal))]" />
+                  <p className="text-xs text-muted-foreground">{t.aiShowcase.email.desc}</p>
+                </div>
+                <div className="rounded-lg bg-[hsl(var(--surface))] p-4 border border-border/40">
+                  <p className="text-xs font-semibold text-[hsl(var(--text-primary))] mb-2">Para: maria@freshbox.com</p>
+                  <p className="text-sm text-[hsl(var(--text-secondary))] leading-relaxed font-mono">
+                    {emailPreview.slice(0, emailChars)}
+                    <span className="animate-pulse">|</span>
+                  </p>
+                </div>
+              </div>
+            )}
+            {activeDemo === 1 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <TrendingUp className="w-4 h-4 text-[hsl(var(--teal))]" />
+                  <p className="text-xs text-muted-foreground">{t.aiShowcase.scoring.desc}</p>
+                </div>
+                <div className="flex items-center gap-4 mb-4">
+                  <div className="text-3xl font-display font-bold text-[hsl(var(--teal))]">{totalScore}</div>
+                  <div className="flex-1 h-3 rounded-full bg-[hsl(var(--surface))] overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-[hsl(var(--teal))] to-emerald-400 transition-all duration-700" style={{ width: `${totalScore}%` }} />
+                  </div>
+                  <span className="text-xs text-muted-foreground">/100</span>
+                </div>
+                <div className="space-y-1.5">
+                  {scoreFactors.map((f, i) => (
+                    <div key={i} className={cn("flex items-center gap-2 text-xs transition-all duration-300", i < scoreProgress ? "opacity-100" : "opacity-20")}>
+                      <CheckCircle className={cn("w-3.5 h-3.5 shrink-0", i < scoreProgress ? "text-[hsl(var(--teal))]" : "text-gray-300")} />
+                      <span className="text-[hsl(var(--text-secondary))]">{f.label}</span>
+                      <span className="ml-auto font-semibold text-[hsl(var(--teal))]">+{f.pts}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            {activeDemo === 2 && (
+              <div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Brain className="w-4 h-4 text-[hsl(var(--teal))]" />
+                  <p className="text-xs text-muted-foreground">{t.aiShowcase.insights.desc}</p>
+                </div>
+                {insightStep === 0 && (
+                  <div className="flex items-center justify-center py-8">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Sparkles className="w-4 h-4 animate-spin" />
+                      Analizando contacto...
+                    </div>
+                  </div>
+                )}
+                <div className="space-y-2">
+                  {insights.slice(0, insightStep).map((insight, i) => (
+                    <div key={i} className="flex items-start gap-2 p-2 rounded-lg bg-[hsl(var(--surface))] border border-border/40">
+                      <Sparkles className="w-3.5 h-3.5 text-[hsl(var(--teal))] mt-0.5 shrink-0" />
+                      <p className="text-sm text-[hsl(var(--text-secondary))]">{insight}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </Reveal>
+      </div>
+    </section>
+  );
+};
+
 const Offer = () => {
   const { t } = useI18n();
   const [, navigate] = useLocation();
@@ -1417,14 +1786,24 @@ export default function Home() {
         <SectionDivider variant="dot" />
         <TechStack />
         <SectionDivider variant="teal" />
+        <BeforeAfter />
+        <SectionDivider variant="dot" />
         <TargetAudience />
         <SectionDivider variant="teal" />
+        <WhatsAppDemo />
+        <SectionDivider variant="dot" />
         <Testimonials />
         <SectionDivider variant="dot" />
         <ClientLogos />
         <SectionDivider variant="teal" />
         <CaseStudies />
         <SectionDivider variant="dot" />
+        <IndustriesGrid />
+        <SectionDivider variant="teal" />
+        <IntegrationLogos />
+        <SectionDivider variant="dot" />
+        <AIShowcase />
+        <SectionDivider variant="teal" />
         <Offer />
         <SectionDivider variant="teal" />
         <BlogLatestPreview />
