@@ -11,6 +11,7 @@ export function useAuth() {
     queryFn: getQueryFn({ on401: "returnNull" }),
     retry: false,
     staleTime: 5 * 60 * 1000,
+    refetchOnMount: "always",
   });
 
   const loginMutation = useMutation({

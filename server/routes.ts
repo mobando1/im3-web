@@ -569,8 +569,7 @@ export async function registerRoutes(
     }
 
     if (!db) {
-      res.json({ success: true });
-      return;
+      return res.status(500).json({ error: "Servicio temporalmente no disponible" });
     }
 
     try {

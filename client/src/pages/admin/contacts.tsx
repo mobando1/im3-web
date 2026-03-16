@@ -150,7 +150,7 @@ export default function Contacts() {
     setPage(1);
   };
 
-  const { data, isLoading } = useQuery<ContactsResponse>({
+  const { data, isLoading, error } = useQuery<ContactsResponse>({
     queryKey: [`/api/admin/contacts?${queryParams.toString()}`],
     enabled: view === "list",
   });
@@ -160,8 +160,8 @@ export default function Contacts() {
     queryFn: async () => {
       const params = new URLSearchParams();
       if (search) params.set("search", search);
-      const res = await fetch(`/api/admin/contacts/pipeline?${params.toString()}`);
-      if (!res.ok) throw new Error("Failed to fetch pipeline");
+      const res = await fetch(`/api/admin/contacts/pipeline?${params.toString()}`, { credentials: "include" });
+      if (!res.ok) throw new Error(`${res.status}: Failed to fetch pipeline`);
       return res.json();
     },
     enabled: view === "pipeline",
@@ -336,13 +336,24 @@ export default function Contacts() {
                         ))}
                       </TableRow>
                     ))
+                  ) : error ? (
+                    <TableRow className="border-gray-100">
+                      <TableCell
+                        colSpan={9}
+                        className="text-center text-red-400 py-8"
+                      >
+                        {error.message?.includes("401")
+                          ? "Sesión expirada — recarga la página e inicia sesión"
+                          : "Error al cargar contactos. Verifica la conexión al servidor."}
+                      </TableCell>
+                    </TableRow>
                   ) : data?.contacts.length === 0 ? (
                     <TableRow className="border-gray-100">
                       <TableCell
                         colSpan={9}
                         className="text-center text-gray-400 py-8"
                       >
-                        No se encontraron contactos
+                        No hay contactos aún. Aparecerán cuando alguien se suscriba al newsletter o complete un diagnóstico.
                       </TableCell>
                     </TableRow>
                   ) : (

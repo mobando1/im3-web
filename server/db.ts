@@ -1,6 +1,10 @@
 import { Pool } from "pg";
 import { drizzle, NodePgDatabase } from "drizzle-orm/node-postgres";
+import { scrypt, randomBytes } from "crypto";
+import { promisify } from "util";
 import * as schema from "@shared/schema";
+
+const scryptAsync = promisify(scrypt);
 
 let db: NodePgDatabase<typeof schema> | null = null;
 let pool: Pool | null = null;
@@ -10,8 +14,9 @@ if (process.env.DATABASE_URL) {
     connectionString: process.env.DATABASE_URL,
   });
   db = drizzle(pool, { schema });
+  console.log("✓ Database connected");
 } else {
-  console.warn("⚠ DATABASE_URL not set — diagnostics will only be logged to console");
+  console.error("✗ CRITICAL: DATABASE_URL not set — CRM, newsletter, and email features will NOT work");
 }
 
 export async function runMigrations() {
@@ -72,6 +77,26 @@ export async function runMigrations() {
     `).catch(() => {}); // Ignore if already nullable
 
     console.log("✓ Database tables ensured");
+
+    // Auto-seed admin user if none exists
+    try {
+      const existingUsers = await pool.query('SELECT id FROM users LIMIT 1');
+      if (existingUsers.rows.length === 0) {
+        const username = process.env.ADMIN_USERNAME || "admin";
+        const password = process.env.ADMIN_PASSWORD || "im3admin2024";
+        const salt = randomBytes(16).toString("hex");
+        const buf = (await scryptAsync(password, salt, 64)) as Buffer;
+        const hashedPassword = `${buf.toString("hex")}.${salt}`;
+
+        await pool.query(
+          `INSERT INTO users (id, username, password) VALUES (gen_random_uuid(), $1, $2)`,
+          [username, hashedPassword]
+        );
+        console.log(`✓ Admin user created: ${username}`);
+      }
+    } catch (userErr) {
+      console.error("⚠ Could not auto-seed admin user:", userErr);
+    }
   } catch (err) {
     console.error("✗ Migration failed:", err);
   }
