@@ -41,7 +41,7 @@ CONTENIDO OBLIGATORIO:
    - La solución de IA/automatización que están adoptando en el sector
    - Resultado con fuente (ej: "según McKinsey (2024), las empresas que automatizan procesos reducen costos operativos entre 20-40%")
 3. Puente: "En tu sesión del {fechaCita} exploraremos oportunidades similares para {empresa}"
-4. NO incluir CTA de venta — el valor ES el contenido
+4. Incluye un CTA SUTIL al final — no vendas, ofrece valor. Algo como: "Si quieres explorar oportunidades similares para tu negocio, te hacemos un análisis gratuito con pasos concretos." con link a https://im3systems.com/booking
 
 CONTEXTO PARA PERSONALIZAR:
 - Herramientas actuales: {herramientas}

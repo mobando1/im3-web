@@ -32,7 +32,8 @@ Reglas:
 - Cuando menciones datos, estadísticas o tendencias, SIEMPRE cita la fuente real (ej: "según McKinsey (2024)", "Gartner reporta que...", "un estudio de Harvard Business Review"). Solo usa fuentes verificables como McKinsey, Gartner, Forrester, Deloitte, BCG, HBR, MIT, Statista, Bloomberg, Reuters. Si no estás seguro de un dato específico, habla en términos generales del sector sin inventar cifras
 - Firma: "— Equipo IM3 Systems"
 - NO incluyas footer de unsubscribe — se agrega automáticamente
-- NO uses placeholders como {empresa} — usa los datos reales del contexto`;
+- NO uses placeholders como {empresa} — usa los datos reales del contexto
+- SIEMPRE incluye un CTA sutil al final del email, antes de la firma. No vendas — ofrece valor. El CTA debe invitar a descubrir oportunidades de mejora con una auditoría gratuita. Ejemplo: "¿Quieres saber qué podría funcionar mejor en tu operación? Analizamos tu negocio y te damos una hoja de ruta con pasos concretos — sin costo." con un botón/link a https://www.im3systems.com/booking estilizado con background:#3B82F6, color:#fff, padding:10px 24px, border-radius:6px. El CTA debe sentirse natural dentro del contenido, no como un bloque publicitario.`;
 
 function buildContext(data: Partial<Diagnostic> | null): string {
   if (!data || !data.empresa) {
@@ -404,7 +405,7 @@ ${n.sourceUrl ? `<p><small>Fuente: <a href="${n.sourceUrl}" target="_blank" rel=
 <h2>Reflexión de la semana</h2>
 <p>${parsed.closing || ""}</p>
 
-<p>¿Quieres implementar alguna de estas ideas en tu empresa? <a href="https://www.im3systems.com/booking">Agenda un diagnóstico gratuito</a> y exploramos juntos las oportunidades.</p>`;
+<p>¿Te gustaría saber cuáles de estas tendencias aplican a tu negocio? <a href="https://www.im3systems.com/booking">Te hacemos un análisis gratuito con pasos concretos</a>.</p>`;
 
   // Build email HTML
   const baseUrl = process.env.BASE_URL || "https://www.im3systems.com";
@@ -425,7 +426,7 @@ ${n.sourceUrl ? `<p><small>Fuente: <a href="${n.sourceUrl}" target="_blank" rel=
     ${parsed.closing ? `<p style="font-size:14px;color:#666;margin:20px 0 0;font-style:italic">${parsed.closing}</p>` : ""}
   </div>
   <div style="padding:20px 28px;text-align:center;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px;background:#f9f9f9">
-    <a href="${baseUrl}/booking" style="background:#3B82F6;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px">Agenda tu diagnóstico gratis →</a>
+    <a href="${baseUrl}/booking" style="background:#3B82F6;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px">¿Qué podrías automatizar en tu negocio? Descúbrelo gratis →</a>
     <p style="font-size:11px;color:#999;margin:12px 0 0">
       <a href="${baseUrl}/blog" style="color:#999;text-decoration:none">Leer en el blog</a> ·
       <a href="${baseUrl}/api/newsletter/unsubscribe/{{EMAIL}}" style="color:#999;text-decoration:none">Desuscribirse</a>
