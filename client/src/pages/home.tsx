@@ -29,7 +29,15 @@ import {
   Linkedin,
   ChevronsRight,
   Sun,
-  Moon
+  Moon,
+  GraduationCap,
+  ShoppingCart,
+  Building2,
+  Utensils,
+  Store,
+  Bot,
+  MessageSquare,
+  Workflow
 } from "lucide-react";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { NewsletterPopup, useNewsletterSubscribe } from "@/components/NewsletterPopup";
@@ -509,20 +517,26 @@ const CredibilityStrip = () => {
     { num: 45, suffix: "+", label: t.credibility.systemsLabel },
     { num: 6, suffix: "", label: t.credibility.industriesLabel },
     { num: 100, suffix: "%", label: t.credibility.conversionLabel },
+    { num: 6, suffix: "", prefix: "", label: t.credibilityExtra.mvpLabel, displayText: "4-8" },
+    { num: 24, suffix: "/7", label: t.credibilityExtra.chatbotsLabel },
   ];
 
   return (
     <section className="py-4 px-3 sm:px-4 md:px-8">
-      <div className="max-w-3xl mx-auto">
-        <div className="flex items-center justify-center gap-4 sm:gap-10 md:gap-16">
+      <div className="max-w-5xl mx-auto">
+        <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-8 md:gap-12">
           {stats.map((stat, i) => (
             <Reveal key={i} delay={i * 150}>
-              <div className="flex items-center gap-4 sm:gap-10 md:gap-16">
-                <div className="text-center">
-                  <div className="text-2xl sm:text-4xl md:text-5xl font-display font-bold text-[hsl(var(--teal))]">
-                    <AnimatedCounter value={stat.num} suffix={stat.suffix} duration={1200 + i * 300} />
+              <div className="flex items-center gap-4 sm:gap-8 md:gap-12">
+                <div className="text-center min-w-[60px]">
+                  <div className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--teal))]">
+                    {(stat as any).displayText ? (
+                      <span>{(stat as any).displayText}</span>
+                    ) : (
+                      <AnimatedCounter value={stat.num} suffix={stat.suffix} prefix={stat.prefix || ""} duration={1200 + i * 200} />
+                    )}
                   </div>
-                  <div className="text-[10px] sm:text-xs text-muted-foreground mt-1 font-medium tracking-wide">{stat.label}</div>
+                  <div className="text-[10px] sm:text-xs text-muted-foreground mt-1 font-medium tracking-wide max-w-[120px] mx-auto">{stat.label}</div>
                 </div>
                 {i < stats.length - 1 && (
                   <div className="h-8 w-px bg-border/60 hidden sm:block" />
@@ -1007,6 +1021,103 @@ const ClientLogos = () => {
   );
 };
 
+const industryIcons: Record<string, any> = {
+  "Educación": GraduationCap, "Education": GraduationCap,
+  "E-commerce": ShoppingCart,
+  "Servicios": Building2, "Services": Building2,
+  "Empresarial": Building2, "Enterprise": Building2,
+  "Alimentos": Utensils, "Food": Utensils,
+  "Retail": Store,
+};
+
+const CaseStudies = () => {
+  const { t } = useI18n();
+
+  return (
+    <section className="py-6 sm:py-8 px-3 sm:px-4 md:px-8">
+      <div className="max-w-5xl mx-auto">
+        <Reveal>
+          <div className="text-center mb-6 sm:mb-8">
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-display font-bold text-[hsl(var(--text-primary))] mb-2">{t.caseStudies.title}</h2>
+            <p className="text-sm text-muted-foreground">{t.caseStudies.subtitle}</p>
+          </div>
+        </Reveal>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {t.caseStudies.cases.map((c: any, i: number) => {
+            const Icon = industryIcons[c.industria] || Building2;
+            return (
+              <Reveal key={c.empresa} delay={i * 80}>
+                <div className="group relative p-5 rounded-xl border border-border/60 bg-card/50 hover:border-[hsl(var(--teal))]/40 hover:shadow-lg transition-all duration-400 h-full">
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="w-9 h-9 rounded-lg bg-[hsl(var(--teal))]/10 flex items-center justify-center shrink-0 group-hover:bg-[hsl(var(--teal))]/20 transition-colors">
+                      <Icon className="w-4.5 h-4.5 text-[hsl(var(--teal))]" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold text-[hsl(var(--text-primary))]">{c.empresa}</p>
+                      <p className="text-[11px] text-muted-foreground">{c.industria}</p>
+                    </div>
+                  </div>
+                  <p className="text-sm text-[hsl(var(--text-secondary))] mb-3 leading-relaxed">{c.solucion}</p>
+                  <div className="flex items-center gap-2 pt-2 border-t border-border/40">
+                    <ArrowRight className="w-3.5 h-3.5 text-[hsl(var(--teal))] shrink-0" />
+                    <p className="text-xs font-semibold text-[hsl(var(--teal))]">{c.resultado}</p>
+                  </div>
+                </div>
+              </Reveal>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+};
+
+const TechStack = () => {
+  const { t } = useI18n();
+
+  const categories = [
+    { icon: Sparkles, title: t.techStack.ai, items: t.techStack.aiItems, color: "from-violet-500 to-purple-600" },
+    { icon: Link2, title: t.techStack.integrations, items: t.techStack.integrationsItems, color: "from-blue-500 to-cyan-600" },
+    { icon: Workflow, title: t.techStack.automation, items: t.techStack.automationItems, color: "from-emerald-500 to-teal-600" },
+  ];
+
+  return (
+    <section className="py-6 sm:py-8 px-3 sm:px-4 md:px-8">
+      <div className="max-w-5xl mx-auto">
+        <Reveal>
+          <div className="text-center mb-6 sm:mb-8">
+            <h2 className="text-xl sm:text-2xl md:text-3xl font-display font-bold text-[hsl(var(--text-primary))] mb-2">{t.techStack.title}</h2>
+            <p className="text-sm text-muted-foreground">{t.techStack.subtitle}</p>
+          </div>
+        </Reveal>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {categories.map((cat, i) => {
+            const Icon = cat.icon;
+            return (
+              <Reveal key={cat.title} delay={i * 120}>
+                <div className="group p-5 rounded-xl border border-border/60 bg-card/50 hover:border-[hsl(var(--teal))]/40 hover:shadow-lg transition-all duration-400 h-full">
+                  <div className={cn("w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center mb-4", cat.color)}>
+                    <Icon className="w-5 h-5 text-white" />
+                  </div>
+                  <h3 className="text-base font-bold text-[hsl(var(--text-primary))] mb-3">{cat.title}</h3>
+                  <ul className="space-y-2">
+                    {(cat.items as string[]).map((item: string, j: number) => (
+                      <li key={j} className="flex items-start gap-2 text-sm text-[hsl(var(--text-secondary))]">
+                        <Check className="w-3.5 h-3.5 text-[hsl(var(--teal))] mt-0.5 shrink-0" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </Reveal>
+            );
+          })}
+        </div>
+      </div>
+    </section>
+  );
+};
+
 const Offer = () => {
   const { t } = useI18n();
   const [, navigate] = useLocation();
@@ -1304,12 +1415,16 @@ export default function Home() {
         <SectionDivider variant="teal" />
         <Process />
         <SectionDivider variant="dot" />
+        <TechStack />
+        <SectionDivider variant="teal" />
         <TargetAudience />
         <SectionDivider variant="teal" />
         <Testimonials />
-        {/* <SectionDivider variant="dot" />
-        <ClientLogos /> */}
+        <SectionDivider variant="dot" />
+        <ClientLogos />
         <SectionDivider variant="teal" />
+        <CaseStudies />
+        <SectionDivider variant="dot" />
         <Offer />
         <SectionDivider variant="teal" />
         <BlogLatestPreview />
