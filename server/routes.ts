@@ -648,7 +648,21 @@ export async function registerRoutes(
           </div>
         </div>`;
 
-        sendEmail(email, welcomeSubject, welcomeHtml).catch((err) => {
+        sendEmail(email, welcomeSubject, welcomeHtml).then((result) => {
+          // Track welcome email in sentEmails for CRM visibility
+          if (contactId && db) {
+            db.insert(sentEmails).values({
+              contactId,
+              subject: welcomeSubject,
+              body: welcomeHtml,
+              status: "sent",
+              sentAt: new Date(),
+              scheduledFor: new Date(),
+              resendMessageId: result?.messageId || null,
+            }).catch((err) => log(`Error tracking welcome email: ${err}`));
+            logActivity(contactId, "email_sent", "Email de bienvenida al newsletter enviado");
+          }
+        }).catch((err) => {
           log(`Error sending newsletter welcome: ${err}`);
         });
 
