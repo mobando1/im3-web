@@ -2225,11 +2225,13 @@ export async function registerRoutes(
         let body: string;
 
         if (template.nombre === "recordatorio_6h") {
-          subject = "Tu sesión de diagnóstico es en 6 horas";
-          body = build6hReminderEmail(sampleData.participante, sampleData.horaCita, sampleData.meetLink);
+          const result = build6hReminderEmail(sampleData.participante, sampleData.horaCita, sampleData.meetLink, "test");
+          subject = result.subject;
+          body = result.body;
         } else if (template.nombre === "micro_recordatorio") {
-          subject = "¡Tu sesión empieza en 1 hora!";
-          body = buildMicroReminderEmail(sampleData.participante, sampleData.meetLink);
+          const result = buildMicroReminderEmail(sampleData.participante, sampleData.horaCita, sampleData.meetLink, "test");
+          subject = result.subject;
+          body = result.body;
         } else {
           const generated = await generateEmailContent(template, sampleData);
           subject = generated.subject;
