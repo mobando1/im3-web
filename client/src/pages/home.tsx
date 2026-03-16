@@ -46,8 +46,48 @@ import {
   CheckCircle,
   Table2,
   Mail,
-  CheckSquare
+  CheckSquare,
+  Database,
+  Cloud,
+  CreditCard,
+  ShoppingBag,
+  BarChart,
+  Globe,
+  Server,
+  HardDrive,
+  Smartphone,
+  FileSpreadsheet,
+  PieChart,
+  Target,
+  Megaphone,
+  Package,
+  Lock,
+  Terminal,
+  Code,
+  GitBranch,
+  Plug,
+  Bell,
+  Radio,
+  Palette,
+  Image,
+  Mic,
+  Monitor
 } from "lucide-react";
+import {
+  SiWhatsapp, SiSlack, SiDiscord, SiTelegram,
+  SiGmail, SiTwilio,
+  SiGooglecalendar, SiGoogledrive, SiGooglesheets, SiNotion,
+  SiAirtable, SiTrello, SiAsana, SiJira, SiClickup,
+  SiHubspot, SiSalesforce, SiZoho,
+  SiShopify, SiWoocommerce, SiStripe, SiPaypal, SiSquare, SiMercadopago,
+  SiGooglecloud, SiFirebase,
+  SiVercel, SiRailway, SiDocker,
+  SiPostgresql, SiMysql, SiMongodb, SiRedis, SiSupabase,
+  SiOpenai, SiGooglegemini,
+  SiSap, SiQuickbooks, SiXero,
+  SiMailchimp, SiSendgrid, SiMeta, SiGoogleads, SiGoogleanalytics,
+  SiZapier, SiN8N, SiGraphql
+} from "react-icons/si";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { NewsletterPopup, useNewsletterSubscribe } from "@/components/NewsletterPopup";
 import { BlogLatestPreview } from "@/components/blog/BlogLatestPreview";
@@ -1256,44 +1296,181 @@ const IndustriesGrid = () => {
   );
 };
 
-const integrationTools = [
-  { name: "Google Calendar", icon: Calendar },
-  { name: "Google Drive", icon: Layers },
-  { name: "WhatsApp", icon: MessageSquare },
-  { name: "Gmail", icon: Mail },
-  { name: "Google Sheets", icon: Table2 },
-  { name: "CRMs", icon: Users },
-  { name: "ERPs", icon: Building2 },
-  { name: "Slack", icon: Send },
-  { name: "Dashboards", icon: Gauge },
-  { name: "APIs", icon: Link2 },
+const integrationCategories = [
+  {
+    label: "Comunicación",
+    icon: MessageSquare,
+    tools: [
+      { name: "WhatsApp", icon: SiWhatsapp, brandColor: "#25D366" },
+      { name: "Slack", icon: SiSlack, brandColor: "#4A154B" },
+      { name: "Discord", icon: SiDiscord, brandColor: "#5865F2" },
+      { name: "Telegram", icon: SiTelegram, brandColor: "#26A5E4" },
+      { name: "Microsoft Teams", icon: Monitor, brandColor: "#6264A7" },
+      { name: "Gmail", icon: SiGmail, brandColor: "#EA4335" },
+      { name: "Outlook", icon: Mail, brandColor: "#0078D4" },
+      { name: "Twilio", icon: SiTwilio, brandColor: "#F22F46" },
+    ],
+  },
+  {
+    label: "Productividad",
+    icon: Layers,
+    tools: [
+      { name: "Google Calendar", icon: SiGooglecalendar, brandColor: "#4285F4" },
+      { name: "Google Drive", icon: SiGoogledrive, brandColor: "#4285F4" },
+      { name: "Google Sheets", icon: SiGooglesheets, brandColor: "#34A853" },
+      { name: "Notion", icon: SiNotion, brandColor: "#000000" },
+      { name: "Airtable", icon: SiAirtable, brandColor: "#18BFFF" },
+      { name: "Trello", icon: SiTrello, brandColor: "#0052CC" },
+      { name: "Asana", icon: SiAsana, brandColor: "#F06A6A" },
+      { name: "Monday.com", icon: Calendar, brandColor: "#FF3D57" },
+      { name: "Jira", icon: SiJira, brandColor: "#0052CC" },
+      { name: "ClickUp", icon: SiClickup, brandColor: "#7B68EE" },
+    ],
+  },
+  {
+    label: "CRM & Ventas",
+    icon: Users,
+    tools: [
+      { name: "HubSpot", icon: SiHubspot, brandColor: "#FF7A59" },
+      { name: "Salesforce", icon: SiSalesforce, brandColor: "#00A1E0" },
+      { name: "Pipedrive", icon: TrendingUp, brandColor: "#1A1A1A" },
+      { name: "Zoho CRM", icon: SiZoho, brandColor: "#C8202B" },
+      { name: "Freshsales", icon: Sparkles, brandColor: "#F36C3D" },
+    ],
+  },
+  {
+    label: "E-commerce & Pagos",
+    icon: ShoppingBag,
+    tools: [
+      { name: "Shopify", icon: SiShopify, brandColor: "#7AB55C" },
+      { name: "WooCommerce", icon: SiWoocommerce, brandColor: "#96588A" },
+      { name: "Stripe", icon: SiStripe, brandColor: "#635BFF" },
+      { name: "PayPal", icon: SiPaypal, brandColor: "#003087" },
+      { name: "MercadoPago", icon: SiMercadopago, brandColor: "#00B1EA" },
+      { name: "Square", icon: SiSquare, brandColor: "#006AFF" },
+    ],
+  },
+  {
+    label: "Cloud & DevOps",
+    icon: Cloud,
+    tools: [
+      { name: "AWS", icon: Cloud, brandColor: "#FF9900" },
+      { name: "Google Cloud", icon: SiGooglecloud, brandColor: "#4285F4" },
+      { name: "Azure", icon: Cloud, brandColor: "#0078D4" },
+      { name: "Firebase", icon: SiFirebase, brandColor: "#FFCA28" },
+      { name: "Vercel", icon: SiVercel, brandColor: "#000000" },
+      { name: "Railway", icon: SiRailway, brandColor: "#0B0D0E" },
+      { name: "Docker", icon: SiDocker, brandColor: "#2496ED" },
+    ],
+  },
+  {
+    label: "Bases de Datos",
+    icon: Database,
+    tools: [
+      { name: "PostgreSQL", icon: SiPostgresql, brandColor: "#4169E1" },
+      { name: "MySQL", icon: SiMysql, brandColor: "#4479A1" },
+      { name: "MongoDB", icon: SiMongodb, brandColor: "#47A248" },
+      { name: "Redis", icon: SiRedis, brandColor: "#DC382D" },
+      { name: "Supabase", icon: SiSupabase, brandColor: "#3FCF8E" },
+    ],
+  },
+  {
+    label: "IA & Machine Learning",
+    icon: Brain,
+    tools: [
+      { name: "Claude AI", icon: Brain, brandColor: "#D97757" },
+      { name: "OpenAI", icon: SiOpenai, brandColor: "#412991" },
+      { name: "Gemini", icon: SiGooglegemini, brandColor: "#8E75B2" },
+      { name: "Whisper", icon: Mic, brandColor: "#412991" },
+      { name: "LangChain", icon: GitBranch, brandColor: "#1C3C3C" },
+    ],
+  },
+  {
+    label: "ERP & Finanzas",
+    icon: Building2,
+    tools: [
+      { name: "SAP", icon: SiSap, brandColor: "#0FAAFF" },
+      { name: "QuickBooks", icon: SiQuickbooks, brandColor: "#2CA01C" },
+      { name: "Xero", icon: SiXero, brandColor: "#13B5EA" },
+      { name: "Excel", icon: Table2, brandColor: "#217346" },
+      { name: "Power BI", icon: PieChart, brandColor: "#F2C811" },
+    ],
+  },
+  {
+    label: "Marketing",
+    icon: Megaphone,
+    tools: [
+      { name: "Mailchimp", icon: SiMailchimp, brandColor: "#FFE01B" },
+      { name: "SendGrid", icon: SiSendgrid, brandColor: "#1A82E2" },
+      { name: "Meta Ads", icon: SiMeta, brandColor: "#0081FB" },
+      { name: "Google Ads", icon: SiGoogleads, brandColor: "#4285F4" },
+      { name: "Google Analytics", icon: SiGoogleanalytics, brandColor: "#E37400" },
+    ],
+  },
+  {
+    label: "Automatización",
+    icon: Plug,
+    tools: [
+      { name: "Zapier", icon: SiZapier, brandColor: "#FF4A00" },
+      { name: "Make", icon: Plug, brandColor: "#6D00CC" },
+      { name: "n8n", icon: SiN8N, brandColor: "#EA4B71" },
+      { name: "Power Automate", icon: Workflow, brandColor: "#0066FF" },
+      { name: "Webhooks", icon: Bell, brandColor: "#6366F1" },
+      { name: "REST APIs", icon: Code, brandColor: "#10B981" },
+      { name: "GraphQL", icon: SiGraphql, brandColor: "#E10098" },
+    ],
+  },
 ];
 
 const IntegrationLogos = () => {
   const { t } = useI18n();
 
   return (
-    <section className="py-6 sm:py-8 px-3 sm:px-4 md:px-8">
-      <div className="max-w-5xl mx-auto">
+    <section className="py-8 sm:py-12 px-3 sm:px-4 md:px-8">
+      <div className="max-w-6xl mx-auto">
         <Reveal>
-          <div className="text-center mb-6 sm:mb-8">
+          <div className="text-center mb-8 sm:mb-10">
             <h2 className="text-xl sm:text-2xl md:text-3xl font-display font-bold text-[hsl(var(--text-primary))] mb-2">{t.integrations.title}</h2>
-            <p className="text-sm text-muted-foreground">{t.integrations.subtitle}</p>
+            <p className="text-sm sm:text-base text-muted-foreground max-w-2xl mx-auto">{t.integrations.subtitle}</p>
           </div>
         </Reveal>
-        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
-          {integrationTools.map((tool, i) => {
-            const Icon = tool.icon;
+        <div className="space-y-6">
+          {integrationCategories.map((category, catIdx) => {
+            const CatIcon = category.icon;
             return (
-              <Reveal key={tool.name} delay={i * 50}>
-                <div className="group flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border/60 bg-card/50 hover:border-[hsl(var(--teal))]/40 hover:shadow-md transition-all duration-300 cursor-default">
-                  <Icon className="w-4 h-4 text-muted-foreground group-hover:text-[hsl(var(--teal))] transition-colors" />
-                  <span className="text-xs sm:text-sm font-medium text-[hsl(var(--text-secondary))] group-hover:text-[hsl(var(--text-primary))] transition-colors">{tool.name}</span>
+              <Reveal key={category.label} delay={catIdx * 80}>
+                <div>
+                  <div className="flex items-center gap-2 mb-3">
+                    <CatIcon className="w-4 h-4 text-[hsl(var(--teal))]" />
+                    <span className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--teal))]">{category.label}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 sm:gap-3">
+                    {category.tools.map((tool) => {
+                      const Icon = tool.icon;
+                      return (
+                        <div
+                          key={tool.name}
+                          className="group/tool flex items-center gap-2 px-3 py-2 rounded-lg border border-border/60 bg-card/50 hover:shadow-md transition-all duration-300 cursor-default"
+                          style={{ "--brand": tool.brandColor } as React.CSSProperties}
+                        >
+                          <span className="w-4 h-4 flex items-center justify-center text-muted-foreground group-hover/tool:[color:var(--brand)] transition-colors duration-300">
+                            <Icon className="w-4 h-4" />
+                          </span>
+                          <span className="text-xs sm:text-sm font-medium text-[hsl(var(--text-secondary))] group-hover/tool:text-[hsl(var(--text-primary))] transition-colors">{tool.name}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
                 </div>
               </Reveal>
             );
           })}
         </div>
+        <Reveal delay={200}>
+          <p className="text-center text-xs text-muted-foreground mt-8 italic">
+            {t.integrations.more}
+          </p>
+        </Reveal>
       </div>
     </section>
   );
@@ -1720,43 +1897,48 @@ export default function Home() {
     <div className="min-h-screen font-sans bg-background selection:bg-[hsl(var(--teal))] selection:text-white transition-colors duration-300">
       <Header />
       <main>
+        {/* ATENCIÓN — Capturar al visitante */}
         <Hero />
         <LogoStrip />
         <SectionDivider variant="dot" />
         <CredibilityStrip />
-        <SectionDivider variant="teal" />
-        <LeadMagnet />
-        <SectionDivider variant="teal" />
-        <Process />
-        <SectionDivider variant="dot" />
-        <TechStack />
+
+        {/* INTERÉS — Mostrar qué hacemos y por qué importa */}
         <SectionDivider variant="teal" />
         <BeforeAfter />
         <SectionDivider variant="dot" />
-        <TargetAudience />
+        <TechStack />
         <SectionDivider variant="teal" />
         <WhatsAppDemo />
         <SectionDivider variant="dot" />
-        <Testimonials />
-        <SectionDivider variant="dot" />
-        <ClientLogos />
+        <AIShowcase />
+
+        {/* DESEO — Prueba social y credibilidad */}
         <SectionDivider variant="teal" />
         <CaseStudies />
         <SectionDivider variant="dot" />
-        <IndustriesGrid />
+        <Testimonials />
         <SectionDivider variant="teal" />
-        <IntegrationLogos />
+        <IndustriesGrid />
         <SectionDivider variant="dot" />
-        <AIShowcase />
+        <IntegrationLogos />
+        <SectionDivider variant="teal" />
+        <Process />
+
+        {/* ACCIÓN — Convertir */}
+        <SectionDivider variant="dot" />
+        <TargetAudience />
         <SectionDivider variant="teal" />
         <Offer />
-        <SectionDivider variant="teal" />
-        <BlogLatestPreview />
         <SectionDivider variant="dot" />
+        <LeadMagnet />
+        <SectionDivider variant="teal" />
         <FAQ />
         <SectionDivider variant="dot" />
-        <NewsletterSection />
+        <BlogLatestPreview />
         <SectionDivider variant="teal" />
+        <NewsletterSection />
+        <SectionDivider variant="dot" />
         <Contact />
       </main>
       <Footer />

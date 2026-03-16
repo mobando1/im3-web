@@ -197,7 +197,8 @@ const translations = {
     },
     integrations: {
       title: "Nos integramos con todo tu ecosistema",
-      subtitle: "Conectamos las herramientas que tu negocio ya usa.",
+      subtitle: "Conectamos las herramientas que tu negocio ya usa — más de 60 plataformas y servicios.",
+      more: "...y cualquier servicio con API REST, GraphQL, webhooks o SDK disponible.",
     },
     aiShowcase: {
       title: "Inteligencia artificial aplicada a tu operación",
@@ -436,7 +437,8 @@ const translations = {
     },
     integrations: {
       title: "We integrate with your entire ecosystem",
-      subtitle: "We connect the tools your business already uses.",
+      subtitle: "We connect the tools your business already uses — 60+ platforms and services.",
+      more: "...and any service with a REST API, GraphQL, webhooks, or available SDK.",
     },
     aiShowcase: {
       title: "Artificial intelligence applied to your operation",
