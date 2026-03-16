@@ -1141,7 +1141,7 @@ const WhatsAppDemo = () => {
                 <CheckCircle className="w-4 h-4 text-[#25D366] ml-auto" />
               </div>
               {/* Chat body */}
-              <div ref={chatContainerRef} className="bg-[#ECE5DD] dark:bg-[#0B141A] p-3 h-[360px] space-y-2 relative overflow-y-auto" style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%239C92AC' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")" }}>
+              <div ref={chatContainerRef} className="bg-[#ECE5DD] dark:bg-[#0B141A] p-3 h-[300px] sm:h-[360px] space-y-2 relative overflow-y-auto" style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%239C92AC' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")" }}>
                 {messages.slice(0, visibleCount).map((msg, i) => (
                   <div key={i} className={cn("flex", msg.from === "bot" ? "justify-start" : "justify-end")}>
                     <div className={cn(
@@ -1252,7 +1252,7 @@ const IndustriesGrid = () => {
             <p className="text-sm text-muted-foreground">{t.industries.subtitle}</p>
           </div>
         </Reveal>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
           {(t.industries.items as any[]).map((ind: any, i: number) => {
             const Icon = industryIconMap[ind.icon] || Building2;
             return (
@@ -1390,7 +1390,7 @@ const AIShowcase = () => {
           </div>
         </Reveal>
         {/* Tab selector */}
-        <div className="flex justify-center gap-2 mb-6">
+        <div className="flex flex-wrap justify-center gap-2 mb-6">
           {[t.aiShowcase.email.title, t.aiShowcase.scoring.title, t.aiShowcase.insights.title].map((label, i) => (
             <button key={i} onClick={() => setActiveDemo(i)} className={cn(
               "px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all",
@@ -1400,7 +1400,7 @@ const AIShowcase = () => {
         </div>
         {/* Demo area */}
         <Reveal delay={100}>
-          <div className="max-w-lg mx-auto rounded-xl border border-border/60 bg-card p-5 h-[280px] overflow-y-auto">
+          <div className="max-w-lg mx-auto rounded-xl border border-border/60 bg-card p-5 h-[260px] sm:h-[280px] overflow-y-auto">
             {activeDemo === 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
@@ -1423,7 +1423,7 @@ const AIShowcase = () => {
                   <p className="text-xs text-muted-foreground">{t.aiShowcase.scoring.desc}</p>
                 </div>
                 <div className="flex items-center gap-4 mb-4">
-                  <div className="text-3xl font-display font-bold text-[hsl(var(--teal))]">{totalScore}</div>
+                  <div className="text-2xl sm:text-3xl font-display font-bold text-[hsl(var(--teal))]">{totalScore}</div>
                   <div className="flex-1 h-3 rounded-full bg-[hsl(var(--surface))] overflow-hidden">
                     <div className="h-full rounded-full bg-gradient-to-r from-[hsl(var(--teal))] to-emerald-400 transition-all duration-700" style={{ width: `${totalScore}%` }} />
                   </div>
