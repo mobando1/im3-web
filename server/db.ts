@@ -78,24 +78,34 @@ export async function runMigrations() {
 
     console.log("✓ Database tables ensured");
 
-    // Auto-seed admin user if none exists
+    // Ensure admin user exists with correct password
     try {
-      const existingUsers = await pool.query('SELECT id FROM users LIMIT 1');
-      if (existingUsers.rows.length === 0) {
-        const username = process.env.ADMIN_USERNAME || "admin";
-        const password = process.env.ADMIN_PASSWORD || "im3admin2024";
-        const salt = randomBytes(16).toString("hex");
-        const buf = (await scryptAsync(password, salt, 64)) as Buffer;
-        const hashedPassword = `${buf.toString("hex")}.${salt}`;
+      const username = process.env.ADMIN_USERNAME || "admin";
+      const password = process.env.ADMIN_PASSWORD || "im3admin2024";
+      const salt = randomBytes(16).toString("hex");
+      const buf = (await scryptAsync(password, salt, 64)) as Buffer;
+      const hashedPassword = `${buf.toString("hex")}.${salt}`;
 
+      const existingUser = await pool.query(
+        'SELECT id FROM users WHERE username = $1 LIMIT 1',
+        [username]
+      );
+
+      if (existingUser.rows.length === 0) {
         await pool.query(
           `INSERT INTO users (id, username, password) VALUES (gen_random_uuid(), $1, $2)`,
           [username, hashedPassword]
         );
         console.log(`✓ Admin user created: ${username}`);
+      } else {
+        await pool.query(
+          'UPDATE users SET password = $1 WHERE username = $2',
+          [hashedPassword, username]
+        );
+        console.log(`✓ Admin password reset: ${username}`);
       }
     } catch (userErr) {
-      console.error("⚠ Could not auto-seed admin user:", userErr);
+      console.error("⚠ Could not ensure admin user:", userErr);
     }
   } catch (err) {
     console.error("✗ Migration failed:", err);
