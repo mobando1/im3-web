@@ -11,7 +11,6 @@ import {
   Menu, 
   X,
   XCircle, 
-  Activity, 
   Cpu, 
   ShieldCheck, 
   BarChart3, 
@@ -551,58 +550,6 @@ const CredibilityStrip = () => {
                 {i < stats.length - 1 && (
                   <div className="h-8 w-px bg-border/60 hidden sm:block" />
                 )}
-              </div>
-            </Reveal>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-};
-
-const Services = () => {
-  const { t } = useI18n();
-  
-  const cards = [
-    {
-      icon: <Layout className="w-6 h-6" />,
-      title: t.services.internalApps,
-      text: t.services.internalAppsDesc,
-      color: "bg-[hsl(var(--icon-bg-blue))] text-[hsl(var(--icon-fg-blue))]"
-    },
-    {
-      icon: <Zap className="w-6 h-6" />,
-      title: t.services.automation,
-      text: t.services.automationDesc,
-      color: "bg-[hsl(var(--icon-bg-amber))] text-[hsl(var(--icon-fg-amber))]"
-    },
-    {
-      icon: <Activity className="w-6 h-6" />,
-      title: t.services.controlSystems,
-      text: t.services.controlSystemsDesc,
-      color: "bg-[hsl(var(--icon-bg-emerald))] text-[hsl(var(--icon-fg-emerald))]"
-    }
-  ];
-
-  return (
-    <section id="que" className="py-6 sm:py-8 px-3 sm:px-4 md:px-8">
-      <div className="max-w-7xl mx-auto">
-        <div className="text-center max-w-2xl mx-auto mb-10">
-          <Reveal>
-            <h2 className="text-2xl sm:text-3xl md:text-4xl font-display font-bold text-[hsl(var(--text-primary))] mb-3 leading-tight">{t.services.title}</h2>
-            <p className="text-base sm:text-lg text-muted-foreground">{t.services.subtitle}</p>
-          </Reveal>
-        </div>
-
-        <div className="grid md:grid-cols-3 gap-2 sm:gap-4 md:gap-6">
-          {cards.map((card, i) => (
-            <Reveal key={i} delay={i * 100}>
-              <div className="bg-[hsl(var(--surface))] p-5 sm:p-7 rounded-2xl border border-[hsl(var(--divider))] hover:shadow-lg transition-all duration-300 hover:border-[hsl(var(--teal))] group h-full">
-                <div className={`w-11 h-11 rounded-xl ${card.color} flex items-center justify-center mb-5 group-hover:scale-110 transition-transform`}>
-                  {card.icon}
-                </div>
-                <h3 className="text-lg font-bold mb-3 text-[hsl(var(--text-primary))]">{card.title}</h3>
-                <p className="text-sm text-muted-foreground leading-relaxed">{card.text}</p>
               </div>
             </Reveal>
           ))}
@@ -1778,8 +1725,6 @@ export default function Home() {
         <SectionDivider variant="dot" />
         <CredibilityStrip />
         <SectionDivider variant="teal" />
-        <Services />
-        <SectionDivider variant="dot" />
         <LeadMagnet />
         <SectionDivider variant="teal" />
         <Process />
