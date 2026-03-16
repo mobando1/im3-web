@@ -1400,7 +1400,7 @@ const AIShowcase = () => {
         </div>
         {/* Demo area */}
         <Reveal delay={100}>
-          <div className="max-w-lg mx-auto rounded-xl border border-border/60 bg-card p-5 min-h-[220px]">
+          <div className="max-w-lg mx-auto rounded-xl border border-border/60 bg-card p-5 h-[280px] overflow-y-auto">
             {activeDemo === 0 && (
               <div>
                 <div className="flex items-center gap-2 mb-3">
