@@ -61,7 +61,7 @@ export function NewsletterPopup() {
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) dismiss(); }}>
-      <DialogContent className="sm:max-w-[420px] p-0 rounded-2xl border-0 overflow-hidden shadow-2xl bg-transparent [&>button]:hidden">
+      <DialogContent className="sm:max-w-[420px] p-0 gap-0 rounded-2xl border-0 outline-none overflow-hidden shadow-2xl bg-transparent [&>button]:hidden">
         {/* Header with gradient */}
         <div className="relative px-6 pt-7 pb-6 text-center" style={{ background: "linear-gradient(135deg, hsl(210 60% 11%), hsl(210 60% 18%), hsl(182 56% 30%))" }}>
           {/* Close button */}
