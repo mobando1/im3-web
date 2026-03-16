@@ -1090,7 +1090,7 @@ const WhatsAppDemo = () => {
   const { t } = useI18n();
   const [visibleCount, setVisibleCount] = useState(0);
   const [isTyping, setIsTyping] = useState(false);
-  const chatEndRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   const messages = t.whatsappDemo.messages as Array<{ from: string; text: string }>;
 
   useEffect(() => {
@@ -1112,7 +1112,8 @@ const WhatsAppDemo = () => {
   }, [visibleCount, messages]);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const el = chatContainerRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
   }, [visibleCount, isTyping]);
 
   return (
@@ -1140,7 +1141,7 @@ const WhatsAppDemo = () => {
                 <CheckCircle className="w-4 h-4 text-[#25D366] ml-auto" />
               </div>
               {/* Chat body */}
-              <div className="bg-[#ECE5DD] dark:bg-[#0B141A] p-3 h-[360px] space-y-2 relative overflow-y-auto" style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%239C92AC' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")" }}>
+              <div ref={chatContainerRef} className="bg-[#ECE5DD] dark:bg-[#0B141A] p-3 h-[360px] space-y-2 relative overflow-y-auto" style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%239C92AC' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")" }}>
                 {messages.slice(0, visibleCount).map((msg, i) => (
                   <div key={i} className={cn("flex", msg.from === "bot" ? "justify-start" : "justify-end")}>
                     <div className={cn(
@@ -1164,7 +1165,6 @@ const WhatsAppDemo = () => {
                     </div>
                   </div>
                 )}
-                <div ref={chatEndRef} />
               </div>
             </div>
           </div>
