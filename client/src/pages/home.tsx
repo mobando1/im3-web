@@ -2,23 +2,23 @@ import { useEffect, useRef, useState, useCallback, lazy, Suspense } from "react"
 import { Link, useLocation } from "wouter";
 import { cn } from "@/lib/utils";
 import { useI18n } from "@/lib/i18n";
-import { 
-  ArrowRight, 
+import {
+  ArrowRight,
   Check,
   CheckCircle2,
   ChevronDown,
-  ChevronRight, 
-  Menu, 
+  ChevronRight,
+  Menu,
   X,
-  XCircle, 
-  Cpu, 
-  ShieldCheck, 
-  BarChart3, 
-  Clock, 
-  Layout, 
-  Users, 
-  Zap, 
-  FileText, 
+  XCircle,
+  Cpu,
+  ShieldCheck,
+  BarChart3,
+  Clock,
+  Layout,
+  Users,
+  Zap,
+  FileText,
   ArrowUpRight,
   Layers,
   Sparkles,
@@ -46,47 +46,18 @@ import {
   CheckCircle,
   Table2,
   Mail,
-  CheckSquare,
-  Database,
-  Cloud,
-  CreditCard,
-  ShoppingBag,
-  BarChart,
-  Globe,
-  Server,
-  HardDrive,
-  Smartphone,
-  FileSpreadsheet,
-  PieChart,
-  Target,
-  Megaphone,
-  Package,
-  Lock,
-  Terminal,
-  Code,
-  GitBranch,
-  Plug,
-  Bell,
-  Radio,
-  Palette,
-  Image,
-  Mic,
-  Monitor
+  CheckSquare
 } from "lucide-react";
 import {
-  SiWhatsapp, SiSlack, SiDiscord, SiTelegram,
-  SiGmail, SiTwilio,
-  SiGooglecalendar, SiGoogledrive, SiGooglesheets, SiNotion,
-  SiAirtable, SiTrello, SiAsana, SiJira, SiClickup,
-  SiHubspot, SiSalesforce, SiZoho,
-  SiShopify, SiWoocommerce, SiStripe, SiPaypal, SiSquare, SiMercadopago,
-  SiGooglecloud, SiFirebase,
-  SiVercel, SiRailway, SiDocker,
-  SiPostgresql, SiMysql, SiMongodb, SiRedis, SiSupabase,
-  SiOpenai, SiGooglegemini,
-  SiSap, SiQuickbooks, SiXero,
-  SiMailchimp, SiSendgrid, SiMeta, SiGoogleads, SiGoogleanalytics,
-  SiZapier, SiN8N, SiGraphql
+  SiWhatsapp, SiSlack, SiGmail,
+  SiGoogledrive, SiGooglesheets, SiNotion,
+  SiHubspot, SiSalesforce,
+  SiShopify, SiStripe, SiPaypal,
+  SiGooglecloud, SiFirebase, SiDocker,
+  SiPostgresql, SiMongodb,
+  SiOpenai,
+  SiMailchimp, SiGoogleanalytics,
+  SiZapier
 } from "react-icons/si";
 import { useDarkMode } from "@/hooks/useDarkMode";
 import { NewsletterPopup, useNewsletterSubscribe } from "@/components/NewsletterPopup";
@@ -1119,6 +1090,7 @@ const WhatsAppDemo = () => {
   const { t } = useI18n();
   const [visibleCount, setVisibleCount] = useState(0);
   const [isTyping, setIsTyping] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
   const messages = t.whatsappDemo.messages as Array<{ from: string; text: string }>;
 
   useEffect(() => {
@@ -1138,6 +1110,10 @@ const WhatsAppDemo = () => {
     const timer = setTimeout(() => setVisibleCount(c => c + 1), 1200);
     return () => clearTimeout(timer);
   }, [visibleCount, messages]);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [visibleCount, isTyping]);
 
   return (
     <section className="py-6 sm:py-8 px-3 sm:px-4 md:px-8">
@@ -1164,7 +1140,7 @@ const WhatsAppDemo = () => {
                 <CheckCircle className="w-4 h-4 text-[#25D366] ml-auto" />
               </div>
               {/* Chat body */}
-              <div className="bg-[#ECE5DD] dark:bg-[#0B141A] p-3 min-h-[320px] space-y-2 relative overflow-hidden" style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%239C92AC' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")" }}>
+              <div className="bg-[#ECE5DD] dark:bg-[#0B141A] p-3 h-[360px] space-y-2 relative overflow-y-auto" style={{ backgroundImage: "url(\"data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' fill-rule='evenodd'%3E%3Cg fill='%239C92AC' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4zm0-30V0h-2v4h-4v2h4v4h2V6h4V4h-4zM6 34v-4H4v4H0v2h4v4h2v-4h4v-2H6zM6 4V0H4v4H0v2h4v4h2V6h4V4H6z'/%3E%3C/g%3E%3C/g%3E%3C/svg%3E\")" }}>
                 {messages.slice(0, visibleCount).map((msg, i) => (
                   <div key={i} className={cn("flex", msg.from === "bot" ? "justify-start" : "justify-end")}>
                     <div className={cn(
@@ -1188,6 +1164,7 @@ const WhatsAppDemo = () => {
                     </div>
                   </div>
                 )}
+                <div ref={chatEndRef} />
               </div>
             </div>
           </div>
@@ -1296,130 +1273,27 @@ const IndustriesGrid = () => {
   );
 };
 
-const integrationCategories = [
-  {
-    label: "Comunicación",
-    icon: MessageSquare,
-    tools: [
-      { name: "WhatsApp", icon: SiWhatsapp, brandColor: "#25D366" },
-      { name: "Slack", icon: SiSlack, brandColor: "#4A154B" },
-      { name: "Discord", icon: SiDiscord, brandColor: "#5865F2" },
-      { name: "Telegram", icon: SiTelegram, brandColor: "#26A5E4" },
-      { name: "Microsoft Teams", icon: Monitor, brandColor: "#6264A7" },
-      { name: "Gmail", icon: SiGmail, brandColor: "#EA4335" },
-      { name: "Outlook", icon: Mail, brandColor: "#0078D4" },
-      { name: "Twilio", icon: SiTwilio, brandColor: "#F22F46" },
-    ],
-  },
-  {
-    label: "Productividad",
-    icon: Layers,
-    tools: [
-      { name: "Google Calendar", icon: SiGooglecalendar, brandColor: "#4285F4" },
-      { name: "Google Drive", icon: SiGoogledrive, brandColor: "#4285F4" },
-      { name: "Google Sheets", icon: SiGooglesheets, brandColor: "#34A853" },
-      { name: "Notion", icon: SiNotion, brandColor: "#000000" },
-      { name: "Airtable", icon: SiAirtable, brandColor: "#18BFFF" },
-      { name: "Trello", icon: SiTrello, brandColor: "#0052CC" },
-      { name: "Asana", icon: SiAsana, brandColor: "#F06A6A" },
-      { name: "Monday.com", icon: Calendar, brandColor: "#FF3D57" },
-      { name: "Jira", icon: SiJira, brandColor: "#0052CC" },
-      { name: "ClickUp", icon: SiClickup, brandColor: "#7B68EE" },
-    ],
-  },
-  {
-    label: "CRM & Ventas",
-    icon: Users,
-    tools: [
-      { name: "HubSpot", icon: SiHubspot, brandColor: "#FF7A59" },
-      { name: "Salesforce", icon: SiSalesforce, brandColor: "#00A1E0" },
-      { name: "Pipedrive", icon: TrendingUp, brandColor: "#1A1A1A" },
-      { name: "Zoho CRM", icon: SiZoho, brandColor: "#C8202B" },
-      { name: "Freshsales", icon: Sparkles, brandColor: "#F36C3D" },
-    ],
-  },
-  {
-    label: "E-commerce & Pagos",
-    icon: ShoppingBag,
-    tools: [
-      { name: "Shopify", icon: SiShopify, brandColor: "#7AB55C" },
-      { name: "WooCommerce", icon: SiWoocommerce, brandColor: "#96588A" },
-      { name: "Stripe", icon: SiStripe, brandColor: "#635BFF" },
-      { name: "PayPal", icon: SiPaypal, brandColor: "#003087" },
-      { name: "MercadoPago", icon: SiMercadopago, brandColor: "#00B1EA" },
-      { name: "Square", icon: SiSquare, brandColor: "#006AFF" },
-    ],
-  },
-  {
-    label: "Cloud & DevOps",
-    icon: Cloud,
-    tools: [
-      { name: "AWS", icon: Cloud, brandColor: "#FF9900" },
-      { name: "Google Cloud", icon: SiGooglecloud, brandColor: "#4285F4" },
-      { name: "Azure", icon: Cloud, brandColor: "#0078D4" },
-      { name: "Firebase", icon: SiFirebase, brandColor: "#FFCA28" },
-      { name: "Vercel", icon: SiVercel, brandColor: "#000000" },
-      { name: "Railway", icon: SiRailway, brandColor: "#0B0D0E" },
-      { name: "Docker", icon: SiDocker, brandColor: "#2496ED" },
-    ],
-  },
-  {
-    label: "Bases de Datos",
-    icon: Database,
-    tools: [
-      { name: "PostgreSQL", icon: SiPostgresql, brandColor: "#4169E1" },
-      { name: "MySQL", icon: SiMysql, brandColor: "#4479A1" },
-      { name: "MongoDB", icon: SiMongodb, brandColor: "#47A248" },
-      { name: "Redis", icon: SiRedis, brandColor: "#DC382D" },
-      { name: "Supabase", icon: SiSupabase, brandColor: "#3FCF8E" },
-    ],
-  },
-  {
-    label: "IA & Machine Learning",
-    icon: Brain,
-    tools: [
-      { name: "Claude AI", icon: Brain, brandColor: "#D97757" },
-      { name: "OpenAI", icon: SiOpenai, brandColor: "#412991" },
-      { name: "Gemini", icon: SiGooglegemini, brandColor: "#8E75B2" },
-      { name: "Whisper", icon: Mic, brandColor: "#412991" },
-      { name: "LangChain", icon: GitBranch, brandColor: "#1C3C3C" },
-    ],
-  },
-  {
-    label: "ERP & Finanzas",
-    icon: Building2,
-    tools: [
-      { name: "SAP", icon: SiSap, brandColor: "#0FAAFF" },
-      { name: "QuickBooks", icon: SiQuickbooks, brandColor: "#2CA01C" },
-      { name: "Xero", icon: SiXero, brandColor: "#13B5EA" },
-      { name: "Excel", icon: Table2, brandColor: "#217346" },
-      { name: "Power BI", icon: PieChart, brandColor: "#F2C811" },
-    ],
-  },
-  {
-    label: "Marketing",
-    icon: Megaphone,
-    tools: [
-      { name: "Mailchimp", icon: SiMailchimp, brandColor: "#FFE01B" },
-      { name: "SendGrid", icon: SiSendgrid, brandColor: "#1A82E2" },
-      { name: "Meta Ads", icon: SiMeta, brandColor: "#0081FB" },
-      { name: "Google Ads", icon: SiGoogleads, brandColor: "#4285F4" },
-      { name: "Google Analytics", icon: SiGoogleanalytics, brandColor: "#E37400" },
-    ],
-  },
-  {
-    label: "Automatización",
-    icon: Plug,
-    tools: [
-      { name: "Zapier", icon: SiZapier, brandColor: "#FF4A00" },
-      { name: "Make", icon: Plug, brandColor: "#6D00CC" },
-      { name: "n8n", icon: SiN8N, brandColor: "#EA4B71" },
-      { name: "Power Automate", icon: Workflow, brandColor: "#0066FF" },
-      { name: "Webhooks", icon: Bell, brandColor: "#6366F1" },
-      { name: "REST APIs", icon: Code, brandColor: "#10B981" },
-      { name: "GraphQL", icon: SiGraphql, brandColor: "#E10098" },
-    ],
-  },
+const topIntegrations = [
+  { name: "WhatsApp", icon: SiWhatsapp, brandColor: "#25D366" },
+  { name: "Slack", icon: SiSlack, brandColor: "#4A154B" },
+  { name: "Gmail", icon: SiGmail, brandColor: "#EA4335" },
+  { name: "Google Sheets", icon: SiGooglesheets, brandColor: "#34A853" },
+  { name: "Google Drive", icon: SiGoogledrive, brandColor: "#4285F4" },
+  { name: "Notion", icon: SiNotion, brandColor: "#000000" },
+  { name: "HubSpot", icon: SiHubspot, brandColor: "#FF7A59" },
+  { name: "Salesforce", icon: SiSalesforce, brandColor: "#00A1E0" },
+  { name: "Shopify", icon: SiShopify, brandColor: "#7AB55C" },
+  { name: "Stripe", icon: SiStripe, brandColor: "#635BFF" },
+  { name: "PayPal", icon: SiPaypal, brandColor: "#003087" },
+  { name: "Google Cloud", icon: SiGooglecloud, brandColor: "#4285F4" },
+  { name: "Firebase", icon: SiFirebase, brandColor: "#FFCA28" },
+  { name: "PostgreSQL", icon: SiPostgresql, brandColor: "#4169E1" },
+  { name: "MongoDB", icon: SiMongodb, brandColor: "#47A248" },
+  { name: "OpenAI", icon: SiOpenai, brandColor: "#412991" },
+  { name: "Zapier", icon: SiZapier, brandColor: "#FF4A00" },
+  { name: "Mailchimp", icon: SiMailchimp, brandColor: "#FFE01B" },
+  { name: "Google Analytics", icon: SiGoogleanalytics, brandColor: "#E37400" },
+  { name: "Docker", icon: SiDocker, brandColor: "#2496ED" },
 ];
 
 const IntegrationLogos = () => {
@@ -1434,33 +1308,19 @@ const IntegrationLogos = () => {
             <p className="text-sm sm:text-base text-muted-foreground max-w-2xl mx-auto">{t.integrations.subtitle}</p>
           </div>
         </Reveal>
-        <div className="space-y-6">
-          {integrationCategories.map((category, catIdx) => {
-            const CatIcon = category.icon;
+        <div className="flex flex-wrap items-center justify-center gap-3 sm:gap-4">
+          {topIntegrations.map((tool, i) => {
+            const Icon = tool.icon;
             return (
-              <Reveal key={category.label} delay={catIdx * 80}>
-                <div>
-                  <div className="flex items-center gap-2 mb-3">
-                    <CatIcon className="w-4 h-4 text-[hsl(var(--teal))]" />
-                    <span className="text-xs font-semibold uppercase tracking-wider text-[hsl(var(--teal))]">{category.label}</span>
-                  </div>
-                  <div className="flex flex-wrap gap-2 sm:gap-3">
-                    {category.tools.map((tool) => {
-                      const Icon = tool.icon;
-                      return (
-                        <div
-                          key={tool.name}
-                          className="group/tool flex items-center gap-2 px-3 py-2 rounded-lg border border-border/60 bg-card/50 hover:shadow-md transition-all duration-300 cursor-default"
-                          style={{ "--brand": tool.brandColor } as React.CSSProperties}
-                        >
-                          <span className="w-4 h-4 flex items-center justify-center text-muted-foreground group-hover/tool:[color:var(--brand)] transition-colors duration-300">
-                            <Icon className="w-4 h-4" />
-                          </span>
-                          <span className="text-xs sm:text-sm font-medium text-[hsl(var(--text-secondary))] group-hover/tool:text-[hsl(var(--text-primary))] transition-colors">{tool.name}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
+              <Reveal key={tool.name} delay={i * 40}>
+                <div
+                  className="group/tool flex items-center gap-2 px-4 py-2.5 rounded-lg border border-border/60 bg-card/50 hover:shadow-md transition-all duration-300 cursor-default"
+                  style={{ "--brand": tool.brandColor } as React.CSSProperties}
+                >
+                  <span className="w-4 h-4 flex items-center justify-center text-muted-foreground group-hover/tool:[color:var(--brand)] transition-colors duration-300">
+                    <Icon className="w-4 h-4" />
+                  </span>
+                  <span className="text-xs sm:text-sm font-medium text-[hsl(var(--text-secondary))] group-hover/tool:text-[hsl(var(--text-primary))] transition-colors">{tool.name}</span>
                 </div>
               </Reveal>
             );
