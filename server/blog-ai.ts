@@ -51,7 +51,7 @@ export async function generateBlogContent(
       : "Escribe el artículo en español latinoamericano.";
 
     const response = await ai.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: "claude-sonnet-4-20250514",
       max_tokens: 4000,
       system: BLOG_SYSTEM_PROMPT,
       messages: [
@@ -100,7 +100,7 @@ export async function improveBlogContent(
 
   try {
     const response = await ai.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: "claude-sonnet-4-20250514",
       max_tokens: 4000,
       system: BLOG_SYSTEM_PROMPT,
       messages: [

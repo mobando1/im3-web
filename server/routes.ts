@@ -269,25 +269,38 @@ export async function registerRoutes(
     if (db && insertedId && data.email) {
       (async () => {
         try {
-          // Check for existing contact (prevent duplicates on double-submit)
+          // Check for existing contact — update if exists, create if new
           const [existingContact] = await db.select().from(contacts)
             .where(eq(contacts.email, data.email)).limit(1);
+
+          let contact;
+          let isReturning = false;
+
           if (existingContact) {
-            log(`Contacto ${data.email} ya existe — saltando creación duplicada`);
-            return;
+            // Update existing contact with diagnostic data (e.g., newsletter subscriber booking a diagnostic)
+            const mergedTags = [...new Set([...(existingContact.tags as string[] || []), "diagnostic"])];
+            [contact] = await db.update(contacts).set({
+              diagnosticId: insertedId!,
+              nombre: data.participante,
+              empresa: data.empresa,
+              telefono: data.telefono || existingContact.telefono,
+              status: "scheduled",
+              tags: mergedTags,
+            }).where(eq(contacts.id, existingContact.id)).returning();
+            isReturning = true;
+            log(`Contacto ${data.email} actualizado con diagnóstico (contacto existente)`);
+            logActivity(contact.id, "form_submitted", `Contacto existente completó diagnóstico — ${data.participante} de ${data.empresa}`, { empresa: data.empresa, diagnosticId: insertedId, returning: true });
+          } else {
+            // Create new contact
+            [contact] = await db.insert(contacts).values({
+              diagnosticId: insertedId!,
+              email: data.email,
+              nombre: data.participante,
+              empresa: data.empresa,
+              telefono: data.telefono || null,
+            }).returning();
+            logActivity(contact.id, "form_submitted", `Formulario diagnóstico completado por ${data.participante}`, { empresa: data.empresa, diagnosticId: insertedId });
           }
-
-          // Create contact
-          const [contact] = await db.insert(contacts).values({
-            diagnosticId: insertedId!,
-            email: data.email,
-            nombre: data.participante,
-            empresa: data.empresa,
-            telefono: data.telefono || null,
-          }).returning();
-
-          // Log form submission
-          logActivity(contact.id, "form_submitted", `Formulario diagnóstico completado por ${data.participante}`, { empresa: data.empresa, diagnosticId: insertedId });
 
           // Fetch full diagnostic for lead scoring
           const [diagForAI] = await db.select().from(diagnostics).where(eq(diagnostics.id, insertedId!));
@@ -335,6 +348,11 @@ export async function registerRoutes(
           // Calculate appointment timing (shared by email + WhatsApp)
           const appointmentDate = parseFechaCita(data.fechaCita, data.horaCita);
 
+          // Flag returning contacts so AI emails acknowledge them
+          if (isReturning && diagForAI) {
+            (diagForAI as any)._isReturningContact = true;
+          }
+
           // Schedule email sequence (only if email system is configured)
           if (isEmailConfigured()) {
             try {
@@ -378,14 +396,27 @@ export async function registerRoutes(
                   log(`Pre-gen failed for ${template.nombre}: ${err}`);
                 }
 
-                await db.insert(sentEmails).values({
+                const [insertedEmail] = await db.insert(sentEmails).values({
                   contactId: contact.id,
                   templateId: template.id,
                   scheduledFor,
                   subject,
                   body,
-                });
+                }).returning();
                 scheduled++;
+
+                // Send confirmation email immediately (don't wait for cron)
+                if (template.nombre === "confirmacion" && subject && body) {
+                  sendEmail(data.email, subject, body)
+                    .then(() => {
+                      db.update(sentEmails)
+                        .set({ status: "sent", sentAt: new Date() })
+                        .where(eq(sentEmails.id, insertedEmail.id))
+                        .catch(() => {});
+                      log(`Email de confirmación enviado inmediatamente a ${data.email}`);
+                    })
+                    .catch(err => log(`Error enviando confirmación inmediata: ${err}`));
+                }
               }
 
               log(`Secuencia de ${scheduled} email(s) programada para ${data.email} (${Math.round(hoursUntilCall)}h hasta la cita)`);
@@ -1526,6 +1557,37 @@ export async function registerRoutes(
     } catch (err: any) {
       log(`Error updating contact: ${err?.message}`);
       res.status(500).json({ error: "Error actualizando contacto" });
+    }
+  });
+
+  // Delete contact (cascades to all related records)
+  app.delete("/api/admin/contacts/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const contactId = req.params.id as string;
+
+    try {
+      // Verify contact exists
+      const [existing] = await db.select().from(contacts).where(eq(contacts.id, contactId)).limit(1);
+      if (!existing) return res.status(404).json({ error: "Contacto no encontrado" });
+
+      // Cascade delete all related records (no FK constraints in schema)
+      await db.delete(sentEmails).where(eq(sentEmails.contactId, contactId));
+      await db.delete(whatsappMessages).where(eq(whatsappMessages.contactId, contactId));
+      await db.delete(activityLog).where(eq(activityLog.contactId, contactId));
+      await db.delete(tasks).where(eq(tasks.contactId, contactId));
+      await db.delete(contactNotes).where(eq(contactNotes.contactId, contactId));
+      await db.delete(deals).where(eq(deals.contactId, contactId));
+      await db.delete(notifications).where(eq(notifications.contactId, contactId));
+      await db.delete(aiInsightsCache).where(eq(aiInsightsCache.contactId, contactId));
+
+      // Delete the contact
+      await db.delete(contacts).where(eq(contacts.id, contactId));
+
+      log(`Contact ${existing.email} deleted with all related records`);
+      res.json({ success: true, deleted: existing.email });
+    } catch (err: any) {
+      log(`Error deleting contact: ${err?.message}`);
+      res.status(500).json({ error: "Error eliminando contacto" });
     }
   });
 
