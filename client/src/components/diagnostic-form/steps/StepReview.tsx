@@ -88,6 +88,8 @@ export default function StepReview({ form, onGoToStep }: StepProps) {
         { label: "Empleados", value: data.empleados },
         { label: "Ciudades / Países", value: data.ciudades },
         { label: "Participante", value: data.participante },
+        { label: "Email", value: data.email },
+        ...(data.telefono ? [{ label: "Teléfono", value: data.telefono }] : []),
       ],
     },
     {
