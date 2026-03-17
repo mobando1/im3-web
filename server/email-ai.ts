@@ -214,6 +214,67 @@ export async function generateEmailContent(
 }
 
 /**
+ * Generate an AI-powered newsletter welcome email with a "dato curioso"
+ * about AI/automation that hooks the subscriber from day one.
+ */
+export async function generateNewsletterWelcome(): Promise<{ subject: string; body: string }> {
+  const anthropic = getClient();
+  if (!anthropic) {
+    throw new Error("ANTHROPIC_API_KEY not configured");
+  }
+
+  const subjectResponse = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 100,
+    system: "Genera SOLO el texto del subject de un email de bienvenida a un newsletter de tecnología. Debe ser intrigante y contener un dato curioso o pregunta que enganche. Sin comillas, sin prefijo, solo el texto. Máximo 60 caracteres. Español latinoamericano.",
+    messages: [
+      {
+        role: "user",
+        content: "Genera un subject para un email de bienvenida al newsletter de IM3 Systems (empresa de IA, automatización y software para empresas en Latinoamérica). El subject debe contener un dato curioso o pregunta intrigante sobre IA/automatización que haga que el lector quiera abrir el email. Ejemplos de estilo: '¿Sabías que el 40% de las tareas repetitivas ya se automatizan?', 'Tu primer insight IM3: lo que viene en IA'. Varía el enfoque cada vez.",
+      },
+    ],
+  });
+
+  const subject =
+    subjectResponse.content?.[0]?.type === "text"
+      ? subjectResponse.content[0].text.trim()
+      : "Bienvenido al newsletter de IM3 Systems";
+
+  const bodyResponse = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 1500,
+    system: SYSTEM_PROMPT,
+    messages: [
+      {
+        role: "user",
+        content: `Genera un email de bienvenida al newsletter de IM3 Systems. Estructura:
+
+1. Saludo breve y cálido (gracias por suscribirse)
+2. UN "dato curioso" impactante sobre IA, automatización o tecnología aplicada a empresas — DEBE citar una fuente real (McKinsey, Gartner, Forrester, MIT, Statista, etc.). El dato debe ser sorprendente y relevante para empresas latinoamericanas.
+3. En 1-2 oraciones, conecta ese dato con por qué les importa a ellos como empresa
+4. Qué van a recibir: cada semana, un digest con tendencias + 3 pasos concretos que pueden implementar esa misma semana. Lectura de 2 minutos.
+5. CTA sutil a https://www.im3systems.com/booking — invita a descubrir oportunidades con una auditoría gratuita
+
+Máximo 200 palabras en el cuerpo. Tono: como un amigo experto en tech que comparte algo que acaba de descubrir. NO corporativo genérico.
+
+Genera el email completo en HTML PURO con estilos inline. NO uses bloques de código markdown. Devuelve SOLO el HTML directo sin \`\`\`html ni \`\`\`. Wrapper: max-width:600px, font-family:'Segoe UI',Roboto,sans-serif. Header con background:linear-gradient(135deg,#0F172A,#1E293B) y título blanco. Links y CTAs en color #3B82F6.`,
+      },
+    ],
+  });
+
+  let body =
+    bodyResponse.content?.[0]?.type === "text"
+      ? bodyResponse.content[0].text.trim()
+      : "<p>Error generando contenido</p>";
+
+  body = body.replace(/^```html\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+
+  log(`Newsletter welcome AI generado: "${subject}"`);
+
+  return { subject, body };
+}
+
+/**
  * Generate AI insight for a contact — sales intelligence analysis.
  */
 export async function generateContactInsight(
@@ -346,7 +407,7 @@ export async function generateDailyNewsDigest(language: string = "es"): Promise<
     : "\n\nNo se pudieron obtener noticias de RSS. Genera basándote en tendencias recientes verificables de IA/tech, citando fuentes reales (TechCrunch, MIT Technology Review, etc.).";
 
   const blogResponse = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-haiku-4-5-20251001",
     max_tokens: 3000,
     system: `Eres un analista tech de IM3 Systems que escribe un resumen semanal de noticias sobre inteligencia artificial, automatización y tecnología para empresas en Latinoamérica.
 

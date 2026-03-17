@@ -2,17 +2,19 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages } from "@shared/schema";
 import { generateBlogContent, improveBlogContent } from "./blog-ai";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
 import { createCalendarEvent } from "./google-calendar";
 import { isEmailConfigured, sendEmail } from "./email-sender";
-import { generateEmailContent, buildMicroReminderEmail, build6hReminderEmail, generateDailyNewsDigest, generateContactInsight, generateWhatsAppMessage } from "./email-ai";
+import { generateEmailContent, buildMicroReminderEmail, build6hReminderEmail, generateDailyNewsDigest, generateContactInsight, generateWhatsAppMessage, generateNewsletterWelcome } from "./email-ai";
 import { parseFechaCita } from "./date-utils";
 import { requireAuth, hashPassword } from "./auth";
 import { calculateLeadScore } from "./lead-scoring";
+import { isWhatsAppConfigured, calculateWhatsAppSchedule, WHATSAPP_SEQUENCE } from "./whatsapp";
 import passport from "passport";
+import { z } from "zod";
 
 /**
  * Calculate when to send each email based on template name,
@@ -90,14 +92,60 @@ export async function registerRoutes(
     }
   }
 
+  // Zod schema for diagnostic form validation
+  const diagnosticSchema = z.object({
+    fechaCita: z.string().min(1),
+    horaCita: z.string().min(1),
+    empresa: z.string().min(1),
+    industria: z.string().min(1),
+    anosOperacion: z.string().min(1),
+    empleados: z.string().min(1),
+    ciudades: z.string().min(1),
+    participante: z.string().min(1),
+    email: z.string().email(),
+    telefono: z.string().nullish().transform(v => v ?? undefined),
+    objetivos: z.array(z.string()).min(1),
+    resultadoEsperado: z.string().min(1),
+    productos: z.string().min(1),
+    volumenMensual: z.string().min(1),
+    clientePrincipal: z.string().min(1),
+    clientePrincipalOtro: z.string().nullish().transform(v => v ?? undefined),
+    canalesAdquisicion: z.array(z.string()).min(1),
+    canalAdquisicionOtro: z.string().nullish().transform(v => v ?? undefined),
+    canalPrincipal: z.string().min(1),
+    herramientas: z.string().min(1),
+    conectadas: z.string().min(1),
+    conectadasDetalle: z.string().nullish().transform(v => v ?? undefined),
+    nivelTech: z.string().min(1),
+    usaIA: z.string().min(1),
+    usaIAParaQue: z.string().nullish().transform(v => v ?? undefined),
+    comodidadTech: z.string().min(1),
+    familiaridad: z.object({
+      automatizacion: z.string(),
+      crm: z.string(),
+      ia: z.string(),
+      integracion: z.string(),
+      desarrollo: z.string(),
+    }),
+    areaPrioridad: z.array(z.string()).min(1),
+    presupuesto: z.string().min(1),
+  });
+
+  // Newsletter subscription email validation
+  const newsletterEmailSchema = z.object({
+    email: z.string().email("Email inválido"),
+  });
+
   // Diagnostic form submission
   app.post("/api/diagnostic", async (req, res) => {
-    const data = req.body;
+    const parsed = diagnosticSchema.safeParse(req.body);
 
-    if (!data || !data.empresa) {
-      res.status(400).json({ error: "Datos incompletos" });
+    if (!parsed.success) {
+      res.status(400).json({ error: "Datos incompletos", details: parsed.error.flatten().fieldErrors });
       return;
     }
+
+    const data = parsed.data;
 
     log(`Diagnóstico recibido: ${data.empresa} — ${data.participante}`);
 
@@ -284,6 +332,9 @@ export async function registerRoutes(
             });
           } catch (_) {}
 
+          // Calculate appointment timing (shared by email + WhatsApp)
+          const appointmentDate = parseFechaCita(data.fechaCita, data.horaCita);
+
           // Schedule email sequence (only if email system is configured)
           if (isEmailConfigured()) {
             try {
@@ -300,7 +351,6 @@ export async function registerRoutes(
               }
 
               const now = new Date();
-              const appointmentDate = parseFechaCita(data.fechaCita, data.horaCita);
               const hoursUntilCall = Math.max(0, (appointmentDate.getTime() - now.getTime()) / (1000 * 60 * 60));
 
               let scheduled = 0;
@@ -369,6 +419,43 @@ export async function registerRoutes(
                 </div>
               </div>`
             ).catch((err) => log(`Error sending admin notification: ${err}`));
+          }
+
+          // Schedule WhatsApp messages (independent of email config)
+          if (isWhatsAppConfigured() && data.telefono) {
+            try {
+              const waSchedule = calculateWhatsAppSchedule(appointmentDate, new Date());
+              let waScheduled = 0;
+
+              for (const wa of waSchedule) {
+                const seqConfig = WHATSAPP_SEQUENCE.find(s => s.name === wa.name);
+                const params = seqConfig?.useTemplate && seqConfig.buildParams
+                  ? seqConfig.buildParams(data.participante, data.empresa, data.horaCita)
+                  : undefined;
+
+                // For non-template messages, generate with AI
+                let message = "";
+                if (!wa.useTemplate) {
+                  message = await generateWhatsAppMessage(contact, diagForAI || null);
+                }
+
+                await db.insert(whatsappMessages).values({
+                  contactId: contact.id,
+                  phone: data.telefono,
+                  message,
+                  templateName: wa.templateName || null,
+                  templateParams: params || null,
+                  scheduledFor: wa.scheduledFor,
+                });
+                waScheduled++;
+              }
+
+              if (waScheduled > 0) {
+                log(`Secuencia de ${waScheduled} WhatsApp(s) programada para ${data.telefono}`);
+              }
+            } catch (waErr) {
+              log(`Error programando WhatsApp: ${waErr}`);
+            }
           }
         } catch (err) {
           log(`Error creando contacto CRM: ${err}`);
@@ -525,6 +612,71 @@ export async function registerRoutes(
     res.json({ received: true });
   });
 
+  // WhatsApp webhook — verification (GET) and status updates (POST)
+  app.get("/api/whatsapp/webhook", (req, res) => {
+    const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
+    const mode = req.query["hub.mode"];
+    const token = req.query["hub.verify_token"];
+    const challenge = req.query["hub.challenge"];
+
+    if (mode === "subscribe" && token === verifyToken) {
+      log("[WhatsApp] Webhook verified");
+      res.status(200).send(challenge);
+    } else {
+      res.sendStatus(403);
+    }
+  });
+
+  app.post("/api/whatsapp/webhook", async (req, res) => {
+    // Respond quickly to avoid Meta retries
+    res.sendStatus(200);
+
+    if (!db) return;
+
+    try {
+      const body = req.body;
+      const entries = body?.entry || [];
+
+      for (const entry of entries) {
+        const changes = entry?.changes || [];
+        for (const change of changes) {
+          const statuses = change?.value?.statuses || [];
+          for (const status of statuses) {
+            const waMessageId = status.id;
+            const waStatus = status.status; // sent | delivered | read | failed
+            const timestamp = status.timestamp ? new Date(parseInt(status.timestamp) * 1000) : new Date();
+
+            if (!waMessageId || !waStatus) continue;
+
+            const updateData: Record<string, any> = {};
+            if (waStatus === "delivered") {
+              updateData.status = "delivered";
+              updateData.deliveredAt = timestamp;
+            } else if (waStatus === "read") {
+              updateData.status = "read";
+              updateData.readAt = timestamp;
+            } else if (waStatus === "failed") {
+              updateData.status = "failed";
+              const errors = status.errors || [];
+              updateData.errorMessage = errors[0]?.title || "Delivery failed";
+            }
+
+            if (Object.keys(updateData).length > 0) {
+              await db.update(whatsappMessages)
+                .set(updateData)
+                .where(eq(whatsappMessages.whatsappMessageId, waMessageId))
+                .catch(() => {});
+
+              log(`[WhatsApp] Status update: ${waMessageId} → ${waStatus}`);
+            }
+          }
+        }
+      }
+    } catch (err: any) {
+      log(`[WhatsApp] Webhook error: ${err?.message}`);
+    }
+  });
+
   // Track email for abandonment detection
   app.post("/api/track-email", async (req, res) => {
     const { email } = req.body;
@@ -561,12 +713,12 @@ export async function registerRoutes(
 
   // Newsletter subscription
   app.post("/api/newsletter/subscribe", async (req, res) => {
-    const { email } = req.body;
-
-    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    const parsed = newsletterEmailSchema.safeParse(req.body);
+    if (!parsed.success) {
       res.status(400).json({ error: "Email inválido" });
       return;
     }
+    const { email } = parsed.data;
 
     if (!db) {
       return res.status(500).json({ error: "Servicio temporalmente no disponible" });
@@ -634,9 +786,10 @@ export async function registerRoutes(
 
       // Send welcome email only for new subscriptions
       if (!alreadySubscribed && process.env.RESEND_API_KEY) {
-        const welcomeSubject = "Bienvenido al newsletter de IM3 Systems";
-        const welcomeHtml = `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
-          <div style="background:#0F172A;padding:24px 32px;border-radius:8px 8px 0 0">
+        // AI-generated welcome with "dato curioso" — falls back to static template
+        let welcomeSubject = "Bienvenido al newsletter de IM3 Systems";
+        let welcomeHtml = `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+          <div style="background:linear-gradient(135deg,#0F172A,#1E293B);padding:24px 32px;border-radius:8px 8px 0 0">
             <h1 style="color:#fff;font-size:22px;margin:0">IM3 Systems</h1>
           </div>
           <div style="padding:32px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
@@ -647,12 +800,20 @@ export async function registerRoutes(
             <p style="line-height:1.6;margin:0;color:#666">— Equipo IM3 Systems</p>
           </div>
         </div>`;
+        try {
+          const aiWelcome = await generateNewsletterWelcome();
+          welcomeSubject = aiWelcome.subject;
+          welcomeHtml = aiWelcome.body;
+        } catch (aiErr) {
+          log(`AI newsletter welcome failed, using fallback: ${aiErr}`);
+        }
 
         sendEmail(email, welcomeSubject, welcomeHtml).then((result) => {
           // Track welcome email in sentEmails for CRM visibility
           if (contactId && db) {
             db.insert(sentEmails).values({
               contactId,
+              templateId: "newsletter-welcome",
               subject: welcomeSubject,
               body: welcomeHtml,
               status: "sent",
@@ -1557,6 +1718,7 @@ export async function registerRoutes(
           contactId: contactMap[d.id]?.id || "",
           meetLink: d.meetLink,
           googleDriveUrl: d.googleDriveUrl,
+          meetingStatus: d.meetingStatus || "scheduled",
         }));
 
       res.json(appointments);
@@ -1763,7 +1925,7 @@ export async function registerRoutes(
 
       if (cached) {
         const age = Date.now() - new Date(cached.generatedAt).getTime();
-        if (age < 24 * 60 * 60 * 1000) {
+        if (age < 7 * 24 * 60 * 60 * 1000) {
           return res.json(cached);
         }
       }
@@ -2422,6 +2584,93 @@ export async function registerRoutes(
     } catch (err: any) {
       log(`Error updating appointment: ${err?.message}`);
       res.status(500).json({ error: "Error actualizando cita" });
+    }
+  });
+
+  // Mark appointment as completed or no-show
+  app.patch("/api/admin/appointments/:id/status", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const { status } = req.body; // "completed" | "no_show" | "cancelled" | "scheduled"
+      if (!["completed", "no_show", "cancelled", "scheduled"].includes(status)) {
+        return res.status(400).json({ error: "Estado inválido" });
+      }
+
+      const updates: any = { status };
+      if (status === "completed") {
+        updates.completedAt = new Date();
+      } else {
+        updates.completedAt = null;
+      }
+
+      const [updated] = await db.update(appointments)
+        .set(updates)
+        .where(eq(appointments.id, req.params.id as string))
+        .returning();
+
+      if (!updated) return res.status(404).json({ error: "Cita no encontrada" });
+
+      // Log activity if appointment has a contact
+      if (updated.contactId) {
+        const activityType = status === "completed" ? "meeting_completed" : status === "no_show" ? "meeting_no_show" : `meeting_${status}`;
+        const descriptions: Record<string, string> = {
+          completed: `Reunión completada: "${updated.title}"`,
+          no_show: `No se presentó a la reunión: "${updated.title}"`,
+          cancelled: `Reunión cancelada: "${updated.title}"`,
+          scheduled: `Reunión reagendada: "${updated.title}"`,
+        };
+        logActivity(updated.contactId, activityType, descriptions[status] || `Estado de reunión: ${status}`);
+      }
+
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error updating appointment status: ${err?.message}`);
+      res.status(500).json({ error: "Error actualizando estado de cita" });
+    }
+  });
+
+  // Mark diagnostic meeting as completed or no-show
+  app.patch("/api/admin/diagnostics/:id/meeting-status", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const { status } = req.body;
+      if (!["completed", "no_show", "cancelled", "scheduled"].includes(status)) {
+        return res.status(400).json({ error: "Estado inválido" });
+      }
+
+      const updates: any = { meetingStatus: status };
+      if (status === "completed") {
+        updates.meetingCompletedAt = new Date();
+      } else {
+        updates.meetingCompletedAt = null;
+      }
+
+      const [updated] = await db.update(diagnostics)
+        .set(updates)
+        .where(eq(diagnostics.id, req.params.id as string))
+        .returning();
+
+      if (!updated) return res.status(404).json({ error: "Diagnóstico no encontrado" });
+
+      // Find contact by diagnostic and log activity
+      const [contact] = await db.select().from(contacts).where(eq(contacts.diagnosticId, updated.id)).limit(1);
+      if (contact) {
+        const activityType = status === "completed" ? "meeting_completed" : status === "no_show" ? "meeting_no_show" : `meeting_${status}`;
+        const descriptions: Record<string, string> = {
+          completed: `Reunión de diagnóstico completada — ${updated.empresa}`,
+          no_show: `No se presentó a reunión de diagnóstico — ${updated.empresa}`,
+          cancelled: `Reunión de diagnóstico cancelada — ${updated.empresa}`,
+          scheduled: `Reunión de diagnóstico reagendada — ${updated.empresa}`,
+        };
+        logActivity(contact.id, activityType, descriptions[status] || `Estado de reunión: ${status}`);
+      }
+
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error updating diagnostic meeting status: ${err?.message}`);
+      res.status(500).json({ error: "Error actualizando estado de reunión" });
     }
   });
 

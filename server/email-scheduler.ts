@@ -1,9 +1,10 @@
 import cron from "node-cron";
 import { db } from "./db";
-import { sentEmails, emailTemplates, contacts, diagnostics, abandonedLeads, activityLog, notifications, newsletterSubscribers, newsletterSends, blogPosts, blogCategories } from "@shared/schema";
-import { eq, and, lte, not, gte, desc } from "drizzle-orm";
-import { generateEmailContent, build6hReminderEmail, buildMicroReminderEmail, generateDailyNewsDigest } from "./email-ai";
+import { sentEmails, emailTemplates, contacts, diagnostics, abandonedLeads, activityLog, notifications, newsletterSubscribers, newsletterSends, blogPosts, blogCategories, appointments, whatsappMessages } from "@shared/schema";
+import { eq, and, lte, not, gte, desc, inArray } from "drizzle-orm";
+import { generateEmailContent, build6hReminderEmail, buildMicroReminderEmail, generateDailyNewsDigest, generateWhatsAppMessage } from "./email-ai";
 import { sendEmail, isEmailConfigured } from "./email-sender";
+import { isWhatsAppConfigured, sendWhatsAppText, sendWhatsAppTemplate } from "./whatsapp";
 import { parseFechaCita } from "./date-utils";
 import { log } from "./index";
 
@@ -74,10 +75,12 @@ async function processEmailQueue() {
         }
 
         // Get diagnostic data
-        const [diagnostic] = await db
-          .select()
-          .from(diagnostics)
-          .where(eq(diagnostics.id, contact.diagnosticId));
+        const [diagnostic] = contact.diagnosticId
+          ? await db
+              .select()
+              .from(diagnostics)
+              .where(eq(diagnostics.id, contact.diagnosticId))
+          : [undefined];
 
         // Check if pre-meeting email should be expired (appointment already passed)
         const PRE_MEETING_TEMPLATES = ["caso_exito", "insight_educativo", "prep_agenda", "recordatorio_6h", "micro_recordatorio"];
@@ -265,6 +268,123 @@ async function processAbandonedEmails() {
 }
 
 /**
+ * Process pending WhatsApp messages from the queue.
+ * Similar to processEmailQueue but for WhatsApp Business API.
+ */
+async function processWhatsAppQueue() {
+  if (!db || !isWhatsAppConfigured()) return;
+
+  try {
+    const now = new Date();
+
+    const pendingMessages = await db
+      .select()
+      .from(whatsappMessages)
+      .where(
+        and(
+          eq(whatsappMessages.status, "pending"),
+          lte(whatsappMessages.scheduledFor, now)
+        )
+      )
+      .limit(5);
+
+    if (pendingMessages.length === 0) return;
+
+    log(`Procesando ${pendingMessages.length} WhatsApp(s) pendientes`);
+
+    for (const msg of pendingMessages) {
+      try {
+        // Get contact to check opt-out
+        const [contact] = await db
+          .select()
+          .from(contacts)
+          .where(eq(contacts.id, msg.contactId));
+
+        if (!contact || contact.optedOut) {
+          await db.update(whatsappMessages)
+            .set({ status: "failed", errorMessage: contact ? "Contact opted out" : "Contact not found" })
+            .where(eq(whatsappMessages.id, msg.id));
+          continue;
+        }
+
+        let result;
+
+        if (msg.templateName) {
+          // Send template message (approved by Meta)
+          result = await sendWhatsAppTemplate(
+            msg.phone,
+            msg.templateName,
+            (msg.templateParams as Record<string, string>) || {}
+          );
+        } else {
+          // Send text message (within 24h window or AI-generated)
+          let messageText = msg.message;
+
+          // If no message pre-generated, generate now with AI
+          if (!messageText) {
+            const [diagnostic] = contact.diagnosticId
+              ? await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId))
+              : [undefined];
+            messageText = await generateWhatsAppMessage(contact, diagnostic || null);
+          }
+
+          result = await sendWhatsAppText(msg.phone, messageText);
+        }
+
+        if (result.status === "sent") {
+          await db.update(whatsappMessages)
+            .set({
+              status: "sent",
+              sentAt: new Date(),
+              whatsappMessageId: result.messageId,
+              message: msg.message || "template message",
+            })
+            .where(eq(whatsappMessages.id, msg.id));
+
+          // Log activity
+          try {
+            await db.insert(activityLog).values({
+              contactId: msg.contactId,
+              type: "whatsapp_sent",
+              description: `WhatsApp enviado a ${msg.phone}${msg.templateName ? ` (template: ${msg.templateName})` : ""}`,
+              metadata: { whatsappMessageId: result.messageId, templateName: msg.templateName },
+            });
+          } catch (_) {}
+
+          log(`WhatsApp enviado → ${msg.phone}`);
+        } else {
+          const newRetry = (msg.retryCount || 0) + 1;
+          const isFinal = newRetry >= MAX_RETRIES;
+
+          await db.update(whatsappMessages)
+            .set({
+              retryCount: newRetry,
+              status: isFinal ? "failed" : "pending",
+              errorMessage: result.error || "Unknown error",
+            })
+            .where(eq(whatsappMessages.id, msg.id));
+
+          log(`WhatsApp error ${msg.id} (intento ${newRetry}/${MAX_RETRIES}): ${result.error}`);
+        }
+      } catch (err: any) {
+        const newRetry = (msg.retryCount || 0) + 1;
+        await db.update(whatsappMessages)
+          .set({
+            retryCount: newRetry,
+            status: newRetry >= MAX_RETRIES ? "failed" : "pending",
+            errorMessage: err?.message || "Unknown error",
+          })
+          .where(eq(whatsappMessages.id, msg.id));
+
+        log(`WhatsApp error ${msg.id}: ${err?.message || err}`);
+      }
+    }
+  } catch (err: any) {
+    log(`Error en WhatsApp scheduler: ${err?.message || err}`);
+  }
+}
+
+/**
  * Auto-update contact substatus based on email engagement patterns.
  * Runs periodically to classify contacts as warm/cold/interested.
  */
@@ -281,10 +401,21 @@ async function updateContactSubstatuses() {
 
     if (activeContacts.length === 0) return;
 
+    // Batch fetch ALL sent emails for active contacts in ONE query (fixes N+1)
+    const contactIds = activeContacts.map(c => c.id);
+    const allEmails = await db.select().from(sentEmails)
+      .where(inArray(sentEmails.contactId, contactIds));
+
+    // Group emails by contactId in memory
+    const emailsByContact = new Map<string, (typeof allEmails)[number][]>();
+    for (const email of allEmails) {
+      const existing = emailsByContact.get(email.contactId) || [];
+      existing.push(email);
+      emailsByContact.set(email.contactId, existing);
+    }
+
     for (const contact of activeContacts) {
-      // Get all emails for this contact
-      const emails = await db.select().from(sentEmails)
-        .where(eq(sentEmails.contactId, contact.id));
+      const emails = emailsByContact.get(contact.id) || [];
 
       const sentCount = emails.filter(e => ["sent", "opened", "clicked"].includes(e.status)).length;
       const openedCount = emails.filter(e => e.status === "opened" || e.status === "clicked").length;
@@ -535,22 +666,133 @@ async function generateAndSendDailyNewsletter() {
   }
 }
 
+/**
+ * Post-meeting automation: check for completed meetings, search for
+ * recordings/transcripts in Drive, and move them to client folders.
+ */
+async function processPostMeetingRecordings() {
+  if (!db) return;
+
+  try {
+    const { moveRecordingToClientFolder, extractFolderIdFromUrl } = await import("./google-drive");
+
+    // Find completed meetings that don't have recordings yet
+    const completedDiags = await db.select().from(diagnostics)
+      .where(and(
+        eq(diagnostics.meetingStatus, "completed"),
+        not(eq(diagnostics.googleDriveUrl, ""))
+      ));
+
+    for (const diag of completedDiags) {
+      if (!diag.googleDriveUrl || !diag.meetLink) continue;
+
+      const folderId = extractFolderIdFromUrl(diag.googleDriveUrl);
+      if (!folderId) continue;
+
+      const meetingTitle = `Diagnóstico IM3 — ${diag.empresa}`;
+
+      try {
+        const { recordingUrl, transcriptUrl } = await moveRecordingToClientFolder(meetingTitle, folderId);
+
+        if (recordingUrl || transcriptUrl) {
+          // Find the contact associated with this diagnostic to log activity
+          const [contact] = await db.select().from(contacts)
+            .where(eq(contacts.diagnosticId, diag.id)).limit(1);
+
+          if (contact) {
+            if (recordingUrl) {
+              await db.insert(activityLog).values({
+                contactId: contact.id,
+                type: "recording_saved",
+                description: `Grabación de reunión guardada en Google Drive`,
+                metadata: { recordingUrl },
+              }).catch(() => {});
+            }
+            if (transcriptUrl) {
+              await db.insert(activityLog).values({
+                contactId: contact.id,
+                type: "transcript_saved",
+                description: `Transcripción de reunión guardada en Google Drive`,
+                metadata: { transcriptUrl },
+              }).catch(() => {});
+            }
+          }
+
+          log(`[Post-Meeting] Archivos movidos para ${diag.empresa}: recording=${!!recordingUrl}, transcript=${!!transcriptUrl}`);
+        }
+      } catch (err: any) {
+        log(`[Post-Meeting] Error procesando ${diag.empresa}: ${err?.message}`);
+      }
+    }
+
+    // Also check manual appointments that are completed
+    const completedAppts = await db.select().from(appointments)
+      .where(eq(appointments.status, "completed"));
+
+    for (const appt of completedAppts) {
+      // Skip if already has recording URL
+      if (appt.recordingUrl) continue;
+      if (!appt.contactId) continue;
+
+      // Find the contact's diagnostic to get the Drive folder
+      const [contact] = await db.select().from(contacts)
+        .where(eq(contacts.id, appt.contactId)).limit(1);
+      if (!contact?.diagnosticId) continue;
+
+      const [diag] = await db.select().from(diagnostics)
+        .where(eq(diagnostics.id, contact.diagnosticId)).limit(1);
+      if (!diag?.googleDriveUrl) continue;
+
+      const folderId = extractFolderIdFromUrl(diag.googleDriveUrl);
+      if (!folderId) continue;
+
+      try {
+        const { recordingUrl, transcriptUrl } = await moveRecordingToClientFolder(appt.title, folderId);
+
+        if (recordingUrl || transcriptUrl) {
+          await db.update(appointments).set({
+            recordingUrl: recordingUrl || undefined,
+            transcriptUrl: transcriptUrl || undefined,
+          }).where(eq(appointments.id, appt.id));
+
+          if (recordingUrl) {
+            await db.insert(activityLog).values({
+              contactId: appt.contactId,
+              type: "recording_saved",
+              description: `Grabación guardada: "${appt.title}"`,
+              metadata: { recordingUrl },
+            }).catch(() => {});
+          }
+
+          log(`[Post-Meeting] Archivos de cita "${appt.title}" movidos`);
+        }
+      } catch (err: any) {
+        log(`[Post-Meeting] Error en cita "${appt.title}": ${err?.message}`);
+      }
+    }
+  } catch (err: any) {
+    log(`Error en processPostMeetingRecordings: ${err?.message || err}`);
+  }
+}
+
 export function startEmailScheduler() {
   if (!isEmailConfigured()) {
     log("⚠ Email system not configured (missing ANTHROPIC_API_KEY or RESEND_API_KEY)");
     return;
   }
 
-  // Run every 5 minutes for more responsive email delivery
-  cron.schedule("*/5 * * * *", async () => {
+  // Run every 5 minutes for more responsive email/WhatsApp delivery
+  cron.schedule("*/15 * * * *", async () => {
     await processEmailQueue().catch(err => log(`Cron error queue: ${err}`));
     await processAbandonedEmails().catch(err => log(`Cron error abandoned: ${err}`));
+    await processWhatsAppQueue().catch(err => log(`Cron error whatsapp: ${err}`));
   });
 
-  // Run substatus updates and overdue task checks every 30 minutes
+  // Run substatus updates, overdue task checks, and post-meeting recordings every 30 minutes
   cron.schedule("*/30 * * * *", async () => {
     await updateContactSubstatuses().catch(err => log(`Cron error substatus: ${err}`));
     await checkOverdueTasks().catch(err => log(`Cron error overdue: ${err}`));
+    await processPostMeetingRecordings().catch(err => log(`Cron error post-meeting: ${err}`));
   });
 
   // Weekly newsletter every Monday at 7:00 AM Colombia time (12:00 UTC)
@@ -562,6 +804,7 @@ export function startEmailScheduler() {
   setTimeout(() => {
     processEmailQueue();
     processAbandonedEmails();
+    processWhatsAppQueue();
   }, 10_000);
 
   // Catch-up: if today is Monday and newsletter hasn't been sent yet, send it now
