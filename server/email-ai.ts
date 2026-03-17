@@ -33,7 +33,13 @@ Reglas:
 - Firma: "— Equipo IM3 Systems"
 - NO incluyas footer de unsubscribe — se agrega automáticamente
 - NO uses placeholders como {empresa} — usa los datos reales del contexto
-- SIEMPRE incluye un CTA sutil al final del email, antes de la firma. No vendas — ofrece valor. El CTA debe invitar a descubrir oportunidades de mejora con una auditoría gratuita. Ejemplo: "¿Quieres saber qué podría funcionar mejor en tu operación? Analizamos tu negocio y te damos una hoja de ruta con pasos concretos — sin costo." con un botón/link a https://www.im3systems.com/booking estilizado con background:#3B82F6, color:#fff, padding:10px 24px, border-radius:6px. El CTA debe sentirse natural dentro del contenido, no como un bloque publicitario.`;
+- SIEMPRE dirige al contacto por su nombre (campo Participante). Nunca uses genéricos como "Hola" sin nombre.
+- Si hay un meetLink en el contexto, SIEMPRE inclúyelo como un botón prominente visible (no como texto al final). Usar: <a href="{meetLink}" style="display:inline-block;background:#3B82F6;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600">Unirse a la reunión →</a>
+- Si hay un link de "Agregar al calendario", inclúyelo justo después del botón de reunión como texto más pequeño
+- NUNCA uses "Confirmar asistencia" como CTA — la persona ya confirmó al agendar. El CTA principal en emails pre-reunión es el link de la reunión (Meet).
+- Para emails pre-reunión: incluir al final (texto pequeño, color #999): "¿Necesitas cambiar la fecha? <a href='{rescheduleUrl}'>Reagendar</a> · <a href='{cancelUrl}'>Cancelar</a>"
+- Para el email de seguimiento post-reunión: el CTA puede invitar a agendar una sesión de seguimiento con link a https://www.im3systems.com/booking
+- NO incluyas un CTA genérico de "/booking" en emails pre-reunión — el contacto YA agendó.`;
 
 function buildContext(data: Partial<Diagnostic> | null): string {
   if (!data || !data.empresa) {
@@ -67,6 +73,9 @@ function buildContext(data: Partial<Diagnostic> | null): string {
     lines.push(`- Familiaridad — Automatización: ${f.automatizacion}, CRM: ${f.crm}, IA: ${f.ia}, Integración: ${f.integracion}, Desarrollo: ${f.desarrollo}`);
   }
   if (data.meetLink) lines.push(`- Link de reunión (Google Meet): ${data.meetLink}`);
+  if ((data as any)._calendarAddUrl) lines.push(`- Link para agregar al calendario personal: ${(data as any)._calendarAddUrl}`);
+  if ((data as any)._rescheduleUrl) lines.push(`- Link para reagendar: ${(data as any)._rescheduleUrl}`);
+  if ((data as any)._cancelUrl) lines.push(`- Link para cancelar: ${(data as any)._cancelUrl}`);
   if ((data as any)._isReturningContact) {
     lines.push("- NOTA: Este contacto ya era conocido (suscriptor de newsletter u otro canal). Reconócelo sutilmente — muestra entusiasmo de que haya decidido dar el siguiente paso y agendar. No lo trates como primera vez, hazle saber que estás pendiente.");
   }
@@ -81,12 +90,18 @@ export function build6hReminderEmail(
   participante: string,
   horaCita: string,
   meetLink: string | null,
-  contactId: string
+  contactId: string,
+  calendarAddUrl?: string | null
 ): { subject: string; body: string } {
-  const subject = `Tu llamada con IM3 es hoy`;
+  const subject = `${participante}, tu sesión con IM3 es hoy`;
+  const baseUrl = process.env.BASE_URL || "https://im3systems.com";
 
   const meetSection = meetLink
-    ? `<p style="margin:0 0 16px"><a href="${meetLink}" style="color:#3B82F6;font-weight:bold;font-size:16px">Link de la reunión →</a></p>`
+    ? `<p style="margin:0 0 12px"><a href="${meetLink}" style="display:inline-block;background:#3B82F6;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px">Unirse a la reunión →</a></p>`
+    : "";
+
+  const calendarSection = calendarAddUrl
+    ? `<p style="margin:0 0 16px"><a href="${calendarAddUrl}" style="color:#3B82F6;font-size:13px;text-decoration:none">📅 Agregar a mi calendario</a></p>`
     : "";
 
   const body = `<div style="max-width:600px;margin:0 auto;font-family:'Segoe UI',Roboto,sans-serif;color:#1a1a1a">
@@ -94,14 +109,16 @@ export function build6hReminderEmail(
     <h1 style="color:#fff;font-size:18px;margin:0">IM3 Systems</h1>
   </div>
   <div style="padding:24px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
-    <p style="margin:0 0 16px">${participante}, hoy tenemos tu sesión de diagnóstico a las <strong>${horaCita}</strong>.</p>
+    <p style="margin:0 0 16px">${participante}, hoy tenemos tu sesión de diagnóstico a las <strong>${horaCita}</strong> (45 minutos).</p>
     ${meetSection}
-    <p style="margin:0 0 16px">Recuerda tener a mano información sobre tus herramientas actuales y los procesos que más tiempo consumen en tu operación.</p>
-    <p style="margin:0 0 16px;color:#666">¿Tienes preguntas antes de la sesión? Responde este correo y te ayudamos.</p>
-    <p style="margin:0;color:#999">— Equipo IM3 Systems</p>
+    ${calendarSection}
+    <p style="margin:0 0 16px">Ten a mano información sobre tus herramientas actuales y los procesos que más tiempo consumen en tu operación — así aprovechamos al máximo la sesión.</p>
+    <p style="margin:0 0 16px;color:#666">¿Tienes preguntas antes? Responde este correo y te ayudamos.</p>
+    <p style="margin:0 0 20px;color:#999">— Equipo IM3 Systems</p>
+    <p style="margin:0;font-size:12px;color:#999"><a href="${baseUrl}/api/reschedule/${contactId}" style="color:#999;text-decoration:none">Reagendar</a> · <a href="${baseUrl}/api/cancel/${contactId}" style="color:#999;text-decoration:none">Cancelar</a></p>
   </div>
   <div style="padding:12px 24px;text-align:center">
-    <a href="${process.env.BASE_URL || "https://im3systems.com"}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">No recibir más emails</a>
+    <a href="${baseUrl}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">No recibir más emails</a>
   </div>
 </div>`;
 
@@ -114,10 +131,11 @@ export function buildMicroReminderEmail(
   meetLink: string | null,
   contactId: string
 ): { subject: string; body: string } {
-  const subject = `En 1 hora: tu diagnóstico IM3`;
+  const subject = `En 1 hora: tu diagnóstico con IM3`;
+  const baseUrl = process.env.BASE_URL || "https://im3systems.com";
 
   const meetSection = meetLink
-    ? `<p style="margin:0 0 16px"><a href="${meetLink}" style="color:#3B82F6;font-weight:bold;font-size:16px">Unirse a la reunión →</a></p>`
+    ? `<p style="margin:0 0 16px"><a href="${meetLink}" style="display:inline-block;background:#3B82F6;color:#fff;padding:14px 28px;border-radius:6px;text-decoration:none;font-weight:600;font-size:16px">Unirse a la reunión →</a></p>`
     : "";
 
   const body = `<div style="max-width:600px;margin:0 auto;font-family:'Segoe UI',Roboto,sans-serif;color:#1a1a1a">
@@ -125,13 +143,12 @@ export function buildMicroReminderEmail(
     <h1 style="color:#fff;font-size:18px;margin:0">IM3 Systems</h1>
   </div>
   <div style="padding:24px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
-    <p style="margin:0 0 16px">${participante}, tu sesión de diagnóstico es en <strong>1 hora</strong> (${horaCita}).</p>
+    <p style="margin:0 0 16px">${participante}, tu sesión empieza en <strong>1 hora</strong> (${horaCita}). Nos vemos ahí.</p>
     ${meetSection}
-    <p style="margin:0 0 16px;color:#666">Responde "confirmado" a este email si nos vemos. Si necesitas reagendar, también responde y lo coordinamos.</p>
     <p style="margin:0;color:#999">— Equipo IM3 Systems</p>
   </div>
   <div style="padding:12px 24px;text-align:center">
-    <a href="${process.env.BASE_URL || "https://im3systems.com"}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">No recibir más emails</a>
+    <a href="${baseUrl}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">No recibir más emails</a>
   </div>
 </div>`;
 

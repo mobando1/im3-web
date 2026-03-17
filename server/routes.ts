@@ -78,6 +78,32 @@ function calculateEmailTime(
   }
 }
 
+/**
+ * Build a Google Calendar "Add to Calendar" URL for the diagnostic session.
+ */
+function buildGoogleCalendarUrl(
+  empresa: string,
+  fechaCita: string,
+  horaCita: string,
+  meetLink: string | null
+): string {
+  // Parse date and time
+  const { parseFechaCita } = require("./date-utils");
+  const start = parseFechaCita(fechaCita, horaCita);
+  const end = new Date(start.getTime() + 45 * 60 * 1000); // 45 min
+
+  const fmt = (d: Date) =>
+    d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+
+  const title = encodeURIComponent(`Diagnóstico IM3 — ${empresa}`);
+  const details = encodeURIComponent(
+    `Sesión de diagnóstico tecnológico con IM3 Systems (45 min).${meetLink ? `\n\nLink de la reunión: ${meetLink}` : ""}`
+  );
+  const location = meetLink ? encodeURIComponent(meetLink) : "";
+
+  return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${title}&dates=${fmt(start)}/${fmt(end)}&details=${details}&location=${location}`;
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -242,27 +268,28 @@ export async function registerRoutes(
         });
     }
 
-    // Create Google Calendar event with Meet link (non-blocking)
+    // Create Google Calendar event with Meet link (AWAIT — must complete before email scheduling)
+    let generatedMeetLink: string | null = null;
     if (db && insertedId && data.email) {
-      createCalendarEvent({
-        diagnosticId: insertedId,
-        empresa: data.empresa,
-        participante: data.participante,
-        email: data.email,
-        fechaCita: data.fechaCita,
-        horaCita: data.horaCita,
-      })
-        .then((result) => {
-          if (result?.meetLink && db && insertedId) {
-            db.update(diagnostics)
-              .set({ meetLink: result.meetLink })
-              .where(eq(diagnostics.id, insertedId))
-              .catch((err: unknown) => log(`Error saving Meet link: ${err}`));
-          }
-        })
-        .catch((err: unknown) => {
-          log(`Error creando evento Calendar: ${err}`);
+      try {
+        const calResult = await createCalendarEvent({
+          diagnosticId: insertedId,
+          empresa: data.empresa,
+          participante: data.participante,
+          email: data.email,
+          fechaCita: data.fechaCita,
+          horaCita: data.horaCita,
         });
+        if (calResult?.meetLink && db) {
+          generatedMeetLink = calResult.meetLink;
+          await db.update(diagnostics)
+            .set({ meetLink: generatedMeetLink })
+            .where(eq(diagnostics.id, insertedId));
+          log(`Meet link creado: ${generatedMeetLink}`);
+        }
+      } catch (err) {
+        log(`Error creando evento Calendar: ${err}`);
+      }
     }
 
     // Create CRM contact (non-blocking, independent of email config)
@@ -348,6 +375,20 @@ export async function registerRoutes(
           // Calculate appointment timing (shared by email + WhatsApp)
           const appointmentDate = parseFechaCita(data.fechaCita, data.horaCita);
 
+          // Enrich diagForAI with meet link, calendar URL, and action links
+          if (diagForAI) {
+            // Ensure meetLink is set (may have been saved after initial fetch)
+            if (!diagForAI.meetLink && generatedMeetLink) {
+              (diagForAI as any).meetLink = generatedMeetLink;
+            }
+            const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+            (diagForAI as any)._calendarAddUrl = buildGoogleCalendarUrl(
+              data.empresa, data.fechaCita, data.horaCita, diagForAI.meetLink || generatedMeetLink
+            );
+            (diagForAI as any)._rescheduleUrl = `${baseUrl}/api/reschedule/${contact.id}`;
+            (diagForAI as any)._cancelUrl = `${baseUrl}/api/cancel/${contact.id}`;
+          }
+
           // Flag returning contacts so AI emails acknowledge them
           if (isReturning && diagForAI) {
             (diagForAI as any)._isReturningContact = true;
@@ -384,6 +425,14 @@ export async function registerRoutes(
                     const r = buildMicroReminderEmail(
                       data.participante, data.horaCita,
                       diagForAI?.meetLink || null, contact.id
+                    );
+                    subject = r.subject;
+                    body = r.body;
+                  } else if (template.nombre === "recordatorio_6h") {
+                    const r = build6hReminderEmail(
+                      data.participante, data.horaCita,
+                      diagForAI?.meetLink || null, contact.id,
+                      (diagForAI as any)?._calendarAddUrl || null
                     );
                     subject = r.subject;
                     body = r.body;
@@ -3341,6 +3390,63 @@ ${urls}
       log(`Error unsubscribe: ${err}`);
       res.status(500).send("<html><body><h2>Error procesando solicitud.</h2></body></html>");
     }
+  });
+
+  // Reschedule — redirect to booking page
+  app.get("/api/reschedule/:contactId", async (req, res) => {
+    const { contactId } = req.params;
+    if (db) {
+      try {
+        const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId)).limit(1);
+        if (contact) {
+          logActivity(contactId, "status_changed", "Contacto solicitó reagendar desde email");
+          // Update meeting status
+          if (contact.diagnosticId) {
+            await db.update(diagnostics)
+              .set({ meetingStatus: "cancelled" })
+              .where(eq(diagnostics.id, contact.diagnosticId));
+          }
+        }
+      } catch (err) {
+        log(`Error processing reschedule: ${err}`);
+      }
+    }
+    res.redirect(`${process.env.BASE_URL || "https://im3systems.com"}/booking`);
+  });
+
+  // Cancel meeting
+  app.get("/api/cancel/:contactId", async (req, res) => {
+    const { contactId } = req.params;
+    if (db) {
+      try {
+        const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId)).limit(1);
+        if (contact) {
+          logActivity(contactId, "status_changed", "Contacto canceló la reunión desde email");
+          if (contact.diagnosticId) {
+            await db.update(diagnostics)
+              .set({ meetingStatus: "cancelled" })
+              .where(eq(diagnostics.id, contact.diagnosticId));
+          }
+          // Opt out of remaining pre-meeting emails
+          await db.update(contacts)
+            .set({ optedOut: true })
+            .where(eq(contacts.id, contactId));
+        }
+      } catch (err) {
+        log(`Error processing cancellation: ${err}`);
+      }
+    }
+
+    res.send(`<html>
+      <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+      <body style="font-family:sans-serif;max-width:500px;margin:60px auto;text-align:center;color:#333">
+        <h2 style="color:#0F172A">Reunión cancelada</h2>
+        <p>Tu sesión de diagnóstico ha sido cancelada.</p>
+        <p>Si cambias de opinión, puedes agendar una nueva sesión en cualquier momento:</p>
+        <a href="${process.env.BASE_URL || "https://im3systems.com"}/booking" style="display:inline-block;background:#3B82F6;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;margin-top:12px">Agendar nueva sesión</a>
+        <p style="color:#999;font-size:14px;margin-top:24px">— Equipo IM3 Systems</p>
+      </body>
+    </html>`);
   });
 
   return httpServer;
