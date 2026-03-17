@@ -15,6 +15,17 @@ import {
 } from "@/components/ui/select";
 import { Progress } from "@/components/ui/progress";
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog";
+import {
   ArrowLeft,
   Mail,
   Phone,
@@ -150,6 +161,8 @@ type ContactDetail = {
     presupuesto: string;
     googleDriveUrl: string | null;
     meetLink: string | null;
+    meetingStatus: string | null;
+    meetingCompletedAt: string | null;
     comodidadTech: string;
     empresa: string;
     anosOperacion: string;
@@ -193,6 +206,20 @@ const emailStatusColors: Record<string, string> = {
   bounced: "bg-red-50 text-red-700 border-red-200",
   failed: "bg-red-50 text-red-700 border-red-200",
   expired: "bg-amber-50 text-amber-700 border-amber-200",
+};
+
+const meetingStatusColors: Record<string, string> = {
+  scheduled: "bg-blue-50 text-blue-700 border-blue-200",
+  completed: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  no_show: "bg-red-50 text-red-700 border-red-200",
+  cancelled: "bg-gray-100 text-gray-600 border-gray-200",
+};
+
+const meetingStatusLabels: Record<string, string> = {
+  scheduled: "Agendada",
+  completed: "Completada",
+  no_show: "No se presentó",
+  cancelled: "Cancelada",
 };
 
 const statusLabels: Record<string, string> = {
@@ -502,6 +529,15 @@ export default function ContactDetailPage() {
     },
   });
 
+  const deleteContactMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("DELETE", `/api/admin/contacts/${contactId}`);
+    },
+    onSuccess: () => {
+      navigate("/admin/contacts");
+    },
+  });
+
   const deleteDealMutation = useMutation({
     mutationFn: async (dealId: string) => {
       await apiRequest("DELETE", `/api/admin/deals/${dealId}`);
@@ -509,6 +545,17 @@ export default function ContactDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/deals?contactId=${contactId}`] });
       queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/activity`] });
+    },
+  });
+
+  const meetingStatusMutation = useMutation({
+    mutationFn: async ({ diagnosticId, status }: { diagnosticId: string; status: string }) => {
+      await apiRequest("PATCH", `/api/admin/diagnostics/${diagnosticId}/meeting-status`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/activity`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/calendar"] });
     },
   });
 
@@ -616,6 +663,35 @@ export default function ContactDetailPage() {
             <MessageCircle className="w-3.5 h-3.5" />
             {whatsAppMutation.isPending ? "Generando..." : "WhatsApp"}
           </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-red-200 text-red-500 hover:text-red-700 hover:bg-red-50 gap-1.5"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                Eliminar
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent className="bg-white">
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Eliminar este contacto?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Se borrarán todos los emails, notas, tareas, deals y actividad asociada a <strong>{contact.nombre}</strong>. Esta acción no se puede deshacer.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="border-gray-200">Cancelar</AlertDialogCancel>
+                <AlertDialogAction
+                  onClick={() => deleteContactMutation.mutate()}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                >
+                  {deleteContactMutation.isPending ? "Eliminando..." : "Sí, eliminar"}
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           {contact.optedOut && (
             <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
               Opted out
@@ -883,6 +959,58 @@ export default function ContactDetailPage() {
                       {diagnostic.meetLink && (
                         <Button variant="outline" size="sm" asChild className="border-gray-200 text-gray-600 hover:text-gray-900">
                           <a href={diagnostic.meetLink} target="_blank" rel="noopener noreferrer"><ExternalLink className="w-3.5 h-3.5 mr-1.5" />Google Meet</a>
+                        </Button>
+                      )}
+                    </div>
+                  </>
+                )}
+                {/* Meeting Status */}
+                {diagnostic?.meetLink && (
+                  <>
+                    <div className="border-t border-gray-100" />
+                    <div>
+                      <p className="text-xs text-gray-400 mb-2 flex items-center gap-1"><Calendar className="w-3 h-3" /> Estado de Reunión</p>
+                      <div className="flex items-center gap-2 mb-2">
+                        <Badge variant="outline" className={`text-xs ${meetingStatusColors[diagnostic.meetingStatus || "scheduled"] || meetingStatusColors.scheduled}`}>
+                          {meetingStatusLabels[diagnostic.meetingStatus || "scheduled"] || "Agendada"}
+                        </Badge>
+                        {diagnostic.meetingCompletedAt && (
+                          <span className="text-[10px] text-gray-400">
+                            {new Date(diagnostic.meetingCompletedAt).toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric", hour: "2-digit", minute: "2-digit" })}
+                          </span>
+                        )}
+                      </div>
+                      {(diagnostic.meetingStatus || "scheduled") === "scheduled" && (
+                        <div className="flex gap-1.5">
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-7 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                            disabled={meetingStatusMutation.isPending}
+                            onClick={() => meetingStatusMutation.mutate({ diagnosticId: contact.diagnosticId, status: "completed" })}
+                          >
+                            <Check className="w-3 h-3 mr-1" /> Completada
+                          </Button>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="text-xs h-7 border-red-200 text-red-600 hover:bg-red-50"
+                            disabled={meetingStatusMutation.isPending}
+                            onClick={() => meetingStatusMutation.mutate({ diagnosticId: contact.diagnosticId, status: "no_show" })}
+                          >
+                            <X className="w-3 h-3 mr-1" /> No se presentó
+                          </Button>
+                        </div>
+                      )}
+                      {(diagnostic.meetingStatus === "completed" || diagnostic.meetingStatus === "no_show") && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs h-7 text-gray-400 hover:text-gray-600"
+                          disabled={meetingStatusMutation.isPending}
+                          onClick={() => meetingStatusMutation.mutate({ diagnosticId: contact.diagnosticId, status: "scheduled" })}
+                        >
+                          Revertir a agendada
                         </Button>
                       )}
                     </div>

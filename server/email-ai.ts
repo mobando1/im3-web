@@ -67,6 +67,9 @@ function buildContext(data: Partial<Diagnostic> | null): string {
     lines.push(`- Familiaridad — Automatización: ${f.automatizacion}, CRM: ${f.crm}, IA: ${f.ia}, Integración: ${f.integracion}, Desarrollo: ${f.desarrollo}`);
   }
   if (data.meetLink) lines.push(`- Link de reunión (Google Meet): ${data.meetLink}`);
+  if ((data as any)._isReturningContact) {
+    lines.push("- NOTA: Este contacto ya era conocido (suscriptor de newsletter u otro canal). Reconócelo sutilmente — muestra entusiasmo de que haya decidido dar el siguiente paso y agendar. No lo trates como primera vez, hazle saber que estás pendiente.");
+  }
   return lines.join("\n");
 }
 

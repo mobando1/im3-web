@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { List, LayoutGrid, Mail, Filter, Download, X, MessageCircle, Tag, UserX } from "lucide-react";
+import { List, LayoutGrid, Mail, Filter, Download, X, MessageCircle, Tag, UserX, Trash2 } from "lucide-react";
 
 type Contact = {
   id: string;
@@ -100,6 +100,15 @@ export default function Contacts() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkTag, setBulkTag] = useState("");
   const [bulkStatus, setBulkStatus] = useState("contacted");
+
+  const deleteContactMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/contacts/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/contacts"] });
+    },
+  });
 
   const bulkMutation = useMutation({
     mutationFn: async (data: { ids: string[]; action: string; payload: any }) => {
@@ -437,19 +446,33 @@ export default function Contacts() {
                           <TableCell className="text-gray-500 text-sm">
                             {new Date(contact.createdAt).toLocaleDateString("es-CO")}
                           </TableCell>
-                          <TableCell className="w-10">
-                            {contact.telefono && (
-                              <a
-                                href={`https://wa.me/${contact.telefono.replace(/\D/g, "")}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                onClick={(e) => e.stopPropagation()}
-                                className="text-gray-300 hover:text-green-600 transition-colors"
-                                title="WhatsApp"
+                          <TableCell className="w-20">
+                            <div className="flex items-center gap-1">
+                              {contact.telefono && (
+                                <a
+                                  href={`https://wa.me/${contact.telefono.replace(/\D/g, "")}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  onClick={(e) => e.stopPropagation()}
+                                  className="text-gray-300 hover:text-green-600 transition-colors"
+                                  title="WhatsApp"
+                                >
+                                  <MessageCircle className="w-4 h-4" />
+                                </a>
+                              )}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (confirm(`¿Eliminar a ${contact.nombre}? Se borrarán todos los datos asociados.`)) {
+                                    deleteContactMutation.mutate(contact.id);
+                                  }
+                                }}
+                                className="text-gray-300 hover:text-red-600 transition-colors"
+                                title="Eliminar contacto"
                               >
-                                <MessageCircle className="w-4 h-4" />
-                              </a>
-                            )}
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
                           </TableCell>
                         </TableRow>
                       );

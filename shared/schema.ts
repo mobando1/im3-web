@@ -68,6 +68,8 @@ export const diagnostics = pgTable("diagnostics", {
   sentToGhl: boolean("sent_to_ghl").default(false).notNull(),
   googleDriveUrl: text("google_drive_url"),
   meetLink: text("meet_link"),
+  meetingStatus: text("meeting_status").default("scheduled"), // scheduled | completed | no_show | cancelled
+  meetingCompletedAt: timestamp("meeting_completed_at"),
 });
 
 export type Diagnostic = typeof diagnostics.$inferSelect;
@@ -256,6 +258,10 @@ export const appointments = pgTable("appointments", {
   notes: text("notes"),
   meetLink: text("meet_link"),
   googleCalendarEventId: text("google_calendar_event_id"),
+  status: text("status").default("scheduled"), // scheduled | completed | no_show | cancelled
+  completedAt: timestamp("completed_at"),
+  recordingUrl: text("recording_url"),
+  transcriptUrl: text("transcript_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -310,3 +316,27 @@ export const insertBlogPostSchema = createInsertSchema(blogPosts).omit({
   createdAt: true,
   updatedAt: true,
 });
+
+// WhatsApp messages (automated sequence + manual sends)
+export const whatsappMessages = pgTable("whatsapp_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contactId: varchar("contact_id").notNull(),
+  phone: text("phone").notNull(),
+  message: text("message").notNull(),
+  templateName: text("template_name"), // Meta-approved template name (null = free-form within 24h window)
+  templateParams: json("template_params").$type<Record<string, string>>(),
+  mediaUrl: text("media_url"), // Voice note or image URL
+  mediaType: text("media_type"), // audio | image | document
+  status: text("status").notNull().default("pending"), // pending | sent | delivered | read | failed
+  scheduledFor: timestamp("scheduled_for").notNull(),
+  sentAt: timestamp("sent_at"),
+  deliveredAt: timestamp("delivered_at"),
+  readAt: timestamp("read_at"),
+  whatsappMessageId: text("whatsapp_message_id"), // Meta API message ID
+  errorMessage: text("error_message"),
+  retryCount: integer("retry_count").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type WhatsAppMessage = typeof whatsappMessages.$inferSelect;
+export type InsertWhatsAppMessage = typeof whatsappMessages.$inferInsert;

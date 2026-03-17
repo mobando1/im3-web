@@ -80,7 +80,7 @@ export const step7Schema = z.object({
 export const diagnosticFormSchema = z.object({
   ...step1Schema.shape,
   ...step2Schema.shape,
-  ...step3Schema.shape,
+  ...step3Schema._def.schema.shape,
   ...step4Schema._def.schema.shape,
   ...step5Schema.shape,
   ...step6Schema._def.schema.shape,

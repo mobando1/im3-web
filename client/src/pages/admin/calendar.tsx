@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Calendar as CalendarIcon, Clock, ExternalLink, Video, ChevronLeft, ChevronRight, Plus, Trash2, X } from "lucide-react";
+import { Calendar as CalendarIcon, Clock, ExternalLink, Video, ChevronLeft, ChevronRight, Plus, Trash2, X, Check, UserX } from "lucide-react";
 import { useState, useMemo } from "react";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -17,6 +17,7 @@ type Appointment = {
   contactId: string;
   meetLink: string | null;
   googleDriveUrl: string | null;
+  meetingStatus?: string;
 };
 
 type ManualAppointment = {
@@ -28,7 +29,15 @@ type ManualAppointment = {
   duration: number;
   notes: string | null;
   meetLink: string | null;
+  status: string | null;
   createdAt: string;
+};
+
+const meetingStatusColors: Record<string, string> = {
+  scheduled: "bg-[#2FA4A9]/10 text-[#2FA4A9]",
+  completed: "bg-emerald-100 text-emerald-700",
+  no_show: "bg-red-100 text-red-700",
+  cancelled: "bg-gray-100 text-gray-500",
 };
 
 function parseDateString(fechaCita: string): Date | null {
@@ -106,6 +115,25 @@ export default function CalendarPage() {
     },
   });
 
+  // Status mutations for both diagnostic and manual appointments
+  const diagnosticStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      await apiRequest("PATCH", `/api/admin/diagnostics/${id}/meeting-status`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/calendar"] });
+    },
+  });
+
+  const appointmentStatusMutation = useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: string }) => {
+      await apiRequest("PATCH", `/api/admin/appointments/${id}/status`, { status });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/appointments"] });
+    },
+  });
+
   const appointmentsByDate = useMemo(() => {
     const map: Record<string, Appointment[]> = {};
     for (const apt of appointments) {
@@ -127,6 +155,7 @@ export default function CalendarPage() {
         contactId: ma.contactId || "",
         meetLink: ma.meetLink,
         googleDriveUrl: null,
+        meetingStatus: ma.status || "scheduled",
       });
     }
     return map;
@@ -174,6 +203,7 @@ export default function CalendarPage() {
       contactId: ma.contactId || "",
       meetLink: ma.meetLink,
       googleDriveUrl: null,
+      meetingStatus: ma.status || "scheduled",
     }));
     return [...appointments, ...converted]
       .filter((a) => {
@@ -295,15 +325,18 @@ export default function CalendarPage() {
                           {cell.day}
                         </span>
                         <div className="mt-1 space-y-0.5">
-                          {apts.slice(0, 2).map((apt) => (
-                            <button
-                              key={apt.id}
-                              onClick={() => apt.contactId && navigate(`/admin/contacts/${apt.contactId}`)}
-                              className="w-full text-left px-1.5 py-0.5 rounded text-[10px] font-medium bg-[#2FA4A9]/10 text-[#2FA4A9] hover:bg-[#2FA4A9]/20 transition-colors truncate block"
-                            >
-                              {apt.horaCita} {apt.contactName}
-                            </button>
-                          ))}
+                          {apts.slice(0, 2).map((apt) => {
+                            const statusClass = meetingStatusColors[apt.meetingStatus || "scheduled"] || meetingStatusColors.scheduled;
+                            return (
+                              <button
+                                key={apt.id}
+                                onClick={() => apt.contactId && navigate(`/admin/contacts/${apt.contactId}`)}
+                                className={`w-full text-left px-1.5 py-0.5 rounded text-[10px] font-medium ${statusClass} hover:opacity-80 transition-colors truncate block`}
+                              >
+                                {apt.horaCita} {apt.contactName}
+                              </button>
+                            );
+                          })}
                           {apts.length > 2 && (
                             <p className="text-[10px] text-gray-400 px-1.5">
                               +{apts.length - 2} mas
@@ -334,54 +367,105 @@ export default function CalendarPage() {
             ) : upcoming.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-4">Sin citas proximas</p>
             ) : (
-              upcoming.map((apt) => (
-                <div
-                  key={apt.id}
-                  className="rounded-lg border border-gray-100 p-3 hover:border-[#2FA4A9]/30 transition-colors cursor-pointer"
-                  onClick={() => apt.contactId && navigate(`/admin/contacts/${apt.contactId}`)}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-medium text-gray-900 truncate">{apt.contactName}</p>
-                      <p className="text-xs text-gray-500 truncate">{apt.contactCompany}</p>
+              upcoming.map((apt) => {
+                const status = apt.meetingStatus || "scheduled";
+                const isManual = apt.id.startsWith("manual-");
+                const realId = isManual ? apt.id.replace("manual-", "") : apt.id;
+
+                return (
+                  <div
+                    key={apt.id}
+                    className={`rounded-lg border p-3 transition-colors cursor-pointer ${
+                      status === "completed" ? "border-emerald-200 bg-emerald-50/30" :
+                      status === "no_show" ? "border-red-200 bg-red-50/30" :
+                      "border-gray-100 hover:border-[#2FA4A9]/30"
+                    }`}
+                    onClick={() => apt.contactId && navigate(`/admin/contacts/${apt.contactId}`)}
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-medium text-gray-900 truncate">{apt.contactName}</p>
+                        <p className="text-xs text-gray-500 truncate">{apt.contactCompany}</p>
+                      </div>
+                      <div className="flex items-center gap-1 flex-shrink-0">
+                        <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-5 ${
+                          status === "completed" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
+                          status === "no_show" ? "bg-red-50 text-red-700 border-red-200" :
+                          status === "cancelled" ? "bg-gray-100 text-gray-500 border-gray-200" :
+                          "bg-blue-50 text-blue-700 border-blue-200"
+                        }`}>
+                          {status === "completed" ? "Completada" : status === "no_show" ? "No show" : status === "cancelled" ? "Cancelada" : "Agendada"}
+                        </Badge>
+                        {isManual && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              deleteMutation.mutate(realId);
+                            }}
+                            className="text-gray-300 hover:text-red-500 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
+                      </div>
                     </div>
-                    {apt.id.startsWith("manual-") && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const realId = apt.id.replace("manual-", "");
-                          deleteMutation.mutate(realId);
-                        }}
-                        className="text-gray-300 hover:text-red-500 transition-colors flex-shrink-0 mt-0.5"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    )}
+                    <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
+                      <span className="flex items-center gap-1">
+                        <CalendarIcon className="w-3 h-3" />
+                        {apt.fechaCita}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="w-3 h-3" />
+                        {apt.horaCita}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-2 mt-2">
+                      {apt.meetLink && (
+                        <a
+                          href={apt.meetLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 text-xs text-[#2FA4A9] hover:underline"
+                        >
+                          <Video className="w-3 h-3" />
+                          Meet
+                        </a>
+                      )}
+                      {status === "scheduled" && (
+                        <>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (isManual) {
+                                appointmentStatusMutation.mutate({ id: realId, status: "completed" });
+                              } else {
+                                diagnosticStatusMutation.mutate({ id: realId, status: "completed" });
+                              }
+                            }}
+                            className="inline-flex items-center gap-0.5 text-[10px] text-emerald-600 hover:text-emerald-800 font-medium"
+                          >
+                            <Check className="w-3 h-3" /> Completada
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (isManual) {
+                                appointmentStatusMutation.mutate({ id: realId, status: "no_show" });
+                              } else {
+                                diagnosticStatusMutation.mutate({ id: realId, status: "no_show" });
+                              }
+                            }}
+                            className="inline-flex items-center gap-0.5 text-[10px] text-red-500 hover:text-red-700 font-medium"
+                          >
+                            <UserX className="w-3 h-3" /> No show
+                          </button>
+                        </>
+                      )}
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3 mt-2 text-xs text-gray-400">
-                    <span className="flex items-center gap-1">
-                      <CalendarIcon className="w-3 h-3" />
-                      {apt.fechaCita}
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
-                      {apt.horaCita}
-                    </span>
-                  </div>
-                  {apt.meetLink && (
-                    <a
-                      href={apt.meetLink}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      onClick={(e) => e.stopPropagation()}
-                      className="inline-flex items-center gap-1 mt-2 text-xs text-[#2FA4A9] hover:underline"
-                    >
-                      <Video className="w-3 h-3" />
-                      Google Meet
-                    </a>
-                  )}
-                </div>
-              ))
+                );
+              })
             )}
           </CardContent>
         </Card>

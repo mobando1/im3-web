@@ -537,7 +537,7 @@ const CredibilityStrip = () => {
     { num: 45, suffix: "+", label: t.credibility.systemsLabel },
     { num: 6, suffix: "", label: t.credibility.industriesLabel },
     { num: 100, suffix: "%", label: t.credibility.conversionLabel },
-    { num: 6, suffix: "", prefix: "", label: t.credibilityExtra.mvpLabel, displayText: "4-8" },
+    { num: 6, suffix: "", prefix: "", label: t.credibilityExtra.mvpLabel, displayText: "2-4" },
     { num: 24, suffix: "/7", label: t.credibilityExtra.chatbotsLabel },
   ];
 

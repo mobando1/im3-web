@@ -409,7 +409,7 @@ export async function registerRoutes(
                 if (template.nombre === "confirmacion" && subject && body) {
                   sendEmail(data.email, subject, body)
                     .then(() => {
-                      db.update(sentEmails)
+                      db!.update(sentEmails)
                         .set({ status: "sent", sentAt: new Date() })
                         .where(eq(sentEmails.id, insertedEmail.id))
                         .catch(() => {});

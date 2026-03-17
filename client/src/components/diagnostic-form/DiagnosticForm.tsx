@@ -112,7 +112,7 @@ export default function DiagnosticForm({ onStepChange }: DiagnosticFormProps) {
       // Trigger validation to show error messages
       const fields = Object.keys(result.error.formErrors.fieldErrors);
       fields.forEach((field) => {
-        const errors = result.error.formErrors.fieldErrors[field as keyof typeof result.error.formErrors.fieldErrors];
+        const errors = (result.error.formErrors.fieldErrors as Record<string, string[] | undefined>)[field];
         if (errors && errors.length > 0) {
           form.setError(field as keyof DiagnosticFormData, {
             type: "manual",

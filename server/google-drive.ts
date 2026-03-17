@@ -447,6 +447,85 @@ async function uploadJsonFile(
 }
 
 /**
+ * Search for a Google Meet recording in the organizer's Drive and move it
+ * to the client's existing folder. Also searches for transcription docs.
+ *
+ * Returns URLs of moved files, or null if nothing found.
+ */
+export async function moveRecordingToClientFolder(
+  meetingTitle: string,
+  clientFolderId: string
+): Promise<{ recordingUrl: string | null; transcriptUrl: string | null }> {
+  const auth = getAuth();
+  if (!auth) throw new Error("Google auth not configured");
+
+  const drive = google.drive({ version: "v3", auth });
+  let recordingUrl: string | null = null;
+  let transcriptUrl: string | null = null;
+
+  // Search for video recording (Meet saves as .mp4 in "Meet Recordings" folder)
+  try {
+    const videoResults = await drive.files.list({
+      q: `name contains '${meetingTitle.replace(/'/g, "\\'")}' and (mimeType='video/mp4' or mimeType='video/webm')`,
+      fields: "files(id, name, mimeType, webViewLink)",
+      pageSize: 5,
+    });
+
+    const recording = videoResults.data.files?.[0];
+    if (recording?.id) {
+      // Move to client folder
+      const file = await drive.files.get({ fileId: recording.id, fields: "parents" });
+      const previousParents = file.data.parents?.join(",") || "";
+      await drive.files.update({
+        fileId: recording.id,
+        addParents: clientFolderId,
+        removeParents: previousParents,
+        fields: "id, webViewLink",
+      });
+      recordingUrl = recording.webViewLink || `https://drive.google.com/file/d/${recording.id}`;
+      log(`[Drive] Recording moved to client folder: ${recording.name}`);
+    }
+  } catch (err: any) {
+    log(`[Drive] Error searching for recording: ${err?.message}`);
+  }
+
+  // Search for transcript (Meet saves as Google Doc)
+  try {
+    const transcriptResults = await drive.files.list({
+      q: `name contains '${meetingTitle.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.document'`,
+      fields: "files(id, name, mimeType, webViewLink)",
+      pageSize: 5,
+    });
+
+    const transcript = transcriptResults.data.files?.[0];
+    if (transcript?.id) {
+      const file = await drive.files.get({ fileId: transcript.id, fields: "parents" });
+      const previousParents = file.data.parents?.join(",") || "";
+      await drive.files.update({
+        fileId: transcript.id,
+        addParents: clientFolderId,
+        removeParents: previousParents,
+        fields: "id, webViewLink",
+      });
+      transcriptUrl = transcript.webViewLink || `https://docs.google.com/document/d/${transcript.id}`;
+      log(`[Drive] Transcript moved to client folder: ${transcript.name}`);
+    }
+  } catch (err: any) {
+    log(`[Drive] Error searching for transcript: ${err?.message}`);
+  }
+
+  return { recordingUrl, transcriptUrl };
+}
+
+/**
+ * Extract the folder ID from a Google Drive folder URL.
+ */
+export function extractFolderIdFromUrl(url: string): string | null {
+  const match = url.match(/folders\/([a-zA-Z0-9_-]+)/);
+  return match ? match[1] : null;
+}
+
+/**
  * Main entry: create folder + sheet + JSON for a diagnostic submission.
  * Returns the Google Drive folder URL and sheet URL.
  */

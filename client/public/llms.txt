@@ -38,7 +38,7 @@ Análisis sin costo de la operación del negocio. Identificamos cuellos de botel
 - 12+ sistemas construidos con IA integrada
 - 6 industrias atendidas (retail, logística, educación, manufactura, servicios, alimentos)
 - 100% de diagnósticos que continúan a implementación
-- MVP funcional en 4 a 8 semanas
+- MVP funcional en 2 a 4 semanas
 - Caso: Reducción de tiempo de cierre de 4 días a 4 horas
 - Caso: Reducción de pérdida de inventario de 8% a 0.5%
 - Caso: Adopción completa del equipo en 2 semanas
@@ -71,7 +71,7 @@ Sí. Aplicamos IA donde genera valor práctico: chatbots de ventas y atención e
 Sí. Construimos chatbots de ventas y atención al cliente en WhatsApp y web, potenciados por inteligencia artificial. Responden consultas, califican leads y cierran ventas 24/7.
 
 **¿Cuánto toma una implementación típica?**
-Un MVP funcional suele estar listo en 4 a 8 semanas. Empezamos con lo que más impacta la operación.
+Un MVP funcional suele estar listo en 2 a 4 semanas. Empezamos con lo que más impacta la operación.
 
 **¿El diagnóstico tiene algún costo?**
 No. El diagnóstico es 100% gratuito y sin compromiso.

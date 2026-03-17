@@ -76,7 +76,54 @@ export async function runMigrations() {
       ALTER TABLE "contacts" ALTER COLUMN "diagnostic_id" DROP NOT NULL;
     `).catch(() => {}); // Ignore if already nullable
 
-    console.log("✓ Database tables ensured");
+    // Add indexes on frequently queried FK columns
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_sent_emails_contact_id" ON "sent_emails" ("contact_id");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_sent_emails_status" ON "sent_emails" ("status");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_sent_emails_scheduled_for" ON "sent_emails" ("scheduled_for");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_contacts_diagnostic_id" ON "contacts" ("diagnostic_id");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_contacts_status" ON "contacts" ("status");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_activity_log_contact_id" ON "activity_log" ("contact_id");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_notifications_contact_id" ON "notifications" ("contact_id");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_deals_contact_id" ON "deals" ("contact_id");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_contact_notes_contact_id" ON "contact_notes" ("contact_id");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_tasks_contact_id" ON "tasks" ("contact_id");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_tasks_status_due" ON "tasks" ("status", "due_date");`).catch(() => {});
+
+    // Meeting status columns for appointments and diagnostics
+    await pool.query(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "status" text DEFAULT 'scheduled';`).catch(() => {});
+    await pool.query(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "completed_at" timestamp;`).catch(() => {});
+    await pool.query(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "recording_url" text;`).catch(() => {});
+    await pool.query(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "transcript_url" text;`).catch(() => {});
+    await pool.query(`ALTER TABLE "diagnostics" ADD COLUMN IF NOT EXISTS "meeting_status" text DEFAULT 'scheduled';`).catch(() => {});
+    await pool.query(`ALTER TABLE "diagnostics" ADD COLUMN IF NOT EXISTS "meeting_completed_at" timestamp;`).catch(() => {});
+
+    // WhatsApp messages table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "whatsapp_messages" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "contact_id" varchar NOT NULL,
+        "phone" text NOT NULL,
+        "message" text NOT NULL,
+        "template_name" text,
+        "template_params" json,
+        "media_url" text,
+        "media_type" text,
+        "status" text DEFAULT 'pending' NOT NULL,
+        "scheduled_for" timestamp NOT NULL,
+        "sent_at" timestamp,
+        "delivered_at" timestamp,
+        "read_at" timestamp,
+        "whatsapp_message_id" text,
+        "error_message" text,
+        "retry_count" integer DEFAULT 0 NOT NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_whatsapp_messages_contact_id" ON "whatsapp_messages" ("contact_id");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_whatsapp_messages_status" ON "whatsapp_messages" ("status");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_whatsapp_messages_scheduled_for" ON "whatsapp_messages" ("scheduled_for");`).catch(() => {});
+
+    console.log("✓ Database tables and indexes ensured");
 
     // Ensure admin user exists with correct password
     try {

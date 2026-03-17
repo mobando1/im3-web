@@ -138,7 +138,7 @@ Sí. IM3 automatiza procesos empresariales combinando integraciones técnicas co
 PYMEs en Latinoamérica y España que tienen operación real y necesitan orden, automatización y control. Especialmente empresas cuya operación depende de procesos manuales, hojas de cálculo, WhatsApp o herramientas desconectadas. Industrias: retail, logística, servicios, educación, alimentos, manufactura y recursos humanos.
 
 **¿Cuánto toma una implementación típica?**
-Un MVP funcional suele estar listo en 4 a 8 semanas desde el diagnóstico inicial. IM3 empieza con lo que más impacta la operación y va iterando con entregas semanales.
+Un MVP funcional suele estar listo en 2 a 4 semanas desde el diagnóstico inicial. IM3 empieza con lo que más impacta la operación y va iterando con entregas semanales.
 
 **¿Qué pasa si mi equipo no es técnico?**
 No se necesita equipo técnico. IM3 diseña todo para que sea fácil de usar. Además, entregan documentación completa y capacitación para que el equipo opere sin depender de desarrolladores.
