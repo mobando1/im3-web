@@ -365,6 +365,10 @@ export default function ContactDetailPage() {
   const [newDealTitle, setNewDealTitle] = useState("");
   const [newDealValue, setNewDealValue] = useState("");
   const [newDealStage, setNewDealStage] = useState("qualification");
+  const [showFollowUpForm, setShowFollowUpForm] = useState(false);
+  const [followUpDate, setFollowUpDate] = useState("");
+  const [followUpTime, setFollowUpTime] = useState("");
+  const [followUpNotes, setFollowUpNotes] = useState("");
 
   const contactId = params?.id;
 
@@ -556,6 +560,35 @@ export default function ContactDetailPage() {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}`] });
       queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/activity`] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/calendar"] });
+    },
+  });
+
+  const { data: followUpData } = useQuery<{
+    id: string;
+    date: string;
+    time: string;
+    meetLink: string | null;
+    status: string;
+  } | null>({
+    queryKey: [`/api/admin/contacts/${contactId}/followup`],
+    enabled: !!contactId,
+  });
+
+  const scheduleFollowUpMutation = useMutation({
+    mutationFn: async (formData: { date: string; time: string; notes?: string }) => {
+      const res = await apiRequest("POST", `/api/admin/contacts/${contactId}/schedule-followup`, formData);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/followup`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/activity`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/appointments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/calendar"] });
+      setShowFollowUpForm(false);
+      setFollowUpDate("");
+      setFollowUpTime("");
+      setFollowUpNotes("");
     },
   });
 
@@ -1016,6 +1049,94 @@ export default function ContactDetailPage() {
                     </div>
                   </>
                 )}
+                {/* Follow-up Scheduling */}
+                <>
+                  <div className="border-t border-gray-100" />
+                  <div>
+                    <p className="text-xs text-gray-400 mb-2 flex items-center gap-1"><Calendar className="w-3 h-3" /> Seguimiento</p>
+                    {followUpData ? (
+                      <div className="space-y-2">
+                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+                          <p className="text-sm font-medium text-blue-900">{followUpData.date} — {followUpData.time}</p>
+                          {followUpData.meetLink && (
+                            <a href={followUpData.meetLink} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 mt-1">
+                              <ExternalLink className="w-3 h-3" /> Google Meet
+                            </a>
+                          )}
+                          <Badge variant="outline" className="text-[10px] mt-1.5 bg-blue-100 text-blue-700 border-blue-300">Agendado</Badge>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="text-xs h-7 w-full border-gray-200"
+                          onClick={() => setShowFollowUpForm(true)}
+                        >
+                          <RefreshCw className="w-3 h-3 mr-1" /> Cambiar fecha
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="text-xs h-7 w-full border-blue-200 text-blue-700 hover:bg-blue-50"
+                        onClick={() => setShowFollowUpForm(true)}
+                      >
+                        <Plus className="w-3 h-3 mr-1" /> Agendar seguimiento
+                      </Button>
+                    )}
+                    {showFollowUpForm && (
+                      <div className="mt-3 space-y-2 bg-gray-50 border border-gray-200 rounded-lg p-3">
+                        <p className="text-xs font-medium text-gray-700">{followUpData ? "Reagendar seguimiento" : "Nueva sesión de seguimiento"}</p>
+                        {followUpData && (
+                          <p className="text-[10px] text-amber-600">Se cancelará el seguimiento actual y se creará uno nuevo</p>
+                        )}
+                        <Input
+                          type="date"
+                          value={followUpDate}
+                          onChange={(e) => setFollowUpDate(e.target.value)}
+                          min={new Date(Date.now() + 86400000).toISOString().split("T")[0]}
+                          className="h-8 text-sm"
+                        />
+                        <Select value={followUpTime} onValueChange={setFollowUpTime}>
+                          <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Hora" /></SelectTrigger>
+                          <SelectContent>
+                            {["9:00 AM", "10:00 AM", "11:00 AM", "12:00 PM", "1:00 PM", "2:00 PM", "3:00 PM", "4:00 PM", "5:00 PM"].map((t) => (
+                              <SelectItem key={t} value={t}>{t}</SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                        <Input
+                          placeholder="Notas (opcional)"
+                          value={followUpNotes}
+                          onChange={(e) => setFollowUpNotes(e.target.value)}
+                          className="h-8 text-sm"
+                        />
+                        <div className="flex gap-1.5">
+                          <Button
+                            size="sm"
+                            className="text-xs h-7 flex-1 bg-blue-600 hover:bg-blue-700"
+                            disabled={!followUpDate || !followUpTime || scheduleFollowUpMutation.isPending}
+                            onClick={() => scheduleFollowUpMutation.mutate({
+                              date: followUpDate,
+                              time: followUpTime,
+                              notes: followUpNotes || undefined,
+                            })}
+                          >
+                            {scheduleFollowUpMutation.isPending ? "Agendando..." : "Confirmar"}
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="text-xs h-7"
+                            onClick={() => setShowFollowUpForm(false)}
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
                 {/* Tags */}
                 {contact.tags && contact.tags.length > 0 && (
                   <>

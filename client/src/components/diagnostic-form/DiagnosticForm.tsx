@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useLocation } from "wouter";
@@ -57,6 +57,7 @@ export default function DiagnosticForm({ onStepChange }: DiagnosticFormProps) {
   const [editingFromReview, setEditingFromReview] = useState(false);
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const formStartTime = useRef(Date.now());
 
   useEffect(() => {
     onStepChange?.(currentStep);
@@ -179,7 +180,8 @@ export default function DiagnosticForm({ onStepChange }: DiagnosticFormProps) {
     setIsSubmitting(true);
     try {
       const data = form.getValues();
-      await apiRequest("POST", "/api/diagnostic", data);
+      const formDurationMinutes = Math.round((Date.now() - formStartTime.current) / 60000);
+      await apiRequest("POST", "/api/diagnostic", { ...data, formDurationMinutes });
       navigate("/confirmed");
     } catch {
       toast({

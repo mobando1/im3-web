@@ -47,6 +47,7 @@ function LoadingSpinner() {
 const Home = lazy(() => import("@/pages/home"));
 const Booking = lazy(() => import("@/pages/booking"));
 const Confirmed = lazy(() => import("@/pages/confirmed"));
+const Reschedule = lazy(() => import("@/pages/reschedule"));
 const AdminLogin = lazy(() => import("@/pages/admin/login"));
 const AdminDashboard = lazy(() => import("@/pages/admin/dashboard"));
 const AdminContacts = lazy(() => import("@/pages/admin/contacts"));
@@ -86,6 +87,7 @@ function Router() {
         <Route path="/" component={Home} />
         <Route path="/booking" component={Booking} />
         <Route path="/confirmed" component={Confirmed} />
+        <Route path="/reschedule/:contactId" component={Reschedule} />
         <Route path="/blog/:slug" component={BlogPost} />
         <Route path="/blog" component={Blog} />
         <Route path="/admin/login" component={AdminLogin} />

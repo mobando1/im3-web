@@ -4,6 +4,7 @@ type EmailSummary = {
   sent: number;
   opened: number;
   clicked: number;
+  firstOpenDelayMinutes?: number; // minutes between first email sent and first open
 };
 
 export function calculateLeadScore(
@@ -55,10 +56,25 @@ export function calculateLeadScore(
     } else if (Array.isArray(areas) && areas.length >= 1) {
       score += 5;
     }
+
+    // Form duration — serious leads spend time filling it out
+    if (diagnostic.formDurationMinutes && diagnostic.formDurationMinutes > 8) {
+      score += 5;
+    }
   }
 
-  // Email engagement
-  score += Math.min(emails.opened * 5, 15); // Max 15 from opens
+  // Email engagement — open rate instead of raw count
+  if (emails.sent > 0) {
+    const openRate = emails.opened / emails.sent;
+    score += Math.round(openRate * 20); // Max 20 pts for 100% open rate
+  }
+
+  // Speed of engagement — opened within 1 hour
+  if (emails.firstOpenDelayMinutes !== undefined && emails.firstOpenDelayMinutes < 60) {
+    score += 5;
+  }
+
+  // Clicks
   score += Math.min(emails.clicked * 10, 20); // Max 20 from clicks
 
   // Status-based
@@ -71,5 +87,13 @@ export function calculateLeadScore(
     score += 10;
   }
 
-  return Math.min(score, 100);
+  // Decay — inactive leads lose points over time
+  if (contact.lastActivityAt) {
+    const daysSince = Math.floor((Date.now() - new Date(contact.lastActivityAt).getTime()) / 86400000);
+    if (daysSince > 7) {
+      score -= Math.min(Math.floor(daysSince / 7), 15);
+    }
+  }
+
+  return Math.max(0, Math.min(score, 100));
 }

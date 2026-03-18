@@ -1,8 +1,8 @@
 import cron from "node-cron";
 import { db } from "./db";
 import { sentEmails, emailTemplates, contacts, diagnostics, abandonedLeads, activityLog, notifications, newsletterSubscribers, newsletterSends, blogPosts, blogCategories, appointments, whatsappMessages } from "@shared/schema";
-import { eq, and, lte, not, gte, desc, inArray } from "drizzle-orm";
-import { generateEmailContent, build6hReminderEmail, buildMicroReminderEmail, generateDailyNewsDigest, generateWhatsAppMessage } from "./email-ai";
+import { eq, and, lte, not, gte, desc, inArray, or } from "drizzle-orm";
+import { generateEmailContent, build6hReminderEmail, buildMicroReminderEmail, generateDailyNewsDigest, generateWhatsAppMessage, generateReengagement } from "./email-ai";
 import { sendEmail, isEmailConfigured } from "./email-sender";
 import { isWhatsAppConfigured, sendWhatsAppText, sendWhatsAppTemplate } from "./whatsapp";
 import { parseFechaCita } from "./date-utils";
@@ -93,14 +93,44 @@ async function processEmailQueue() {
             continue;
           }
 
-          // Post-meeting follow-up: expire if more than 48h after appointment
+          // Post-meeting follow-up: only send if meeting was completed, expire otherwise
           if (template.nombre === "seguimiento_post") {
+            if (diagnostic?.meetingStatus !== "completed") {
+              log(`Email seguimiento_post cancelado — reunión de ${contact.email} no fue completada (status: ${diagnostic?.meetingStatus})`);
+              await db.update(sentEmails).set({ status: "expired" }).where(eq(sentEmails.id, email.id));
+              continue;
+            }
             const hoursSinceMeeting = (now.getTime() - appointmentDate.getTime()) / (1000 * 60 * 60);
             if (hoursSinceMeeting > 48) {
               log(`Email seguimiento_post expirado — cita de ${contact.email} fue hace ${Math.round(hoursSinceMeeting)}h`);
               await db.update(sentEmails).set({ status: "expired" }).where(eq(sentEmails.id, email.id));
               continue;
             }
+          }
+        }
+
+        // Inject follow-up appointment context for seguimiento_post email
+        let diagnosticForEmail = diagnostic;
+        if (template.nombre === "seguimiento_post" && !email.subject) {
+          try {
+            const followUpAppts = await db.select().from(appointments)
+              .where(and(
+                eq(appointments.contactId, contact.id),
+                eq(appointments.appointmentType, "follow_up"),
+                eq(appointments.status, "scheduled")
+              ))
+              .limit(1);
+
+            if (followUpAppts.length > 0) {
+              const followUp = followUpAppts[0];
+              diagnosticForEmail = diagnostic ? { ...diagnostic } : {} as any;
+              (diagnosticForEmail as any)._followUpDate = followUp.date;
+              (diagnosticForEmail as any)._followUpTime = followUp.time;
+              (diagnosticForEmail as any)._followUpMeetLink = followUp.meetLink;
+              log(`Seguimiento_post: inyectando contexto de follow-up (${followUp.date} ${followUp.time}) para ${contact.email}`);
+            }
+          } catch (err) {
+            log(`Error checking follow-up for seguimiento_post: ${err}`);
           }
         }
 
@@ -135,7 +165,7 @@ async function processEmailQueue() {
           // Generate content with AI (fallback for legacy or failed pre-gen)
           const result = await generateEmailContent(
             template,
-            diagnostic || null,
+            diagnosticForEmail || null,
             contact.id
           );
           subject = result.subject;
@@ -307,6 +337,29 @@ async function processWhatsAppQueue() {
           continue;
         }
 
+        // Conditional WA: skip if linked email was already opened
+        if (msg.conditionType === "if_email_not_opened" && msg.conditionEmailTemplate) {
+          const [template] = await db.select().from(emailTemplates)
+            .where(eq(emailTemplates.nombre, msg.conditionEmailTemplate))
+            .limit(1);
+          if (template) {
+            const [openedEmail] = await db.select({ id: sentEmails.id }).from(sentEmails)
+              .where(and(
+                eq(sentEmails.contactId, msg.contactId),
+                eq(sentEmails.templateId, template.id),
+                or(eq(sentEmails.status, "opened"), eq(sentEmails.status, "clicked"))
+              ))
+              .limit(1);
+            if (openedEmail) {
+              await db.update(whatsappMessages)
+                .set({ status: "failed", errorMessage: "Skipped: linked email was opened" })
+                .where(eq(whatsappMessages.id, msg.id));
+              log(`WhatsApp condicional omitido para ${msg.phone} (email ${msg.conditionEmailTemplate} ya abierto)`);
+              continue;
+            }
+          }
+        }
+
         let result;
 
         if (msg.templateName) {
@@ -462,6 +515,40 @@ async function updateContactSubstatuses() {
               contactId: contact.id,
             });
           } catch (_) {}
+
+          // Auto re-engagement: schedule disruptive email + conditional WhatsApp
+          try {
+            const reengTemplate = await db.select().from(emailTemplates)
+              .where(eq(emailTemplates.nombre, "reengagement")).limit(1);
+            if (reengTemplate.length > 0) {
+              const [diagnostic] = contact.diagnosticId
+                ? await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId))
+                : [null];
+              const reeng = await generateReengagement(contact, diagnostic, contact.id);
+              await db.insert(sentEmails).values({
+                contactId: contact.id,
+                templateId: reengTemplate[0].id,
+                scheduledFor: new Date(Date.now() + 2 * 3600000), // +2 hours
+                subject: reeng.subject,
+                body: reeng.body,
+              });
+
+              // WhatsApp follow-up if email not opened after 48h
+              if (contact.telefono && isWhatsAppConfigured()) {
+                await db.insert(whatsappMessages).values({
+                  contactId: contact.id,
+                  phone: contact.telefono,
+                  message: `Hola ${contact.nombre}, ¿sigue siendo buen momento para hablar sobre automatización en ${contact.empresa}? Si prefieres, podemos reagendar. — Equipo IM3`,
+                  scheduledFor: new Date(Date.now() + 50 * 3600000), // +50 hours
+                  conditionType: "if_email_not_opened",
+                  conditionEmailTemplate: "reengagement",
+                });
+              }
+              log(`Re-engagement programado para lead frío: ${contact.nombre} (${contact.empresa})`);
+            }
+          } catch (reengErr) {
+            log(`Error programando re-engagement: ${reengErr}`);
+          }
         } else if (newSubstatus === "warm") {
           try {
             await db.insert(notifications).values({

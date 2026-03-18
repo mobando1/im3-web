@@ -68,8 +68,10 @@ export const diagnostics = pgTable("diagnostics", {
   sentToGhl: boolean("sent_to_ghl").default(false).notNull(),
   googleDriveUrl: text("google_drive_url"),
   meetLink: text("meet_link"),
+  googleCalendarEventId: text("google_calendar_event_id"),
   meetingStatus: text("meeting_status").default("scheduled"), // scheduled | completed | no_show | cancelled
   meetingCompletedAt: timestamp("meeting_completed_at"),
+  formDurationMinutes: integer("form_duration_minutes"),
 });
 
 export type Diagnostic = typeof diagnostics.$inferSelect;
@@ -88,6 +90,7 @@ export const contacts = pgTable("contacts", {
   tags: json("tags").$type<string[]>().default([]),
   optedOut: boolean("opted_out").default(false).notNull(),
   leadScore: integer("lead_score").default(0).notNull(),
+  lastActivityAt: timestamp("last_activity_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -118,6 +121,7 @@ export const sentEmails = pgTable("sent_emails", {
   status: text("status").notNull().default("pending"), // pending | sent | opened | clicked | bounced | failed
   scheduledFor: timestamp("scheduled_for").notNull(),
   sentAt: timestamp("sent_at"),
+  openedAt: timestamp("opened_at"),
   resendMessageId: text("resend_message_id"),
   retryCount: integer("retry_count").default(0).notNull(),
 });
@@ -262,6 +266,8 @@ export const appointments = pgTable("appointments", {
   completedAt: timestamp("completed_at"),
   recordingUrl: text("recording_url"),
   transcriptUrl: text("transcript_url"),
+  appointmentType: text("appointment_type").default("manual"), // initial | follow_up | manual
+  parentAppointmentId: varchar("parent_appointment_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -335,6 +341,8 @@ export const whatsappMessages = pgTable("whatsapp_messages", {
   whatsappMessageId: text("whatsapp_message_id"), // Meta API message ID
   errorMessage: text("error_message"),
   retryCount: integer("retry_count").default(0).notNull(),
+  conditionType: text("condition_type"), // null | "if_email_not_opened" — skip this WA if linked email was opened
+  conditionEmailTemplate: text("condition_email_template"), // template name to check (e.g., "mini_auditoria", "reengagement")
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

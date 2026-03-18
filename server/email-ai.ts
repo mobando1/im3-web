@@ -37,7 +37,7 @@ Reglas:
 - Si hay un meetLink en el contexto, SIEMPRE inclúyelo como un botón prominente visible (no como texto al final). Usar: <a href="{meetLink}" style="display:inline-block;background:#3B82F6;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600">Unirse a la reunión →</a>
 - Si hay un link de "Agregar al calendario", inclúyelo justo después del botón de reunión como texto más pequeño
 - NUNCA uses "Confirmar asistencia" como CTA — la persona ya confirmó al agendar. El CTA principal en emails pre-reunión es el link de la reunión (Meet).
-- Para emails pre-reunión: incluir al final (texto pequeño, color #999): "¿Necesitas cambiar la fecha? <a href='{rescheduleUrl}'>Reagendar</a> · <a href='{cancelUrl}'>Cancelar</a>"
+- NO incluyas links de reagendar o cancelar en tu HTML — se agregan automáticamente en el footer de cada email.
 - Para el email de seguimiento post-reunión: el CTA puede invitar a agendar una sesión de seguimiento con link a https://www.im3systems.com/booking
 - NO incluyas un CTA genérico de "/booking" en emails pre-reunión — el contacto YA agendó.`;
 
@@ -79,6 +79,10 @@ function buildContext(data: Partial<Diagnostic> | null): string {
   if ((data as any)._isReturningContact) {
     lines.push("- NOTA: Este contacto ya era conocido (suscriptor de newsletter u otro canal). Reconócelo sutilmente — muestra entusiasmo de que haya decidido dar el siguiente paso y agendar. No lo trates como primera vez, hazle saber que estás pendiente.");
   }
+  if ((data as any)._followUpDate) {
+    lines.push(`- SESIÓN DE SEGUIMIENTO YA AGENDADA: ${(data as any)._followUpDate} a las ${(data as any)._followUpTime}`);
+    if ((data as any)._followUpMeetLink) lines.push(`- Link de reunión de seguimiento: ${(data as any)._followUpMeetLink}`);
+  }
   return lines.join("\n");
 }
 
@@ -115,7 +119,6 @@ export function build6hReminderEmail(
     <p style="margin:0 0 16px">Ten a mano información sobre tus herramientas actuales y los procesos que más tiempo consumen en tu operación — así aprovechamos al máximo la sesión.</p>
     <p style="margin:0 0 16px;color:#666">¿Tienes preguntas antes? Responde este correo y te ayudamos.</p>
     <p style="margin:0 0 20px;color:#999">— Equipo IM3 Systems</p>
-    <p style="margin:0;font-size:12px;color:#999"><a href="${baseUrl}/api/reschedule/${contactId}" style="color:#999;text-decoration:none">Reagendar</a> · <a href="${baseUrl}/api/cancel/${contactId}" style="color:#999;text-decoration:none">Cancelar</a></p>
   </div>
   <div style="padding:12px 24px;text-align:center">
     <a href="${baseUrl}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">No recibir más emails</a>
@@ -156,15 +159,112 @@ export function buildMicroReminderEmail(
 }
 
 /**
- * Add unsubscribe footer to AI-generated email HTML.
+ * Build fixed HTML for no-show email (empathetic, invite to reschedule).
  */
-function addUnsubscribeFooter(html: string, contactId: string): string {
+export function buildNoShowEmail(
+  participante: string,
+  empresa: string,
+  contactId: string
+): { subject: string; body: string } {
+  const subject = `${participante}, no pudimos conectarnos hoy`;
   const baseUrl = process.env.BASE_URL || "https://im3systems.com";
-  const footer = `<div style="max-width:600px;margin:8px auto 0;text-align:center;padding:8px">
+
+  const body = `<div style="max-width:600px;margin:0 auto;font-family:'Segoe UI',Roboto,sans-serif;color:#1a1a1a">
+  <div style="background:linear-gradient(135deg,#0F172A,#1E293B);padding:16px 24px;border-radius:8px 8px 0 0">
+    <h1 style="color:#fff;font-size:18px;margin:0">IM3 Systems</h1>
+  </div>
+  <div style="padding:24px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+    <p style="margin:0 0 16px">${participante}, notamos que no pudimos conectarnos hoy para la sesión de diagnóstico de ${empresa}.</p>
+    <p style="margin:0 0 16px">Entendemos que a veces surgen imprevistos. Tu tiempo de diagnóstico sigue reservado y toda la información que compartiste está guardada.</p>
+    <p style="margin:0 0 20px">Si quieres, puedes elegir una nueva fecha en segundos:</p>
+    <p style="margin:0 0 20px"><a href="${baseUrl}/reschedule/${contactId}" style="display:inline-block;background:#3B82F6;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px">Reagendar mi sesión →</a></p>
+    <p style="margin:0 0 16px;color:#666;font-size:14px">Si prefieres, también puedes responder a este correo y coordinamos directamente.</p>
+    <p style="margin:0;color:#999">— Equipo IM3 Systems</p>
+  </div>
+  <div style="padding:12px 24px;text-align:center">
+    <a href="${baseUrl}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">No recibir más emails</a>
+  </div>
+</div>`;
+
+  return { subject, body };
+}
+
+/**
+ * Build fixed HTML for follow-up confirmation email.
+ * Sent when admin schedules a follow-up call for a contact.
+ */
+export function buildFollowUpConfirmationEmail(
+  participante: string,
+  empresa: string,
+  fechaSeguimiento: string,
+  horaSeguimiento: string,
+  meetLink: string | null,
+  contactId: string,
+  calendarAddUrl?: string | null
+): { subject: string; body: string } {
+  const subject = `${participante}, confirmada tu sesión de seguimiento con IM3`;
+  const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+
+  const meetSection = meetLink
+    ? `<p style="margin:0 0 12px"><a href="${meetLink}" style="display:inline-block;background:#3B82F6;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px">Unirse a la reunión →</a></p>`
+    : "";
+
+  const calendarSection = calendarAddUrl
+    ? `<p style="margin:0 0 16px"><a href="${calendarAddUrl}" style="color:#3B82F6;font-size:13px;text-decoration:none">📅 Agregar a mi calendario</a></p>`
+    : "";
+
+  const body = `<div style="max-width:600px;margin:0 auto;font-family:'Segoe UI',Roboto,sans-serif;color:#1a1a1a">
+  <div style="background:linear-gradient(135deg,#0F172A,#1E293B);padding:16px 24px;border-radius:8px 8px 0 0">
+    <h1 style="color:#fff;font-size:18px;margin:0">IM3 Systems</h1>
+  </div>
+  <div style="padding:24px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+    <p style="margin:0 0 16px">${participante}, como quedamos en nuestra conversación, te confirmo los detalles de nuestra próxima sesión de seguimiento:</p>
+    <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:0 0 16px">
+      <p style="margin:0 0 8px;font-size:14px;color:#64748B">Sesión de seguimiento</p>
+      <p style="margin:0 0 4px;font-weight:600;font-size:16px">Fecha: ${fechaSeguimiento}</p>
+      <p style="margin:0 0 4px;font-weight:600;font-size:16px">Hora: ${horaSeguimiento}</p>
+      <p style="margin:0;font-size:14px;color:#64748B">Duración: 45 minutos</p>
+    </div>
+    ${meetSection}
+    ${calendarSection}
+    <p style="margin:0 0 16px">En esta sesión revisaremos la propuesta y los próximos pasos para ${empresa}. Si tienes preguntas antes, responde a este correo.</p>
+    <p style="margin:0 0 20px;color:#999">— Equipo IM3 Systems</p>
+  </div>
+  <div style="max-width:600px;margin:8px auto 0;text-align:center;padding:12px 20px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px">
+    <p style="margin:0 0 4px;font-size:13px;color:#475569">¿Necesitas cambiar la fecha?</p>
+    <p style="margin:0"><a href="${baseUrl}/api/reschedule/${contactId}" style="color:#3B82F6;font-size:13px;text-decoration:none;font-weight:600">Reagendar</a> <span style="color:#CBD5E1;margin:0 8px">·</span> <a href="${baseUrl}/api/cancel/${contactId}" style="color:#94A3B8;font-size:13px;text-decoration:none">Cancelar reunión</a></p>
+  </div>
+  <div style="padding:12px 24px;text-align:center">
+    <a href="${baseUrl}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">No recibir más emails</a>
+  </div>
+</div>`;
+
+  return { subject, body };
+}
+
+/**
+ * Add email footer with reschedule/cancel links (pre-meeting) + unsubscribe.
+ * @param isPreMeeting - if true, includes reschedule/cancel links prominently
+ */
+function addEmailFooter(html: string, contactId: string, isPreMeeting: boolean = true): string {
+  const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+
+  const rescheduleSection = isPreMeeting ? `<div style="max-width:600px;margin:8px auto 0;text-align:center;padding:12px 20px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px">
+  <p style="margin:0 0 4px;font-size:13px;color:#475569">¿Necesitas cambiar la fecha?</p>
+  <p style="margin:0">
+    <a href="${baseUrl}/api/reschedule/${contactId}" style="color:#3B82F6;font-size:13px;text-decoration:none;font-weight:600">Reagendar</a>
+    <span style="color:#CBD5E1;margin:0 8px">·</span>
+    <a href="${baseUrl}/api/cancel/${contactId}" style="color:#94A3B8;font-size:13px;text-decoration:none">Cancelar reunión</a>
+  </p>
+</div>` : "";
+
+  const unsubscribe = `<div style="max-width:600px;margin:8px auto 0;text-align:center;padding:8px">
   <a href="${baseUrl}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">No recibir más emails de esta secuencia</a>
 </div>`;
 
-  // Try to insert before closing </div> or append
+  const footer = rescheduleSection + unsubscribe;
+
+  // Try to insert after last closing </div> or append
   if (html.includes("</div>")) {
     const lastDiv = html.lastIndexOf("</div>");
     return html.substring(0, lastDiv + 6) + footer;
@@ -223,9 +323,10 @@ export async function generateEmailContent(
   // Strip markdown code block wrappers if AI included them
   body = body.replace(/^```html\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
 
-  // Add unsubscribe footer if we have a contactId
+  // Add footer with reschedule/cancel (pre-meeting) + unsubscribe
   if (contactId) {
-    body = addUnsubscribeFooter(body, contactId);
+    const isPreMeeting = template.nombre !== "seguimiento_post";
+    body = addEmailFooter(body, contactId, isPreMeeting);
   }
 
   log(`Email AI generado: "${subject}" para ${diagnosticData?.empresa || "suscriptor"}`);
@@ -547,4 +648,252 @@ export async function generateWhatsAppMessage(
 
   const text = response.content?.[0]?.type === "text" ? response.content[0].text.trim() : "";
   return text || `Hola ${contact.nombre}, soy del equipo de IM3 Systems. Queria hacer seguimiento. ¿Tienes un momento?`;
+}
+
+/**
+ * Generate a mini-audit report (3 insights) based on diagnostic data.
+ * Sent 1 hour after form submission to feel like human analysis.
+ */
+export async function generateMiniAudit(
+  diagnosticData: Partial<Diagnostic>,
+  contactId: string
+): Promise<{ subject: string; body: string; whatsappSummary: string }> {
+  const anthropic = getClient();
+  if (!anthropic) throw new Error("ANTHROPIC_API_KEY not configured");
+
+  const context = buildContext(diagnosticData);
+
+  const subjectResponse = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 100,
+    system: "Genera SOLO el texto del subject de un email. Sin comillas, sin prefijo, solo el texto. Máximo 60 caracteres. Debe transmitir que analizaste su diagnóstico y encontraste oportunidades concretas.",
+    messages: [{
+      role: "user",
+      content: `Genera un subject para un email de mini-auditoría. La empresa es ${diagnosticData.empresa} del sector ${diagnosticData.industria}. El subject debe transmitir que el equipo ya analizó su caso y tiene hallazgos iniciales. Ejemplo de estilo: "3 oportunidades que encontramos para [empresa]", "Análisis preliminar de [empresa] — hallazgos iniciales"`,
+    }],
+  });
+
+  const subject = subjectResponse.content?.[0]?.type === "text"
+    ? subjectResponse.content[0].text.trim()
+    : `Análisis preliminar para ${diagnosticData.empresa}`;
+
+  const bodyResponse = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 2000,
+    system: SYSTEM_PROMPT,
+    messages: [{
+      role: "user",
+      content: `Genera un email de mini-auditoría para este cliente. El equipo de IM3 "analizó" su diagnóstico y tiene hallazgos iniciales.
+
+TONO: Como un consultor que se sentó a revisar su caso y encontró cosas interesantes. Profesional pero entusiasmado con las oportunidades. NUNCA digas "nuestra IA analizó" — dilo como "estuvimos revisando tu diagnóstico".
+
+ESTRUCTURA:
+1. Saludo: "Hola {nombre}, estuvimos revisando el diagnóstico de {empresa}..."
+2. Tres insights concretos, cada uno con:
+   - Título corto (ej: "Automatización de reportes")
+   - 2-3 oraciones explicando la oportunidad específica basada en su industria, herramientas y objetivos
+   - Si aplica, citar un dato real de fuente confiable sobre su industria
+3. Cierre: "En la sesión del {fechaCita} profundizaremos en estas y más oportunidades específicas para {empresa}. Lleva tus preguntas — queremos que sea una sesión de alto valor para ti."
+4. NO incluir CTA de agendar (ya tiene cita). El valor es mostrar que ya están trabajando en su caso.
+
+Máximo 250 palabras en cuerpo.
+
+${context}
+
+Genera el email completo en HTML PURO con estilos inline. NO uses bloques de código markdown. Devuelve SOLO el HTML directo. Wrapper: max-width:600px, font-family:'Segoe UI',Roboto,sans-serif. Header con background:linear-gradient(135deg,#0F172A,#1E293B) y título blanco. Links y CTAs en color #3B82F6.`,
+    }],
+  });
+
+  let body = bodyResponse.content?.[0]?.type === "text"
+    ? bodyResponse.content[0].text.trim()
+    : "<p>Error generando contenido</p>";
+  body = body.replace(/^```html\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+  if (contactId) body = addEmailFooter(body, contactId, true);
+
+  // WhatsApp summary
+  const waResponse = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 200,
+    system: "Genera un resumen MUY corto en español (máximo 3 oraciones, 200 caracteres total). Texto plano, sin emojis excesivos (máximo 1). Debe resumir los 3 hallazgos clave.",
+    messages: [{
+      role: "user",
+      content: `Resume los 3 insights principales de esta mini-auditoría para ${diagnosticData.empresa} (${diagnosticData.industria}). Áreas prioritarias: ${Array.isArray(diagnosticData.areaPrioridad) ? diagnosticData.areaPrioridad.join(", ") : ""}. Herramientas: ${diagnosticData.herramientas || ""}. Empieza con "Hola ${diagnosticData.participante}, revisamos tu diagnóstico:"`,
+    }],
+  });
+
+  const whatsappSummary = waResponse.content?.[0]?.type === "text"
+    ? waResponse.content[0].text.trim()
+    : `Hola ${diagnosticData.participante}, revisamos tu diagnóstico de ${diagnosticData.empresa} y encontramos oportunidades interesantes. Te enviamos los detalles al correo.`;
+
+  log(`Mini-auditoría generada para ${diagnosticData.empresa}`);
+  return { subject, body, whatsappSummary };
+}
+
+/**
+ * Generate a re-engagement email for cold leads (completely different tone/approach).
+ */
+export async function generateReengagement(
+  contact: Contact,
+  diagnosticData: Partial<Diagnostic> | null,
+  contactId: string
+): Promise<{ subject: string; body: string }> {
+  const anthropic = getClient();
+  if (!anthropic) throw new Error("ANTHROPIC_API_KEY not configured");
+
+  const context = buildContext(diagnosticData);
+
+  const subjectResponse = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 100,
+    system: "Genera SOLO el texto del subject de un email. Sin comillas, sin prefijo, solo el texto. Máximo 60 caracteres. Debe ser COMPLETAMENTE diferente a emails de diagnóstico/auditoría. Intriga con un dato de su industria o pregunta provocadora.",
+    messages: [{
+      role: "user",
+      content: `Genera un subject de re-engagement para un lead frío del sector ${diagnosticData?.industria || "empresas"}. NO mencionar "auditoría", "diagnóstico", "cita" ni "IM3". Enfócate en un dato sorprendente de su industria. Ejemplos: "Lo que el 73% de empresas de [industria] no saben", "¿Tu equipo pierde X horas por semana en esto?"`,
+    }],
+  });
+
+  const subject = subjectResponse.content?.[0]?.type === "text"
+    ? subjectResponse.content[0].text.trim()
+    : `¿Sigues pensando en automatizar ${contact.empresa}?`;
+
+  const bodyResponse = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 1200,
+    system: SYSTEM_PROMPT,
+    messages: [{
+      role: "user",
+      content: `Genera un email de RE-ENGAGEMENT para un lead frío (no ha abierto emails anteriores).
+
+ESTRATEGIA: Romper el patrón. NO mencionar auditoría ni diagnóstico. En su lugar:
+1. Abrir con un dato sorprendente o historia corta sobre su industria (${diagnosticData?.industria || "empresas"})
+2. Conectar ese dato con un dolor que probablemente tienen
+3. Ofrecer valor sin pedir nada: un tip concreto que puedan aplicar HOY
+4. CTA suave: "Si quieres ver cómo aplicar esto en ${contact.empresa}, responde a este email"
+
+Máximo 150 palabras. Tono: como alguien que comparte algo útil, no como alguien que vende.
+
+${context}
+
+Genera en HTML PURO con estilos inline. Devuelve SOLO el HTML directo. Diseño MINIMALISTA — sin header grande, sin gradientes. Solo texto limpio con un link al final. max-width:600px, font-family:'Segoe UI',Roboto,sans-serif.`,
+    }],
+  });
+
+  let body = bodyResponse.content?.[0]?.type === "text"
+    ? bodyResponse.content[0].text.trim()
+    : "<p>Error generando contenido</p>";
+  body = body.replace(/^```html\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+  if (contactId) body = addEmailFooter(body, contactId, false);
+
+  log(`Re-engagement email generado para ${contact.empresa}`);
+  return { subject, body };
+}
+
+/**
+ * Classify intent of an incoming WhatsApp message using AI.
+ */
+export async function classifyWhatsAppIntent(
+  messageText: string,
+  contact: Contact,
+  diagnosticData: Partial<Diagnostic> | null
+): Promise<{ type: "question" | "reschedule" | "interest" | "rejection" | "other"; confidence: number }> {
+  const anthropic = getClient();
+  if (!anthropic) return { type: "other", confidence: 0 };
+
+  const response = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 50,
+    system: `Clasifica el intent de este mensaje de WhatsApp de un lead de consultoría tecnológica. Responde SOLO con un JSON: {"type": "question"|"reschedule"|"interest"|"rejection"|"other", "confidence": 0.0-1.0}
+- question: pregunta sobre el servicio, auditoría, precios
+- reschedule: quiere cambiar fecha/hora de su cita
+- interest: muestra interés, entusiasmo, confirma, agradece
+- rejection: no le interesa, pide que no le escriban
+- other: saludo simple, mensaje no relacionado`,
+    messages: [{
+      role: "user",
+      content: `Contacto: ${contact.nombre} de ${contact.empresa} (${contact.status})\nMensaje: "${messageText}"`,
+    }],
+  });
+
+  const text = response.content?.[0]?.type === "text" ? response.content[0].text.trim() : "";
+  try {
+    const parsed = JSON.parse(text);
+    return { type: parsed.type || "other", confidence: parsed.confidence || 0.5 };
+  } catch {
+    return { type: "other", confidence: 0 };
+  }
+}
+
+/**
+ * Generate an AI response to a WhatsApp question, using diagnostic context.
+ */
+export async function generateWhatsAppAutoReply(
+  questionText: string,
+  contact: Contact,
+  diagnosticData: Partial<Diagnostic> | null
+): Promise<string> {
+  const anthropic = getClient();
+  if (!anthropic) {
+    return `Hola ${contact.nombre}, gracias por tu mensaje. Le paso tu consulta al equipo y te responderemos pronto. — Equipo IM3`;
+  }
+
+  const context = buildContext(diagnosticData);
+
+  const response = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 300,
+    system: `Responde un mensaje de WhatsApp como si fueras del equipo de IM3 Systems. Máximo 3-4 oraciones. Texto plano (no HTML). Tono: profesional pero cercano. Responde basándote en el contexto del diagnóstico del cliente. Si no sabes algo, di que lo revisarás con el equipo. Firma: "— Equipo IM3". No uses emojis excesivos (máximo 1).`,
+    messages: [{
+      role: "user",
+      content: `El contacto ${contact.nombre} de ${contact.empresa} pregunta por WhatsApp: "${questionText}"\n\n${context}`,
+    }],
+  });
+
+  const text = response.content?.[0]?.type === "text" ? response.content[0].text.trim() : "";
+  return text || `Hola ${contact.nombre}, gracias por tu mensaje. Le paso tu consulta al equipo. — Equipo IM3`;
+}
+
+const INTENT_LABELS: Record<string, { emoji: string; label: string }> = {
+  question: { emoji: "💬", label: "Pregunta" },
+  reschedule: { emoji: "📅", label: "Quiere reagendar" },
+  interest: { emoji: "🔥", label: "Muestra interés" },
+  rejection: { emoji: "⚠️", label: "Rechazo" },
+  other: { emoji: "💬", label: "Mensaje" },
+};
+
+export function buildWhatsAppNotificationEmail(
+  contact: Contact,
+  messageText: string,
+  intent: { type: string; confidence: number },
+  autoReply: string | null
+): { subject: string; body: string } {
+  const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+  const info = INTENT_LABELS[intent.type] || INTENT_LABELS.other;
+  const subject = `${info.emoji} ${info.label} de ${contact.nombre} por WhatsApp`;
+
+  const autoReplySection = autoReply
+    ? `<div style="margin:16px 0;padding:12px 16px;background:#f0fdf4;border-left:3px solid #22c55e;border-radius:4px">
+        <p style="margin:0 0 4px;font-size:12px;color:#16a34a;font-weight:600">RESPUESTA AUTOMÁTICA ENVIADA:</p>
+        <p style="margin:0;font-size:14px;color:#333">${autoReply}</p>
+      </div>`
+    : `<p style="margin:16px 0;padding:12px 16px;background:#fef2f2;border-left:3px solid #ef4444;border-radius:4px;font-size:13px;color:#dc2626">No se envió respuesta automática — requiere acción manual.</p>`;
+
+  const body = `<div style="max-width:600px;margin:0 auto;font-family:'Segoe UI',Roboto,sans-serif;color:#1a1a1a">
+  <div style="background:linear-gradient(135deg,#0F172A,#1E293B);padding:16px 24px;border-radius:8px 8px 0 0">
+    <h1 style="color:#fff;font-size:18px;margin:0">IM3 Systems — WhatsApp</h1>
+  </div>
+  <div style="padding:24px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+    <p style="margin:0 0 4px;font-size:13px;color:#666">Contacto</p>
+    <p style="margin:0 0 16px;font-size:16px;font-weight:600">${contact.nombre} — ${contact.empresa || "Sin empresa"}</p>
+    <p style="margin:0 0 4px;font-size:13px;color:#666">Intent detectado</p>
+    <p style="margin:0 0 16px;font-size:14px">${info.emoji} ${info.label} <span style="color:#999">(confianza: ${Math.round(intent.confidence * 100)}%)</span></p>
+    <div style="margin:0 0 16px;padding:12px 16px;background:#f8fafc;border-left:3px solid #3B82F6;border-radius:4px">
+      <p style="margin:0 0 4px;font-size:12px;color:#3B82F6;font-weight:600">MENSAJE DEL LEAD:</p>
+      <p style="margin:0;font-size:14px;color:#333">${messageText}</p>
+    </div>
+    ${autoReplySection}
+    <p style="margin:20px 0 0;text-align:center"><a href="${baseUrl}/crm" style="display:inline-block;background:#3B82F6;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px">Ver en CRM →</a></p>
+  </div>
+</div>`;
+
+  return { subject, body };
 }

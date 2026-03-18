@@ -6,13 +6,13 @@ import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, news
 import { generateBlogContent, improveBlogContent } from "./blog-ai";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
-import { createCalendarEvent } from "./google-calendar";
+import { createCalendarEvent, deleteCalendarEvent } from "./google-calendar";
 import { isEmailConfigured, sendEmail } from "./email-sender";
-import { generateEmailContent, buildMicroReminderEmail, build6hReminderEmail, generateDailyNewsDigest, generateContactInsight, generateWhatsAppMessage, generateNewsletterWelcome } from "./email-ai";
+import { generateEmailContent, buildMicroReminderEmail, build6hReminderEmail, buildFollowUpConfirmationEmail, buildNoShowEmail, generateDailyNewsDigest, generateContactInsight, generateWhatsAppMessage, generateNewsletterWelcome, generateMiniAudit, classifyWhatsAppIntent, generateWhatsAppAutoReply, buildWhatsAppNotificationEmail } from "./email-ai";
 import { parseFechaCita } from "./date-utils";
 import { requireAuth, hashPassword } from "./auth";
 import { calculateLeadScore } from "./lead-scoring";
-import { isWhatsAppConfigured, calculateWhatsAppSchedule, WHATSAPP_SEQUENCE } from "./whatsapp";
+import { isWhatsAppConfigured, calculateWhatsAppSchedule, WHATSAPP_SEQUENCE, sendWhatsAppText } from "./whatsapp";
 import passport from "passport";
 import { z } from "zod";
 
@@ -31,28 +31,53 @@ function calculateEmailTime(
       // Always send immediately
       return now;
 
-    case "caso_exito":
-      // Send next morning at 10 AM Colombia, only if 36+ hours until call
-      if (hoursUntilCall < 36) return null;
+    case "caso_exito": {
+      // Long window (36h+): next morning at 10 AM COT
+      // Short window (16-36h): same evening at 7 PM COT
+      // Too short (<16h): skip
+      if (hoursUntilCall < 16) return null;
+      if (hoursUntilCall < 36) {
+        // Short window: send same evening at 7 PM COT (00:00 UTC next day)
+        const evening = new Date(now);
+        evening.setUTCDate(evening.getUTCDate() + 1);
+        evening.setUTCHours(0, 0, 0, 0); // 00:00 UTC = 7:00 PM COT
+        // Only if at least 2h from now
+        if (evening.getTime() <= now.getTime() + 2 * 60 * 60 * 1000) return null;
+        return evening;
+      }
       const nextMorning = new Date(now);
       nextMorning.setUTCDate(nextMorning.getUTCDate() + 1);
-      nextMorning.setUTCHours(15, 0, 0, 0); // 15:00 UTC = 10:00 AM Colombia
+      nextMorning.setUTCHours(15, 0, 0, 0); // 15:00 UTC = 10:00 AM COT
       return nextMorning;
+    }
 
-    case "insight_educativo":
-      // Send day 3 at 10 AM Colombia, only if 96+ hours until call
-      if (hoursUntilCall < 96) return null;
+    case "insight_educativo": {
+      // Long window (96h+): day 3 at 10 AM COT
+      // Medium window (60-96h): day 2 at 10 AM COT (compressed)
+      // Short window (<60h): skip — lead already gets caso_exito + prep_agenda
+      if (hoursUntilCall < 60) return null;
+      if (hoursUntilCall < 96) {
+        const day2 = new Date(now);
+        day2.setUTCDate(day2.getUTCDate() + 2);
+        day2.setUTCHours(15, 0, 0, 0); // 15:00 UTC = 10:00 AM COT
+        return day2;
+      }
       const day3 = new Date(now);
       day3.setUTCDate(day3.getUTCDate() + 3);
-      day3.setUTCHours(15, 0, 0, 0); // 15:00 UTC = 10:00 AM Colombia
+      day3.setUTCHours(15, 0, 0, 0); // 15:00 UTC = 10:00 AM COT
       return day3;
+    }
 
-    case "prep_agenda":
-      // Send 24 hours before appointment
+    case "prep_agenda": {
+      // Primary: 24 hours before appointment
       const prep = new Date(appointmentDate.getTime() - 24 * 60 * 60 * 1000);
-      // Don't send if it's already past or too close to now
-      if (prep.getTime() <= now.getTime() + 2 * 60 * 60 * 1000) return null;
-      return prep;
+      if (prep.getTime() > now.getTime() + 2 * 60 * 60 * 1000) return prep;
+      // Fallback: morning of appointment at 8 AM COT (13:00 UTC)
+      const morningOf = new Date(appointmentDate);
+      morningOf.setUTCHours(13, 0, 0, 0); // 13:00 UTC = 8:00 AM COT
+      if (morningOf.getTime() > now.getTime() + 60 * 60 * 1000) return morningOf;
+      return null;
+    }
 
     case "recordatorio_6h":
       // Send 6 hours before appointment
@@ -68,10 +93,8 @@ function calculateEmailTime(
       return reminder;
 
     case "seguimiento_post":
-      // Send 5 hours after appointment
-      const followUp = new Date(appointmentDate.getTime() + 5 * 60 * 60 * 1000);
-      if (followUp.getTime() <= now.getTime()) return null;
-      return followUp;
+      // No longer auto-scheduled — triggered manually when meeting is marked "completed" in CRM
+      return null;
 
     default:
       return null;
@@ -113,6 +136,8 @@ export async function registerRoutes(
     if (!db) return;
     try {
       await db.insert(activityLog).values({ contactId, type, description, metadata: metadata || null });
+      // Update last activity timestamp for lead score decay
+      await db.update(contacts).set({ lastActivityAt: new Date() }).where(eq(contacts.id, contactId));
     } catch (err) {
       log(`Error logging activity: ${err}`);
     }
@@ -155,11 +180,23 @@ export async function registerRoutes(
     }),
     areaPrioridad: z.array(z.string()).min(1),
     presupuesto: z.string().min(1),
+    formDurationMinutes: z.number().optional(),
   });
 
   // Newsletter subscription email validation
   const newsletterEmailSchema = z.object({
     email: z.string().email("Email inválido"),
+  });
+
+  // Booked slots for a given date (public, no auth)
+  app.get("/api/booked-slots", async (req, res) => {
+    if (!db) return res.json([]);
+    const date = req.query.date as string;
+    if (!date) return res.json([]);
+    const booked = await db.select({ horaCita: diagnostics.horaCita })
+      .from(diagnostics)
+      .where(eq(diagnostics.fechaCita, date));
+    res.json(booked.map(b => b.horaCita).filter(Boolean));
   });
 
   // Diagnostic form submission
@@ -179,6 +216,20 @@ export async function registerRoutes(
 
     // Save to PostgreSQL if database is available
     if (db) {
+      // Check for slot conflict
+      if (data.fechaCita && data.horaCita) {
+        const conflict = await db.select({ id: diagnostics.id })
+          .from(diagnostics)
+          .where(and(
+            eq(diagnostics.fechaCita, data.fechaCita),
+            eq(diagnostics.horaCita, data.horaCita)
+          )).limit(1);
+        if (conflict.length > 0) {
+          res.status(409).json({ message: "Este horario ya fue reservado. Por favor selecciona otro." });
+          return;
+        }
+      }
+
       try {
         const [inserted] = await db.insert(diagnostics).values({
           fechaCita: data.fechaCita,
@@ -210,6 +261,7 @@ export async function registerRoutes(
           familiaridad: data.familiaridad,
           areaPrioridad: data.areaPrioridad,
           presupuesto: data.presupuesto,
+          formDurationMinutes: data.formDurationMinutes || null,
         }).returning();
 
         insertedId = inserted.id;
@@ -270,6 +322,7 @@ export async function registerRoutes(
 
     // Create Google Calendar event with Meet link (AWAIT — must complete before email scheduling)
     let generatedMeetLink: string | null = null;
+    let generatedEventId: string | null = null;
     if (db && insertedId && data.email) {
       try {
         const calResult = await createCalendarEvent({
@@ -280,12 +333,16 @@ export async function registerRoutes(
           fechaCita: data.fechaCita,
           horaCita: data.horaCita,
         });
-        if (calResult?.meetLink && db) {
-          generatedMeetLink = calResult.meetLink;
+        if (calResult && db) {
+          generatedMeetLink = calResult.meetLink || null;
+          generatedEventId = calResult.eventId || null;
           await db.update(diagnostics)
-            .set({ meetLink: generatedMeetLink })
+            .set({
+              meetLink: generatedMeetLink,
+              googleCalendarEventId: generatedEventId,
+            })
             .where(eq(diagnostics.id, insertedId));
-          log(`Meet link creado: ${generatedMeetLink}`);
+          log(`Meet link creado: ${generatedMeetLink} (eventId: ${generatedEventId})`);
         }
       } catch (err) {
         log(`Error creando evento Calendar: ${err}`);
@@ -524,6 +581,49 @@ export async function registerRoutes(
               }
 
               log(`Secuencia de ${scheduled} email(s) programada para ${data.email} (${Math.round(hoursUntilCall)}h hasta la cita)`);
+
+              // Schedule mini-audit cascade: email +60min → WA reminder +180min → WA content +360min
+              try {
+                const auditTemplate = templates.find(t => t.nombre === "mini_auditoria");
+                if (auditTemplate && diagForAI) {
+                  const audit = await generateMiniAudit(diagForAI, contact.id);
+                  const auditScheduledFor = new Date(now.getTime() + 60 * 60 * 1000); // +1 hour
+
+                  await db.insert(sentEmails).values({
+                    contactId: contact.id,
+                    templateId: auditTemplate.id,
+                    scheduledFor: auditScheduledFor,
+                    subject: audit.subject,
+                    body: audit.body,
+                  });
+
+                  // WhatsApp reminder (+3h) — only sent if email not opened
+                  if (isWhatsAppConfigured() && data.telefono) {
+                    await db.insert(whatsappMessages).values({
+                      contactId: contact.id,
+                      phone: data.telefono,
+                      message: `Hola ${data.participante}, te enviamos un análisis preliminar de ${data.empresa} al correo. Tiene insights interesantes para tu auditoría. ¡Revísalo! — Equipo IM3`,
+                      scheduledFor: new Date(now.getTime() + 180 * 60 * 1000), // +3 hours
+                      conditionType: "if_email_not_opened",
+                      conditionEmailTemplate: "mini_auditoria",
+                    });
+
+                    // WhatsApp with full content (+6h) — only if still not opened
+                    await db.insert(whatsappMessages).values({
+                      contactId: contact.id,
+                      phone: data.telefono,
+                      message: audit.whatsappSummary,
+                      scheduledFor: new Date(now.getTime() + 360 * 60 * 1000), // +6 hours
+                      conditionType: "if_email_not_opened",
+                      conditionEmailTemplate: "mini_auditoria",
+                    });
+                  }
+
+                  log(`Mini-auditoría programada para ${data.email}: email +1h, WA +3h, WA +6h`);
+                }
+              } catch (auditErr) {
+                log(`Error programando mini-auditoría: ${auditErr}`);
+              }
             } catch (emailErr) {
               log(`Error programando emails: ${emailErr}`);
             }
@@ -629,9 +729,11 @@ export async function registerRoutes(
 
       const newStatus = statusMap[event.type];
       if (newStatus) {
+        const updateData: Record<string, any> = { status: newStatus };
+        if (newStatus === "opened") updateData.openedAt = new Date();
         const [updatedEmail] = await db
           .update(sentEmails)
-          .set({ status: newStatus })
+          .set(updateData)
           .where(eq(sentEmails.resendMessageId, messageId))
           .returning();
 
@@ -689,19 +791,31 @@ export async function registerRoutes(
               const oldScore = contact.leadScore;
               const [diagnostic] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId!));
               const contactEmails = await db.select().from(sentEmails).where(eq(sentEmails.contactId, contact.id));
-              const emailSummary = { sent: 0, opened: 0, clicked: 0 };
+              const emailSummary: { sent: number; opened: number; clicked: number; firstOpenDelayMinutes?: number } = { sent: 0, opened: 0, clicked: 0 };
+              let earliestOpenDelay: number | undefined;
               for (const e of contactEmails) {
                 if (e.status === "sent" || e.status === "opened" || e.status === "clicked") emailSummary.sent++;
-                if (e.status === "opened") emailSummary.opened++;
+                if (e.status === "opened" || e.status === "clicked") {
+                  emailSummary.opened++;
+                  // Calculate first open delay (time from send to open)
+                  if (e.openedAt && e.sentAt) {
+                    const delayMs = new Date(e.openedAt).getTime() - new Date(e.sentAt).getTime();
+                    const delayMin = Math.max(0, delayMs / 60000);
+                    if (earliestOpenDelay === undefined || delayMin < earliestOpenDelay) {
+                      earliestOpenDelay = delayMin;
+                    }
+                  }
+                }
                 if (e.status === "clicked") emailSummary.clicked++;
               }
+              if (earliestOpenDelay !== undefined) emailSummary.firstOpenDelayMinutes = earliestOpenDelay;
               const score = calculateLeadScore(contact, diagnostic || null, emailSummary);
               await db.update(contacts).set({ leadScore: score }).where(eq(contacts.id, contact.id));
               if (score !== oldScore) {
                 logActivity(contact.id, "score_changed", `Lead score: ${oldScore} → ${score}`, { oldScore, newScore: score });
                 // Hot lead notification
                 if (score > 60 && oldScore <= 60) {
-                  db.insert(notifications).values({
+                  await db.insert(notifications).values({
                     type: "hot_lead",
                     title: "Hot lead detectado",
                     description: `${contact.nombre} (${contact.empresa}) alcanzó score ${score}`,
@@ -775,6 +889,7 @@ export async function registerRoutes(
       for (const entry of entries) {
         const changes = entry?.changes || [];
         for (const change of changes) {
+          // Handle status updates
           const statuses = change?.value?.statuses || [];
           for (const status of statuses) {
             const waMessageId = status.id;
@@ -803,6 +918,117 @@ export async function registerRoutes(
                 .catch(() => {});
 
               log(`[WhatsApp] Status update: ${waMessageId} → ${waStatus}`);
+            }
+          }
+
+          // Handle incoming messages — AI-powered conversational WhatsApp
+          const messages = change?.value?.messages || [];
+          for (const message of messages) {
+            if (message.type !== "text" || !message.text?.body) continue;
+
+            const senderPhone = message.from; // E.164 format
+            const messageText = message.text.body;
+            log(`[WhatsApp] Incoming from ${senderPhone}: "${messageText.substring(0, 80)}"`);
+
+            // Find contact by phone (try original, without country code, and with + prefix)
+            const phoneVariants = [senderPhone, senderPhone.replace(/^57/, ""), `+${senderPhone}`];
+            const [contact] = await db.select().from(contacts)
+              .where(or(...phoneVariants.map(v => eq(contacts.telefono, v))))
+              .limit(1);
+
+            if (!contact) {
+              log(`[WhatsApp] No contact found for phone ${senderPhone}`);
+              continue;
+            }
+
+            // Get diagnostic data for context
+            const [diagnostic] = contact.diagnosticId
+              ? await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId))
+              : [null];
+
+            // Classify intent with AI and handle response
+            let intent: { type: string; confidence: number } = { type: "other", confidence: 0 };
+            let autoReply: string | null = null;
+
+            try {
+              intent = await classifyWhatsAppIntent(messageText, contact, diagnostic);
+              log(`[WhatsApp] Intent: ${intent.type} (confidence: ${intent.confidence}) for ${contact.nombre}`);
+            } catch (aiErr: any) {
+              log(`[WhatsApp] AI classification failed, using fallback: ${aiErr?.message}`);
+            }
+
+            logActivity(contact.id, "whatsapp_received", `WhatsApp recibido: "${messageText.substring(0, 100)}"`, { intent: intent.type, confidence: intent.confidence });
+
+            const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+
+            try {
+              switch (intent.type) {
+                case "question": {
+                  autoReply = await generateWhatsAppAutoReply(messageText, contact, diagnostic);
+                  await sendWhatsAppText(senderPhone, autoReply);
+                  logActivity(contact.id, "whatsapp_sent", `Respuesta automática: "${autoReply.substring(0, 100)}"`);
+                  break;
+                }
+                case "reschedule": {
+                  autoReply = `¡Claro, ${contact.nombre}! Puedes reagendar aquí: ${baseUrl}/booking — Equipo IM3`;
+                  await sendWhatsAppText(senderPhone, autoReply);
+                  await db.insert(notifications).values({
+                    type: "reschedule_request",
+                    title: `Solicitud de reagendamiento`,
+                    description: `${contact.nombre} (${contact.empresa}) quiere reagendar por WhatsApp`,
+                    contactId: contact.id,
+                  });
+                  logActivity(contact.id, "whatsapp_sent", "Link de reagendamiento enviado");
+                  break;
+                }
+                case "interest": {
+                  await db.insert(notifications).values({
+                    type: "hot_lead",
+                    title: `Respuesta positiva por WhatsApp`,
+                    description: `${contact.nombre}: "${messageText.substring(0, 100)}"`,
+                    contactId: contact.id,
+                  });
+                  autoReply = `¡Excelente, ${contact.nombre}! Le paso tu mensaje al equipo. Te contactaremos pronto. — Equipo IM3`;
+                  await sendWhatsAppText(senderPhone, autoReply);
+                  logActivity(contact.id, "whatsapp_sent", "Confirmación de interés enviada");
+                  break;
+                }
+                case "rejection": {
+                  logActivity(contact.id, "whatsapp_rejection", `Rechazo detectado: "${messageText.substring(0, 100)}"`);
+                  await db.insert(notifications).values({
+                    type: "cold_lead",
+                    title: `Rechazo por WhatsApp`,
+                    description: `${contact.nombre}: "${messageText.substring(0, 100)}"`,
+                    contactId: contact.id,
+                  });
+                  // Don't auto-reply to rejections — let admin decide
+                  break;
+                }
+                default: {
+                  // "other" — simple greeting or unclear, send friendly reply
+                  autoReply = `Hola ${contact.nombre}, gracias por tu mensaje. ¿En qué te podemos ayudar? — Equipo IM3`;
+                  await sendWhatsAppText(senderPhone, autoReply);
+                  logActivity(contact.id, "whatsapp_sent", "Respuesta genérica enviada");
+                  break;
+                }
+              }
+            } catch (replyErr: any) {
+              log(`[WhatsApp] Error processing reply for ${contact.nombre}: ${replyErr?.message}`);
+              // Try to send fallback reply
+              try {
+                autoReply = `Hola ${contact.nombre}, recibimos tu mensaje. Te responderemos pronto. — Equipo IM3`;
+                await sendWhatsAppText(senderPhone, autoReply);
+              } catch (_) {}
+            }
+
+            // Notify admin via email about the incoming WhatsApp message
+            try {
+              const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
+              const notification = buildWhatsAppNotificationEmail(contact, messageText, intent, autoReply);
+              await sendEmail(adminEmail, notification.subject, notification.body);
+              log(`[WhatsApp] Admin notified: ${notification.subject}`);
+            } catch (notifErr: any) {
+              log(`[WhatsApp] Failed to notify admin: ${notifErr?.message}`);
             }
           }
         }
@@ -2796,6 +3022,223 @@ export async function registerRoutes(
     }
   });
 
+  // Schedule a follow-up call for an existing contact
+  app.post("/api/admin/contacts/:contactId/schedule-followup", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const contactId = req.params.contactId as string;
+      const { date, time, duration, notes } = req.body;
+
+      if (!date || !time) return res.status(400).json({ error: "date y time son requeridos" });
+
+      // Validate contact exists
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId)).limit(1);
+      if (!contact) return res.status(404).json({ error: "Contacto no encontrado" });
+
+      // Get diagnostic data for email context
+      const [diagnostic] = contact.diagnosticId
+        ? await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId)).limit(1)
+        : [undefined];
+
+      const empresa = diagnostic?.empresa || contact.empresa;
+      const participante = diagnostic?.participante || contact.nombre;
+      const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+
+      // Cancel any existing pending follow-up for this contact
+      const existingFollowups = await db.select().from(appointments)
+        .where(and(
+          eq(appointments.contactId, contactId),
+          eq(appointments.appointmentType, "follow_up"),
+          eq(appointments.status, "scheduled")
+        ));
+
+      for (const oldFollowup of existingFollowups) {
+        // Delete old calendar event
+        if (oldFollowup.googleCalendarEventId) {
+          deleteCalendarEvent(oldFollowup.googleCalendarEventId).catch(err =>
+            log(`Error deleting old follow-up calendar event: ${err}`)
+          );
+        }
+        // Mark as cancelled
+        await db.update(appointments)
+          .set({ status: "cancelled" })
+          .where(eq(appointments.id, oldFollowup.id));
+      }
+
+      // Cancel pending reminder emails for old follow-ups
+      const reminderTemplateNames = ["prep_agenda", "recordatorio_6h", "micro_recordatorio"];
+      const reminderTemplates = await db.select().from(emailTemplates)
+        .where(and(eq(emailTemplates.isActive, true)));
+      const reminderTemplateIds = reminderTemplates
+        .filter(t => reminderTemplateNames.includes(t.nombre))
+        .map(t => t.id);
+
+      if (reminderTemplateIds.length > 0 && existingFollowups.length > 0) {
+        for (const templateId of reminderTemplateIds) {
+          await db.update(sentEmails)
+            .set({ status: "cancelled" })
+            .where(and(
+              eq(sentEmails.contactId, contactId),
+              eq(sentEmails.templateId, templateId),
+              eq(sentEmails.status, "pending")
+            ));
+        }
+      }
+
+      // Create Google Calendar event
+      let meetLink: string | null = null;
+      let eventId: string | null = null;
+      try {
+        const calResult = await createCalendarEvent({
+          diagnosticId: `followup-${contactId}-${Date.now()}`,
+          empresa: `Seguimiento — ${empresa}`,
+          participante,
+          email: contact.email,
+          fechaCita: date,
+          horaCita: time,
+          rescheduleUrl: `${baseUrl}/api/reschedule/${contactId}`,
+          cancelUrl: `${baseUrl}/api/cancel/${contactId}`,
+        });
+        if (calResult) {
+          meetLink = calResult.meetLink;
+          eventId = calResult.eventId;
+        }
+      } catch (err) {
+        log(`Calendar event creation failed for follow-up: ${err}`);
+      }
+
+      // Build calendar add URL
+      const calendarAddUrl = buildGoogleCalendarUrl(
+        `Seguimiento — ${empresa}`, date, time, meetLink
+      );
+
+      // Insert appointment
+      const [appt] = await db.insert(appointments).values({
+        contactId,
+        title: `Seguimiento — ${empresa}`,
+        date,
+        time,
+        duration: duration || 45,
+        notes: notes || null,
+        meetLink,
+        googleCalendarEventId: eventId,
+        appointmentType: "follow_up",
+      }).returning();
+
+      // Update contact status to scheduled
+      await db.update(contacts)
+        .set({ status: "scheduled", substatus: "interested" })
+        .where(eq(contacts.id, contactId));
+
+      // Send confirmation email to client
+      const confirmEmail = buildFollowUpConfirmationEmail(
+        participante, empresa, date, time, meetLink, contactId, calendarAddUrl
+      );
+
+      if (isEmailConfigured()) {
+        sendEmail(contact.email, confirmEmail.subject, confirmEmail.body)
+          .then(() => log(`Follow-up confirmation email sent to ${contact.email}`))
+          .catch(err => log(`Error sending follow-up confirmation: ${err}`));
+      }
+
+      // Schedule reminder emails for the follow-up
+      const appointmentDate = parseFechaCita(date, time);
+      const now = new Date();
+      const hoursUntilCall = Math.max(0, (appointmentDate.getTime() - now.getTime()) / (1000 * 60 * 60));
+
+      let emailsScheduled = 0;
+      for (const templateName of reminderTemplateNames) {
+        const template = reminderTemplates.find(t => t.nombre === templateName);
+        if (!template) continue;
+
+        const scheduledFor = calculateEmailTime(templateName, now, appointmentDate, hoursUntilCall);
+        if (!scheduledFor) continue;
+
+        let subject: string | null = null;
+        let body: string | null = null;
+        try {
+          if (templateName === "micro_recordatorio") {
+            const r = buildMicroReminderEmail(participante, time, meetLink, contactId);
+            subject = r.subject;
+            body = r.body;
+          } else if (templateName === "recordatorio_6h") {
+            const r = build6hReminderEmail(participante, time, meetLink, contactId, calendarAddUrl);
+            subject = r.subject;
+            body = r.body;
+          } else if (templateName === "prep_agenda") {
+            // Use diagnostic data for AI-generated prep email
+            const diagForAI = diagnostic ? { ...diagnostic } : { empresa, participante, email: contact.email } as any;
+            diagForAI.fechaCita = date;
+            diagForAI.horaCita = time;
+            diagForAI.meetLink = meetLink;
+            (diagForAI as any)._calendarAddUrl = calendarAddUrl;
+            const r = await generateEmailContent(template, diagForAI, contactId);
+            subject = r.subject;
+            body = r.body;
+          }
+        } catch (err) {
+          log(`Pre-gen failed for follow-up ${templateName}: ${err}`);
+        }
+
+        await db.insert(sentEmails).values({
+          contactId,
+          templateId: template.id,
+          scheduledFor,
+          subject,
+          body,
+        });
+        emailsScheduled++;
+      }
+
+      // Log activity
+      logActivity(contactId, "followup_scheduled", `Seguimiento agendado: ${date} a las ${time}`, {
+        appointmentId: appt.id,
+        meetLink,
+      });
+
+      // Create notification
+      await db.insert(notifications).values({
+        type: "new_lead",
+        title: `Seguimiento agendado: ${participante}`,
+        description: `${empresa} — ${date} a las ${time}`,
+        contactId,
+      }).catch(() => {});
+
+      // Boost lead score
+      const currentScore = contact.leadScore || 0;
+      const newScore = Math.min(100, currentScore + 15);
+      await db.update(contacts)
+        .set({ leadScore: newScore })
+        .where(eq(contacts.id, contactId));
+
+      res.json({ appointment: appt, meetLink, emailsScheduled });
+    } catch (err: any) {
+      log(`Error scheduling follow-up: ${err?.message}`);
+      res.status(500).json({ error: "Error agendando seguimiento" });
+    }
+  });
+
+  // Get follow-up appointment for a contact
+  app.get("/api/admin/contacts/:contactId/followup", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const followups = await db.select().from(appointments)
+        .where(and(
+          eq(appointments.contactId, req.params.contactId as string),
+          eq(appointments.appointmentType, "follow_up"),
+          eq(appointments.status, "scheduled")
+        ))
+        .limit(1);
+
+      res.json(followups[0] || null);
+    } catch (err: any) {
+      log(`Error fetching follow-up: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo seguimiento" });
+    }
+  });
+
   // Mark diagnostic meeting as completed or no-show
   app.patch("/api/admin/diagnostics/:id/meeting-status", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
@@ -2831,6 +3274,89 @@ export async function registerRoutes(
           scheduled: `Reunión de diagnóstico reagendada — ${updated.empresa}`,
         };
         logActivity(contact.id, activityType, descriptions[status] || `Estado de reunión: ${status}`);
+
+        // Post-meeting automations based on status
+        if (status === "completed") {
+          // 1. Schedule seguimiento_post email for 5h from now
+          try {
+            const [postTemplate] = await db.select().from(emailTemplates)
+              .where(eq(emailTemplates.nombre, "seguimiento_post")).limit(1);
+
+            if (postTemplate) {
+              const sendAt = new Date(Date.now() + 5 * 60 * 60 * 1000);
+              await db.insert(sentEmails).values({
+                contactId: contact.id,
+                templateId: postTemplate.id,
+                scheduledFor: sendAt,
+                status: "pending",
+              });
+              log(`Seguimiento post-reunión programado para ${sendAt.toISOString()} — ${updated.empresa}`);
+            }
+          } catch (err) {
+            log(`Error scheduling seguimiento_post: ${err}`);
+          }
+
+          // 2. Update contact status to "converted"
+          await db.update(contacts)
+            .set({ status: "converted" })
+            .where(eq(contacts.id, contact.id));
+
+          // 3. Create notification
+          await db.insert(notifications).values({
+            type: "deal_stage_changed",
+            title: `Reunión completada — ${updated.empresa}`,
+            description: `La reunión con ${updated.participante} de ${updated.empresa} fue completada. Preparar propuesta.`,
+            contactId: contact.id,
+          }).catch(() => {});
+
+          // 4. Create follow-up task (send proposal within 48h)
+          await db.insert(tasks).values({
+            contactId: contact.id,
+            title: `Enviar propuesta a ${updated.empresa}`,
+            description: `Reunión completada. Preparar y enviar propuesta basada en el diagnóstico.`,
+            priority: "high",
+            dueDate: new Date(Date.now() + 48 * 60 * 60 * 1000),
+          }).catch(() => {});
+
+        } else if (status === "no_show") {
+          // 1. Cancel any pending pre-meeting emails
+          await db.update(sentEmails)
+            .set({ status: "cancelled" })
+            .where(and(eq(sentEmails.contactId, contact.id), eq(sentEmails.status, "pending")));
+
+          // 2. Schedule no-show email (send in 2 hours — empathetic, invite to reschedule)
+          try {
+            const [postTemplate] = await db.select().from(emailTemplates)
+              .where(eq(emailTemplates.nombre, "seguimiento_post")).limit(1);
+
+            if (postTemplate) {
+              const { subject, body } = buildNoShowEmail(
+                updated.participante, updated.empresa, contact.id
+              );
+              const sendAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
+              await db.insert(sentEmails).values({
+                contactId: contact.id,
+                templateId: postTemplate.id,
+                subject,
+                body,
+                scheduledFor: sendAt,
+                status: "pending",
+              });
+              log(`Email no-show programado para ${sendAt.toISOString()} — ${updated.empresa}`);
+            }
+          } catch (err) {
+            log(`Error scheduling no-show email: ${err}`);
+          }
+
+          // 3. Create task to try rescheduling
+          await db.insert(tasks).values({
+            contactId: contact.id,
+            title: `Intentar reagendar con ${updated.empresa}`,
+            description: `${updated.participante} no se presentó a la reunión. Contactar para reagendar.`,
+            priority: "high",
+            dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000),
+          }).catch(() => {});
+        }
       }
 
       res.json(updated);
@@ -3447,7 +3973,7 @@ ${urls}
     }
   });
 
-  // Reschedule — redirect to booking page
+  // Reschedule — redirect to dedicated reschedule page (no need to redo full form)
   app.get("/api/reschedule/:contactId", async (req, res) => {
     const { contactId } = req.params;
     if (db) {
@@ -3455,36 +3981,257 @@ ${urls}
         const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId)).limit(1);
         if (contact) {
           logActivity(contactId, "status_changed", "Contacto solicitó reagendar desde email");
-          // Update meeting status
-          if (contact.diagnosticId) {
-            await db.update(diagnostics)
-              .set({ meetingStatus: "cancelled" })
-              .where(eq(diagnostics.id, contact.diagnosticId));
-          }
         }
       } catch (err) {
         log(`Error processing reschedule: ${err}`);
       }
     }
-    res.redirect(`${process.env.BASE_URL || "https://im3systems.com"}/booking`);
+    res.redirect(`${process.env.BASE_URL || "https://im3systems.com"}/reschedule/${contactId}`);
   });
 
-  // Cancel meeting
+  // Get current booking info for reschedule page
+  app.get("/api/reschedule-info/:contactId", async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const { contactId } = req.params;
+
+    try {
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId)).limit(1);
+      if (!contact) return res.status(404).json({ error: "Contacto no encontrado" });
+
+      let diagnostic = null;
+      if (contact.diagnosticId) {
+        const [diag] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId)).limit(1);
+        diagnostic = diag || null;
+      }
+
+      res.json({
+        contactId: contact.id,
+        nombre: contact.nombre,
+        empresa: contact.empresa,
+        email: contact.email,
+        fechaCita: diagnostic?.fechaCita || null,
+        horaCita: diagnostic?.horaCita || null,
+        meetingStatus: diagnostic?.meetingStatus || null,
+      });
+    } catch (err) {
+      log(`Error fetching reschedule info: ${err}`);
+      res.status(500).json({ error: "Error interno" });
+    }
+  });
+
+  // Process reschedule — update date/time, create new calendar event, reschedule emails
+  app.post("/api/reschedule/:contactId", async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const { contactId } = req.params;
+    const { fechaCita, horaCita } = req.body;
+
+    if (!fechaCita || !horaCita) {
+      return res.status(400).json({ error: "fechaCita y horaCita son requeridos" });
+    }
+
+    try {
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId)).limit(1);
+      if (!contact) return res.status(404).json({ error: "Contacto no encontrado" });
+      if (!contact.diagnosticId) return res.status(400).json({ error: "No hay diagnóstico asociado" });
+
+      const [diag] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId)).limit(1);
+      if (!diag) return res.status(404).json({ error: "Diagnóstico no encontrado" });
+
+      // Block rescheduling if meeting already completed
+      if (diag.meetingStatus === "completed") {
+        return res.status(400).json({ error: "Esta reunión ya fue completada. No se puede reagendar." });
+      }
+
+      // 1. Delete old Google Calendar event
+      if (diag.googleCalendarEventId) {
+        await deleteCalendarEvent(diag.googleCalendarEventId).catch((err) =>
+          log(`Error deleting old calendar event on reschedule: ${err}`)
+        );
+      }
+
+      // 2. Cancel pending emails and WhatsApp
+      await db.update(sentEmails)
+        .set({ status: "cancelled" })
+        .where(and(eq(sentEmails.contactId, contactId), eq(sentEmails.status, "pending")));
+
+      await db.update(whatsappMessages)
+        .set({ status: "cancelled" })
+        .where(and(eq(whatsappMessages.contactId, contactId), eq(whatsappMessages.status, "pending")));
+
+      // 3. Create new Google Calendar event
+      const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+      const calResult = await createCalendarEvent({
+        diagnosticId: `resched-${contact.diagnosticId}-${Date.now()}`,
+        empresa: diag.empresa,
+        participante: diag.participante,
+        email: diag.email,
+        fechaCita,
+        horaCita,
+        rescheduleUrl: `${baseUrl}/api/reschedule/${contactId}`,
+        cancelUrl: `${baseUrl}/api/cancel/${contactId}`,
+      });
+
+      const newMeetLink = calResult?.meetLink || null;
+      const newEventId = calResult?.eventId || null;
+
+      // 4. Update diagnostic with new date, time, meet link, event ID
+      await db.update(diagnostics).set({
+        fechaCita,
+        horaCita,
+        meetLink: newMeetLink,
+        googleCalendarEventId: newEventId,
+        meetingStatus: "scheduled",
+      }).where(eq(diagnostics.id, contact.diagnosticId));
+
+      // 5. Update contact status back to scheduled
+      await db.update(contacts)
+        .set({ status: "scheduled" })
+        .where(eq(contacts.id, contactId));
+
+      logActivity(contactId, "status_changed", `Reunión reagendada: ${fechaCita} a las ${horaCita}`);
+
+      // 6. Re-schedule email sequence with new date
+      try {
+        const templates = await db.select().from(emailTemplates)
+          .where(eq(emailTemplates.isActive, true))
+          .orderBy(asc(emailTemplates.sequenceOrder));
+
+        const [updatedDiag] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId)).limit(1);
+        const appointmentDate = parseFechaCita(fechaCita, horaCita);
+        const now = new Date();
+        const hoursUntilCall = (appointmentDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+        // Enrich diagnostic for AI emails
+        if (updatedDiag) {
+          (updatedDiag as any)._calendarAddUrl = buildGoogleCalendarUrl(
+            diag.empresa, fechaCita, horaCita, newMeetLink
+          );
+          (updatedDiag as any)._rescheduleUrl = `${baseUrl}/api/reschedule/${contactId}`;
+          (updatedDiag as any)._cancelUrl = `${baseUrl}/api/cancel/${contactId}`;
+          if ((contact.tags as string[] || []).includes("newsletter")) {
+            (updatedDiag as any)._isReturningContact = true;
+          }
+        }
+
+        for (const template of templates) {
+          const sendAt = calculateEmailTime(template.nombre, now, appointmentDate, hoursUntilCall);
+          if (!sendAt) continue;
+
+          // Pre-generate fixed templates
+          let preGenSubject: string | null = null;
+          let preGenBody: string | null = null;
+
+          if (template.nombre === "confirmacion") {
+            // Send confirmation immediately via AI
+            try {
+              const { subject, body } = await generateEmailContent(template, updatedDiag, contactId);
+              preGenSubject = subject;
+              preGenBody = body;
+              await sendEmail(diag.email, subject, body);
+              await db.insert(sentEmails).values({
+                contactId,
+                templateId: template.id,
+                subject,
+                body,
+                scheduledFor: new Date(),
+                status: "sent",
+                sentAt: new Date(),
+              });
+              logActivity(contactId, "email_sent", `Email de confirmación de reagendamiento enviado`);
+              continue;
+            } catch (err) {
+              log(`Error sending reschedule confirmation email: ${err}`);
+            }
+          } else if (template.nombre === "recordatorio_6h") {
+            const result = build6hReminderEmail(
+              diag.participante, horaCita,
+              updatedDiag?.meetLink || null, contactId,
+              (updatedDiag as any)?._calendarAddUrl
+            );
+            preGenSubject = result.subject;
+            preGenBody = result.body;
+          } else if (template.nombre === "micro_recordatorio") {
+            const result = buildMicroReminderEmail(
+              diag.participante, horaCita,
+              updatedDiag?.meetLink || null, contactId
+            );
+            preGenSubject = result.subject;
+            preGenBody = result.body;
+          }
+
+          await db.insert(sentEmails).values({
+            contactId,
+            templateId: template.id,
+            subject: preGenSubject,
+            body: preGenBody,
+            scheduledFor: sendAt,
+            status: "pending",
+          });
+        }
+      } catch (err) {
+        log(`Error re-scheduling emails after reschedule: ${err}`);
+      }
+
+      // 7. Build calendar add URL for response
+      const calendarAddUrl = buildGoogleCalendarUrl(diag.empresa, fechaCita, horaCita, newMeetLink);
+
+      res.json({
+        success: true,
+        meetLink: newMeetLink,
+        calendarAddUrl,
+        fechaCita,
+        horaCita,
+      });
+    } catch (err) {
+      log(`Error processing reschedule: ${err}`);
+      res.status(500).json({ error: "Error procesando reagendamiento" });
+    }
+  });
+
+  // Cancel meeting (does NOT opt out — only cancels this meeting's pending emails/WhatsApp/Calendar)
   app.get("/api/cancel/:contactId", async (req, res) => {
     const { contactId } = req.params;
+    const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+    let contactName = "";
+
     if (db) {
       try {
         const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId)).limit(1);
         if (contact) {
+          contactName = contact.nombre;
           logActivity(contactId, "status_changed", "Contacto canceló la reunión desde email");
+
           if (contact.diagnosticId) {
+            // Get diagnostic to find calendar event ID
+            const [diag] = await db.select().from(diagnostics)
+              .where(eq(diagnostics.id, contact.diagnosticId)).limit(1);
+
+            // Cancel diagnostic meeting status
             await db.update(diagnostics)
               .set({ meetingStatus: "cancelled" })
               .where(eq(diagnostics.id, contact.diagnosticId));
+
+            // Delete Google Calendar event
+            if (diag?.googleCalendarEventId) {
+              deleteCalendarEvent(diag.googleCalendarEventId).catch((err) =>
+                log(`Error deleting calendar event on cancel: ${err}`)
+              );
+            }
           }
-          // Opt out of remaining pre-meeting emails
+
+          // Cancel pending emails for this contact (not opt-out — just this sequence)
+          await db.update(sentEmails)
+            .set({ status: "cancelled" })
+            .where(and(eq(sentEmails.contactId, contactId), eq(sentEmails.status, "pending")));
+
+          // Cancel pending WhatsApp messages
+          await db.update(whatsappMessages)
+            .set({ status: "cancelled" })
+            .where(and(eq(whatsappMessages.contactId, contactId), eq(whatsappMessages.status, "pending")));
+
+          // Return contact to lead status (they can still be contacted in the future)
           await db.update(contacts)
-            .set({ optedOut: true })
+            .set({ status: "lead" })
             .where(eq(contacts.id, contactId));
         }
       } catch (err) {
@@ -3493,13 +4240,23 @@ ${urls}
     }
 
     res.send(`<html>
-      <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-      <body style="font-family:sans-serif;max-width:500px;margin:60px auto;text-align:center;color:#333">
-        <h2 style="color:#0F172A">Reunión cancelada</h2>
-        <p>Tu sesión de diagnóstico ha sido cancelada.</p>
-        <p>Si cambias de opinión, puedes agendar una nueva sesión en cualquier momento:</p>
-        <a href="${process.env.BASE_URL || "https://im3systems.com"}/booking" style="display:inline-block;background:#3B82F6;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;margin-top:12px">Agendar nueva sesión</a>
-        <p style="color:#999;font-size:14px;margin-top:24px">— Equipo IM3 Systems</p>
+      <head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+      <style>body{font-family:'Segoe UI',Roboto,sans-serif;margin:0;padding:0;background:#f8fafc}</style></head>
+      <body>
+        <div style="max-width:500px;margin:60px auto;text-align:center;padding:0 20px">
+          <div style="background:linear-gradient(135deg,#0F172A,#1E293B);padding:20px 28px;border-radius:12px 12px 0 0">
+            <h1 style="color:#fff;font-size:18px;margin:0">IM3 Systems</h1>
+          </div>
+          <div style="background:#fff;padding:32px 28px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 12px 12px">
+            <div style="width:56px;height:56px;background:#FEF3C7;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 20px;font-size:24px">✓</div>
+            <h2 style="color:#0F172A;margin:0 0 12px;font-size:20px">Reunión cancelada</h2>
+            <p style="color:#64748B;font-size:15px;margin:0 0 8px">${contactName ? `${contactName}, tu` : "Tu"} sesión de diagnóstico ha sido cancelada correctamente.</p>
+            <p style="color:#64748B;font-size:15px;margin:0 0 24px">Hemos eliminado el evento de tu calendario y cancelado los recordatorios pendientes.</p>
+            <p style="color:#475569;font-size:14px;margin:0 0 20px">Si cambias de opinión, siempre puedes reagendar una nueva sesión. Tu información está guardada.</p>
+            <a href="${baseUrl}/reschedule/${contactId}" style="display:inline-block;background:#3B82F6;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px">Reagendar nueva sesión →</a>
+            <p style="color:#94A3B8;font-size:13px;margin-top:24px">— Equipo IM3 Systems</p>
+          </div>
+        </div>
       </body>
     </html>`);
   });
