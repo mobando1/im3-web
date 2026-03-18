@@ -461,12 +461,23 @@ const LogoStrip = () => {
     { name: "Vertex Capital", src: "/assets/logos/vertex-capital.png" },
   ];
 
+  const logosWithBg = ["La Glorieta", "Xtremcol", "Salomé Momentos"];
+  const hasBg = (name: string) => logosWithBg.includes(name);
+
   const LogoItem = ({ logo }: { logo: { name: string; src: string } }) => (
-    <div className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity duration-300 flex items-center justify-center mx-4 sm:mx-8 w-[120px] h-[80px] sm:w-[160px] sm:h-[100px]">
+    <div className={cn(
+      "flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity duration-300 flex items-center justify-center mx-2 sm:mx-5",
+      hasBg(logo.name)
+        ? "w-[80px] h-[55px] sm:w-[110px] sm:h-[75px] overflow-hidden rounded-2xl"
+        : "w-[120px] h-[80px] sm:w-[160px] sm:h-[100px]"
+    )}>
       <img
         src={logo.src}
         alt={logo.name}
-        className="w-full h-full object-contain rounded-xl"
+        className={cn(
+          "w-full h-full",
+          hasBg(logo.name) ? "object-cover" : "object-contain rounded-xl"
+        )}
       />
     </div>
   );
