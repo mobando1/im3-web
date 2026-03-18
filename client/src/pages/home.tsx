@@ -462,11 +462,11 @@ const LogoStrip = () => {
   ];
 
   const LogoItem = ({ logo }: { logo: { name: string; src: string } }) => (
-    <div className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity duration-300 flex items-center mx-4 sm:mx-8">
-      <img 
-        src={logo.src} 
-        alt={logo.name} 
-        className="w-auto object-contain rounded-xl h-12 sm:h-16 max-w-[110px] sm:max-w-[160px]"
+    <div className="flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity duration-300 flex items-center justify-center mx-4 sm:mx-8 w-[100px] h-[60px] sm:w-[140px] sm:h-[80px]">
+      <img
+        src={logo.src}
+        alt={logo.name}
+        className="w-full h-full object-contain rounded-xl"
       />
     </div>
   );
