@@ -467,11 +467,8 @@ const LogoStrip = () => {
         src={logo.src} 
         alt={logo.name} 
         className={cn(
-          "w-auto object-contain rounded-xl",
-          logo.name === "AMJ Solutions" ? "h-20 sm:h-32 max-w-[160px] sm:max-w-[240px]" :
-          logo.name === "Tierra Salvaje" ? "h-14 sm:h-20 max-w-[120px] sm:max-w-[180px]" :
-          logo.name === "Freshbox" ? "h-10 sm:h-14 max-w-[90px] sm:max-w-[130px] mix-blend-multiply" :
-          "h-10 sm:h-14 max-w-[90px] sm:max-w-[130px]"
+          "w-auto object-contain h-12 sm:h-16 max-w-[110px] sm:max-w-[160px]",
+          logo.name === "Xtremcol" ? "mix-blend-screen" : "mix-blend-multiply"
         )}
       />
     </div>
