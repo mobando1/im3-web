@@ -317,6 +317,42 @@ export async function registerRoutes(
             isReturning = true;
             log(`Contacto ${data.email} actualizado con diagnóstico (contacto existente)`);
             logActivity(contact.id, "form_submitted", `Contacto existente completó diagnóstico — ${data.participante} de ${data.empresa}`, { empresa: data.empresa, diagnosticId: insertedId, returning: true });
+
+            // Alert admin when a newsletter subscriber books a diagnostic (warm lead conversion)
+            const wasNewsletterSubscriber = (existingContact.tags as string[] || []).includes("newsletter");
+            if (wasNewsletterSubscriber) {
+              await db.insert(notifications).values({
+                type: "lead_converted",
+                title: "Suscriptor de newsletter agendó cita",
+                description: `${data.participante} de ${data.empresa} era suscriptor del newsletter y acaba de agendar una auditoría`,
+                contactId: contact.id,
+              });
+
+              const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
+              const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+              sendEmail(
+                adminEmail,
+                `🔥 Conversión: suscriptor de newsletter agendó cita — ${data.participante}`,
+                `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+                  <div style="background:#B45309;padding:20px 28px;border-radius:8px 8px 0 0">
+                    <h1 style="color:#fff;font-size:18px;margin:0">🔥 Conversión Newsletter → Auditoría</h1>
+                  </div>
+                  <div style="padding:28px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+                    <p style="font-size:14px;margin:0 0 16px"><strong>${data.participante}</strong> de <strong>${data.empresa}</strong> estaba suscrito al newsletter y acaba de agendar una auditoría de diagnóstico.</p>
+                    <p style="font-size:13px;color:#B45309;font-weight:600;margin:0 0 16px">Este contacto ya estaba caliente — prioridad alta.</p>
+                    <table style="width:100%;border-collapse:collapse;font-size:14px">
+                      <tr><td style="padding:6px 0;color:#666;width:120px">Email</td><td style="padding:6px 0">${data.email}</td></tr>
+                      ${data.telefono ? `<tr><td style="padding:6px 0;color:#666">Teléfono</td><td style="padding:6px 0">${data.telefono}</td></tr>` : ""}
+                      <tr><td style="padding:6px 0;color:#666">Industria</td><td style="padding:6px 0">${data.industria || "—"}</td></tr>
+                      <tr><td style="padding:6px 0;color:#666">Cita</td><td style="padding:6px 0">${data.fechaCita || "—"} ${data.horaCita || ""}</td></tr>
+                    </table>
+                    <div style="margin-top:20px">
+                      <a href="${baseUrl}/admin/contacts/${contact.id}" style="display:inline-block;background:#B45309;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Ver en CRM →</a>
+                    </div>
+                  </div>
+                </div>`
+              ).catch((err) => log(`Error sending newsletter conversion alert: ${err}`));
+            }
           } else {
             // Create new contact
             [contact] = await db.insert(contacts).values({
@@ -327,6 +363,25 @@ export async function registerRoutes(
               telefono: data.telefono || null,
             }).returning();
             logActivity(contact.id, "form_submitted", `Formulario diagnóstico completado por ${data.participante}`, { empresa: data.empresa, diagnosticId: insertedId });
+          }
+
+          // Auto-create deal for pipeline
+          if (isReturning) {
+            const existingDeal = await db.select().from(deals)
+              .where(eq(deals.contactId, contact.id)).limit(1);
+            if (existingDeal.length === 0) {
+              await db.insert(deals).values({
+                contactId: contact.id,
+                title: `Diagnóstico — ${data.empresa}`,
+                stage: "qualification",
+              });
+            }
+          } else {
+            await db.insert(deals).values({
+              contactId: contact.id,
+              title: `Diagnóstico — ${data.empresa}`,
+              stage: "qualification",
+            });
           }
 
           // Fetch full diagnostic for lead scoring
@@ -348,7 +403,7 @@ export async function registerRoutes(
               contactId: contact.id,
               title: `Revisar diagnóstico de ${data.empresa}`,
               priority: "high",
-              dueDate: new Date(),
+              dueDate: appointmentDate,
             });
             const postCitaDate = new Date(appointmentDate.getTime() + 24 * 60 * 60 * 1000);
             await db.insert(tasks).values({

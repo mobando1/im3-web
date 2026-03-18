@@ -65,5 +65,11 @@ export function calculateLeadScore(
   if (contact.status === "scheduled") score += 15;
   if (contact.status === "converted") score += 20;
 
+  // Newsletter subscriber who booked = warmer lead
+  const tags = (contact as any).tags as string[] || [];
+  if (tags.includes("newsletter") && contact.status === "scheduled") {
+    score += 10;
+  }
+
   return Math.min(score, 100);
 }

@@ -72,8 +72,9 @@ export default function StepBooking({ form }: StepProps) {
     setValue("horaCita", time, { shouldValidate: true });
   };
 
+  const minDate = addDays(today, 1);
   const isDayDisabled = (date: Date) => {
-    return isBefore(date, today) || isWeekend(date) || isAfter(date, maxDate);
+    return isBefore(date, minDate) || isWeekend(date) || isAfter(date, maxDate);
   };
 
   return (
