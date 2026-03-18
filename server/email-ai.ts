@@ -651,8 +651,114 @@ export async function generateWhatsAppMessage(
 }
 
 /**
+ * Build the premium HTML template for a mini-audit email.
+ */
+function buildMiniAuditEmail(
+  insights: Array<{ title: string; description: string; stat: string }>,
+  diagnosticData: Partial<Diagnostic>,
+  contactId: string
+): string {
+  const nombre = diagnosticData.participante || "there";
+  const empresa = diagnosticData.empresa || "tu empresa";
+  const industria = diagnosticData.industria || "tu sector";
+  const fechaCita = diagnosticData.fechaCita || "";
+  const horaCita = diagnosticData.horaCita || "";
+  const meetLink = (diagnosticData as any)._meetLink || (diagnosticData as any).meetLink || "";
+  const areaPrioridad = Array.isArray(diagnosticData.areaPrioridad) ? diagnosticData.areaPrioridad : [];
+
+  const insightColors = [
+    { border: "#3B82F6", bg: "#EFF6FF", icon: "&#9889;", iconBg: "#DBEAFE", label: "OPORTUNIDAD" },
+    { border: "#10B981", bg: "#ECFDF5", icon: "&#128200;", iconBg: "#D1FAE5", label: "EFICIENCIA" },
+    { border: "#F59E0B", bg: "#FFFBEB", icon: "&#127919;", iconBg: "#FEF3C7", label: "IMPACTO" },
+  ];
+
+  const insightCards = insights.map((insight, i) => {
+    const c = insightColors[i] || insightColors[0];
+    return `
+    <div style="background:${c.bg};border-left:4px solid ${c.border};border-radius:0 8px 8px 0;padding:20px;margin:0 0 16px">
+      <div style="display:flex;align-items:center;margin:0 0 10px">
+        <div style="width:36px;height:36px;background:${c.iconBg};border-radius:8px;text-align:center;line-height:36px;font-size:18px;margin-right:12px">${c.icon}</div>
+        <div>
+          <span style="font-size:10px;font-weight:700;letter-spacing:1px;color:${c.border};text-transform:uppercase">${c.label}</span>
+          <p style="margin:2px 0 0;font-size:16px;font-weight:700;color:#1a1a1a">${insight.title}</p>
+        </div>
+      </div>
+      <p style="margin:0 0 12px;font-size:14px;color:#374151;line-height:1.6">${insight.description}</p>
+      <div style="background:#fff;border:1px solid #E5E7EB;border-radius:6px;padding:10px 14px;display:inline-block">
+        <span style="font-size:12px;color:#6B7280">&#128202; </span>
+        <span style="font-size:13px;font-weight:600;color:#1F2937">${insight.stat}</span>
+      </div>
+    </div>`;
+  }).join("");
+
+  const priorityTags = areaPrioridad.map(area =>
+    `<span style="display:inline-block;background:#EFF6FF;color:#3B82F6;font-size:11px;font-weight:600;padding:4px 10px;border-radius:12px;margin:2px 4px 2px 0">${area}</span>`
+  ).join("");
+
+  const meetSection = meetLink ? `
+    <div style="text-align:center;margin:24px 0 0">
+      <a href="${meetLink}" style="display:inline-block;background:linear-gradient(135deg,#3B82F6,#2563EB);color:#fff;padding:14px 32px;border-radius:8px;text-decoration:none;font-weight:700;font-size:15px;box-shadow:0 2px 8px rgba(59,130,246,0.3)">Unirse a la reunion &#8594;</a>
+    </div>` : "";
+
+  const calendarInfo = fechaCita && horaCita ? `
+    <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:16px;margin:20px 0 0;text-align:center">
+      <p style="margin:0 0 4px;font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.5px">Tu sesion de diagnostico</p>
+      <p style="margin:0;font-size:16px;font-weight:700;color:#1E293B">${fechaCita} a las ${horaCita}</p>
+      <p style="margin:4px 0 0;font-size:13px;color:#64748B">45 minutos &middot; Google Meet</p>
+    </div>` : "";
+
+  const html = `<div style="max-width:600px;margin:0 auto;font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#ffffff">
+  <div style="background:linear-gradient(135deg,#0F172A,#1E293B);padding:28px 24px;border-radius:8px 8px 0 0;text-align:center">
+    <p style="margin:0 0 8px;font-size:13px;color:#94A3B8;letter-spacing:0.5px">IM3 SYSTEMS</p>
+    <h1 style="color:#fff;font-size:22px;margin:0 0 12px;font-weight:700">Analisis preliminar</h1>
+    <div style="display:inline-block;background:rgba(59,130,246,0.2);border:1px solid rgba(59,130,246,0.4);border-radius:20px;padding:6px 16px">
+      <span style="color:#60A5FA;font-size:12px;font-weight:600;letter-spacing:0.5px">&#9733; HALLAZGOS PARA ${empresa.toUpperCase()}</span>
+    </div>
+  </div>
+
+  <div style="padding:28px 24px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+    <p style="margin:0 0 8px;font-size:16px;color:#1a1a1a">Hola <strong>${nombre}</strong>,</p>
+    <p style="margin:0 0 24px;font-size:15px;color:#374151;line-height:1.6">Estuvimos revisando el diagnostico de <strong>${empresa}</strong> y encontramos <strong>3 oportunidades concretas</strong> que pueden tener impacto en tu operacion:</p>
+
+    ${insightCards}
+
+    <div style="background:linear-gradient(135deg,#F8FAFC,#F1F5F9);border:1px solid #E2E8F0;border-radius:8px;padding:20px;margin:24px 0 0">
+      <div style="display:flex;align-items:center;margin:0 0 12px">
+        <div style="width:28px;height:28px;background:#DBEAFE;border-radius:6px;text-align:center;line-height:28px;font-size:14px;margin-right:10px">&#128640;</div>
+        <p style="margin:0;font-size:14px;font-weight:700;color:#1E293B">Resumen de tu diagnostico</p>
+      </div>
+      <table style="width:100%;border-collapse:collapse">
+        <tr>
+          <td style="padding:6px 0;font-size:13px;color:#64748B">Industria</td>
+          <td style="padding:6px 0;font-size:13px;font-weight:600;color:#1E293B;text-align:right">${industria}</td>
+        </tr>
+        <tr>
+          <td style="padding:6px 0;font-size:13px;color:#64748B">Oportunidades</td>
+          <td style="padding:6px 0;font-size:13px;font-weight:600;color:#10B981;text-align:right">3 detectadas</td>
+        </tr>
+        ${areaPrioridad.length > 0 ? `<tr>
+          <td style="padding:6px 0;font-size:13px;color:#64748B;vertical-align:top">Prioridades</td>
+          <td style="padding:6px 0;text-align:right">${priorityTags}</td>
+        </tr>` : ""}
+      </table>
+    </div>
+
+    ${calendarInfo}
+    ${meetSection}
+
+    <p style="margin:24px 0 0;font-size:14px;color:#374151;line-height:1.6">En la sesion profundizaremos en estas y mas oportunidades especificas para <strong>${empresa}</strong>. Lleva tus preguntas — queremos que sea una sesion de alto valor para ti.</p>
+
+    <p style="margin:20px 0 0;color:#999;font-size:14px">— Equipo IM3 Systems</p>
+  </div>
+</div>`;
+
+  return addEmailFooter(html, contactId, true);
+}
+
+/**
  * Generate a mini-audit report (3 insights) based on diagnostic data.
  * Sent 1 hour after form submission to feel like human analysis.
+ * AI generates structured insights (JSON), HTML template is fixed for consistent design.
  */
 export async function generateMiniAudit(
   diagnosticData: Partial<Diagnostic>,
@@ -663,70 +769,73 @@ export async function generateMiniAudit(
 
   const context = buildContext(diagnosticData);
 
+  // 1. Generate subject
   const subjectResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 100,
-    system: "Genera SOLO el texto del subject de un email. Sin comillas, sin prefijo, solo el texto. Máximo 60 caracteres. Debe transmitir que analizaste su diagnóstico y encontraste oportunidades concretas.",
+    system: "Genera SOLO el texto del subject de un email. Sin comillas, sin prefijo, solo el texto. Maximo 60 caracteres.",
     messages: [{
       role: "user",
-      content: `Genera un subject para un email de mini-auditoría. La empresa es ${diagnosticData.empresa} del sector ${diagnosticData.industria}. El subject debe transmitir que el equipo ya analizó su caso y tiene hallazgos iniciales. Ejemplo de estilo: "3 oportunidades que encontramos para [empresa]", "Análisis preliminar de [empresa] — hallazgos iniciales"`,
+      content: `Subject para mini-auditoria de ${diagnosticData.empresa} (${diagnosticData.industria}). Transmite que analizaste su caso y encontraste oportunidades. Estilo: "3 oportunidades que encontramos para ${diagnosticData.empresa}"`,
     }],
   });
 
   const subject = subjectResponse.content?.[0]?.type === "text"
     ? subjectResponse.content[0].text.trim()
-    : `Análisis preliminar para ${diagnosticData.empresa}`;
+    : `3 oportunidades que encontramos para ${diagnosticData.empresa}`;
 
-  const bodyResponse = await anthropic.messages.create({
+  // 2. Generate 3 insights as structured JSON
+  const insightsResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
-    max_tokens: 2000,
-    system: SYSTEM_PROMPT,
+    max_tokens: 1200,
+    system: `Eres un consultor senior de tecnologia e IA de IM3 Systems. Analiza diagnosticos de empresas y detectas oportunidades de automatizacion, IA y optimizacion.
+
+Responde UNICAMENTE con un JSON array valido. Sin texto antes ni despues. Sin bloques de codigo markdown. Solo el JSON.
+
+Formato exacto:
+[
+  {"title": "titulo corto (3-5 palabras)", "description": "2-3 oraciones explicando la oportunidad. Especifica, basada en la industria y herramientas del cliente. Menciona beneficio concreto.", "stat": "dato estadistico con fuente (ej: 'McKinsey: 40% reduccion en costos operativos')"},
+  {"title": "...", "description": "...", "stat": "..."},
+  {"title": "...", "description": "...", "stat": "..."}
+]
+
+Reglas:
+- Cada insight debe ser DIFERENTE (automatizacion, datos/IA, integracion/eficiencia)
+- Las estadisticas deben ser de fuentes reales (McKinsey, Gartner, Forrester, Deloitte, HBR)
+- Las descripciones deben usar datos reales del diagnostico (industria, herramientas, objetivos)
+- NO menciones "nuestra IA" ni "inteligencia artificial analizo" — escribe como consultor humano
+- Maximo 50 palabras por descripcion`,
     messages: [{
       role: "user",
-      content: `Genera un email de mini-auditoría para este cliente. El equipo de IM3 "analizó" su diagnóstico y tiene hallazgos iniciales.
-
-TONO: Como un consultor que se sentó a revisar su caso y encontró cosas interesantes. Profesional pero entusiasmado con las oportunidades. NUNCA digas "nuestra IA analizó" — dilo como "estuvimos revisando tu diagnóstico".
-
-ESTRUCTURA:
-1. Saludo: "Hola {nombre}, estuvimos revisando el diagnóstico de {empresa}..."
-2. Tres insights concretos, cada uno con:
-   - Título corto (ej: "Automatización de reportes")
-   - 2-3 oraciones explicando la oportunidad específica basada en su industria, herramientas y objetivos
-   - Si aplica, citar un dato real de fuente confiable sobre su industria
-3. Cierre: "En la sesión del {fechaCita} profundizaremos en estas y más oportunidades específicas para {empresa}. Lleva tus preguntas — queremos que sea una sesión de alto valor para ti."
-4. NO incluir CTA de agendar (ya tiene cita). El valor es mostrar que ya están trabajando en su caso.
-
-Máximo 250 palabras en cuerpo.
-
-${context}
-
-Genera el email completo en HTML PURO con estilos inline. NO uses bloques de código markdown. Devuelve SOLO el HTML directo. Wrapper: max-width:600px, font-family:'Segoe UI',Roboto,sans-serif. Header con background:linear-gradient(135deg,#0F172A,#1E293B) y título blanco. Links y CTAs en color #3B82F6.`,
+      content: `Genera 3 insights para esta empresa:\n\n${context}`,
     }],
   });
 
-  let body = bodyResponse.content?.[0]?.type === "text"
-    ? bodyResponse.content[0].text.trim()
-    : "<p>Error generando contenido</p>";
-  body = body.replace(/^```html\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
-  if (contactId) body = addEmailFooter(body, contactId, true);
+  const insightsText = insightsResponse.content?.[0]?.type === "text"
+    ? insightsResponse.content[0].text.trim()
+    : "[]";
 
-  // WhatsApp summary
-  const waResponse = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 200,
-    system: "Genera un resumen MUY corto en español (máximo 3 oraciones, 200 caracteres total). Texto plano, sin emojis excesivos (máximo 1). Debe resumir los 3 hallazgos clave.",
-    messages: [{
-      role: "user",
-      content: `Resume los 3 insights principales de esta mini-auditoría para ${diagnosticData.empresa} (${diagnosticData.industria}). Áreas prioritarias: ${Array.isArray(diagnosticData.areaPrioridad) ? diagnosticData.areaPrioridad.join(", ") : ""}. Herramientas: ${diagnosticData.herramientas || ""}. Empieza con "Hola ${diagnosticData.participante}, revisamos tu diagnóstico:"`,
-    }],
-  });
+  let insights: Array<{ title: string; description: string; stat: string }>;
+  try {
+    const cleaned = insightsText.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim();
+    insights = JSON.parse(cleaned);
+    if (!Array.isArray(insights) || insights.length < 3) throw new Error("Invalid insights");
+  } catch {
+    insights = [
+      { title: "Automatizacion de procesos", description: `Detectamos procesos repetitivos en ${diagnosticData.industria || "tu operacion"} que pueden automatizarse para reducir errores y liberar tiempo del equipo.`, stat: "McKinsey: 45% de actividades laborales son automatizables" },
+      { title: "Integracion de herramientas", description: `Las herramientas actuales de ${diagnosticData.empresa || "la empresa"} pueden conectarse para eliminar entrada manual de datos y mejorar la visibilidad operativa.`, stat: "Forrester: empresas integradas reducen 30% el tiempo administrativo" },
+      { title: "IA aplicada a decisiones", description: `En ${diagnosticData.industria || "tu industria"}, la IA permite anticipar demanda, optimizar inventario y personalizar la experiencia del cliente con datos historicos.`, stat: "Gartner: 75% de empresas adoptaran IA operativa para 2026" },
+    ];
+  }
 
-  const whatsappSummary = waResponse.content?.[0]?.type === "text"
-    ? waResponse.content[0].text.trim()
-    : `Hola ${diagnosticData.participante}, revisamos tu diagnóstico de ${diagnosticData.empresa} y encontramos oportunidades interesantes. Te enviamos los detalles al correo.`;
+  // 3. Build premium HTML email
+  const body = buildMiniAuditEmail(insights, diagnosticData, contactId);
 
-  log(`Mini-auditoría generada para ${diagnosticData.empresa}`);
-  return { subject, body, whatsappSummary };
+  // 4. WhatsApp summary
+  const waSummary = `Hola ${diagnosticData.participante || ""},  revisamos tu diagnostico de ${diagnosticData.empresa || ""} y encontramos 3 oportunidades: ${insights.map(i => i.title).join(", ")}. Te enviamos los detalles al correo. — Equipo IM3`;
+
+  log(`Mini-auditoria generada para ${diagnosticData.empresa}`);
+  return { subject, body, whatsappSummary: waSummary };
 }
 
 /**
