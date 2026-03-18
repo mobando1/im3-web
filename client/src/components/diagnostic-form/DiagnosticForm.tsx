@@ -54,6 +54,7 @@ export default function DiagnosticForm({ onStepChange }: DiagnosticFormProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [direction, setDirection] = useState(1); // 1 = forward, -1 = backward
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [editingFromReview, setEditingFromReview] = useState(false);
   const [, navigate] = useLocation();
   const { toast } = useToast();
 
@@ -140,6 +141,9 @@ export default function DiagnosticForm({ onStepChange }: DiagnosticFormProps) {
   }, [currentStep, form]);
 
   const goToStep = useCallback((step: number) => {
+    if (currentStep === TOTAL_STEPS - 1) {
+      setEditingFromReview(true);
+    }
     setDirection(step > currentStep ? 1 : -1);
     setCurrentStep(step);
     window.scrollTo({ top: 0, behavior: "smooth" });
@@ -150,10 +154,19 @@ export default function DiagnosticForm({ onStepChange }: DiagnosticFormProps) {
     if (!isValid) return;
 
     form.clearErrors();
+
+    if (editingFromReview) {
+      setEditingFromReview(false);
+      setDirection(1);
+      setCurrentStep(TOTAL_STEPS - 1); // back to review
+      window.scrollTo({ top: 0, behavior: "smooth" });
+      return;
+    }
+
     setDirection(1);
     setCurrentStep((prev) => Math.min(prev + 1, TOTAL_STEPS - 1));
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [validateCurrentStep, form]);
+  }, [validateCurrentStep, form, editingFromReview]);
 
   const handlePrev = useCallback(() => {
     form.clearErrors();
@@ -285,7 +298,7 @@ export default function DiagnosticForm({ onStepChange }: DiagnosticFormProps) {
             onClick={handleNext}
             className="gap-2"
           >
-            {currentStep === TOTAL_STEPS - 2 ? "Revisar respuestas" : "Siguiente"}
+            {editingFromReview ? "Guardar y volver" : currentStep === TOTAL_STEPS - 2 ? "Revisar respuestas" : "Siguiente"}
             <ChevronRight className="w-4 h-4" />
           </Button>
         )}
