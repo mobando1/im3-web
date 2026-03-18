@@ -473,7 +473,7 @@ const LogoStrip = () => {
 
     return (
       <div className={cn(
-        "flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity duration-300 flex items-center justify-center mx-1 sm:mx-3 overflow-hidden",
+        "flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity duration-300 flex items-center justify-center mx-3 sm:mx-6 overflow-hidden",
         sizeClass
       )}>
         <img
