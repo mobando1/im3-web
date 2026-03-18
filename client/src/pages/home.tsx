@@ -461,25 +461,33 @@ const LogoStrip = () => {
     { name: "Vertex Capital", src: "/assets/logos/vertex-capital.png" },
   ];
 
-  const logosWithBg = ["La Glorieta", "Xtremcol", "Salomé Momentos"];
-  const hasBg = (name: string) => logosWithBg.includes(name);
+  const LogoItem = ({ logo }: { logo: { name: string; src: string } }) => {
+    const isCircular = logo.name === "Salomé Momentos";
+    const hasSquareBg = logo.name === "La Glorieta" || logo.name === "Xtremcol";
+    const isAmj = logo.name === "AMJ Solutions";
 
-  const LogoItem = ({ logo }: { logo: { name: string; src: string } }) => (
-    <div className={cn(
-      "flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity duration-300 flex items-center justify-center mx-1 sm:mx-3",
-      hasBg(logo.name)
-        ? "w-[90px] h-[60px] sm:w-[120px] sm:h-[80px] overflow-hidden rounded-lg"
-        : logo.name === "AMJ Solutions"
-          ? "w-[140px] h-[90px] sm:w-[180px] sm:h-[110px]"
-          : "w-[120px] h-[80px] sm:w-[160px] sm:h-[100px]"
-    )}>
-      <img
-        src={logo.src}
-        alt={logo.name}
-        className="w-full h-full object-contain"
-      />
-    </div>
-  );
+    return (
+      <div className={cn(
+        "flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity duration-300 flex items-center justify-center mx-1 sm:mx-3 overflow-hidden",
+        isCircular
+          ? "w-[60px] h-[60px] sm:w-[80px] sm:h-[80px] rounded-full"
+          : hasSquareBg
+            ? "w-[90px] h-[60px] sm:w-[120px] sm:h-[80px] rounded-2xl"
+            : isAmj
+              ? "w-[140px] h-[90px] sm:w-[180px] sm:h-[110px]"
+              : "w-[120px] h-[80px] sm:w-[160px] sm:h-[100px]"
+      )}>
+        <img
+          src={logo.src}
+          alt={logo.name}
+          className={cn(
+            "w-full h-full",
+            isCircular || hasSquareBg ? "object-cover" : "object-contain"
+          )}
+        />
+      </div>
+    );
+  };
   
   return (
     <section className="py-4 sm:py-6 overflow-hidden bg-background relative">
