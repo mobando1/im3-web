@@ -466,18 +466,17 @@ const LogoStrip = () => {
 
   const LogoItem = ({ logo }: { logo: { name: string; src: string } }) => (
     <div className={cn(
-      "flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity duration-300 flex items-center justify-center mx-2 sm:mx-5",
+      "flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity duration-300 flex items-center justify-center mx-1 sm:mx-3",
       hasBg(logo.name)
-        ? "w-[90px] h-[60px] sm:w-[120px] sm:h-[80px] overflow-hidden rounded-2xl"
-        : "w-[120px] h-[80px] sm:w-[160px] sm:h-[100px]"
+        ? "w-[90px] h-[60px] sm:w-[120px] sm:h-[80px] overflow-hidden rounded-lg"
+        : logo.name === "AMJ Solutions"
+          ? "w-[140px] h-[90px] sm:w-[180px] sm:h-[110px]"
+          : "w-[120px] h-[80px] sm:w-[160px] sm:h-[100px]"
     )}>
       <img
         src={logo.src}
         alt={logo.name}
-        className={cn(
-          "w-full h-full",
-          hasBg(logo.name) ? "object-contain" : "object-contain rounded-xl"
-        )}
+        className="w-full h-full object-contain"
       />
     </div>
   );
