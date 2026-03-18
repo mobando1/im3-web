@@ -462,28 +462,24 @@ const LogoStrip = () => {
   ];
 
   const LogoItem = ({ logo }: { logo: { name: string; src: string } }) => {
-    const isCircular = logo.name === "Salomé Momentos";
-    const hasSquareBg = logo.name === "La Glorieta" || logo.name === "Xtremcol";
-    const isAmj = logo.name === "AMJ Solutions";
+    const n = logo.name;
+    const sizeClass =
+      n === "Salomé Momentos" ? "w-[55px] h-[55px] sm:w-[75px] sm:h-[75px] rounded-full" :
+      n === "Xtremcol"        ? "w-[55px] h-[55px] sm:w-[75px] sm:h-[75px] rounded-2xl" :
+      n === "La Glorieta"     ? "w-[110px] h-[50px] sm:w-[150px] sm:h-[65px] rounded-xl" :
+      n === "AMJ Solutions"   ? "w-[140px] h-[90px] sm:w-[180px] sm:h-[110px]" :
+                                "w-[120px] h-[80px] sm:w-[160px] sm:h-[100px]";
+    const needsCover = n === "Salomé Momentos" || n === "Xtremcol" || n === "La Glorieta";
 
     return (
       <div className={cn(
         "flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity duration-300 flex items-center justify-center mx-1 sm:mx-3 overflow-hidden",
-        isCircular
-          ? "w-[60px] h-[60px] sm:w-[80px] sm:h-[80px] rounded-full"
-          : hasSquareBg
-            ? "w-[90px] h-[60px] sm:w-[120px] sm:h-[80px] rounded-2xl"
-            : isAmj
-              ? "w-[140px] h-[90px] sm:w-[180px] sm:h-[110px]"
-              : "w-[120px] h-[80px] sm:w-[160px] sm:h-[100px]"
+        sizeClass
       )}>
         <img
           src={logo.src}
           alt={logo.name}
-          className={cn(
-            "w-full h-full",
-            isCircular || hasSquareBg ? "object-cover" : "object-contain"
-          )}
+          className={cn("w-full h-full", needsCover ? "object-cover" : "object-contain")}
         />
       </div>
     );
