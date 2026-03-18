@@ -468,7 +468,7 @@ const LogoStrip = () => {
     <div className={cn(
       "flex-shrink-0 opacity-60 hover:opacity-100 transition-opacity duration-300 flex items-center justify-center mx-2 sm:mx-5",
       hasBg(logo.name)
-        ? "w-[80px] h-[55px] sm:w-[110px] sm:h-[75px] overflow-hidden rounded-2xl"
+        ? "w-[90px] h-[60px] sm:w-[120px] sm:h-[80px] overflow-hidden rounded-2xl"
         : "w-[120px] h-[80px] sm:w-[160px] sm:h-[100px]"
     )}>
       <img
@@ -476,7 +476,7 @@ const LogoStrip = () => {
         alt={logo.name}
         className={cn(
           "w-full h-full",
-          hasBg(logo.name) ? "object-cover" : "object-contain rounded-xl"
+          hasBg(logo.name) ? "object-contain" : "object-contain rounded-xl"
         )}
       />
     </div>
