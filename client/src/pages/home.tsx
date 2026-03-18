@@ -456,6 +456,9 @@ const LogoStrip = () => {
     { name: "Salomé Momentos", src: "/assets/logos/salome.jpg" },
     { name: "AMJ Solutions", src: "/assets/logos/amj-solutions.png" },
     { name: "Tierra Salvaje", src: "/assets/logos/tierra-salvaje.png" },
+    { name: "Freshbox", src: "/assets/logos/freshbox.png" },
+    { name: "Grupo Santamaria", src: "/assets/logos/grupo-santamaria.png" },
+    { name: "Vertex Capital", src: "/assets/logos/vertex-capital.png" },
   ];
 
   const LogoItem = ({ logo }: { logo: { name: string; src: string } }) => (
@@ -466,7 +469,8 @@ const LogoStrip = () => {
         className={cn(
           "w-auto object-contain rounded-xl",
           logo.name === "AMJ Solutions" ? "h-20 sm:h-32 max-w-[160px] sm:max-w-[240px]" :
-          logo.name === "Tierra Salvaje" ? "h-14 sm:h-20 max-w-[120px] sm:max-w-[180px] mix-blend-multiply" :
+          logo.name === "Tierra Salvaje" ? "h-14 sm:h-20 max-w-[120px] sm:max-w-[180px]" :
+          logo.name === "Freshbox" ? "h-10 sm:h-14 max-w-[90px] sm:max-w-[130px] mix-blend-multiply" :
           "h-10 sm:h-14 max-w-[90px] sm:max-w-[130px]"
         )}
       />
