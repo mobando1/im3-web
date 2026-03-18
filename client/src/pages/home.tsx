@@ -466,10 +466,7 @@ const LogoStrip = () => {
       <img 
         src={logo.src} 
         alt={logo.name} 
-        className={cn(
-          "w-auto object-contain h-12 sm:h-16 max-w-[110px] sm:max-w-[160px]",
-          logo.name === "Xtremcol" ? "mix-blend-screen" : "mix-blend-multiply"
-        )}
+        className="w-auto object-contain rounded-xl h-12 sm:h-16 max-w-[110px] sm:max-w-[160px]"
       />
     </div>
   );
