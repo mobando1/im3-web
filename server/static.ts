@@ -5,18 +5,20 @@ import { db } from "./db";
 import { blogPosts, blogCategories } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 
-const BOT_USER_AGENTS = [
-  'googlebot', 'bingbot', 'yandexbot', 'duckduckbot', 'slurp',
-  'gptbot', 'chatgpt-user', 'claudebot', 'anthropic-ai',
-  'perplexitybot', 'bytespider', 'ccbot', 'applebot',
-  'youbot', 'google-extended', 'facebookexternalhit',
-  'twitterbot', 'linkedinbot', 'whatsapp', 'telegrambot',
-  'ia_archiver', 'semrushbot', 'ahrefsbot',
+/**
+ * Instead of maintaining an ever-growing bot list, we detect real browsers.
+ * Anything that isn't a recognized browser (Chrome, Firefox, Safari, Edge)
+ * gets the pre-rendered HTML so bots, AI crawlers, and fetchers can read it.
+ */
+const BROWSER_PATTERNS = [
+  /mozilla\/.*chrome\/.*safari\//i,   // Chrome, Edge, Opera, Brave
+  /mozilla\/.*firefox\//i,             // Firefox
+  /mozilla\/.*safari\/.*version\//i,   // Safari (real, not Chrome's Safari token)
 ];
 
 function isBot(userAgent: string): boolean {
-  const ua = userAgent.toLowerCase();
-  return BOT_USER_AGENTS.some(bot => ua.includes(bot));
+  if (!userAgent) return true;
+  return !BROWSER_PATTERNS.some(pattern => pattern.test(userAgent));
 }
 
 /**
