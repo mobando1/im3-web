@@ -22,8 +22,34 @@ function isBot(userAgent: string): boolean {
 }
 
 /**
- * Static HTML content injected for crawlers that don't execute JavaScript.
- * This ensures AI search engines and traditional crawlers can index the page content.
+ * Generates a clean, standalone HTML page for bots — no SPA template, no React scripts,
+ * no massive JSON-LD. Just meta tags + semantic content that any AI or crawler can read.
+ */
+function getBotHtml(content: string, title: string, description: string, canonicalPath: string = "/"): string {
+  const url = `https://www.im3systems.com${canonicalPath}`;
+  return `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <title>${title}</title>
+  <meta name="description" content="${description}">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="${url}">
+  <meta property="og:title" content="${title}">
+  <meta property="og:description" content="${description}">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="${url}">
+  <meta property="og:image" content="https://www.im3systems.com/opengraph.jpg">
+  <meta property="og:site_name" content="IM3 Systems">
+</head>
+<body>
+  ${content}
+</body>
+</html>`;
+}
+
+/**
+ * Static HTML content for crawlers that don't execute JavaScript.
  */
 function getCrawlerContent(): string {
   return `
@@ -228,20 +254,21 @@ export function serveStatic(app: Express) {
     );
   }
 
-  app.use(express.static(distPath));
+  app.use(express.static(distPath, { index: false }));
 
   // fall through to index.html if the file doesn't exist
   app.use("/{*path}", async (req, res) => {
     const indexPath = path.resolve(distPath, "index.html");
     const userAgent = req.headers['user-agent'] || '';
 
-    // For bots/crawlers: inject static HTML content so they can index the page
+    // For bots/crawlers: serve clean standalone HTML — no SPA template, no React scripts
     if (isBot(userAgent)) {
       if (req.path === '/' || req.path === '/booking') {
-        let html = fs.readFileSync(indexPath, 'utf-8');
-        html = html.replace(
-          '<div id="root"></div>',
-          `<div id="root">${getCrawlerContent()}</div>`
+        const html = getBotHtml(
+          getCrawlerContent(),
+          "IM3 Systems | Desarrollo de software con IA para empresas",
+          "Desarrollamos software a medida con inteligencia artificial para PYMEs: chatbots de WhatsApp con IA, automatización de procesos, dashboards inteligentes. Diagnóstico gratuito.",
+          req.path,
         );
         res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
         return;
@@ -251,10 +278,11 @@ export function serveStatic(app: Express) {
       if (req.path === '/blog') {
         try {
           const blogContent = await getBlogListingContent();
-          let html = fs.readFileSync(indexPath, 'utf-8');
-          html = html.replace(
-            '<div id="root"></div>',
-            `<div id="root">${blogContent}</div>`
+          const html = getBotHtml(
+            blogContent,
+            "Blog — IM3 Systems",
+            "Artículos sobre inteligencia artificial, automatización y tecnología para empresas.",
+            "/blog",
           );
           res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
           return;
@@ -267,10 +295,11 @@ export function serveStatic(app: Express) {
         try {
           const postContent = await getBlogPostContent(blogMatch[1]);
           if (postContent) {
-            let html = fs.readFileSync(indexPath, 'utf-8');
-            html = html.replace(
-              '<div id="root"></div>',
-              `<div id="root">${postContent}</div>`
+            const html = getBotHtml(
+              postContent,
+              "IM3 Systems Blog",
+              "Artículo de IM3 Systems",
+              `/blog/${blogMatch[1]}`,
             );
             res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
             return;
