@@ -296,7 +296,8 @@ export function serveStatic(app: Express) {
     const userAgent = req.headers['user-agent'] || '';
 
     // For bots/crawlers: serve clean standalone HTML — no SPA template, no React scripts
-    if (isBot(userAgent)) {
+    const forceStatic = req.query.render === 'static';
+    if (forceStatic || isBot(userAgent)) {
       if (req.path === '/' || req.path === '/booking') {
         const html = getBotHtml(
           getCrawlerContent(),
