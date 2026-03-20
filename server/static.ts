@@ -6,19 +6,53 @@ import { blogPosts, blogCategories } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 
 /**
- * Instead of maintaining an ever-growing bot list, we detect real browsers.
- * Anything that isn't a recognized browser (Chrome, Firefox, Safari, Edge)
- * gets the pre-rendered HTML so bots, AI crawlers, and fetchers can read it.
+ * Detect known bots/crawlers by user-agent.
+ * Only serve pre-rendered HTML to known bots — all other requests get the SPA.
  */
-const BROWSER_PATTERNS = [
-  /mozilla\/.*chrome\/.*safari\//i,   // Chrome, Edge, Opera, Brave
-  /mozilla\/.*firefox\//i,             // Firefox
-  /mozilla\/.*safari\/.*version\//i,   // Safari (real, not Chrome's Safari token)
+const BOT_PATTERNS = [
+  /googlebot/i,
+  /bingbot/i,
+  /slurp/i,             // Yahoo
+  /duckduckbot/i,
+  /baiduspider/i,
+  /yandexbot/i,
+  /facebookexternalhit/i,
+  /facebot/i,
+  /twitterbot/i,
+  /linkedinbot/i,
+  /whatsapp/i,
+  /telegrambot/i,
+  /discordbot/i,
+  /slackbot/i,
+  /applebot/i,
+  /semrushbot/i,
+  /ahrefsbot/i,
+  /mj12bot/i,
+  /dotbot/i,
+  /petalbot/i,
+  /gptbot/i,
+  /chatgpt/i,
+  /anthropic/i,
+  /claude-web/i,
+  /ccbot/i,
+  /bytespider/i,
+  /headlesschrome/i,
+  /lighthouse/i,
+  /pingdom/i,
+  /uptimerobot/i,
+  /curl\//i,
+  /wget\//i,
+  /python-requests/i,
+  /axios\//i,
+  /node-fetch/i,
+  /go-http-client/i,
+  /java\//i,
+  /php\//i,
 ];
 
 function isBot(userAgent: string): boolean {
   if (!userAgent) return true;
-  return !BROWSER_PATTERNS.some(pattern => pattern.test(userAgent));
+  return BOT_PATTERNS.some(pattern => pattern.test(userAgent));
 }
 
 /**
