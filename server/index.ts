@@ -27,7 +27,7 @@ app.use(
 app.use(express.urlencoded({ extended: false }));
 
 // Subdomain routing: crm.im3systems.com → admin, im3systems.com/admin → crm redirect
-const CRM_HOSTNAME = process.env.CRM_HOSTNAME || "crm.im3systems.com";
+const CRM_HOSTNAME = process.env.CRM_HOSTNAME || "hub.im3systems.com";
 
 app.use((req, res, next) => {
   const host = req.hostname;
