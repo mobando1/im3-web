@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useI18n } from "@/lib/i18n";
 import {
   step0Schema,
   step1Schema,
@@ -57,6 +58,7 @@ export default function DiagnosticForm({ onStepChange }: DiagnosticFormProps) {
   const [editingFromReview, setEditingFromReview] = useState(false);
   const [, navigate] = useLocation();
   const { toast } = useToast();
+  const { language } = useI18n();
   const formStartTime = useRef(Date.now());
 
   useEffect(() => {
@@ -181,7 +183,7 @@ export default function DiagnosticForm({ onStepChange }: DiagnosticFormProps) {
     try {
       const data = form.getValues();
       const formDurationMinutes = Math.round((Date.now() - formStartTime.current) / 60000);
-      await apiRequest("POST", "/api/diagnostic", { ...data, formDurationMinutes });
+      await apiRequest("POST", "/api/diagnostic", { ...data, formDurationMinutes, language });
       navigate("/confirmed");
     } catch {
       toast({

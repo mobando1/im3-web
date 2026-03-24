@@ -15,7 +15,7 @@ INSTRUCCIONES ESPECÍFICAS:
 CONTENIDO OBLIGATORIO:
 1. Saludo con nombre: "Hola {participante}" — SIEMPRE usa el nombre del participante
 2. Agradecimiento genuino y breve: "Gracias por agendar tu diagnóstico tecnológico con IM3 Systems"
-3. Quiénes somos (1-2 líneas): especialistas en IA, automatización y desarrollo de software para empresas en Latinoamérica
+3. Quiénes somos (1-2 líneas): especialistas en IA, automatización y desarrollo de software para empresas
 4. Confirma datos de la cita con formato claro:
    - Fecha: {fechaCita}
    - Hora: {horaCita}

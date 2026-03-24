@@ -12,7 +12,43 @@ function getClient(): Anthropic | null {
   return client;
 }
 
-const SYSTEM_PROMPT = `Eres el equipo de IM3 Systems, una empresa de tecnología especializada en inteligencia artificial, automatización y desarrollo de software para empresas en Latinoamérica.
+function getSystemPrompt(language: string = "es"): string {
+  const shared = `
+- El email debe ser HTML PURO con estilos inline simples (sin CSS externo)
+- IMPORTANTE: NO envuelvas el HTML en bloques de código markdown (no uses \`\`\`html). Devuelve SOLO el HTML directo.
+- Estructura: wrapper div con max-width:600px, font-family:'Segoe UI',Roboto,sans-serif
+- Color primario header: background con linear-gradient(135deg,#0F172A,#1E293B) — azul oscuro tech
+- Color para links y CTAs: #3B82F6 (azul vibrante)
+- Color para botones CTA: background:#3B82F6, color:#fff
+- Solo usa fuentes verificables como McKinsey, Gartner, Forrester, Deloitte, BCG, HBR, MIT, Statista, Bloomberg, Reuters. Si no estás seguro de un dato específico, habla en términos generales del sector sin inventar cifras
+- NO incluyas footer de unsubscribe — se agrega automáticamente
+- NO uses placeholders como {empresa} — usa los datos reales del contexto
+- SIEMPRE dirige al contacto por su nombre (campo Participante). Nunca uses genéricos como "Hola" sin nombre.
+- Si hay un meetLink en el contexto, SIEMPRE inclúyelo como un botón prominente visible (no como texto al final). Usar: <a href="{meetLink}" style="display:inline-block;background:#3B82F6;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600">${language === "en" ? "Join the meeting →" : "Unirse a la reunión →"}</a>
+- Si hay un link de "Agregar al calendario", inclúyelo justo después del botón de reunión como texto más pequeño
+- NO incluyas links de reagendar o cancelar en tu HTML — se agregan automáticamente en el footer de cada email.`;
+
+  if (language === "en") {
+    return `You are the IM3 Systems team, a technology company specialized in artificial intelligence, automation, and custom software development for businesses.
+
+Your task is to generate professional and personalized emails for clients who scheduled a technology diagnostic session.
+
+Rules:
+- Tone: professional yet approachable, like a tech consultant who knows their stuff. NOT generic corporate.
+- Language: professional English
+- Length: follow the specific instructions of each prompt
+- Don't use excessive emojis (max 1-2 if applicable)
+- Personalize using the client's real data — mention their industry, tools, goals
+- Don't make up data you don't have — if there's no data, omit that mention
+- When citing data, statistics or trends, ALWAYS cite the real source (e.g., "according to McKinsey (2024)", "Gartner reports that...")
+- Signature: "— IM3 Systems Team"
+- NEVER use "Confirm attendance" as CTA — the person already confirmed by scheduling. The main CTA in pre-meeting emails is the meeting link (Meet).
+- For the post-meeting follow-up email: the CTA can invite to schedule a follow-up session with link to https://www.im3systems.com/booking
+- Do NOT include a generic "/booking" CTA in pre-meeting emails — the contact already scheduled.
+${shared}`;
+  }
+
+  return `Eres el equipo de IM3 Systems, una empresa de tecnología especializada en inteligencia artificial, automatización y desarrollo de software para empresas.
 
 Tu tarea es generar emails profesionales y personalizados para clientes que agendaron una sesión de diagnóstico tecnológico.
 
@@ -23,23 +59,13 @@ Reglas:
 - No uses emojis excesivos (máximo 1-2 si aplica)
 - Personaliza usando los datos reales del cliente — menciona su industria, herramientas, objetivos
 - No inventes datos que no tengas — si no hay dato, omite esa mención
-- El email debe ser HTML PURO con estilos inline simples (sin CSS externo)
-- IMPORTANTE: NO envuelvas el HTML en bloques de código markdown (no uses \`\`\`html). Devuelve SOLO el HTML directo.
-- Estructura: wrapper div con max-width:600px, font-family:'Segoe UI',Roboto,sans-serif
-- Color primario header: background con linear-gradient(135deg,#0F172A,#1E293B) — azul oscuro tech
-- Color para links y CTAs: #3B82F6 (azul vibrante)
-- Color para botones CTA: background:#3B82F6, color:#fff
-- Cuando menciones datos, estadísticas o tendencias, SIEMPRE cita la fuente real (ej: "según McKinsey (2024)", "Gartner reporta que...", "un estudio de Harvard Business Review"). Solo usa fuentes verificables como McKinsey, Gartner, Forrester, Deloitte, BCG, HBR, MIT, Statista, Bloomberg, Reuters. Si no estás seguro de un dato específico, habla en términos generales del sector sin inventar cifras
+- Cuando menciones datos, estadísticas o tendencias, SIEMPRE cita la fuente real (ej: "según McKinsey (2024)", "Gartner reporta que...", "un estudio de Harvard Business Review")
 - Firma: "— Equipo IM3 Systems"
-- NO incluyas footer de unsubscribe — se agrega automáticamente
-- NO uses placeholders como {empresa} — usa los datos reales del contexto
-- SIEMPRE dirige al contacto por su nombre (campo Participante). Nunca uses genéricos como "Hola" sin nombre.
-- Si hay un meetLink en el contexto, SIEMPRE inclúyelo como un botón prominente visible (no como texto al final). Usar: <a href="{meetLink}" style="display:inline-block;background:#3B82F6;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600">Unirse a la reunión →</a>
-- Si hay un link de "Agregar al calendario", inclúyelo justo después del botón de reunión como texto más pequeño
 - NUNCA uses "Confirmar asistencia" como CTA — la persona ya confirmó al agendar. El CTA principal en emails pre-reunión es el link de la reunión (Meet).
-- NO incluyas links de reagendar o cancelar en tu HTML — se agregan automáticamente en el footer de cada email.
 - Para el email de seguimiento post-reunión: el CTA puede invitar a agendar una sesión de seguimiento con link a https://www.im3systems.com/booking
-- NO incluyas un CTA genérico de "/booking" en emails pre-reunión — el contacto YA agendó.`;
+- NO incluyas un CTA genérico de "/booking" en emails pre-reunión — el contacto YA agendó.
+${shared}`;
+}
 
 function buildContext(data: Partial<Diagnostic> | null): string {
   if (!data || !data.empresa) {
@@ -95,9 +121,12 @@ export function build6hReminderEmail(
   horaCita: string,
   meetLink: string | null,
   contactId: string,
-  calendarAddUrl?: string | null
+  calendarAddUrl?: string | null,
+  language: string = "es"
 ): { subject: string; body: string } {
-  const subject = `${participante}, tu sesión con IM3 es hoy`;
+  const subject = language === "en"
+    ? `${participante}, your IM3 session is today`
+    : `${participante}, tu sesión con IM3 es hoy`;
   const baseUrl = process.env.BASE_URL || "https://im3systems.com";
 
   const meetSection = meetLink
@@ -113,15 +142,21 @@ export function build6hReminderEmail(
     <h1 style="color:#fff;font-size:18px;margin:0">IM3 Systems</h1>
   </div>
   <div style="padding:24px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
-    <p style="margin:0 0 16px">${participante}, hoy tenemos tu sesión de diagnóstico a las <strong>${horaCita}</strong> (45 minutos).</p>
+    <p style="margin:0 0 16px">${language === "en"
+      ? `${participante}, your diagnostic session is today at <strong>${horaCita}</strong> (45 minutes).`
+      : `${participante}, hoy tenemos tu sesión de diagnóstico a las <strong>${horaCita}</strong> (45 minutos).`}</p>
     ${meetSection}
     ${calendarSection}
-    <p style="margin:0 0 16px">Ten a mano información sobre tus herramientas actuales y los procesos que más tiempo consumen en tu operación — así aprovechamos al máximo la sesión.</p>
-    <p style="margin:0 0 16px;color:#666">¿Tienes preguntas antes? Responde este correo y te ayudamos.</p>
-    <p style="margin:0 0 20px;color:#999">— Equipo IM3 Systems</p>
+    <p style="margin:0 0 16px">${language === "en"
+      ? "Have information about your current tools and the processes that take the most time ready — so we can make the most of the session."
+      : "Ten a mano información sobre tus herramientas actuales y los procesos que más tiempo consumen en tu operación — así aprovechamos al máximo la sesión."}</p>
+    <p style="margin:0 0 16px;color:#666">${language === "en"
+      ? "Any questions beforehand? Reply to this email and we'll help."
+      : "¿Tienes preguntas antes? Responde este correo y te ayudamos."}</p>
+    <p style="margin:0 0 20px;color:#999">— ${language === "en" ? "IM3 Systems Team" : "Equipo IM3 Systems"}</p>
   </div>
   <div style="padding:12px 24px;text-align:center">
-    <a href="${baseUrl}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">No recibir más emails</a>
+    <a href="${baseUrl}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">${language === "en" ? "Unsubscribe" : "No recibir más emails"}</a>
   </div>
 </div>`;
 
@@ -132,9 +167,12 @@ export function buildMicroReminderEmail(
   participante: string,
   horaCita: string,
   meetLink: string | null,
-  contactId: string
+  contactId: string,
+  language: string = "es"
 ): { subject: string; body: string } {
-  const subject = `En 1 hora: tu diagnóstico con IM3`;
+  const subject = language === "en"
+    ? `In 1 hour: your diagnostic with IM3`
+    : `En 1 hora: tu diagnóstico con IM3`;
   const baseUrl = process.env.BASE_URL || "https://im3systems.com";
 
   const meetSection = meetLink
@@ -146,12 +184,14 @@ export function buildMicroReminderEmail(
     <h1 style="color:#fff;font-size:18px;margin:0">IM3 Systems</h1>
   </div>
   <div style="padding:24px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
-    <p style="margin:0 0 16px">${participante}, tu sesión empieza en <strong>1 hora</strong> (${horaCita}). Nos vemos ahí.</p>
+    <p style="margin:0 0 16px">${language === "en"
+      ? `${participante}, your session starts in <strong>1 hour</strong> (${horaCita}). See you there.`
+      : `${participante}, tu sesión empieza en <strong>1 hora</strong> (${horaCita}). Nos vemos ahí.`}</p>
     ${meetSection}
-    <p style="margin:0;color:#999">— Equipo IM3 Systems</p>
+    <p style="margin:0;color:#999">— ${language === "en" ? "IM3 Systems Team" : "Equipo IM3 Systems"}</p>
   </div>
   <div style="padding:12px 24px;text-align:center">
-    <a href="${baseUrl}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">No recibir más emails</a>
+    <a href="${baseUrl}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">${language === "en" ? "Unsubscribe" : "No recibir más emails"}</a>
   </div>
 </div>`;
 
@@ -164,9 +204,12 @@ export function buildMicroReminderEmail(
 export function buildNoShowEmail(
   participante: string,
   empresa: string,
-  contactId: string
+  contactId: string,
+  language: string = "es"
 ): { subject: string; body: string } {
-  const subject = `${participante}, no pudimos conectarnos hoy`;
+  const subject = language === "en"
+    ? `${participante}, we couldn't connect today`
+    : `${participante}, no pudimos conectarnos hoy`;
   const baseUrl = process.env.BASE_URL || "https://im3systems.com";
 
   const body = `<div style="max-width:600px;margin:0 auto;font-family:'Segoe UI',Roboto,sans-serif;color:#1a1a1a">
@@ -174,15 +217,23 @@ export function buildNoShowEmail(
     <h1 style="color:#fff;font-size:18px;margin:0">IM3 Systems</h1>
   </div>
   <div style="padding:24px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
-    <p style="margin:0 0 16px">${participante}, notamos que no pudimos conectarnos hoy para la sesión de diagnóstico de ${empresa}.</p>
-    <p style="margin:0 0 16px">Entendemos que a veces surgen imprevistos. Tu tiempo de diagnóstico sigue reservado y toda la información que compartiste está guardada.</p>
-    <p style="margin:0 0 20px">Si quieres, puedes elegir una nueva fecha en segundos:</p>
-    <p style="margin:0 0 20px"><a href="${baseUrl}/reschedule/${contactId}" style="display:inline-block;background:#3B82F6;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px">Reagendar mi sesión →</a></p>
-    <p style="margin:0 0 16px;color:#666;font-size:14px">Si prefieres, también puedes responder a este correo y coordinamos directamente.</p>
-    <p style="margin:0;color:#999">— Equipo IM3 Systems</p>
+    <p style="margin:0 0 16px">${language === "en"
+      ? `${participante}, we noticed we couldn't connect today for the ${empresa} diagnostic session.`
+      : `${participante}, notamos que no pudimos conectarnos hoy para la sesión de diagnóstico de ${empresa}.`}</p>
+    <p style="margin:0 0 16px">${language === "en"
+      ? "We understand things come up. Your diagnostic time is still reserved and all the information you shared is saved."
+      : "Entendemos que a veces surgen imprevistos. Tu tiempo de diagnóstico sigue reservado y toda la información que compartiste está guardada."}</p>
+    <p style="margin:0 0 20px">${language === "en"
+      ? "If you'd like, you can pick a new date in seconds:"
+      : "Si quieres, puedes elegir una nueva fecha en segundos:"}</p>
+    <p style="margin:0 0 20px"><a href="${baseUrl}/reschedule/${contactId}" style="display:inline-block;background:#3B82F6;color:#fff;padding:12px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:15px">${language === "en" ? "Reschedule my session →" : "Reagendar mi sesión →"}</a></p>
+    <p style="margin:0 0 16px;color:#666;font-size:14px">${language === "en"
+      ? "If you prefer, you can also reply to this email and we'll coordinate directly."
+      : "Si prefieres, también puedes responder a este correo y coordinamos directamente."}</p>
+    <p style="margin:0;color:#999">— ${language === "en" ? "IM3 Systems Team" : "Equipo IM3 Systems"}</p>
   </div>
   <div style="padding:12px 24px;text-align:center">
-    <a href="${baseUrl}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">No recibir más emails</a>
+    <a href="${baseUrl}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">${language === "en" ? "Unsubscribe" : "No recibir más emails"}</a>
   </div>
 </div>`;
 
@@ -200,9 +251,12 @@ export function buildFollowUpConfirmationEmail(
   horaSeguimiento: string,
   meetLink: string | null,
   contactId: string,
-  calendarAddUrl?: string | null
+  calendarAddUrl?: string | null,
+  language: string = "es"
 ): { subject: string; body: string } {
-  const subject = `${participante}, confirmada tu sesión de seguimiento con IM3`;
+  const subject = language === "en"
+    ? `${participante}, your follow-up session with IM3 is confirmed`
+    : `${participante}, confirmada tu sesión de seguimiento con IM3`;
   const baseUrl = process.env.BASE_URL || "https://im3systems.com";
 
   const meetSection = meetLink
@@ -218,24 +272,28 @@ export function buildFollowUpConfirmationEmail(
     <h1 style="color:#fff;font-size:18px;margin:0">IM3 Systems</h1>
   </div>
   <div style="padding:24px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
-    <p style="margin:0 0 16px">${participante}, como quedamos en nuestra conversación, te confirmo los detalles de nuestra próxima sesión de seguimiento:</p>
+    <p style="margin:0 0 16px">${language === "en"
+      ? `${participante}, as we discussed, here are the details for our next follow-up session:`
+      : `${participante}, como quedamos en nuestra conversación, te confirmo los detalles de nuestra próxima sesión de seguimiento:`}</p>
     <div style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:16px;margin:0 0 16px">
-      <p style="margin:0 0 8px;font-size:14px;color:#64748B">Sesión de seguimiento</p>
-      <p style="margin:0 0 4px;font-weight:600;font-size:16px">Fecha: ${fechaSeguimiento}</p>
-      <p style="margin:0 0 4px;font-weight:600;font-size:16px">Hora: ${horaSeguimiento}</p>
-      <p style="margin:0;font-size:14px;color:#64748B">Duración: 45 minutos</p>
+      <p style="margin:0 0 8px;font-size:14px;color:#64748B">${language === "en" ? "Follow-up session" : "Sesión de seguimiento"}</p>
+      <p style="margin:0 0 4px;font-weight:600;font-size:16px">${language === "en" ? "Date" : "Fecha"}: ${fechaSeguimiento}</p>
+      <p style="margin:0 0 4px;font-weight:600;font-size:16px">${language === "en" ? "Time" : "Hora"}: ${horaSeguimiento}</p>
+      <p style="margin:0;font-size:14px;color:#64748B">${language === "en" ? "Duration: 45 minutes" : "Duración: 45 minutos"}</p>
     </div>
     ${meetSection}
     ${calendarSection}
-    <p style="margin:0 0 16px">En esta sesión revisaremos la propuesta y los próximos pasos para ${empresa}. Si tienes preguntas antes, responde a este correo.</p>
-    <p style="margin:0 0 20px;color:#999">— Equipo IM3 Systems</p>
+    <p style="margin:0 0 16px">${language === "en"
+      ? `In this session we'll review the proposal and next steps for ${empresa}. If you have questions, reply to this email.`
+      : `En esta sesión revisaremos la propuesta y los próximos pasos para ${empresa}. Si tienes preguntas antes, responde a este correo.`}</p>
+    <p style="margin:0 0 20px;color:#999">— ${language === "en" ? "IM3 Systems Team" : "Equipo IM3 Systems"}</p>
   </div>
   <div style="max-width:600px;margin:8px auto 0;text-align:center;padding:12px 20px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px">
-    <p style="margin:0 0 4px;font-size:13px;color:#475569">¿Necesitas cambiar la fecha?</p>
-    <p style="margin:0"><a href="${baseUrl}/api/reschedule/${contactId}" style="color:#3B82F6;font-size:13px;text-decoration:none;font-weight:600">Reagendar</a> <span style="color:#CBD5E1;margin:0 8px">·</span> <a href="${baseUrl}/api/cancel/${contactId}" style="color:#94A3B8;font-size:13px;text-decoration:none">Cancelar reunión</a></p>
+    <p style="margin:0 0 4px;font-size:13px;color:#475569">${language === "en" ? "Need to change the date?" : "¿Necesitas cambiar la fecha?"}</p>
+    <p style="margin:0"><a href="${baseUrl}/api/reschedule/${contactId}" style="color:#3B82F6;font-size:13px;text-decoration:none;font-weight:600">${language === "en" ? "Reschedule" : "Reagendar"}</a> <span style="color:#CBD5E1;margin:0 8px">·</span> <a href="${baseUrl}/api/cancel/${contactId}" style="color:#94A3B8;font-size:13px;text-decoration:none">${language === "en" ? "Cancel meeting" : "Cancelar reunión"}</a></p>
   </div>
   <div style="padding:12px 24px;text-align:center">
-    <a href="${baseUrl}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">No recibir más emails</a>
+    <a href="${baseUrl}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">${language === "en" ? "Unsubscribe" : "No recibir más emails"}</a>
   </div>
 </div>`;
 
@@ -246,20 +304,21 @@ export function buildFollowUpConfirmationEmail(
  * Add email footer with reschedule/cancel links (pre-meeting) + unsubscribe.
  * @param isPreMeeting - if true, includes reschedule/cancel links prominently
  */
-function addEmailFooter(html: string, contactId: string, isPreMeeting: boolean = true): string {
+function addEmailFooter(html: string, contactId: string, isPreMeeting: boolean = true, language: string = "es"): string {
   const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+  const isEn = language === "en";
 
   const rescheduleSection = isPreMeeting ? `<div style="max-width:600px;margin:8px auto 0;text-align:center;padding:12px 20px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:6px">
-  <p style="margin:0 0 4px;font-size:13px;color:#475569">¿Necesitas cambiar la fecha?</p>
+  <p style="margin:0 0 4px;font-size:13px;color:#475569">${isEn ? "Need to change the date?" : "¿Necesitas cambiar la fecha?"}</p>
   <p style="margin:0">
-    <a href="${baseUrl}/api/reschedule/${contactId}" style="color:#3B82F6;font-size:13px;text-decoration:none;font-weight:600">Reagendar</a>
+    <a href="${baseUrl}/api/reschedule/${contactId}" style="color:#3B82F6;font-size:13px;text-decoration:none;font-weight:600">${isEn ? "Reschedule" : "Reagendar"}</a>
     <span style="color:#CBD5E1;margin:0 8px">·</span>
-    <a href="${baseUrl}/api/cancel/${contactId}" style="color:#94A3B8;font-size:13px;text-decoration:none">Cancelar reunión</a>
+    <a href="${baseUrl}/api/cancel/${contactId}" style="color:#94A3B8;font-size:13px;text-decoration:none">${isEn ? "Cancel meeting" : "Cancelar reunión"}</a>
   </p>
 </div>` : "";
 
   const unsubscribe = `<div style="max-width:600px;margin:8px auto 0;text-align:center;padding:8px">
-  <a href="${baseUrl}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">No recibir más emails de esta secuencia</a>
+  <a href="${baseUrl}/api/unsubscribe/${contactId}" style="color:#999;font-size:11px;text-decoration:none">${isEn ? "Unsubscribe from this sequence" : "No recibir más emails de esta secuencia"}</a>
 </div>`;
 
   const footer = rescheduleSection + unsubscribe;
@@ -275,7 +334,8 @@ function addEmailFooter(html: string, contactId: string, isPreMeeting: boolean =
 export async function generateEmailContent(
   template: EmailTemplate,
   diagnosticData: Partial<Diagnostic> | null,
-  contactId?: string
+  contactId?: string,
+  language: string = "es"
 ): Promise<{ subject: string; body: string }> {
   const anthropic = getClient();
   if (!anthropic) {
@@ -288,11 +348,15 @@ export async function generateEmailContent(
   const subjectResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 100,
-    system: "Genera SOLO el texto del subject de un email. Sin comillas, sin prefijo, solo el texto. Máximo 60 caracteres.",
+    system: language === "en"
+      ? "Generate ONLY the email subject text. No quotes, no prefix, just the text. Max 60 characters. Write in English."
+      : "Genera SOLO el texto del subject de un email. Sin comillas, sin prefijo, solo el texto. Máximo 60 caracteres.",
     messages: [
       {
         role: "user",
-        content: `${template.subjectPrompt}\n\n${context}`,
+        content: language === "en"
+          ? `${template.subjectPrompt}\n\nIMPORTANT: Write the subject in English.\n\n${context}`
+          : `${template.subjectPrompt}\n\n${context}`,
       },
     ],
   });
@@ -300,17 +364,17 @@ export async function generateEmailContent(
   const subject =
     subjectResponse.content?.[0]?.type === "text"
       ? subjectResponse.content[0].text.trim()
-      : "Diagnóstico IM3 Systems";
+      : language === "en" ? "IM3 Systems Diagnostic" : "Diagnóstico IM3 Systems";
 
   // Generate body
   const bodyResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 1500,
-    system: SYSTEM_PROMPT,
+    system: getSystemPrompt(language),
     messages: [
       {
         role: "user",
-        content: `${template.bodyPrompt}\n\n${context}\n\nGenera el email completo en HTML PURO con estilos inline. NO uses bloques de código markdown. Devuelve SOLO el HTML directo sin \`\`\`html ni \`\`\`. Wrapper: max-width:600px, font-family:'Segoe UI',Roboto,sans-serif. Header con background:linear-gradient(135deg,#0F172A,#1E293B) y título blanco. Links y CTAs en color #3B82F6.`,
+        content: `${template.bodyPrompt}\n\n${language === "en" ? "IMPORTANT: Write ALL content in English." : ""}\n\n${context}\n\nGenera el email completo en HTML PURO con estilos inline. NO uses bloques de código markdown. Devuelve SOLO el HTML directo sin \`\`\`html ni \`\`\`. Wrapper: max-width:600px, font-family:'Segoe UI',Roboto,sans-serif. Header con background:linear-gradient(135deg,#0F172A,#1E293B) y título blanco. Links y CTAs en color #3B82F6.`,
       },
     ],
   });
@@ -326,7 +390,7 @@ export async function generateEmailContent(
   // Add footer with reschedule/cancel (pre-meeting) + unsubscribe
   if (contactId) {
     const isPreMeeting = template.nombre !== "seguimiento_post";
-    body = addEmailFooter(body, contactId, isPreMeeting);
+    body = addEmailFooter(body, contactId, isPreMeeting, language);
   }
 
   log(`Email AI generado: "${subject}" para ${diagnosticData?.empresa || "suscriptor"}`);
@@ -338,7 +402,7 @@ export async function generateEmailContent(
  * Generate an AI-powered newsletter welcome email with a "dato curioso"
  * about AI/automation that hooks the subscriber from day one.
  */
-export async function generateNewsletterWelcome(): Promise<{ subject: string; body: string }> {
+export async function generateNewsletterWelcome(language: string = "es"): Promise<{ subject: string; body: string }> {
   const anthropic = getClient();
   if (!anthropic) {
     throw new Error("ANTHROPIC_API_KEY not configured");
@@ -347,11 +411,15 @@ export async function generateNewsletterWelcome(): Promise<{ subject: string; bo
   const subjectResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 100,
-    system: "Genera SOLO el texto del subject de un email de bienvenida a un newsletter de tecnología. Debe ser intrigante y contener un dato curioso o pregunta que enganche. Sin comillas, sin prefijo, solo el texto. Máximo 60 caracteres. Español latinoamericano.",
+    system: language === "en"
+      ? "Generate ONLY the email subject text for a tech newsletter welcome. It should be intriguing with a fun fact or question. No quotes, no prefix, just the text. Max 60 characters."
+      : "Genera SOLO el texto del subject de un email de bienvenida a un newsletter de tecnología. Debe ser intrigante y contener un dato curioso o pregunta que enganche. Sin comillas, sin prefijo, solo el texto. Máximo 60 caracteres. Español latinoamericano.",
     messages: [
       {
         role: "user",
-        content: "Genera un subject para un email de bienvenida al newsletter de IM3 Systems (empresa de IA, automatización y software para empresas en Latinoamérica). El subject debe contener un dato curioso o pregunta intrigante sobre IA/automatización que haga que el lector quiera abrir el email. Ejemplos de estilo: '¿Sabías que el 40% de las tareas repetitivas ya se automatizan?', 'Tu primer insight IM3: lo que viene en IA'. Varía el enfoque cada vez.",
+        content: language === "en"
+          ? "Generate a subject for a welcome email to the IM3 Systems newsletter (AI, automation and software company). The subject should contain a fun fact or intriguing question about AI/automation. Examples: 'Did you know 40% of repetitive tasks can be automated?', 'Your first IM3 insight: what's next in AI'. Vary the approach each time."
+          : "Genera un subject para un email de bienvenida al newsletter de IM3 Systems (empresa de IA, automatización y software para empresas). El subject debe contener un dato curioso o pregunta intrigante sobre IA/automatización que haga que el lector quiera abrir el email. Ejemplos de estilo: '¿Sabías que el 40% de las tareas repetitivas ya se automatizan?', 'Tu primer insight IM3: lo que viene en IA'. Varía el enfoque cada vez.",
       },
     ],
   });
@@ -359,19 +427,31 @@ export async function generateNewsletterWelcome(): Promise<{ subject: string; bo
   const subject =
     subjectResponse.content?.[0]?.type === "text"
       ? subjectResponse.content[0].text.trim()
-      : "Bienvenido al newsletter de IM3 Systems";
+      : language === "en" ? "Welcome to the IM3 Systems newsletter" : "Bienvenido al newsletter de IM3 Systems";
 
   const bodyResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 1500,
-    system: SYSTEM_PROMPT,
+    system: getSystemPrompt(language),
     messages: [
       {
         role: "user",
-        content: `Genera un email de bienvenida al newsletter de IM3 Systems. Estructura:
+        content: language === "en"
+          ? `Generate a welcome email for the IM3 Systems newsletter. Structure:
+
+1. Brief, warm greeting (thanks for subscribing)
+2. ONE impactful "fun fact" about AI, automation or technology applied to businesses — MUST cite a real source (McKinsey, Gartner, Forrester, MIT, Statista, etc.)
+3. In 1-2 sentences, connect that fact to why it matters to them as a business
+4. What they'll receive: every week, a digest with trends + 3 concrete steps they can implement that same week. 2-minute read.
+5. Subtle CTA to https://www.im3systems.com/booking — invite them to discover opportunities with a free audit
+
+Max 200 words in the body. Tone: like a tech-savvy friend sharing something they just discovered. NOT generic corporate.
+
+Generate the complete email in PURE HTML with inline styles. NO markdown code blocks. Return ONLY the direct HTML. Wrapper: max-width:600px, font-family:'Segoe UI',Roboto,sans-serif. Header with background:linear-gradient(135deg,#0F172A,#1E293B) and white title. Links and CTAs in #3B82F6.`
+          : `Genera un email de bienvenida al newsletter de IM3 Systems. Estructura:
 
 1. Saludo breve y cálido (gracias por suscribirse)
-2. UN "dato curioso" impactante sobre IA, automatización o tecnología aplicada a empresas — DEBE citar una fuente real (McKinsey, Gartner, Forrester, MIT, Statista, etc.). El dato debe ser sorprendente y relevante para empresas latinoamericanas.
+2. UN "dato curioso" impactante sobre IA, automatización o tecnología aplicada a empresas — DEBE citar una fuente real (McKinsey, Gartner, Forrester, MIT, Statista, etc.). El dato debe ser sorprendente y relevante para empresas.
 3. En 1-2 oraciones, conecta ese dato con por qué les importa a ellos como empresa
 4. Qué van a recibir: cada semana, un digest con tendencias + 3 pasos concretos que pueden implementar esa misma semana. Lectura de 2 minutos.
 5. CTA sutil a https://www.im3systems.com/booking — invita a descubrir oportunidades con una auditoría gratuita
@@ -432,7 +512,7 @@ export async function generateContactInsight(
     ? `NOTAS INTERNAS:\n${notes.map(n => `- ${n.content}`).join("\n")}`
     : "Sin notas internas.";
 
-  const prompt = `Eres un analista de inteligencia comercial para IM3 Systems, consultora de automatización e IA en Latinoamérica.
+  const prompt = `Eres un analista de inteligencia comercial para IM3 Systems, consultora de automatización e IA.
 
 Analiza este lead y responde SOLO con un JSON válido (sin markdown, sin backticks, sin texto adicional).
 
@@ -512,7 +592,8 @@ export async function generateDailyNewsDigest(language: string = "es"): Promise<
     throw new Error("ANTHROPIC_API_KEY not configured");
   }
 
-  const today = new Date().toLocaleDateString("es-CO", {
+  const isEn = language === "en";
+  const today = new Date().toLocaleDateString(isEn ? "en-US" : "es-CO", {
     weekday: "long",
     year: "numeric",
     month: "long",
@@ -530,7 +611,17 @@ export async function generateDailyNewsDigest(language: string = "es"): Promise<
   const blogResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 3000,
-    system: `Eres un analista tech de IM3 Systems que escribe un resumen semanal de noticias sobre inteligencia artificial, automatización y tecnología para empresas en Latinoamérica.
+    system: isEn
+      ? `You are a tech analyst at IM3 Systems writing a weekly summary of AI, automation and technology news for businesses.
+
+Rules:
+- Language: professional English
+- Tone: informative but accessible, like a tech colleague sharing the week's most relevant news
+- Each story must include: what happened, why it matters, and how an SMB could apply it
+- ALWAYS include the real source and original link for each story
+- Base your summaries on the real news provided — DO NOT make things up
+- Include a brief closing reflection connecting the 3 stories`
+      : `Eres un analista tech de IM3 Systems que escribe un resumen semanal de noticias sobre inteligencia artificial, automatización y tecnología para empresas.
 
 Reglas:
 - Idioma: español latinoamericano
@@ -581,13 +672,15 @@ Responde SOLO con un JSON válido (sin markdown, sin backticks):
 ${news.map((n: any, i: number) => `
 <h2>${i + 1}. ${n.headline}</h2>
 <p>${n.summary}</p>
-<p><strong>Para tu negocio:</strong> ${n.takeaway}</p>
-${n.sourceUrl ? `<p><small>Fuente: <a href="${n.sourceUrl}" target="_blank" rel="noopener">${n.sourceName || "Ver artículo original"}</a></small></p>` : ""}`).join("\n")}
+<p><strong>${isEn ? "For your business:" : "Para tu negocio:"}</strong> ${n.takeaway}</p>
+${n.sourceUrl ? `<p><small>${isEn ? "Source" : "Fuente"}: <a href="${n.sourceUrl}" target="_blank" rel="noopener">${n.sourceName || (isEn ? "See original article" : "Ver artículo original")}</a></small></p>` : ""}`).join("\n")}
 
-<h2>Reflexión de la semana</h2>
+<h2>${isEn ? "Weekly reflection" : "Reflexión de la semana"}</h2>
 <p>${parsed.closing || ""}</p>
 
-<p>¿Te gustaría saber cuáles de estas tendencias aplican a tu negocio? <a href="https://www.im3systems.com/booking">Te hacemos un análisis gratuito con pasos concretos</a>.</p>`;
+<p>${isEn
+  ? `Want to know which of these trends apply to your business? <a href="https://www.im3systems.com/booking">Get a free analysis with concrete steps</a>.`
+  : `¿Te gustaría saber cuáles de estas tendencias aplican a tu negocio? <a href="https://www.im3systems.com/booking">Te hacemos un análisis gratuito con pasos concretos</a>.`}</p>`;
 
   // Build email HTML
   const baseUrl = process.env.BASE_URL || "https://www.im3systems.com";
@@ -608,10 +701,10 @@ ${n.sourceUrl ? `<p><small>Fuente: <a href="${n.sourceUrl}" target="_blank" rel=
     ${parsed.closing ? `<p style="font-size:14px;color:#666;margin:20px 0 0;font-style:italic">${parsed.closing}</p>` : ""}
   </div>
   <div style="padding:20px 28px;text-align:center;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px;background:#f9f9f9">
-    <a href="${baseUrl}/booking" style="background:#3B82F6;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px">¿Qué podrías automatizar en tu negocio? Descúbrelo gratis →</a>
+    <a href="${baseUrl}/booking" style="background:#3B82F6;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-size:14px">${isEn ? "What could you automate in your business? Find out free →" : "¿Qué podrías automatizar en tu negocio? Descúbrelo gratis →"}</a>
     <p style="font-size:11px;color:#999;margin:12px 0 0">
-      <a href="${baseUrl}/blog" style="color:#999;text-decoration:none">Leer en el blog</a> ·
-      <a href="${baseUrl}/api/newsletter/unsubscribe/{{EMAIL}}" style="color:#999;text-decoration:none">Desuscribirse</a>
+      <a href="${baseUrl}/blog" style="color:#999;text-decoration:none">${isEn ? "Read on the blog" : "Leer en el blog"}</a> ·
+      <a href="${baseUrl}/api/newsletter/unsubscribe/{{EMAIL}}" style="color:#999;text-decoration:none">${isEn ? "Unsubscribe" : "Desuscribirse"}</a>
     </p>
   </div>
 </div>`;
@@ -626,12 +719,14 @@ ${n.sourceUrl ? `<p><small>Fuente: <a href="${n.sourceUrl}" target="_blank" rel=
  */
 export async function generateWhatsAppMessage(
   contact: Contact,
-  diagnostic: Partial<Diagnostic> | null
+  diagnostic: Partial<Diagnostic> | null,
+  language: string = "es"
 ): Promise<string> {
   const anthropic = getClient();
   if (!anthropic) {
-    // Fallback message
-    return `Hola ${contact.nombre}, soy del equipo de IM3 Systems. Queria hacer seguimiento sobre tu diagnostico tecnologico. ¿Tienes un momento para conversar?`;
+    return language === "en"
+      ? `Hi ${contact.nombre}, this is the IM3 Systems team. We wanted to follow up on your technology diagnostic. Do you have a moment to chat?`
+      : `Hola ${contact.nombre}, soy del equipo de IM3 Systems. Queria hacer seguimiento sobre tu diagnostico tecnologico. ¿Tienes un momento para conversar?`;
   }
 
   const context = buildContext(diagnostic);
@@ -639,7 +734,9 @@ export async function generateWhatsAppMessage(
   const response = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 300,
-    system: `Genera un mensaje corto de WhatsApp (máximo 3 oraciones) en español latinoamericano. Tono: profesional pero cercano, como un consultor tech amigable. NO uses emojis excesivos (máximo 1). NO uses formato HTML. Texto plano solamente. Empieza con "Hola {nombre}". Firma como "— Equipo IM3 Systems". El mensaje debe ser relevante al status actual del contacto y sus datos.`,
+    system: language === "en"
+      ? `Generate a short WhatsApp message (max 3 sentences) in professional English. Tone: professional but approachable, like a friendly tech consultant. NO excessive emojis (max 1). NO HTML format. Plain text only. Start with "Hi {name}". Sign as "— IM3 Systems Team". The message must be relevant to the contact's current status and data.`
+      : `Genera un mensaje corto de WhatsApp (máximo 3 oraciones) en español latinoamericano. Tono: profesional pero cercano, como un consultor tech amigable. NO uses emojis excesivos (máximo 1). NO uses formato HTML. Texto plano solamente. Empieza con "Hola {nombre}". Firma como "— Equipo IM3 Systems". El mensaje debe ser relevante al status actual del contacto y sus datos.`,
     messages: [{
       role: "user",
       content: `Genera un mensaje de WhatsApp para este contacto.\n\nStatus: ${contact.status}\nSubstatus: ${contact.substatus || "ninguno"}\n\n${context}`,
@@ -647,7 +744,9 @@ export async function generateWhatsAppMessage(
   });
 
   const text = response.content?.[0]?.type === "text" ? response.content[0].text.trim() : "";
-  return text || `Hola ${contact.nombre}, soy del equipo de IM3 Systems. Queria hacer seguimiento. ¿Tienes un momento?`;
+  return text || (language === "en"
+    ? `Hi ${contact.nombre}, this is the IM3 Systems team. We wanted to follow up. Do you have a moment?`
+    : `Hola ${contact.nombre}, soy del equipo de IM3 Systems. Queria hacer seguimiento. ¿Tienes un momento?`);
 }
 
 /**
@@ -656,20 +755,22 @@ export async function generateWhatsAppMessage(
 function buildMiniAuditEmail(
   insights: Array<{ title: string; description: string; stat: string }>,
   diagnosticData: Partial<Diagnostic>,
-  contactId: string
+  contactId: string,
+  language: string = "es"
 ): string {
+  const isEn = language === "en";
   const nombre = diagnosticData.participante || "there";
-  const empresa = diagnosticData.empresa || "tu empresa";
-  const industria = diagnosticData.industria || "tu sector";
+  const empresa = diagnosticData.empresa || (isEn ? "your company" : "tu empresa");
+  const industria = diagnosticData.industria || (isEn ? "your sector" : "tu sector");
   const fechaCita = diagnosticData.fechaCita || "";
   const horaCita = diagnosticData.horaCita || "";
   const meetLink = (diagnosticData as any)._meetLink || (diagnosticData as any).meetLink || "";
   const areaPrioridad = Array.isArray(diagnosticData.areaPrioridad) ? diagnosticData.areaPrioridad : [];
 
   const insightColors = [
-    { border: "#3B82F6", bg: "#EFF6FF", icon: "&#9889;", iconBg: "#DBEAFE", label: "OPORTUNIDAD" },
-    { border: "#10B981", bg: "#ECFDF5", icon: "&#128200;", iconBg: "#D1FAE5", label: "EFICIENCIA" },
-    { border: "#F59E0B", bg: "#FFFBEB", icon: "&#127919;", iconBg: "#FEF3C7", label: "IMPACTO" },
+    { border: "#3B82F6", bg: "#EFF6FF", icon: "&#9889;", iconBg: "#DBEAFE", label: isEn ? "OBSERVATION" : "OBSERVACION" },
+    { border: "#10B981", bg: "#ECFDF5", icon: "&#128200;", iconBg: "#D1FAE5", label: isEn ? "DATA POINT" : "DATO" },
+    { border: "#F59E0B", bg: "#FFFBEB", icon: "&#127919;", iconBg: "#FEF3C7", label: isEn ? "AREA OF INTEREST" : "AREA DE INTERES" },
   ];
 
   const insightCards = insights.map((insight, i) => {
@@ -702,42 +803,44 @@ function buildMiniAuditEmail(
 
   const calendarInfo = fechaCita && horaCita ? `
     <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:16px;margin:20px 0 0;text-align:center">
-      <p style="margin:0 0 4px;font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.5px">Tu sesion de diagnostico</p>
-      <p style="margin:0;font-size:16px;font-weight:700;color:#1E293B">${fechaCita} a las ${horaCita}</p>
-      <p style="margin:4px 0 0;font-size:13px;color:#64748B">45 minutos &middot; Google Meet</p>
+      <p style="margin:0 0 4px;font-size:12px;color:#64748B;text-transform:uppercase;letter-spacing:0.5px">${isEn ? "Your diagnostic session" : "Tu sesion de diagnostico"}</p>
+      <p style="margin:0;font-size:16px;font-weight:700;color:#1E293B">${fechaCita} ${isEn ? "at" : "a las"} ${horaCita}</p>
+      <p style="margin:4px 0 0;font-size:13px;color:#64748B">45 ${isEn ? "minutes" : "minutos"} &middot; Google Meet</p>
     </div>` : "";
 
   const html = `<div style="max-width:600px;margin:0 auto;font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color:#1a1a1a;background:#ffffff">
-  <div style="background:linear-gradient(135deg,#0F172A,#1E293B);padding:28px 24px;border-radius:8px 8px 0 0;text-align:center">
-    <p style="margin:0 0 8px;font-size:13px;color:#94A3B8;letter-spacing:0.5px">IM3 SYSTEMS</p>
-    <h1 style="color:#fff;font-size:22px;margin:0 0 12px;font-weight:700">Analisis preliminar</h1>
-    <div style="display:inline-block;background:rgba(59,130,246,0.2);border:1px solid rgba(59,130,246,0.4);border-radius:20px;padding:6px 16px">
-      <span style="color:#60A5FA;font-size:12px;font-weight:600;letter-spacing:0.5px">&#9733; HALLAZGOS PARA ${empresa.toUpperCase()}</span>
+  <div style="background:linear-gradient(135deg,#0F172A 0%,#1E293B 50%,#0F172A 100%);padding:32px 24px;border-radius:8px 8px 0 0;text-align:center">
+    <p style="margin:0 0 6px;font-size:11px;color:#64748B;letter-spacing:2px;text-transform:uppercase">IM3 SYSTEMS</p>
+    <h1 style="color:#fff;font-size:24px;margin:0 0 6px;font-weight:700">${isEn ? "Initial observations" : "Primeras observaciones"}</h1>
+    <p style="color:#94A3B8;font-size:14px;margin:0 0 16px">${isEn ? "about what you shared with us" : "sobre lo que nos compartiste"}</p>
+    <div style="display:inline-block;background:rgba(59,130,246,0.15);border:1px solid rgba(59,130,246,0.3);border-radius:20px;padding:6px 18px">
+      <span style="color:#60A5FA;font-size:12px;font-weight:600;letter-spacing:0.5px">${isEn ? "INITIAL REVIEW" : "REVISION INICIAL"} &middot; ${empresa.toUpperCase()}</span>
     </div>
   </div>
 
   <div style="padding:28px 24px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
-    <p style="margin:0 0 8px;font-size:16px;color:#1a1a1a">Hola <strong>${nombre}</strong>,</p>
-    <p style="margin:0 0 24px;font-size:15px;color:#374151;line-height:1.6">Estuvimos revisando el diagnostico de <strong>${empresa}</strong> y encontramos <strong>3 oportunidades concretas</strong> que pueden tener impacto en tu operacion:</p>
+    <p style="margin:0 0 20px;font-size:16px;color:#1a1a1a;line-height:1.6">${isEn
+      ? `<strong>${nombre}</strong>, we took a first look at what you shared about <strong>${empresa}</strong>. There are some areas that caught our attention and that we think are worth exploring together in the session:`
+      : `<strong>${nombre}</strong>, le dimos una primera mirada a lo que nos compartiste sobre <strong>${empresa}</strong>. Hay algunas areas que nos llamaron la atencion y que creemos que vale la pena explorar juntos en la sesion:`}</p>
 
     ${insightCards}
 
     <div style="background:linear-gradient(135deg,#F8FAFC,#F1F5F9);border:1px solid #E2E8F0;border-radius:8px;padding:20px;margin:24px 0 0">
-      <div style="display:flex;align-items:center;margin:0 0 12px">
-        <div style="width:28px;height:28px;background:#DBEAFE;border-radius:6px;text-align:center;line-height:28px;font-size:14px;margin-right:10px">&#128640;</div>
-        <p style="margin:0;font-size:14px;font-weight:700;color:#1E293B">Resumen de tu diagnostico</p>
-      </div>
+      <table cellpadding="0" cellspacing="0" border="0" style="margin:0 0 12px"><tr>
+        <td style="width:28px;height:28px;background:#DBEAFE;border-radius:6px;text-align:center;font-size:14px;vertical-align:middle">&#128640;</td>
+        <td style="padding-left:10px;font-size:14px;font-weight:700;color:#1E293B">${isEn ? "Diagnostic summary" : "Resumen de tu diagnostico"}</td>
+      </tr></table>
       <table style="width:100%;border-collapse:collapse">
         <tr>
-          <td style="padding:6px 0;font-size:13px;color:#64748B">Industria</td>
+          <td style="padding:6px 0;font-size:13px;color:#64748B">${isEn ? "Sector" : "Sector"}</td>
           <td style="padding:6px 0;font-size:13px;font-weight:600;color:#1E293B;text-align:right">${industria}</td>
         </tr>
         <tr>
-          <td style="padding:6px 0;font-size:13px;color:#64748B">Oportunidades</td>
-          <td style="padding:6px 0;font-size:13px;font-weight:600;color:#10B981;text-align:right">3 detectadas</td>
+          <td style="padding:6px 0;font-size:13px;color:#64748B">${isEn ? "Areas to review" : "Areas para revisar"}</td>
+          <td style="padding:6px 0;font-size:13px;font-weight:600;color:#1E293B;text-align:right">${isEn ? "3 identified" : "3 identificadas"}</td>
         </tr>
         ${areaPrioridad.length > 0 ? `<tr>
-          <td style="padding:6px 0;font-size:13px;color:#64748B;vertical-align:top">Prioridades</td>
+          <td style="padding:6px 0;font-size:13px;color:#64748B;vertical-align:top">${isEn ? "Your priorities" : "Tus prioridades"}</td>
           <td style="padding:6px 0;text-align:right">${priorityTags}</td>
         </tr>` : ""}
       </table>
@@ -746,13 +849,21 @@ function buildMiniAuditEmail(
     ${calendarInfo}
     ${meetSection}
 
-    <p style="margin:24px 0 0;font-size:14px;color:#374151;line-height:1.6">En la sesion profundizaremos en estas y mas oportunidades especificas para <strong>${empresa}</strong>. Lleva tus preguntas — queremos que sea una sesion de alto valor para ti.</p>
+    <div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:16px 20px;margin:24px 0 0">
+      <p style="margin:0;font-size:14px;color:#475569;line-height:1.6">${isEn
+        ? `This is an initial read — in the session we'll go into detail, review your processes and see what makes sense for <strong>${empresa}</strong>. We may find more things, or some of these may not apply as much. That's what the session is for.`
+        : `Esto es una primera lectura — en la sesion vamos a entrar en detalle, revisar tus procesos y ver que tiene sentido para <strong>${empresa}</strong>. Puede que encontremos mas cosas, o que algunas de estas no apliquen tanto. Para eso es la sesion.`}</p>
+    </div>
 
-    <p style="margin:20px 0 0;color:#999;font-size:14px">— Equipo IM3 Systems</p>
+    <p style="margin:20px 0 0;color:#64748B;font-size:13px">${isEn
+      ? "If you have questions before the session, reply to this email. We're here to help."
+      : "Si tienes preguntas antes de la sesion, responde a este correo. Estamos para ayudarte."}</p>
+
+    <p style="margin:16px 0 0;color:#999;font-size:14px">— ${isEn ? "IM3 Systems Team" : "Equipo IM3 Systems"}</p>
   </div>
 </div>`;
 
-  return addEmailFooter(html, contactId, true);
+  return addEmailFooter(html, contactId, true, language);
 }
 
 /**
@@ -762,10 +873,12 @@ function buildMiniAuditEmail(
  */
 export async function generateMiniAudit(
   diagnosticData: Partial<Diagnostic>,
-  contactId: string
+  contactId: string,
+  language: string = "es"
 ): Promise<{ subject: string; body: string; whatsappSummary: string }> {
   const anthropic = getClient();
   if (!anthropic) throw new Error("ANTHROPIC_API_KEY not configured");
+  const isEn = language === "en";
 
   const context = buildContext(diagnosticData);
 
@@ -773,41 +886,67 @@ export async function generateMiniAudit(
   const subjectResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 100,
-    system: "Genera SOLO el texto del subject de un email. Sin comillas, sin prefijo, solo el texto. Maximo 60 caracteres.",
+    system: isEn
+      ? "Generate ONLY the email subject text. No quotes, no prefix, just the text. Max 60 characters. Professional and moderate tone — don't exaggerate or promise too much."
+      : "Genera SOLO el texto del subject de un email. Sin comillas, sin prefijo, solo el texto. Maximo 60 caracteres. Tono profesional y moderado — no exagerar ni prometer demasiado.",
     messages: [{
       role: "user",
-      content: `Subject para mini-auditoria de ${diagnosticData.empresa} (${diagnosticData.industria}). Transmite que analizaste su caso y encontraste oportunidades. Estilo: "3 oportunidades que encontramos para ${diagnosticData.empresa}"`,
+      content: isEn
+        ? `Subject for initial observations on the diagnostic of ${diagnosticData.empresa} (${diagnosticData.industria}). Consultative tone, not salesy. Style: "Initial observations on ${diagnosticData.empresa}" or "Areas worth reviewing — ${diagnosticData.empresa}"`
+        : `Subject para primeras observaciones del diagnostico de ${diagnosticData.empresa} (${diagnosticData.industria}). Tono consultivo, no vendedor. Estilo: "Primeras observaciones sobre ${diagnosticData.empresa}" o "Areas que vale la pena revisar — ${diagnosticData.empresa}"`,
     }],
   });
 
   const subject = subjectResponse.content?.[0]?.type === "text"
     ? subjectResponse.content[0].text.trim()
-    : `3 oportunidades que encontramos para ${diagnosticData.empresa}`;
+    : isEn ? `Initial observations on ${diagnosticData.empresa}` : `Primeras observaciones sobre ${diagnosticData.empresa}`;
 
   // 2. Generate 3 insights as structured JSON
   const insightsResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 1200,
-    system: `Eres un consultor senior de tecnologia e IA de IM3 Systems. Analiza diagnosticos de empresas y detectas oportunidades de automatizacion, IA y optimizacion.
+    system: isEn
+      ? `You are a senior technology and AI consultant at IM3 Systems. You make initial observations about company diagnostics — areas worth exploring, not promises.
+
+Respond ONLY with a valid JSON array. No text before or after. No markdown code blocks. Just the JSON.
+
+Exact format:
+[
+  {"title": "short title (3-5 words)", "description": "2-3 sentences describing the area you observed. Consultative and moderate tone — don't promise big results, just point out it's an interesting area to review together.", "stat": "reference data with source (e.g.: 'McKinsey: 40% of operational tasks are automatable')"},
+  {"title": "...", "description": "...", "stat": "..."},
+  {"title": "...", "description": "...", "stat": "..."}
+]
+
+Rules:
+- Each observation must be DIFFERENT (automation, data/AI, integration/efficiency)
+- Statistics must be from real sources (McKinsey, Gartner, Forrester, Deloitte, HBR)
+- Descriptions must use real data from the diagnostic (industry, tools, goals)
+- DO NOT exaggerate benefits — use phrases like "could be worth exploring", "there are signs that", "this is something we see in similar companies"
+- DO NOT mention "our AI" or "artificial intelligence analyzed" — write as a human consultant
+- Max 50 words per description`
+      : `Eres un consultor senior de tecnologia e IA de IM3 Systems. Haces observaciones iniciales sobre diagnosticos de empresas — areas que vale la pena explorar, no promesas.
 
 Responde UNICAMENTE con un JSON array valido. Sin texto antes ni despues. Sin bloques de codigo markdown. Solo el JSON.
 
 Formato exacto:
 [
-  {"title": "titulo corto (3-5 palabras)", "description": "2-3 oraciones explicando la oportunidad. Especifica, basada en la industria y herramientas del cliente. Menciona beneficio concreto.", "stat": "dato estadistico con fuente (ej: 'McKinsey: 40% reduccion en costos operativos')"},
+  {"title": "titulo corto (3-5 palabras)", "description": "2-3 oraciones describiendo el area que observaste. Tono consultivo y moderado — no prometas resultados grandes, solo señala que es un area interesante para revisar juntos.", "stat": "dato de referencia con fuente (ej: 'McKinsey: 40% de tareas operativas son automatizables')"},
   {"title": "...", "description": "...", "stat": "..."},
   {"title": "...", "description": "...", "stat": "..."}
 ]
 
 Reglas:
-- Cada insight debe ser DIFERENTE (automatizacion, datos/IA, integracion/eficiencia)
+- Cada observacion debe ser DIFERENTE (automatizacion, datos/IA, integracion/eficiencia)
 - Las estadisticas deben ser de fuentes reales (McKinsey, Gartner, Forrester, Deloitte, HBR)
 - Las descripciones deben usar datos reales del diagnostico (industria, herramientas, objetivos)
+- NO exageres beneficios — usa frases como "podria valer la pena explorar", "hay señales de que", "esto es algo que vemos en empresas similares"
 - NO menciones "nuestra IA" ni "inteligencia artificial analizo" — escribe como consultor humano
 - Maximo 50 palabras por descripcion`,
     messages: [{
       role: "user",
-      content: `Genera 3 insights para esta empresa:\n\n${context}`,
+      content: isEn
+        ? `Generate 3 observations for this company:\n\n${context}`
+        : `Genera 3 insights para esta empresa:\n\n${context}`,
     }],
   });
 
@@ -821,18 +960,24 @@ Reglas:
     insights = JSON.parse(cleaned);
     if (!Array.isArray(insights) || insights.length < 3) throw new Error("Invalid insights");
   } catch {
-    insights = [
-      { title: "Automatizacion de procesos", description: `Detectamos procesos repetitivos en ${diagnosticData.industria || "tu operacion"} que pueden automatizarse para reducir errores y liberar tiempo del equipo.`, stat: "McKinsey: 45% de actividades laborales son automatizables" },
-      { title: "Integracion de herramientas", description: `Las herramientas actuales de ${diagnosticData.empresa || "la empresa"} pueden conectarse para eliminar entrada manual de datos y mejorar la visibilidad operativa.`, stat: "Forrester: empresas integradas reducen 30% el tiempo administrativo" },
-      { title: "IA aplicada a decisiones", description: `En ${diagnosticData.industria || "tu industria"}, la IA permite anticipar demanda, optimizar inventario y personalizar la experiencia del cliente con datos historicos.`, stat: "Gartner: 75% de empresas adoptaran IA operativa para 2026" },
+    insights = isEn ? [
+      { title: "Repetitive processes", description: `We noticed that in ${diagnosticData.industria || "your operation"} there are tasks that are probably being done manually and could be simplified. Worth reviewing which ones have the most impact.`, stat: "McKinsey: 45% of work activities are automatable" },
+      { title: "Disconnected tools", description: `It seems ${diagnosticData.empresa || "the company"} uses several tools that don't communicate with each other. Connecting them could reduce duplicate work, though it would need to be evaluated case by case.`, stat: "Forrester: integrated companies reduce 30% of admin time" },
+      { title: "Untapped data", description: `In ${diagnosticData.industria || "your industry"} it's common to have valuable data that isn't being used for decision-making. This is an area that could be worth exploring.`, stat: "Gartner: 75% of companies will adopt operational AI by 2026" },
+    ] : [
+      { title: "Procesos que se repiten", description: `Notamos que en ${diagnosticData.industria || "tu operacion"} hay tareas que probablemente se estan haciendo de forma manual y podrian simplificarse. Vale la pena revisar cuales tienen mas impacto.`, stat: "McKinsey: 45% de actividades laborales son automatizables" },
+      { title: "Herramientas desconectadas", description: `Parece que ${diagnosticData.empresa || "la empresa"} usa varias herramientas que no se comunican entre si. Conectarlas podria reducir trabajo duplicado, aunque habria que ver caso por caso.`, stat: "Forrester: empresas integradas reducen 30% el tiempo administrativo" },
+      { title: "Datos sin aprovechar", description: `En ${diagnosticData.industria || "tu industria"} es comun tener datos valiosos que no se estan usando para tomar decisiones. Es un area que podria valer la pena explorar.`, stat: "Gartner: 75% de empresas adoptaran IA operativa para 2026" },
     ];
   }
 
   // 3. Build premium HTML email
-  const body = buildMiniAuditEmail(insights, diagnosticData, contactId);
+  const body = buildMiniAuditEmail(insights, diagnosticData, contactId, language);
 
   // 4. WhatsApp summary
-  const waSummary = `Hola ${diagnosticData.participante || ""},  revisamos tu diagnostico de ${diagnosticData.empresa || ""} y encontramos 3 oportunidades: ${insights.map(i => i.title).join(", ")}. Te enviamos los detalles al correo. — Equipo IM3`;
+  const waSummary = isEn
+    ? `Hi ${diagnosticData.participante || ""}, we took a first look at your diagnostic for ${diagnosticData.empresa || ""} and there are some interesting areas to review together: ${insights.map(i => i.title).join(", ")}. We sent the details to your email. — IM3 Team`
+    : `Hola ${diagnosticData.participante || ""}, le dimos una primera mirada a tu diagnostico de ${diagnosticData.empresa || ""} y hay algunas areas interesantes para revisar juntos: ${insights.map(i => i.title).join(", ")}. Te enviamos los detalles al correo. — Equipo IM3`;
 
   log(`Mini-auditoria generada para ${diagnosticData.empresa}`);
   return { subject, body, whatsappSummary: waSummary };
@@ -844,7 +989,8 @@ Reglas:
 export async function generateReengagement(
   contact: Contact,
   diagnosticData: Partial<Diagnostic> | null,
-  contactId: string
+  contactId: string,
+  language: string = "es"
 ): Promise<{ subject: string; body: string }> {
   const anthropic = getClient();
   if (!anthropic) throw new Error("ANTHROPIC_API_KEY not configured");
@@ -854,24 +1000,42 @@ export async function generateReengagement(
   const subjectResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 100,
-    system: "Genera SOLO el texto del subject de un email. Sin comillas, sin prefijo, solo el texto. Máximo 60 caracteres. Debe ser COMPLETAMENTE diferente a emails de diagnóstico/auditoría. Intriga con un dato de su industria o pregunta provocadora.",
+    system: language === "en"
+      ? "Generate ONLY the email subject text. No quotes, no prefix, just the text. Max 60 characters. Must be COMPLETELY different from diagnostic/audit emails. Intrigue with an industry fact or provocative question."
+      : "Genera SOLO el texto del subject de un email. Sin comillas, sin prefijo, solo el texto. Máximo 60 caracteres. Debe ser COMPLETAMENTE diferente a emails de diagnóstico/auditoría. Intriga con un dato de su industria o pregunta provocadora.",
     messages: [{
       role: "user",
-      content: `Genera un subject de re-engagement para un lead frío del sector ${diagnosticData?.industria || "empresas"}. NO mencionar "auditoría", "diagnóstico", "cita" ni "IM3". Enfócate en un dato sorprendente de su industria. Ejemplos: "Lo que el 73% de empresas de [industria] no saben", "¿Tu equipo pierde X horas por semana en esto?"`,
+      content: language === "en"
+        ? `Generate a re-engagement subject for a cold lead in ${diagnosticData?.industria || "business"} sector. DO NOT mention "audit", "diagnostic", "appointment" or "IM3". Focus on a surprising industry fact. Examples: "What 73% of ${diagnosticData?.industria || "companies"} don't know", "Is your team losing X hours per week on this?"`
+        : `Genera un subject de re-engagement para un lead frío del sector ${diagnosticData?.industria || "empresas"}. NO mencionar "auditoría", "diagnóstico", "cita" ni "IM3". Enfócate en un dato sorprendente de su industria. Ejemplos: "Lo que el 73% de empresas de [industria] no saben", "¿Tu equipo pierde X horas por semana en esto?"`,
     }],
   });
 
   const subject = subjectResponse.content?.[0]?.type === "text"
     ? subjectResponse.content[0].text.trim()
-    : `¿Sigues pensando en automatizar ${contact.empresa}?`;
+    : language === "en" ? `Still thinking about automating ${contact.empresa}?` : `¿Sigues pensando en automatizar ${contact.empresa}?`;
 
   const bodyResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 1200,
-    system: SYSTEM_PROMPT,
+    system: getSystemPrompt(language),
     messages: [{
       role: "user",
-      content: `Genera un email de RE-ENGAGEMENT para un lead frío (no ha abierto emails anteriores).
+      content: language === "en"
+        ? `Generate a RE-ENGAGEMENT email for a cold lead (hasn't opened previous emails).
+
+STRATEGY: Break the pattern. DO NOT mention audit or diagnostic. Instead:
+1. Open with a surprising fact or short story about their industry (${diagnosticData?.industria || "business"})
+2. Connect that fact with a pain they probably have
+3. Offer value without asking for anything: a concrete tip they can apply TODAY
+4. Soft CTA: "If you'd like to see how to apply this at ${contact.empresa}, reply to this email"
+
+Max 150 words. Tone: like someone sharing something useful, not someone selling.
+
+${context}
+
+Generate in PURE HTML with inline styles. Return ONLY the direct HTML. MINIMALIST design — no big header, no gradients. Just clean text with a link at the end. max-width:600px, font-family:'Segoe UI',Roboto,sans-serif.`
+        : `Genera un email de RE-ENGAGEMENT para un lead frío (no ha abierto emails anteriores).
 
 ESTRATEGIA: Romper el patrón. NO mencionar auditoría ni diagnóstico. En su lugar:
 1. Abrir con un dato sorprendente o historia corta sobre su industria (${diagnosticData?.industria || "empresas"})
@@ -891,7 +1055,7 @@ Genera en HTML PURO con estilos inline. Devuelve SOLO el HTML directo. Diseño M
     ? bodyResponse.content[0].text.trim()
     : "<p>Error generando contenido</p>";
   body = body.replace(/^```html\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
-  if (contactId) body = addEmailFooter(body, contactId, false);
+  if (contactId) body = addEmailFooter(body, contactId, false, language);
 
   log(`Re-engagement email generado para ${contact.empresa}`);
   return { subject, body };

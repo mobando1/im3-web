@@ -26,6 +26,30 @@ app.use(
 
 app.use(express.urlencoded({ extended: false }));
 
+// Subdomain routing: crm.im3systems.com → admin, im3systems.com/admin → crm redirect
+const CRM_HOSTNAME = process.env.CRM_HOSTNAME || "crm.im3systems.com";
+
+app.use((req, res, next) => {
+  const host = req.hostname;
+
+  // crm.im3systems.com → redirect root to /admin
+  if (host === CRM_HOSTNAME && req.path === "/") {
+    return res.redirect("/admin");
+  }
+
+  // im3systems.com/admin → redirect to crm subdomain
+  if (host !== CRM_HOSTNAME && req.path.startsWith("/admin")) {
+    return res.redirect(`https://${CRM_HOSTNAME}${req.path}`);
+  }
+
+  // crm.im3systems.com → block public pages (only allow /admin, /api, assets)
+  if (host === CRM_HOSTNAME && !req.path.startsWith("/admin") && !req.path.startsWith("/api") && !req.path.startsWith("/assets") && !req.path.includes(".")) {
+    return res.redirect("/admin");
+  }
+
+  next();
+});
+
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {
     hour: "numeric",

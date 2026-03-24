@@ -136,37 +136,42 @@ async function processEmailQueue() {
 
         let subject: string;
         let body: string;
+        const lang = contact.idioma || "es";
 
-        if (email.subject && email.body) {
-          // Use pre-generated or admin-edited content
-          subject = email.subject;
-          body = email.body;
-        } else if (template.nombre === "recordatorio_6h") {
-          // Recordatorio 6h: use fixed template (no AI)
+        // Fixed templates: ALWAYS regenerate with current meetLink from DB
+        // (meetLink may have been created after pre-generation, or changed by reschedule)
+        if (template.nombre === "recordatorio_6h") {
           const result = build6hReminderEmail(
             diagnostic?.participante || contact.nombre,
             diagnostic?.horaCita || "",
             diagnostic?.meetLink || null,
-            contact.id
+            contact.id,
+            undefined,
+            lang
           );
           subject = result.subject;
           body = result.body;
         } else if (template.nombre === "micro_recordatorio") {
-          // E5 micro_recordatorio: use fixed template (no AI)
           const result = buildMicroReminderEmail(
             diagnostic?.participante || contact.nombre,
             diagnostic?.horaCita || "",
             diagnostic?.meetLink || null,
-            contact.id
+            contact.id,
+            lang
           );
           subject = result.subject;
           body = result.body;
+        } else if (email.subject && email.body) {
+          // Use pre-generated or admin-edited content for AI templates
+          subject = email.subject;
+          body = email.body;
         } else {
           // Generate content with AI (fallback for legacy or failed pre-gen)
           const result = await generateEmailContent(
             template,
             diagnosticForEmail || null,
-            contact.id
+            contact.id,
+            lang
           );
           subject = result.subject;
           body = result.body;
@@ -378,7 +383,7 @@ async function processWhatsAppQueue() {
             const [diagnostic] = contact.diagnosticId
               ? await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId))
               : [undefined];
-            messageText = await generateWhatsAppMessage(contact, diagnostic || null);
+            messageText = await generateWhatsAppMessage(contact, diagnostic || null, contact.idioma || "es");
           }
 
           result = await sendWhatsAppText(msg.phone, messageText);
@@ -524,7 +529,7 @@ async function updateContactSubstatuses() {
               const [diagnostic] = contact.diagnosticId
                 ? await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId))
                 : [null];
-              const reeng = await generateReengagement(contact, diagnostic, contact.id);
+              const reeng = await generateReengagement(contact, diagnostic, contact.id, contact.idioma || "es");
               await db.insert(sentEmails).values({
                 contactId: contact.id,
                 templateId: reengTemplate[0].id,
@@ -862,6 +867,99 @@ async function processPostMeetingRecordings() {
   }
 }
 
+/**
+ * Send admin a daily briefing with today's meetings + client info + Meet links.
+ * Runs every morning at 7:00 AM Colombia (12:00 UTC).
+ */
+async function sendAdminDailyBriefing() {
+  if (!db || !isEmailConfigured()) return;
+
+  try {
+    const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
+    const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+
+    // Get all scheduled diagnostics
+    const allDiags = await db.select().from(diagnostics)
+      .where(eq(diagnostics.meetingStatus, "scheduled"));
+
+    if (allDiags.length === 0) return;
+
+    const now = new Date();
+    const todayMeetings: Array<{ diag: typeof allDiags[0]; contact: any }> = [];
+
+    for (const diag of allDiags) {
+      if (!diag.fechaCita || !diag.horaCita) continue;
+
+      const appointmentDate = parseFechaCita(diag.fechaCita, diag.horaCita);
+      const hoursUntil = (appointmentDate.getTime() - now.getTime()) / (1000 * 60 * 60);
+
+      // Include meetings happening in the next 24 hours
+      if (hoursUntil > 0 && hoursUntil <= 24) {
+        // Find the associated contact
+        const [contact] = await db.select().from(contacts)
+          .where(eq(contacts.diagnosticId, diag.id)).limit(1);
+        if (contact) {
+          todayMeetings.push({ diag, contact });
+        }
+      }
+    }
+
+    if (todayMeetings.length === 0) return;
+
+    // Build the briefing email
+    const meetingsHtml = todayMeetings.map(({ diag, contact }) => {
+      const meetBtn = diag.meetLink
+        ? `<a href="${diag.meetLink}" style="display:inline-block;background:#10B981;color:#fff;padding:8px 16px;border-radius:6px;text-decoration:none;font-size:13px;font-weight:600;margin-top:8px">Unirse a Meet →</a>`
+        : `<span style="color:#EF4444;font-size:13px">⚠ Sin link de Meet</span>`;
+
+      return `<div style="background:#F8FAFC;border:1px solid #E2E8F0;border-radius:8px;padding:20px;margin-bottom:16px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <h3 style="margin:0 0 4px;font-size:16px;color:#0F172A">${diag.participante}</h3>
+            <p style="margin:0;color:#3B82F6;font-weight:600;font-size:14px">${diag.empresa}</p>
+          </div>
+          <div style="text-align:right">
+            <p style="margin:0;font-weight:700;font-size:15px;color:#0F172A">${diag.horaCita}</p>
+            <p style="margin:0;color:#64748B;font-size:13px">${diag.fechaCita}</p>
+          </div>
+        </div>
+        <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:12px">
+          <tr><td style="padding:4px 0;color:#666;width:120px">Email</td><td style="padding:4px 0">${diag.email}</td></tr>
+          ${diag.telefono ? `<tr><td style="padding:4px 0;color:#666">Teléfono</td><td style="padding:4px 0">${diag.telefono}</td></tr>` : ""}
+          ${diag.industria ? `<tr><td style="padding:4px 0;color:#666">Industria</td><td style="padding:4px 0">${diag.industria}</td></tr>` : ""}
+          ${diag.empleados ? `<tr><td style="padding:4px 0;color:#666">Empleados</td><td style="padding:4px 0">${diag.empleados}</td></tr>` : ""}
+          ${diag.areaPrioridad ? `<tr><td style="padding:4px 0;color:#666">Área prioritaria</td><td style="padding:4px 0">${diag.areaPrioridad}</td></tr>` : ""}
+          ${diag.objetivos ? `<tr><td style="padding:4px 0;color:#666">Objetivos</td><td style="padding:4px 0">${diag.objetivos}</td></tr>` : ""}
+          ${diag.herramientas ? `<tr><td style="padding:4px 0;color:#666">Herramientas</td><td style="padding:4px 0">${diag.herramientas}</td></tr>` : ""}
+          ${diag.presupuesto ? `<tr><td style="padding:4px 0;color:#666">Presupuesto</td><td style="padding:4px 0">${diag.presupuesto}</td></tr>` : ""}
+        </table>
+        <div style="margin-top:12px;display:flex;gap:8px;align-items:center">
+          ${meetBtn}
+          <a href="${baseUrl}/admin/contacts/${contact.id}" style="display:inline-block;color:#3B82F6;font-size:13px;text-decoration:none;margin-left:8px">Ver en CRM →</a>
+        </div>
+      </div>`;
+    }).join("");
+
+    await sendEmail(
+      adminEmail,
+      `📋 Hoy tienes ${todayMeetings.length} reunión${todayMeetings.length > 1 ? "es" : ""} programada${todayMeetings.length > 1 ? "s" : ""}`,
+      `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+        <div style="background:linear-gradient(135deg,#0F172A,#1E293B);padding:20px 28px;border-radius:8px 8px 0 0">
+          <h1 style="color:#fff;font-size:18px;margin:0">📋 Briefing del día — ${todayMeetings.length} reunión${todayMeetings.length > 1 ? "es" : ""}</h1>
+        </div>
+        <div style="padding:28px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+          ${meetingsHtml}
+          <p style="color:#94A3B8;font-size:13px;margin-top:24px;text-align:center">— IM3 Systems CRM</p>
+        </div>
+      </div>`
+    );
+
+    log(`Admin briefing enviado: ${todayMeetings.length} reunión(es) hoy`);
+  } catch (err: any) {
+    log(`Error en admin daily briefing: ${err?.message || err}`);
+  }
+}
+
 export function startEmailScheduler() {
   if (!isEmailConfigured()) {
     log("⚠ Email system not configured (missing ANTHROPIC_API_KEY or RESEND_API_KEY)");
@@ -882,8 +980,13 @@ export function startEmailScheduler() {
     await processPostMeetingRecordings().catch(err => log(`Cron error post-meeting: ${err}`));
   });
 
-  // Weekly newsletter every Monday at 7:00 AM Colombia time (12:00 UTC)
-  cron.schedule("0 12 * * 1", async () => {
+  // Daily admin briefing at 7:00 AM Colombia time (12:00 UTC) every day
+  cron.schedule("0 12 * * *", async () => {
+    await sendAdminDailyBriefing().catch(err => log(`Cron error admin briefing: ${err}`));
+  });
+
+  // Weekly newsletter every Monday at 7:30 AM Colombia time (12:30 UTC)
+  cron.schedule("30 12 * * 1", async () => {
     await generateAndSendDailyNewsletter().catch(err => log(`Cron error newsletter: ${err}`));
   });
 
@@ -904,5 +1007,5 @@ export function startEmailScheduler() {
     }
   }, 15_000);
 
-  log("Email scheduler iniciado (cada 5 min, newsletter semanal lunes 7AM COT)");
+  log("Email scheduler iniciado (cada 15 min, briefing admin diario 7AM COT, newsletter lunes 7:30AM COT)");
 }

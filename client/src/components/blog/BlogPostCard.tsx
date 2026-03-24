@@ -17,7 +17,7 @@ export function BlogPostCard({ slug, title, excerpt, featuredImageUrl, category,
     <Link href={`/blog/${slug}`}>
       <article className={`group cursor-pointer bg-white dark:bg-[hsl(var(--ink))] rounded-2xl overflow-hidden border border-gray-100 dark:border-gray-800 hover:shadow-lg transition-all duration-300 hover:-translate-y-1 ${featured ? "md:col-span-2 md:grid md:grid-cols-2" : ""}`}>
         {/* Image */}
-        <div className={`relative overflow-hidden bg-gradient-to-br from-[#2FA4A9]/10 to-[#2FA4A9]/5 ${featured ? "h-64 md:h-full" : "h-48"}`}>
+        <div className={`relative overflow-hidden bg-gradient-to-br from-[#2FA4A9]/10 to-[#2FA4A9]/5 ${featured ? "h-64 md:h-full" : "h-36 sm:h-48"}`}>
           {featuredImageUrl ? (
             <img
               src={featuredImageUrl}
@@ -39,7 +39,7 @@ export function BlogPostCard({ slug, title, excerpt, featuredImageUrl, category,
         </div>
 
         {/* Content */}
-        <div className="p-5">
+        <div className="p-4 sm:p-5">
           <h3 className={`font-bold text-foreground group-hover:text-[#2FA4A9] transition-colors line-clamp-2 ${featured ? "text-xl mb-3" : "text-base mb-2"}`}>
             {title}
           </h3>

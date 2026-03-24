@@ -22,6 +22,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { List, LayoutGrid, Mail, Filter, Download, X, MessageCircle, Tag, UserX, Trash2 } from "lucide-react";
 
 type Contact = {
@@ -100,6 +110,8 @@ export default function Contacts() {
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [bulkTag, setBulkTag] = useState("");
   const [bulkStatus, setBulkStatus] = useState("contacted");
+  const [deleteTarget, setDeleteTarget] = useState<Contact | null>(null);
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
 
   const deleteContactMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -463,9 +475,7 @@ export default function Contacts() {
                               <button
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  if (confirm(`¿Eliminar a ${contact.nombre}? Se borrarán todos los datos asociados.`)) {
-                                    deleteContactMutation.mutate(contact.id);
-                                  }
+                                  setDeleteTarget(contact);
                                 }}
                                 className="text-gray-300 hover:text-red-600 transition-colors"
                                 title="Eliminar contacto"
@@ -668,6 +678,49 @@ export default function Contacts() {
           })}
         </div>
       )}
+      <AlertDialog
+        open={!!deleteTarget}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDeleteTarget(null);
+            setDeleteConfirmName("");
+          }
+        }}
+      >
+        <AlertDialogContent className="bg-white">
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar este contacto?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Se borrarán todos los emails, notas, tareas, deals y actividad asociada a <strong>{deleteTarget?.nombre}</strong>. Esta acción no se puede deshacer.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="py-2">
+            <label className="text-sm text-gray-600 mb-1.5 block">
+              Escribe <strong>{deleteTarget?.nombre}</strong> para confirmar:
+            </label>
+            <Input
+              value={deleteConfirmName}
+              onChange={(e) => setDeleteConfirmName(e.target.value)}
+              placeholder={deleteTarget?.nombre || ""}
+              className="border-gray-300"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-gray-200">Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (deleteTarget) deleteContactMutation.mutate(deleteTarget.id);
+                setDeleteTarget(null);
+                setDeleteConfirmName("");
+              }}
+              disabled={!deleteTarget || deleteConfirmName.trim().toLowerCase() !== deleteTarget.nombre.trim().toLowerCase() || deleteContactMutation.isPending}
+              className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {deleteContactMutation.isPending ? "Eliminando..." : "Sí, eliminar"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

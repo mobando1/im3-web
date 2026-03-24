@@ -354,6 +354,7 @@ export default function ContactDetailPage() {
   const [showWhatsApp, setShowWhatsApp] = useState(false);
   const [whatsAppMsg, setWhatsAppMsg] = useState("");
   const [editData, setEditData] = useState({ nombre: "", empresa: "", email: "", telefono: "" });
+  const [deleteConfirmName, setDeleteConfirmName] = useState("");
   const [noteText, setNoteText] = useState("");
   const [expandedEmail, setExpandedEmail] = useState<string | null>(null);
   const [editingEmailId, setEditingEmailId] = useState<string | null>(null);
@@ -696,7 +697,7 @@ export default function ContactDetailPage() {
             <MessageCircle className="w-3.5 h-3.5" />
             {whatsAppMutation.isPending ? "Generando..." : "WhatsApp"}
           </Button>
-          <AlertDialog>
+          <AlertDialog onOpenChange={(open) => { if (!open) setDeleteConfirmName(""); }}>
             <AlertDialogTrigger asChild>
               <Button
                 variant="outline"
@@ -714,11 +715,23 @@ export default function ContactDetailPage() {
                   Se borrarán todos los emails, notas, tareas, deals y actividad asociada a <strong>{contact.nombre}</strong>. Esta acción no se puede deshacer.
                 </AlertDialogDescription>
               </AlertDialogHeader>
+              <div className="py-2">
+                <label className="text-sm text-gray-600 mb-1.5 block">
+                  Escribe <strong>{contact.nombre}</strong> para confirmar:
+                </label>
+                <Input
+                  value={deleteConfirmName}
+                  onChange={(e) => setDeleteConfirmName(e.target.value)}
+                  placeholder={contact.nombre}
+                  className="border-gray-300"
+                />
+              </div>
               <AlertDialogFooter>
                 <AlertDialogCancel className="border-gray-200">Cancelar</AlertDialogCancel>
                 <AlertDialogAction
                   onClick={() => deleteContactMutation.mutate()}
-                  className="bg-red-600 hover:bg-red-700 text-white"
+                  disabled={deleteConfirmName.trim().toLowerCase() !== contact.nombre.trim().toLowerCase() || deleteContactMutation.isPending}
+                  className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {deleteContactMutation.isPending ? "Eliminando..." : "Sí, eliminar"}
                 </AlertDialogAction>

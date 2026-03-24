@@ -25,11 +25,15 @@ export function NewsletterPopup() {
   const benefits = language === "es" ? BENEFITS_ES : BENEFITS_EN;
 
   useEffect(() => {
-    const timer = setTimeout(() => setOpen(true), 8000);
+    if (sessionStorage.getItem("newsletter_dismissed")) return;
+    const timer = setTimeout(() => setOpen(true), 15000);
     return () => clearTimeout(timer);
   }, []);
 
-  const dismiss = () => setOpen(false);
+  const dismiss = () => {
+    setOpen(false);
+    sessionStorage.setItem("newsletter_dismissed", "1");
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -40,7 +44,7 @@ export function NewsletterPopup() {
       const res = await fetch("/api/newsletter/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, language }),
       });
       if (!res.ok) throw new Error("Server error");
       const data = await res.json();
@@ -52,6 +56,7 @@ export function NewsletterPopup() {
       }
 
       setOpen(false);
+      sessionStorage.setItem("newsletter_dismissed", "1");
     } catch {
       toast.error(t.newsletter.error);
     } finally {
@@ -61,7 +66,7 @@ export function NewsletterPopup() {
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) dismiss(); }}>
-      <DialogContent className="sm:max-w-[420px] p-0 gap-0 rounded-2xl border-0 outline-none overflow-hidden shadow-2xl bg-transparent [&>button]:hidden">
+      <DialogContent className="sm:max-w-[420px] p-0 gap-0 rounded-2xl border-0 outline-none overflow-hidden shadow-2xl bg-transparent [&>button]:hidden data-[state=open]:slide-in-from-bottom-8 data-[state=open]:duration-500 data-[state=open]:ease-out data-[state=closed]:slide-out-to-bottom-8 data-[state=closed]:duration-300">
         {/* Header with gradient */}
         <div className="relative px-6 pt-7 pb-6 text-center" style={{ background: "linear-gradient(135deg, hsl(210 60% 11%), hsl(210 60% 18%), hsl(182 56% 30%))" }}>
           {/* Close button */}
@@ -144,7 +149,7 @@ export function NewsletterPopup() {
 }
 
 export function useNewsletterSubscribe() {
-  const { t } = useI18n();
+  const { t, language } = useI18n();
   const [loading, setLoading] = useState(false);
 
   const subscribe = async (email: string) => {
@@ -155,7 +160,7 @@ export function useNewsletterSubscribe() {
       const res = await fetch("/api/newsletter/subscribe", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, language }),
       });
       if (!res.ok) throw new Error("Server error");
       const data = await res.json();

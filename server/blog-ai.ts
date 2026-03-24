@@ -11,7 +11,7 @@ function getClient(): Anthropic | null {
   return client;
 }
 
-const BLOG_SYSTEM_PROMPT = `Eres un escritor experto de contenido técnico para IM3 Systems, una empresa de tecnología especializada en inteligencia artificial, automatización y desarrollo de software para empresas en Latinoamérica.
+const BLOG_SYSTEM_PROMPT = `Eres un escritor experto de contenido técnico para IM3 Systems, una empresa de tecnología especializada en inteligencia artificial, automatización y desarrollo de software para empresas.
 
 Tu tarea es generar artículos de blog que:
 - Despierten curiosidad sobre IA, automatización y tecnología
