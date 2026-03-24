@@ -145,6 +145,9 @@ export default function AdminProjectDetail() {
         status: project.status,
         totalBudget: project.totalBudget?.toString() || "",
         currency: project.currency,
+        healthStatus: (project as any).healthStatus || "on_track",
+        healthNote: (project as any).healthNote || "",
+        githubRepoUrl: (project as any).githubRepoUrl || "",
       });
       // Auto-expand all phases
       setExpandedPhases(new Set(project.phases.map(p => p.id)));
@@ -743,6 +746,75 @@ export default function AdminProjectDetail() {
               >
                 Guardar cambios
               </Button>
+            </div>
+
+            {/* Health status */}
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
+              <h3 className="font-semibold text-gray-900">Estado de salud del proyecto</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <Label>Estado</Label>
+                  <Select value={editForm.healthStatus || "on_track"} onValueChange={v => setEditForm(f => ({ ...f, healthStatus: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="on_track">En línea</SelectItem>
+                      <SelectItem value="ahead">Adelantado</SelectItem>
+                      <SelectItem value="at_risk">En riesgo</SelectItem>
+                      <SelectItem value="behind">Atrasado</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Nota para el cliente</Label>
+                  <Input value={editForm.healthNote || ""} onChange={e => setEditForm(f => ({ ...f, healthNote: e.target.value }))} placeholder="Tu proyecto avanza bien..." />
+                </div>
+              </div>
+              <Button size="sm" variant="outline" onClick={() => {
+                apiRequest("PATCH", `/api/admin/projects/${params.id}/health`, { healthStatus: editForm.healthStatus, healthNote: editForm.healthNote });
+                toast({ title: "Estado de salud actualizado" });
+                invalidate();
+              }}>
+                Actualizar estado
+              </Button>
+            </div>
+
+            {/* GitHub integration */}
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
+              <h3 className="font-semibold text-gray-900">GitHub — Auto-tracking con AI</h3>
+              <p className="text-xs text-gray-500">Conecta un repositorio para que el portal se actualice automáticamente con cada push.</p>
+              <div className="space-y-2">
+                <div className="space-y-1.5">
+                  <Label>URL del repositorio</Label>
+                  <Input value={editForm.githubRepoUrl || ""} onChange={e => setEditForm(f => ({ ...f, githubRepoUrl: e.target.value }))} placeholder="https://github.com/owner/repo" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Webhook URL (configurar en GitHub)</Label>
+                  <Input readOnly value={`${window.location.origin}/api/webhooks/github/${params.id}`} className="text-xs font-mono bg-gray-50" />
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                <Button size="sm" variant="outline" onClick={() => {
+                  updateProjectMut.mutate({ githubRepoUrl: editForm.githubRepoUrl || null, aiTrackingEnabled: true });
+                }}>
+                  Guardar y activar AI tracking
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => {
+                  apiRequest("POST", `/api/admin/projects/${params.id}/analyze`).then(() => {
+                    toast({ title: "Análisis iniciado" });
+                    invalidate();
+                  }).catch(() => toast({ title: "Error al analizar", variant: "destructive" }));
+                }}>
+                  Analizar commits ahora
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => {
+                  apiRequest("POST", `/api/admin/projects/${params.id}/weekly-summary`).then(() => {
+                    toast({ title: "Resumen semanal generado" });
+                    invalidate();
+                  }).catch(() => toast({ title: "Error al generar resumen", variant: "destructive" }));
+                }}>
+                  Generar resumen semanal
+                </Button>
+              </div>
             </div>
 
             {/* Portal link */}

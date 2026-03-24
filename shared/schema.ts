@@ -366,6 +366,13 @@ export const clientProjects = pgTable("client_projects", {
   totalBudget: integer("total_budget"), // in USD
   currency: varchar("currency", { length: 3 }).default("USD"),
   accessToken: varchar("access_token").default(sql`gen_random_uuid()`).notNull().unique(),
+  // Health & AI tracking
+  healthStatus: text("health_status").default("on_track"), // on_track | at_risk | behind | ahead
+  healthNote: text("health_note"),
+  githubRepoUrl: text("github_repo_url"),
+  githubWebhookSecret: text("github_webhook_secret"),
+  aiTrackingEnabled: boolean("ai_tracking_enabled").default(false).notNull(),
+  lastWeeklySummaryAt: timestamp("last_weekly_summary_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -409,6 +416,8 @@ export const projectTasks = pgTable("project_tasks", {
   projectId: varchar("project_id").notNull(),
   title: text("title").notNull(),
   description: text("description"),
+  clientFacingTitle: text("client_facing_title"), // shown to client instead of title
+  clientFacingDescription: text("client_facing_description"), // plain-language explanation
   status: text("status").notNull().default("pending"), // pending | in_progress | completed | blocked
   priority: text("priority").notNull().default("medium"), // low | medium | high
   estimatedHours: integer("estimated_hours"),
@@ -488,3 +497,35 @@ export const insertProjectMessageSchema = createInsertSchema(projectMessages).om
   id: true,
   createdAt: true,
 });
+
+// Project activity entries (AI-generated from GitHub webhooks)
+export const projectActivityEntries = pgTable("project_activity_entries", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull(),
+  taskId: varchar("task_id"),
+  phaseId: varchar("phase_id"),
+  source: text("source").notNull().default("manual"), // manual | github_webhook | system
+  commitShas: json("commit_shas").$type<string[]>().default([]),
+  summaryLevel1: text("summary_level1").notNull(), // 1 line, always visible
+  summaryLevel2: text("summary_level2"), // paragraph, visible on expand
+  summaryLevel3: text("summary_level3"), // full detail, hidden by default
+  category: text("category").notNull().default("feature"), // feature | bugfix | improvement | infrastructure | meeting | milestone
+  aiGenerated: boolean("ai_generated").default(false).notNull(),
+  isSignificant: boolean("is_significant").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ProjectActivityEntry = typeof projectActivityEntries.$inferSelect;
+export type InsertProjectActivityEntry = typeof projectActivityEntries.$inferInsert;
+
+// GitHub webhook events (raw storage for audit trail)
+export const githubWebhookEvents = pgTable("github_webhook_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull(),
+  payload: json("payload").$type<Record<string, unknown>>().notNull(),
+  processed: boolean("processed").default(false).notNull(),
+  activityEntryId: varchar("activity_entry_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type GithubWebhookEvent = typeof githubWebhookEvents.$inferSelect;

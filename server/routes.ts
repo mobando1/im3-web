@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents } from "@shared/schema";
 import { generateBlogContent, improveBlogContent } from "./blog-ai";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
@@ -15,6 +15,8 @@ import { calculateLeadScore } from "./lead-scoring";
 import { isWhatsAppConfigured, calculateWhatsAppSchedule, WHATSAPP_SEQUENCE, sendWhatsAppText } from "./whatsapp";
 import passport from "passport";
 import { z } from "zod";
+import { analyzeCommitsForProject, generateWeeklySummary, calculateProjectHealth } from "./project-ai";
+import crypto from "crypto";
 
 /**
  * COT timezone helpers — Colombia is UTC-5 with no DST.
@@ -4750,6 +4752,8 @@ ${urls}
       taskCount: allTasks.length,
       completedTaskCount: completedTasks,
       unreadMessageCount: unreadMessages.length,
+      healthStatus: project.healthStatus || "on_track",
+      healthNote: project.healthNote,
     });
   });
 
@@ -4766,7 +4770,7 @@ ${urls}
       const completed = phaseTasks.filter(t => t.status === "completed").length;
       return {
         ...ph,
-        tasks: phaseTasks.map(t => ({ id: t.id, title: t.title, status: t.status, priority: t.priority })),
+        tasks: phaseTasks.map(t => ({ id: t.id, title: t.title, clientFacingTitle: t.clientFacingTitle, status: t.status, priority: t.priority })),
         progress: phaseTasks.length > 0 ? Math.round((completed / phaseTasks.length) * 100) : 0,
       };
     });
@@ -4853,6 +4857,288 @@ ${urls}
 
     await db!.update(projectMessages).set({ isRead: true }).where(and(eq(projectMessages.projectId, project.id), eq(projectMessages.senderType, "team")));
     res.json({ success: true });
+  });
+
+  // Portal: pulse (current task + last 48h activity)
+  app.get("/api/portal/:token/pulse", async (req, res) => {
+    const project = await getProjectByToken(req.params.token as string);
+    if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+
+    // Current focus: highest priority in_progress task
+    const inProgressTasks = await db!.select().from(projectTasks)
+      .where(and(eq(projectTasks.projectId, project.id), eq(projectTasks.status, "in_progress")));
+    const currentTask = inProgressTasks.sort((a, b) => {
+      const prio = { high: 3, medium: 2, low: 1 };
+      return (prio[b.priority as keyof typeof prio] || 0) - (prio[a.priority as keyof typeof prio] || 0);
+    })[0] || null;
+
+    // Get phase for current task
+    let currentPhase = null;
+    if (currentTask) {
+      const [ph] = await db!.select().from(projectPhases).where(eq(projectPhases.id, currentTask.phaseId));
+      currentPhase = ph || null;
+    }
+
+    // Last 48h activity entries
+    const twoDaysAgo = new Date();
+    twoDaysAgo.setDate(twoDaysAgo.getDate() - 2);
+    const recentActivity = await db!.select().from(projectActivityEntries)
+      .where(and(eq(projectActivityEntries.projectId, project.id), gte(projectActivityEntries.createdAt, twoDaysAgo)))
+      .orderBy(desc(projectActivityEntries.createdAt))
+      .limit(10);
+
+    // Calculate task progress within its phase
+    let taskProgress = 0;
+    if (currentTask) {
+      const phaseTasks = await db!.select().from(projectTasks).where(eq(projectTasks.phaseId, currentTask.phaseId));
+      const completed = phaseTasks.filter(t => t.status === "completed").length;
+      taskProgress = phaseTasks.length > 0 ? Math.round((completed / phaseTasks.length) * 100) : 0;
+    }
+
+    res.json({
+      currentFocus: currentTask ? {
+        title: currentTask.clientFacingTitle || currentTask.title,
+        description: currentTask.clientFacingDescription || currentTask.description,
+        phaseName: currentPhase?.name || null,
+        progress: taskProgress,
+        lastActivityAt: recentActivity[0]?.createdAt || null,
+      } : null,
+      recentActivity: recentActivity.map(a => ({
+        id: a.id,
+        summaryLevel1: a.summaryLevel1,
+        summaryLevel2: a.summaryLevel2,
+        summaryLevel3: a.summaryLevel3,
+        category: a.category,
+        isSignificant: a.isSignificant,
+        createdAt: a.createdAt,
+      })),
+    });
+  });
+
+  // Portal: full activity feed (paginated, grouped by week)
+  app.get("/api/portal/:token/activity", async (req, res) => {
+    const project = await getProjectByToken(req.params.token as string);
+    if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+
+    const limit = parseInt(req.query.limit as string) || 50;
+    const offset = parseInt(req.query.offset as string) || 0;
+
+    const entries = await db!.select().from(projectActivityEntries)
+      .where(eq(projectActivityEntries.projectId, project.id))
+      .orderBy(desc(projectActivityEntries.createdAt))
+      .limit(limit)
+      .offset(offset);
+
+    res.json(entries);
+  });
+
+  // Portal: investment data
+  app.get("/api/portal/:token/investment", async (req, res) => {
+    const project = await getProjectByToken(req.params.token as string);
+    if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+
+    const logs = await db!.select().from(projectTimeLog).where(eq(projectTimeLog.projectId, project.id));
+
+    const byCategory: Record<string, number> = {};
+    const byWeek: Record<string, number> = {};
+    let totalHours = 0;
+
+    for (const log_ of logs) {
+      const hrs = parseFloat(String(log_.hours));
+      totalHours += hrs;
+      byCategory[log_.category] = (byCategory[log_.category] || 0) + hrs;
+      const d = new Date(log_.date);
+      const weekStart = new Date(d);
+      weekStart.setDate(d.getDate() - d.getDay());
+      const weekKey = weekStart.toISOString().split("T")[0];
+      byWeek[weekKey] = (byWeek[weekKey] || 0) + hrs;
+    }
+
+    // This week hours
+    const now = new Date();
+    const weekStart = new Date(now);
+    weekStart.setDate(now.getDate() - now.getDay());
+    const thisWeekKey = weekStart.toISOString().split("T")[0];
+    const thisWeekHours = byWeek[thisWeekKey] || 0;
+
+    // Meeting percentage
+    const meetingHours = byCategory["meeting"] || 0;
+    const meetingPct = totalHours > 0 ? Math.round((meetingHours / totalHours) * 100) : 0;
+    const buildPct = 100 - meetingPct;
+
+    res.json({
+      totalBudget: project.totalBudget,
+      currency: project.currency,
+      totalHours,
+      thisWeekHours,
+      byCategory,
+      byWeek,
+      meetingPct,
+      buildPct,
+    });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // GitHub Webhook — receives push events
+  // ─────────────────────────────────────────────────────────────
+
+  app.post("/api/webhooks/github/:projectId", async (req, res) => {
+    const projectId = req.params.projectId as string;
+    const [project] = await db!.select().from(clientProjects).where(eq(clientProjects.id, projectId));
+    if (!project) return res.status(404).json({ message: "Project not found" });
+
+    // Verify webhook secret if configured
+    if (project.githubWebhookSecret) {
+      const signature = req.headers["x-hub-signature-256"] as string;
+      if (signature) {
+        const body = JSON.stringify(req.body);
+        const expected = "sha256=" + crypto.createHmac("sha256", project.githubWebhookSecret).update(body).digest("hex");
+        if (signature !== expected) {
+          return res.status(401).json({ message: "Invalid signature" });
+        }
+      }
+    }
+
+    // Store raw event
+    const [event] = await db!.insert(githubWebhookEvents).values({
+      projectId,
+      payload: req.body,
+    }).returning();
+
+    // Extract commits from push event
+    const commits = (req.body.commits || []).map((c: { id: string; message: string; added: string[]; modified: string[]; removed: string[]; timestamp: string }) => ({
+      sha: c.id,
+      message: c.message,
+      filesChanged: [...(c.added || []), ...(c.modified || []), ...(c.removed || [])],
+      timestamp: c.timestamp,
+    }));
+
+    if (commits.length === 0) {
+      return res.json({ message: "No commits to process", eventId: event.id });
+    }
+
+    // Process with AI if enabled
+    if (project.aiTrackingEnabled) {
+      try {
+        const results = await analyzeCommitsForProject(projectId, commits);
+
+        for (const result of results) {
+          const [entry] = await db!.insert(projectActivityEntries).values({
+            projectId,
+            source: "github_webhook",
+            commitShas: commits.map((c: { sha: string }) => c.sha),
+            summaryLevel1: result.summaryLevel1,
+            summaryLevel2: result.summaryLevel2,
+            summaryLevel3: result.summaryLevel3,
+            category: result.category,
+            aiGenerated: true,
+            isSignificant: result.isSignificant,
+          }).returning();
+
+          // Update webhook event with activity entry link
+          await db!.update(githubWebhookEvents).set({ processed: true, activityEntryId: entry.id }).where(eq(githubWebhookEvents.id, event.id));
+        }
+
+        // Recalculate health
+        await calculateProjectHealth(projectId);
+
+        res.json({ message: `Processed ${results.length} activity entries`, eventId: event.id });
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        log(`Webhook AI processing error: ${message}`);
+        res.json({ message: "Event stored but AI processing failed", eventId: event.id });
+      }
+    } else {
+      res.json({ message: "Event stored (AI tracking disabled)", eventId: event.id });
+    }
+  });
+
+  // Admin: update health status manually
+  app.patch("/api/admin/projects/:id/health", requireAuth, async (req, res) => {
+    const { healthStatus, healthNote } = req.body;
+    const [updated] = await db!.update(clientProjects).set({ healthStatus, healthNote, updatedAt: new Date() })
+      .where(eq(clientProjects.id, req.params.id as string)).returning();
+    if (!updated) return res.status(404).json({ message: "Proyecto no encontrado" });
+    res.json(updated);
+  });
+
+  // Admin: trigger manual analysis (fetch recent commits from GitHub API)
+  app.post("/api/admin/projects/:id/analyze", requireAuth, async (req, res) => {
+    const id = req.params.id as string;
+    const [project] = await db!.select().from(clientProjects).where(eq(clientProjects.id, id));
+    if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+    if (!project.githubRepoUrl) return res.status(400).json({ message: "No hay repositorio de GitHub configurado" });
+
+    try {
+      // Fetch last 20 commits from GitHub API (public repos, no auth needed)
+      const repoPath = project.githubRepoUrl.replace("https://github.com/", "").replace(/\/$/, "");
+      const ghRes = await fetch(`https://api.github.com/repos/${repoPath}/commits?per_page=20`, {
+        headers: { "Accept": "application/vnd.github.v3+json", "User-Agent": "IM3-Systems-CRM" },
+      });
+
+      if (!ghRes.ok) return res.status(400).json({ message: `GitHub API error: ${ghRes.status}` });
+
+      const ghCommits = await ghRes.json() as Array<{ sha: string; commit: { message: string; author: { date: string } }; files?: Array<{ filename: string }> }>;
+
+      const commits = ghCommits.map(c => ({
+        sha: c.sha,
+        message: c.commit.message,
+        filesChanged: (c.files || []).map(f => f.filename),
+        timestamp: c.commit.author.date,
+      }));
+
+      const results = await analyzeCommitsForProject(id, commits);
+
+      for (const result of results) {
+        await db!.insert(projectActivityEntries).values({
+          projectId: id,
+          source: "github_webhook",
+          commitShas: commits.map(c => c.sha),
+          summaryLevel1: result.summaryLevel1,
+          summaryLevel2: result.summaryLevel2,
+          summaryLevel3: result.summaryLevel3,
+          category: result.category,
+          aiGenerated: true,
+          isSignificant: result.isSignificant,
+        });
+      }
+
+      await calculateProjectHealth(id);
+
+      res.json({ message: `Análisis completado: ${results.length} entradas generadas`, results: results.length });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ message: `Error: ${message}` });
+    }
+  });
+
+  // Admin: generate weekly summary manually
+  app.post("/api/admin/projects/:id/weekly-summary", requireAuth, async (req, res) => {
+    const id = req.params.id as string;
+    const summary = await generateWeeklySummary(id);
+    if (!summary) return res.status(400).json({ message: "No se pudo generar el resumen" });
+
+    // Post as system message
+    await db!.insert(projectMessages).values({
+      projectId: id,
+      senderType: "team",
+      senderName: "Resumen semanal",
+      content: summary,
+    });
+
+    // Update last summary timestamp
+    await db!.update(clientProjects).set({ lastWeeklySummaryAt: new Date() }).where(eq(clientProjects.id, id));
+
+    res.json({ message: "Resumen semanal generado", summary });
+  });
+
+  // Admin: get activity entries for a project
+  app.get("/api/admin/projects/:id/activity", requireAuth, async (req, res) => {
+    const entries = await db!.select().from(projectActivityEntries)
+      .where(eq(projectActivityEntries.projectId, req.params.id as string))
+      .orderBy(desc(projectActivityEntries.createdAt))
+      .limit(50);
+    res.json(entries);
   });
 
   return httpServer;

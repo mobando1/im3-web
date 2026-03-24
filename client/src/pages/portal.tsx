@@ -1,10 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
 import { useParams } from "wouter";
-import { Send, CheckCircle2, Circle, Clock, AlertCircle, ChevronDown, ChevronRight, ExternalLink, X } from "lucide-react";
+import { Send, CheckCircle2, Circle, Clock, AlertCircle, ChevronDown, ChevronRight, ExternalLink, X, Zap, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+
+// ── Types ──
 
 type PortalOverview = {
   name: string;
@@ -18,6 +20,8 @@ type PortalOverview = {
   taskCount: number;
   completedTaskCount: number;
   unreadMessageCount: number;
+  healthStatus: string;
+  healthNote: string | null;
 };
 
 type Phase = {
@@ -25,8 +29,10 @@ type Phase = {
   name: string;
   description: string | null;
   status: string;
+  startDate: string | null;
+  endDate: string | null;
   progress: number;
-  tasks: Array<{ id: string; title: string; status: string; priority: string }>;
+  tasks: Array<{ id: string; title: string; clientFacingTitle: string | null; status: string; priority: string }>;
 };
 
 type Deliverable = {
@@ -38,13 +44,40 @@ type Deliverable = {
   deliveredAt: string | null;
   approvedAt: string | null;
   clientComment: string | null;
+  screenshotUrl: string | null;
   demoUrl: string | null;
 };
 
-type TimeLogSummary = {
+type ActivityEntry = {
+  id: string;
+  summaryLevel1: string;
+  summaryLevel2: string | null;
+  summaryLevel3: string | null;
+  category: string;
+  isSignificant: boolean;
+  createdAt: string;
+};
+
+type PulseData = {
+  currentFocus: {
+    title: string;
+    description: string | null;
+    phaseName: string | null;
+    progress: number;
+    lastActivityAt: string | null;
+  } | null;
+  recentActivity: ActivityEntry[];
+};
+
+type InvestmentData = {
+  totalBudget: number | null;
+  currency: string;
+  totalHours: number;
+  thisWeekHours: number;
   byCategory: Record<string, number>;
   byWeek: Record<string, number>;
-  totalHours: number;
+  meetingPct: number;
+  buildPct: number;
 };
 
 type Message = {
@@ -56,20 +89,35 @@ type Message = {
   createdAt: string;
 };
 
-const STATUS_LABELS: Record<string, string> = {
-  planning: "Planeaci\u00f3n",
-  in_progress: "En progreso",
-  paused: "Pausado",
-  completed: "Completado",
-  cancelled: "Cancelado",
+// ── Constants ──
+
+const HEALTH_STYLES: Record<string, { border: string; bg: string; text: string }> = {
+  on_track: { border: "border-l-emerald-500", bg: "bg-emerald-50", text: "text-emerald-700" },
+  ahead: { border: "border-l-[#2FA4A9]", bg: "bg-[#2FA4A9]/5", text: "text-[#2FA4A9]" },
+  at_risk: { border: "border-l-amber-500", bg: "bg-amber-50", text: "text-amber-700" },
+  behind: { border: "border-l-red-500", bg: "bg-red-50", text: "text-red-700" },
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  planning: "bg-blue-100 text-blue-700",
-  in_progress: "bg-emerald-100 text-emerald-700",
-  paused: "bg-amber-100 text-amber-700",
-  completed: "bg-gray-100 text-gray-600",
-  cancelled: "bg-red-100 text-red-700",
+const CATEGORY_LABELS: Record<string, string> = {
+  feature: "Funcionalidad",
+  bugfix: "Corrección",
+  improvement: "Mejora",
+  infrastructure: "Infraestructura",
+  meeting: "Reunión",
+  milestone: "Hito",
+  development: "Desarrollo",
+  design: "Diseño",
+  support: "Soporte",
+  planning: "Planeación",
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  feature: "bg-blue-100 text-blue-700",
+  bugfix: "bg-orange-100 text-orange-700",
+  improvement: "bg-purple-100 text-purple-700",
+  infrastructure: "bg-gray-100 text-gray-600",
+  meeting: "bg-amber-100 text-amber-700",
+  milestone: "bg-emerald-100 text-emerald-700",
 };
 
 const TASK_ICONS: Record<string, typeof Circle> = {
@@ -86,12 +134,10 @@ const TASK_COLORS: Record<string, string> = {
   blocked: "text-red-500",
 };
 
-const CATEGORY_LABELS: Record<string, string> = {
-  development: "Desarrollo",
-  design: "Dise\u00f1o",
-  meeting: "Reuni\u00f3n",
-  support: "Soporte",
-  planning: "Planeaci\u00f3n",
+const PHASE_DOT_COLORS: Record<string, string> = {
+  completed: "bg-emerald-500",
+  in_progress: "bg-blue-500",
+  pending: "bg-gray-300",
 };
 
 const DELIV_COLORS: Record<string, string> = {
@@ -101,25 +147,103 @@ const DELIV_COLORS: Record<string, string> = {
   rejected: "bg-red-100 text-red-700",
 };
 
-const sections = ["Resumen", "Roadmap", "Entregas", "Actividad", "Mensajes"];
+const sections = ["Pulso", "Timeline", "Roadmap", "Entregas", "Inversión", "Mensajes"];
+
+// ── Helpers ──
+
+function timeAgo(dateStr: string): string {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "hace un momento";
+  if (mins < 60) return `hace ${mins} min`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `hace ${hrs}h`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return "ayer";
+  return `hace ${days} días`;
+}
+
+function formatDate(dateStr: string): string {
+  return new Date(dateStr).toLocaleDateString("es-CO", { day: "numeric", month: "short" });
+}
+
+function formatWeekday(dateStr: string): string {
+  const d = new Date(dateStr);
+  const today = new Date();
+  if (d.toDateString() === today.toDateString()) return "Hoy";
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  if (d.toDateString() === yesterday.toDateString()) return "Ayer";
+  return d.toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "short" });
+}
+
+// ── Expandable Activity Entry ──
+
+function ActivityItem({ entry }: { entry: ActivityEntry }) {
+  const [expanded, setExpanded] = useState(false);
+  const [showLevel3, setShowLevel3] = useState(false);
+
+  return (
+    <div className="group">
+      <div
+        className="flex items-start gap-3 py-2 cursor-pointer hover:bg-gray-50 rounded-lg px-2 -mx-2 transition-colors"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 mt-0.5 ${CATEGORY_COLORS[entry.category] || "bg-gray-100 text-gray-600"}`}>
+          {CATEGORY_LABELS[entry.category] || entry.category}
+        </span>
+        <p className="text-sm text-gray-700 flex-1">{entry.summaryLevel1}</p>
+        <span className="text-[10px] text-gray-300 shrink-0 mt-0.5">{timeAgo(entry.createdAt)}</span>
+      </div>
+
+      {expanded && entry.summaryLevel2 && (
+        <div className="ml-14 mr-4 pb-2 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+          <p className="text-sm text-gray-500 leading-relaxed">{entry.summaryLevel2}</p>
+
+          {entry.summaryLevel3 && (
+            <>
+              <button
+                onClick={() => setShowLevel3(!showLevel3)}
+                className="text-xs text-[#2FA4A9] hover:underline mt-2 flex items-center gap-1"
+              >
+                {showLevel3 ? "Ocultar detalle" : "Ver detalle completo"}
+                <ChevronDown className={`w-3 h-3 transition-transform ${showLevel3 ? "rotate-180" : ""}`} />
+              </button>
+              {showLevel3 && (
+                <div className="mt-2 text-xs text-gray-400 leading-relaxed whitespace-pre-wrap bg-gray-50 rounded-lg p-3">
+                  {entry.summaryLevel3}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Main Portal Component ──
 
 export default function Portal() {
   const { token } = useParams<{ token: string }>();
   const queryClient = useQueryClient();
-  const [activeSection, setActiveSection] = useState("Resumen");
+  const [activeSection, setActiveSection] = useState("Pulso");
   const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set());
   const [msgContent, setMsgContent] = useState("");
-  const [clientName, setClientName] = useState("");
+  const [clientName, setClientName] = useState(() => localStorage.getItem("portal_client_name") || "");
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewComment, setReviewComment] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const base = `/api/portal/${token}`;
 
+  // Queries
   const { data: overview, isLoading, error } = useQuery<PortalOverview>({ queryKey: [base] });
+  const { data: pulse } = useQuery<PulseData>({ queryKey: [`${base}/pulse`], enabled: !!overview, refetchInterval: 60000 });
+  const { data: activityEntries = [] } = useQuery<ActivityEntry[]>({ queryKey: [`${base}/activity`], enabled: !!overview });
   const { data: phases = [] } = useQuery<Phase[]>({ queryKey: [`${base}/phases`], enabled: !!overview });
   const { data: deliverables = [] } = useQuery<Deliverable[]>({ queryKey: [`${base}/deliverables`], enabled: !!overview });
-  const { data: timeSummary } = useQuery<TimeLogSummary>({ queryKey: [`${base}/timelog`], enabled: !!overview });
+  const { data: investment } = useQuery<InvestmentData>({ queryKey: [`${base}/investment`], enabled: !!overview });
   const { data: messages = [] } = useQuery<Message[]>({ queryKey: [`${base}/messages`], enabled: !!overview });
 
   useEffect(() => {
@@ -129,11 +253,15 @@ export default function Portal() {
   useEffect(() => {
     if (activeSection === "Mensajes") {
       messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-      // Mark as read
       fetch(`${base}/messages/read`, { method: "PATCH" });
     }
   }, [activeSection, messages]);
 
+  useEffect(() => {
+    if (clientName) localStorage.setItem("portal_client_name", clientName);
+  }, [clientName]);
+
+  // Mutations
   const sendMsgMut = useMutation({
     mutationFn: async (content: string) => {
       await fetch(`${base}/messages`, {
@@ -156,6 +284,7 @@ export default function Portal() {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`${base}/deliverables`] }); setReviewingId(null); setReviewComment(""); },
   });
 
+  // Loading & error states
   if (isLoading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -163,13 +292,12 @@ export default function Portal() {
       </div>
     );
   }
-
   if (error || !overview) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
         <div className="text-center">
           <h1 className="text-xl font-bold text-gray-900 mb-2">Proyecto no encontrado</h1>
-          <p className="text-gray-500">El link puede haber expirado o ser inv\u00e1lido.</p>
+          <p className="text-gray-500">El link puede haber expirado o ser inválido.</p>
         </div>
       </div>
     );
@@ -183,96 +311,210 @@ export default function Portal() {
     });
   };
 
+  // Group activity by day
+  const activityByDay: Record<string, ActivityEntry[]> = {};
+  for (const entry of activityEntries) {
+    const dayKey = new Date(entry.createdAt).toISOString().split("T")[0];
+    if (!activityByDay[dayKey]) activityByDay[dayKey] = [];
+    activityByDay[dayKey].push(entry);
+  }
+
+  const pendingDeliverables = deliverables.filter(d => d.status === "delivered");
+  const healthStyle = HEALTH_STYLES[overview.healthStatus] || HEALTH_STYLES.on_track;
+
   return (
     <div className="min-h-screen bg-gray-50">
-      {/* Header */}
+      {/* ── HEADER + HEALTH BANNER ── */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4">
-          <div className="flex items-center gap-3">
-            <img src="/assets/im3-logo.png" alt="IM3" className="h-6" />
-            <div className="h-5 w-px bg-gray-200" />
-            <div>
-              <h1 className="text-sm font-semibold text-gray-900">{overview.name}</h1>
-              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${STATUS_COLORS[overview.status]}`}>
-                {STATUS_LABELS[overview.status]}
-              </span>
-            </div>
+        <div className="max-w-3xl mx-auto px-4 sm:px-6">
+          {/* Top row: logo + project name */}
+          <div className="flex items-center gap-3 py-3">
+            <img src="/assets/im3-logo.png" alt="IM3" className="h-5" />
+            <div className="h-4 w-px bg-gray-200" />
+            <h1 className="text-sm font-semibold text-gray-900 truncate">{overview.name}</h1>
           </div>
-        </div>
-        {/* Nav */}
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 flex gap-1 overflow-x-auto">
-          {sections.map(s => (
-            <button
-              key={s}
-              onClick={() => setActiveSection(s)}
-              className={`px-3 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
-                activeSection === s
-                  ? "border-[#2FA4A9] text-[#2FA4A9]"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
-              }`}
-            >
-              {s}
-              {s === "Mensajes" && overview.unreadMessageCount > 0 && (
-                <span className="ml-1.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 inline-flex items-center justify-center">
-                  {overview.unreadMessageCount}
+
+          {/* Health banner */}
+          <div className={`rounded-lg border-l-4 ${healthStyle.border} ${healthStyle.bg} px-4 py-3 mb-3`}>
+            <div className="flex items-center justify-between">
+              <p className={`text-sm font-medium ${healthStyle.text}`}>
+                {overview.healthNote || "Tu proyecto avanza según lo planeado."}
+              </p>
+              {overview.estimatedEndDate && (
+                <span className="text-xs text-gray-400 shrink-0 ml-4">
+                  Entrega: {new Date(overview.estimatedEndDate).toLocaleDateString("es-CO", { day: "numeric", month: "long" })}
                 </span>
               )}
-            </button>
-          ))}
+            </div>
+            {/* Progress bar */}
+            <div className="mt-2 flex items-center gap-3">
+              <div className="flex-1 h-2 bg-white/60 rounded-full overflow-hidden">
+                <div className="h-full bg-[#2FA4A9] rounded-full transition-all duration-700" style={{ width: `${overview.progress}%` }} />
+              </div>
+              <span className="text-xs font-semibold text-gray-500">{overview.progress}%</span>
+            </div>
+          </div>
+
+          {/* Section nav */}
+          <div className="flex gap-1 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 pb-0">
+            {sections.map(s => (
+              <button
+                key={s}
+                onClick={() => setActiveSection(s)}
+                className={`px-3 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors ${
+                  activeSection === s
+                    ? "border-[#2FA4A9] text-[#2FA4A9]"
+                    : "border-transparent text-gray-400 hover:text-gray-700"
+                }`}
+              >
+                {s}
+                {s === "Mensajes" && overview.unreadMessageCount > 0 && (
+                  <span className="ml-1.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-4 h-4 inline-flex items-center justify-center">
+                    {overview.unreadMessageCount}
+                  </span>
+                )}
+                {s === "Entregas" && pendingDeliverables.length > 0 && (
+                  <span className="ml-1.5 bg-blue-500 text-white text-[10px] font-bold rounded-full w-4 h-4 inline-flex items-center justify-center">
+                    {pendingDeliverables.length}
+                  </span>
+                )}
+              </button>
+            ))}
+          </div>
         </div>
       </header>
 
-      <main className="max-w-4xl mx-auto px-4 sm:px-6 py-8">
-        {/* ── RESUMEN ── */}
-        {activeSection === "Resumen" && (
+      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-6">
+        {/* ── PULSO ── */}
+        {activeSection === "Pulso" && (
           <div className="space-y-6">
-            {overview.description && (
-              <p className="text-gray-600">{overview.description}</p>
+            {/* Current focus card */}
+            {pulse?.currentFocus ? (
+              <div className="bg-white rounded-xl border border-gray-200 p-5">
+                <div className="flex items-center gap-2 mb-3">
+                  <Zap className="w-4 h-4 text-[#2FA4A9]" />
+                  <span className="text-xs font-semibold uppercase tracking-wider text-gray-400">En este momento estamos trabajando en</span>
+                </div>
+                <h2 className="text-lg font-semibold text-gray-900">{pulse.currentFocus.title}</h2>
+                {pulse.currentFocus.phaseName && (
+                  <p className="text-xs text-gray-400 mt-0.5">{pulse.currentFocus.phaseName}</p>
+                )}
+                {pulse.currentFocus.description && (
+                  <p className="text-sm text-gray-500 mt-2 leading-relaxed">{pulse.currentFocus.description}</p>
+                )}
+                <div className="flex items-center gap-4 mt-4">
+                  <div className="flex-1">
+                    <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-[#2FA4A9] rounded-full transition-all duration-500" style={{ width: `${pulse.currentFocus.progress}%` }} />
+                    </div>
+                  </div>
+                  <span className="text-xs text-gray-400">{pulse.currentFocus.progress}%</span>
+                  {pulse.currentFocus.lastActivityAt && (
+                    <span className="text-xs text-gray-300">Última actividad: {timeAgo(pulse.currentFocus.lastActivityAt)}</span>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-white rounded-xl border border-gray-200 p-5 text-center">
+                <p className="text-gray-400 text-sm">No hay tarea activa en este momento.</p>
+              </div>
             )}
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            {/* Recent activity (48h) */}
+            <div className="bg-white rounded-xl border border-gray-200 p-5">
+              <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-4">Actividad reciente</h3>
+              {(pulse?.recentActivity || []).length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-6">No hay actividad registrada aún.</p>
+              ) : (
+                <div className="space-y-1">
+                  {pulse!.recentActivity.map(entry => (
+                    <ActivityItem key={entry.id} entry={entry} />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Quick stats */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {[
                 { label: "Progreso", value: `${overview.progress}%` },
                 { label: "Tareas", value: `${overview.completedTaskCount}/${overview.taskCount}` },
-                { label: "Horas invertidas", value: `${overview.totalHours.toFixed(1)}h` },
+                { label: "Horas", value: `${overview.totalHours.toFixed(1)}h` },
                 { label: "Entregas", value: `${deliverables.filter(d => d.status === "approved").length} aprobadas` },
               ].map(s => (
                 <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-4">
-                  <p className="text-xs text-gray-400 font-medium">{s.label}</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{s.value}</p>
-                </div>
-              ))}
-            </div>
-
-            {/* Progress bar */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              <p className="text-sm font-medium text-gray-900 mb-3">Progreso general</p>
-              <div className="w-full h-3 bg-gray-100 rounded-full overflow-hidden">
-                <div className="h-full bg-[#2FA4A9] rounded-full transition-all duration-500" style={{ width: `${overview.progress}%` }} />
-              </div>
-              <p className="text-xs text-gray-400 mt-2">{overview.completedTaskCount} de {overview.taskCount} tareas completadas</p>
-            </div>
-
-            {/* Quick phase overview */}
-            <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-3">
-              <p className="text-sm font-medium text-gray-900">Fases del proyecto</p>
-              {phases.map(ph => (
-                <div key={ph.id} className="flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full shrink-0" style={{ background: ph.status === "completed" ? "#10b981" : ph.status === "in_progress" ? "#3b82f6" : "#d1d5db" }} />
-                  <span className="text-sm text-gray-700 flex-1">{ph.name}</span>
-                  <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-[#2FA4A9] rounded-full" style={{ width: `${ph.progress}%` }} />
-                  </div>
-                  <span className="text-xs text-gray-400 w-8 text-right">{ph.progress}%</span>
+                  <p className="text-xs text-gray-400">{s.label}</p>
+                  <p className="text-xl font-bold text-gray-900 mt-1">{s.value}</p>
                 </div>
               ))}
             </div>
           </div>
         )}
 
+        {/* ── TIMELINE ── */}
+        {activeSection === "Timeline" && (
+          <div className="space-y-6">
+            {Object.keys(activityByDay).length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-gray-400">No hay actividad registrada aún.</p>
+                <p className="text-xs text-gray-300 mt-1">Cuando el equipo empiece a trabajar, aquí verás todo lo que se hace.</p>
+              </div>
+            ) : (
+              Object.entries(activityByDay).sort(([a], [b]) => b.localeCompare(a)).map(([day, entries]) => (
+                <div key={day}>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3 sticky top-[180px] bg-gray-50 py-1 z-10">
+                    {formatWeekday(day)}
+                  </h3>
+                  <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-1">
+                    {entries.map(entry => (
+                      <ActivityItem key={entry.id} entry={entry} />
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        )}
+
         {/* ── ROADMAP ── */}
         {activeSection === "Roadmap" && (
           <div className="space-y-4">
+            {/* Visual timeline bar (desktop) */}
+            <div className="hidden sm:flex gap-1 bg-white rounded-xl border border-gray-200 p-4">
+              {phases.map((ph, idx) => {
+                const width = phases.length > 0 ? 100 / phases.length : 100;
+                return (
+                  <div key={ph.id} style={{ width: `${width}%` }} className="text-center">
+                    <div className={`h-2 rounded-full ${ph.status === "completed" ? "bg-emerald-500" : ph.status === "in_progress" ? "bg-blue-500" : "bg-gray-200"}`} />
+                    <p className="text-[10px] font-medium text-gray-600 mt-1.5 truncate">{ph.name}</p>
+                    <p className="text-[10px] text-gray-400">{ph.progress}%</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Next milestone */}
+            {(() => {
+              const nextPhase = phases.find(p => p.status === "in_progress") || phases.find(p => p.status === "pending");
+              const nextTask = nextPhase?.tasks.find(t => t.status === "in_progress" || t.status === "pending");
+              if (!nextPhase) return null;
+              return (
+                <div className="bg-[#2FA4A9]/5 border border-[#2FA4A9]/20 rounded-xl p-4 flex items-center gap-3">
+                  <ArrowRight className="w-5 h-5 text-[#2FA4A9] shrink-0" />
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wider text-[#2FA4A9]">Próximo hito</p>
+                    <p className="text-sm text-gray-700 mt-0.5">
+                      {nextTask ? (nextTask.clientFacingTitle || nextTask.title) : nextPhase.name}
+                    </p>
+                    {nextPhase.endDate && (
+                      <p className="text-xs text-gray-400 mt-0.5">Fecha estimada: {formatDate(nextPhase.endDate)}</p>
+                    )}
+                  </div>
+                </div>
+              );
+            })()}
+
+            {/* Phase cards */}
             {phases.map((phase, idx) => {
               const isExpanded = expandedPhases.has(phase.id);
               return (
@@ -282,18 +524,21 @@ export default function Portal() {
                     onClick={() => togglePhase(phase.id)}
                   >
                     {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-                    <div className="flex-1">
+                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${PHASE_DOT_COLORS[phase.status] || "bg-gray-300"}`} />
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-gray-400">FASE {idx + 1}</span>
-                        <h3 className="font-medium text-gray-900">{phase.name}</h3>
+                        <span className="text-[10px] font-semibold text-gray-300">FASE {idx + 1}</span>
+                        <h3 className="font-medium text-gray-900 truncate">{phase.name}</h3>
                       </div>
-                      {phase.description && <p className="text-xs text-gray-400 mt-0.5">{phase.description}</p>}
+                      {phase.startDate && phase.endDate && (
+                        <p className="text-[10px] text-gray-400">{formatDate(phase.startDate)} — {formatDate(phase.endDate)}</p>
+                      )}
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
                       <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                         <div className="h-full bg-[#2FA4A9] rounded-full" style={{ width: `${phase.progress}%` }} />
                       </div>
-                      <span className="text-xs text-gray-400">{phase.progress}%</span>
+                      <span className="text-xs text-gray-400 w-8 text-right">{phase.progress}%</span>
                     </div>
                   </div>
 
@@ -303,9 +548,9 @@ export default function Portal() {
                         const Icon = TASK_ICONS[task.status] || Circle;
                         return (
                           <div key={task.id} className="flex items-center gap-3 py-1">
-                            <Icon className={`w-4 h-4 ${TASK_COLORS[task.status]}`} />
+                            <Icon className={`w-4 h-4 shrink-0 ${TASK_COLORS[task.status]}`} />
                             <span className={`text-sm ${task.status === "completed" ? "line-through text-gray-400" : "text-gray-700"}`}>
-                              {task.title}
+                              {task.clientFacingTitle || task.title}
                             </span>
                           </div>
                         );
@@ -321,65 +566,60 @@ export default function Portal() {
         {/* ── ENTREGAS ── */}
         {activeSection === "Entregas" && (
           <div className="space-y-4">
+            {/* Pending review banner */}
+            {pendingDeliverables.length > 0 && (
+              <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-center gap-3">
+                <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center shrink-0">
+                  <span className="text-sm font-bold text-blue-600">{pendingDeliverables.length}</span>
+                </div>
+                <p className="text-sm text-blue-700">
+                  Tienes {pendingDeliverables.length} entrega{pendingDeliverables.length > 1 ? "s" : ""} pendiente{pendingDeliverables.length > 1 ? "s" : ""} de revisión.
+                </p>
+              </div>
+            )}
+
             {deliverables.length === 0 ? (
-              <p className="text-center text-gray-400 py-12">No hay entregas a\u00fan.</p>
+              <div className="text-center py-12">
+                <p className="text-gray-400">Las entregas aparecerán aquí cuando el equipo las registre.</p>
+              </div>
             ) : (
               deliverables.map(d => (
                 <div key={d.id} className="bg-white rounded-xl border border-gray-200 p-5">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
+                  <div className="flex items-start gap-4">
+                    {d.screenshotUrl && (
+                      <img src={d.screenshotUrl} alt={d.title} className="w-20 h-20 rounded-lg object-cover border border-gray-100 shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <h3 className="font-medium text-gray-900">{d.title}</h3>
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${DELIV_COLORS[d.status]}`}>{d.status}</span>
                       </div>
                       {d.description && <p className="text-sm text-gray-500 mt-1">{d.description}</p>}
-                      {d.deliveredAt && <p className="text-xs text-gray-400 mt-1">Entregado: {new Date(d.deliveredAt).toLocaleDateString("es-CO")}</p>}
+                      {d.deliveredAt && <p className="text-xs text-gray-400 mt-1">Entregado: {formatDate(d.deliveredAt)}</p>}
                       {d.clientComment && (
                         <p className="text-sm text-amber-600 mt-2 bg-amber-50 px-3 py-1.5 rounded-lg">Tu comentario: {d.clientComment}</p>
                       )}
                       {d.demoUrl && (
-                        <a href={d.demoUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-[#2FA4A9] hover:underline mt-1 inline-flex items-center gap-1">
-                          Ver demo <ExternalLink className="w-3 h-3" />
+                        <a href={d.demoUrl} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex items-center gap-1.5 text-sm text-[#2FA4A9] hover:underline font-medium">
+                          Ver demo <ExternalLink className="w-3.5 h-3.5" />
                         </a>
                       )}
                     </div>
                   </div>
 
-                  {/* Approve/Reject buttons for delivered items */}
                   {d.status === "delivered" && (
                     <div className="mt-4 pt-3 border-t border-gray-100">
                       {reviewingId === d.id ? (
                         <div className="space-y-3">
-                          <Textarea
-                            value={reviewComment}
-                            onChange={e => setReviewComment(e.target.value)}
-                            placeholder="Comentario opcional..."
-                            rows={2}
-                          />
+                          <Textarea value={reviewComment} onChange={e => setReviewComment(e.target.value)} placeholder="Comentario opcional..." rows={2} />
                           <div className="flex gap-2">
-                            <Button
-                              size="sm"
-                              className="bg-emerald-600 hover:bg-emerald-700"
-                              onClick={() => reviewDelivMut.mutate({ id: d.id, status: "approved", comment: reviewComment })}
-                            >
-                              Aprobar
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              onClick={() => reviewDelivMut.mutate({ id: d.id, status: "rejected", comment: reviewComment })}
-                            >
-                              Rechazar
-                            </Button>
-                            <Button size="sm" variant="ghost" onClick={() => { setReviewingId(null); setReviewComment(""); }}>
-                              <X className="w-4 h-4" />
-                            </Button>
+                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => reviewDelivMut.mutate({ id: d.id, status: "approved", comment: reviewComment })}>Aprobar</Button>
+                            <Button size="sm" variant="destructive" onClick={() => reviewDelivMut.mutate({ id: d.id, status: "rejected", comment: reviewComment })}>Rechazar</Button>
+                            <Button size="sm" variant="ghost" onClick={() => { setReviewingId(null); setReviewComment(""); }}><X className="w-4 h-4" /></Button>
                           </div>
                         </div>
                       ) : (
-                        <Button size="sm" variant="outline" onClick={() => setReviewingId(d.id)}>
-                          Revisar entrega
-                        </Button>
+                        <Button size="sm" className="bg-[#2FA4A9] hover:bg-[#238b8f]" onClick={() => setReviewingId(d.id)}>Revisar entrega</Button>
                       )}
                     </div>
                   )}
@@ -389,22 +629,43 @@ export default function Portal() {
           </div>
         )}
 
-        {/* ── ACTIVIDAD ── */}
-        {activeSection === "Actividad" && (
+        {/* ── INVERSIÓN ── */}
+        {activeSection === "Inversión" && (
           <div className="space-y-6">
-            {timeSummary ? (
+            {investment ? (
               <>
+                {/* Budget + hours */}
                 <div className="bg-white rounded-xl border border-gray-200 p-5">
-                  <p className="text-sm font-medium text-gray-900 mb-4">Horas totales invertidas</p>
-                  <p className="text-4xl font-bold text-[#2FA4A9]">{timeSummary.totalHours.toFixed(1)}h</p>
+                  <div className="grid grid-cols-2 gap-6">
+                    {investment.totalBudget && (
+                      <div>
+                        <p className="text-xs text-gray-400 font-medium">Presupuesto</p>
+                        <p className="text-2xl font-bold text-gray-900 mt-1">
+                          ${investment.totalBudget.toLocaleString()} {investment.currency}
+                        </p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs text-gray-400 font-medium">Horas invertidas</p>
+                      <p className="text-2xl font-bold text-gray-900 mt-1">{investment.totalHours.toFixed(1)}h</p>
+                    </div>
+                  </div>
                 </div>
 
-                {/* By category */}
+                {/* Value narrative */}
+                <div className="bg-[#2FA4A9]/5 border border-[#2FA4A9]/20 rounded-xl p-4">
+                  <p className="text-sm text-[#2FA4A9] font-medium">
+                    El {investment.buildPct}% de tu inversión va directo a construir tu producto.
+                    {investment.meetingPct <= 5 && ` Solo el ${investment.meetingPct}% se destina a reuniones.`}
+                  </p>
+                </div>
+
+                {/* Category breakdown */}
                 <div className="bg-white rounded-xl border border-gray-200 p-5">
-                  <p className="text-sm font-medium text-gray-900 mb-4">Por categor\u00eda</p>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-4">Distribución de horas</h3>
                   <div className="space-y-3">
-                    {Object.entries(timeSummary.byCategory).sort(([,a],[,b]) => b - a).map(([cat, hrs]) => {
-                      const pct = timeSummary.totalHours > 0 ? (hrs / timeSummary.totalHours) * 100 : 0;
+                    {Object.entries(investment.byCategory).sort(([, a], [, b]) => b - a).map(([cat, hrs]) => {
+                      const pct = investment.totalHours > 0 ? (hrs / investment.totalHours) * 100 : 0;
                       return (
                         <div key={cat}>
                           <div className="flex items-center justify-between mb-1">
@@ -412,7 +673,7 @@ export default function Portal() {
                             <span className="text-sm font-medium text-gray-900">{hrs.toFixed(1)}h</span>
                           </div>
                           <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
-                            <div className="h-full bg-[#2FA4A9] rounded-full" style={{ width: `${pct}%` }} />
+                            <div className="h-full bg-[#2FA4A9] rounded-full transition-all" style={{ width: `${pct}%` }} />
                           </div>
                         </div>
                       );
@@ -420,14 +681,21 @@ export default function Portal() {
                   </div>
                 </div>
 
-                {/* By week */}
-                {Object.keys(timeSummary.byWeek).length > 0 && (
+                {/* This week */}
+                <div className="bg-white rounded-xl border border-gray-200 p-5">
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Esta semana</h3>
+                  <p className="text-3xl font-bold text-gray-900">{investment.thisWeekHours.toFixed(1)}h</p>
+                  <p className="text-xs text-gray-400 mt-1">invertidas esta semana</p>
+                </div>
+
+                {/* Weekly history */}
+                {Object.keys(investment.byWeek).length > 0 && (
                   <div className="bg-white rounded-xl border border-gray-200 p-5">
-                    <p className="text-sm font-medium text-gray-900 mb-4">Por semana</p>
+                    <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">Historial semanal</h3>
                     <div className="space-y-2">
-                      {Object.entries(timeSummary.byWeek).sort(([a],[b]) => b.localeCompare(a)).slice(0, 8).map(([week, hrs]) => (
+                      {Object.entries(investment.byWeek).sort(([a], [b]) => b.localeCompare(a)).slice(0, 8).map(([week, hrs]) => (
                         <div key={week} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
-                          <span className="text-sm text-gray-500">Semana del {new Date(week).toLocaleDateString("es-CO", { month: "short", day: "numeric" })}</span>
+                          <span className="text-sm text-gray-500">Semana del {formatDate(week)}</span>
                           <span className="text-sm font-medium text-gray-900">{hrs.toFixed(1)}h</span>
                         </div>
                       ))}
@@ -436,26 +704,32 @@ export default function Portal() {
                 )}
               </>
             ) : (
-              <p className="text-center text-gray-400 py-12">No hay actividad registrada a\u00fan.</p>
+              <div className="text-center py-12">
+                <p className="text-gray-400">No hay datos de inversión disponibles aún.</p>
+              </div>
             )}
           </div>
         )}
 
         {/* ── MENSAJES ── */}
         {activeSection === "Mensajes" && (
-          <div className="bg-white rounded-xl border border-gray-200 flex flex-col" style={{ height: "calc(100vh - 220px)", minHeight: "400px" }}>
+          <div className="bg-white rounded-xl border border-gray-200 flex flex-col" style={{ height: "calc(100vh - 240px)", minHeight: "400px" }}>
             <div className="flex-1 overflow-y-auto p-5 space-y-3">
               {messages.length === 0 ? (
-                <p className="text-center text-gray-400 py-12">No hay mensajes a\u00fan. Inicia la conversaci\u00f3n.</p>
+                <p className="text-center text-gray-400 py-12">No hay mensajes aún. Inicia la conversación.</p>
               ) : (
                 messages.map(m => (
                   <div key={m.id} className={`flex ${m.senderType === "client" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[75%] rounded-2xl px-4 py-2.5 ${
+                    <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
                       m.senderType === "client"
                         ? "bg-[#2FA4A9] text-white rounded-br-md"
-                        : "bg-gray-100 text-gray-900 rounded-bl-md"
+                        : m.senderName === "Resumen semanal"
+                          ? "bg-gradient-to-br from-gray-50 to-blue-50 text-gray-900 rounded-bl-md border border-blue-100"
+                          : "bg-gray-100 text-gray-900 rounded-bl-md"
                     }`}>
-                      <p className={`text-[10px] font-medium mb-0.5 ${m.senderType === "client" ? "text-white/70" : "text-gray-400"}`}>{m.senderName}</p>
+                      <p className={`text-[10px] font-medium mb-0.5 ${
+                        m.senderType === "client" ? "text-white/70" : "text-gray-400"
+                      }`}>{m.senderName}</p>
                       <p className="text-sm whitespace-pre-wrap">{m.content}</p>
                       <p className={`text-[10px] mt-1 ${m.senderType === "client" ? "text-white/50" : "text-gray-300"}`}>
                         {new Date(m.createdAt).toLocaleString("es-CO", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
@@ -498,7 +772,7 @@ export default function Portal() {
 
       {/* Footer */}
       <footer className="border-t border-gray-200 bg-white py-4 mt-8">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 text-center">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6 text-center">
           <p className="text-xs text-gray-400">Portal de proyecto powered by <a href="https://www.im3systems.com" className="text-[#2FA4A9] hover:underline">IM3 Systems</a></p>
         </div>
       </footer>
