@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, json, timestamp, boolean, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, json, timestamp, boolean, integer, numeric } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -89,6 +89,7 @@ export const contacts = pgTable("contacts", {
   substatus: text("substatus"), // warm, cold, interested, no_response, proposal_sent, delivering, completed
   tags: json("tags").$type<string[]>().default([]),
   optedOut: boolean("opted_out").default(false).notNull(),
+  idioma: varchar("idioma", { length: 5 }).default("es").notNull(),
   leadScore: integer("lead_score").default(0).notNull(),
   lastActivityAt: timestamp("last_activity_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -348,3 +349,142 @@ export const whatsappMessages = pgTable("whatsapp_messages", {
 
 export type WhatsAppMessage = typeof whatsappMessages.$inferSelect;
 export type InsertWhatsAppMessage = typeof whatsappMessages.$inferInsert;
+
+// ───────────────────────────────────────────────────────────────
+// Portal del Cliente — Proyectos de desarrollo
+// ───────────────────────────────────────────────────────────────
+
+export const clientProjects = pgTable("client_projects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contactId: varchar("contact_id"), // FK contacts (nullable)
+  name: text("name").notNull(),
+  description: text("description"),
+  status: text("status").notNull().default("planning"), // planning | in_progress | paused | completed | cancelled
+  startDate: timestamp("start_date"),
+  estimatedEndDate: timestamp("estimated_end_date"),
+  actualEndDate: timestamp("actual_end_date"),
+  totalBudget: integer("total_budget"), // in USD
+  currency: varchar("currency", { length: 3 }).default("USD"),
+  accessToken: varchar("access_token").default(sql`gen_random_uuid()`).notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type ClientProject = typeof clientProjects.$inferSelect;
+export type InsertClientProject = typeof clientProjects.$inferInsert;
+
+export const insertClientProjectSchema = createInsertSchema(clientProjects).omit({
+  id: true,
+  accessToken: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const projectPhases = pgTable("project_phases", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull(),
+  name: text("name").notNull(),
+  description: text("description"),
+  orderIndex: integer("order_index").notNull().default(0),
+  status: text("status").notNull().default("pending"), // pending | in_progress | completed
+  startDate: timestamp("start_date"),
+  endDate: timestamp("end_date"),
+  estimatedHours: integer("estimated_hours"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type ProjectPhase = typeof projectPhases.$inferSelect;
+export type InsertProjectPhase = typeof projectPhases.$inferInsert;
+
+export const insertProjectPhaseSchema = createInsertSchema(projectPhases).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const projectTasks = pgTable("project_tasks", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  phaseId: varchar("phase_id").notNull(),
+  projectId: varchar("project_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  status: text("status").notNull().default("pending"), // pending | in_progress | completed | blocked
+  priority: text("priority").notNull().default("medium"), // low | medium | high
+  estimatedHours: integer("estimated_hours"),
+  actualHours: numeric("actual_hours", { precision: 6, scale: 2 }),
+  completedAt: timestamp("completed_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type ProjectTask = typeof projectTasks.$inferSelect;
+export type InsertProjectTask = typeof projectTasks.$inferInsert;
+
+export const insertProjectTaskSchema = createInsertSchema(projectTasks).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const projectDeliverables = pgTable("project_deliverables", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull(),
+  phaseId: varchar("phase_id"),
+  taskId: varchar("task_id"),
+  title: text("title").notNull(),
+  description: text("description"),
+  type: text("type").notNull().default("feature"), // feature | bugfix | design | document | video | other
+  status: text("status").notNull().default("pending"), // pending | delivered | approved | rejected
+  deliveredAt: timestamp("delivered_at"),
+  approvedAt: timestamp("approved_at"),
+  clientComment: text("client_comment"),
+  screenshotUrl: text("screenshot_url"),
+  demoUrl: text("demo_url"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ProjectDeliverable = typeof projectDeliverables.$inferSelect;
+export type InsertProjectDeliverable = typeof projectDeliverables.$inferInsert;
+
+export const insertProjectDeliverableSchema = createInsertSchema(projectDeliverables).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const projectTimeLog = pgTable("project_time_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull(),
+  taskId: varchar("task_id"),
+  description: text("description").notNull(),
+  hours: numeric("hours", { precision: 6, scale: 2 }).notNull(),
+  date: text("date").notNull(), // YYYY-MM-DD
+  category: text("category").notNull().default("development"), // development | design | meeting | support | planning
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ProjectTimeLogEntry = typeof projectTimeLog.$inferSelect;
+export type InsertProjectTimeLog = typeof projectTimeLog.$inferInsert;
+
+export const insertProjectTimeLogSchema = createInsertSchema(projectTimeLog).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const projectMessages = pgTable("project_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull(),
+  senderType: text("sender_type").notNull(), // team | client
+  senderName: text("sender_name").notNull(),
+  content: text("content").notNull(),
+  isRead: boolean("is_read").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ProjectMessage = typeof projectMessages.$inferSelect;
+export type InsertProjectMessage = typeof projectMessages.$inferInsert;
+
+export const insertProjectMessageSchema = createInsertSchema(projectMessages).omit({
+  id: true,
+  createdAt: true,
+});

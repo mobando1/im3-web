@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages } from "@shared/schema";
 import { generateBlogContent, improveBlogContent } from "./blog-ai";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
@@ -17,8 +17,25 @@ import passport from "passport";
 import { z } from "zod";
 
 /**
+ * COT timezone helpers — Colombia is UTC-5 with no DST.
+ */
+function cotDayStartUTC(d: Date): Date {
+  // 00:00 COT = 05:00 UTC. If UTC hour < 5, we're still in the previous COT day.
+  const r = new Date(d);
+  if (r.getUTCHours() < 5) r.setUTCDate(r.getUTCDate() - 1);
+  r.setUTCHours(5, 0, 0, 0);
+  return r;
+}
+
+function setCOTHour(refDate: Date, cotHour: number, cotMin = 0): Date {
+  const start = cotDayStartUTC(refDate);
+  return new Date(start.getTime() + (cotHour * 60 + cotMin) * 60_000);
+}
+
+/**
  * Calculate when to send each email based on template name,
  * adaptive to the window between now and the appointment.
+ * All times are COT-aware (UTC-5).
  */
 function calculateEmailTime(
   templateName: string,
@@ -26,74 +43,88 @@ function calculateEmailTime(
   appointmentDate: Date,
   hoursUntilCall: number
 ): Date | null {
+  const MIN_BUFFER_MS = 30 * 60 * 1000; // Must be at least 30 min in the future
+
+  function validOrNull(candidate: Date): Date | null {
+    if (candidate.getTime() <= now.getTime() + MIN_BUFFER_MS) return null;
+    if (candidate.getTime() >= appointmentDate.getTime()) return null;
+    return candidate;
+  }
+
   switch (templateName) {
     case "confirmacion":
-      // Always send immediately
       return now;
 
     case "caso_exito": {
-      // Long window (36h+): next morning at 10 AM COT
-      // Short window (16-36h): same evening at 7 PM COT
-      // Too short (<16h): skip
-      if (hoursUntilCall < 16) return null;
-      if (hoursUntilCall < 36) {
-        // Short window: send same evening at 7 PM COT (00:00 UTC next day)
-        const evening = new Date(now);
-        evening.setUTCDate(evening.getUTCDate() + 1);
-        evening.setUTCHours(0, 0, 0, 0); // 00:00 UTC = 7:00 PM COT
-        // Only if at least 2h from now
-        if (evening.getTime() <= now.getTime() + 2 * 60 * 60 * 1000) return null;
-        return evening;
+      // Long window (36h+): next morning 10 AM COT
+      // Medium window (12-36h): same evening 7 PM COT, fallback next morning 8 AM COT
+      // Short (<12h): skip
+      if (hoursUntilCall < 12) return null;
+
+      if (hoursUntilCall >= 36) {
+        const nextDay10AM = new Date(cotDayStartUTC(now).getTime() + (24 + 10) * 3600_000);
+        return validOrNull(nextDay10AM);
       }
-      const nextMorning = new Date(now);
-      nextMorning.setUTCDate(nextMorning.getUTCDate() + 1);
-      nextMorning.setUTCHours(15, 0, 0, 0); // 15:00 UTC = 10:00 AM COT
-      return nextMorning;
+
+      // Medium window: try same evening 7 PM COT
+      const evening = setCOTHour(now, 19, 0);
+      const ev = validOrNull(evening);
+      if (ev) return ev;
+
+      // Fallback: next morning 8 AM COT
+      const nextMorning8 = new Date(cotDayStartUTC(now).getTime() + (24 + 8) * 3600_000);
+      return validOrNull(nextMorning8);
     }
 
     case "insight_educativo": {
       // Long window (96h+): day 3 at 10 AM COT
-      // Medium window (60-96h): day 2 at 10 AM COT (compressed)
-      // Short window (<60h): skip — lead already gets caso_exito + prep_agenda
+      // Medium window (60-96h): day 2 at 10 AM COT
+      // Short (<60h): skip
       if (hoursUntilCall < 60) return null;
-      if (hoursUntilCall < 96) {
-        const day2 = new Date(now);
-        day2.setUTCDate(day2.getUTCDate() + 2);
-        day2.setUTCHours(15, 0, 0, 0); // 15:00 UTC = 10:00 AM COT
-        return day2;
-      }
-      const day3 = new Date(now);
-      day3.setUTCDate(day3.getUTCDate() + 3);
-      day3.setUTCHours(15, 0, 0, 0); // 15:00 UTC = 10:00 AM COT
-      return day3;
+      const dayOffset = hoursUntilCall < 96 ? 2 : 3;
+      const candidate = new Date(cotDayStartUTC(now).getTime() + (dayOffset * 24 + 10) * 3600_000);
+      return validOrNull(candidate);
     }
 
     case "prep_agenda": {
-      // Primary: 24 hours before appointment
-      const prep = new Date(appointmentDate.getTime() - 24 * 60 * 60 * 1000);
-      if (prep.getTime() > now.getTime() + 2 * 60 * 60 * 1000) return prep;
-      // Fallback: morning of appointment at 8 AM COT (13:00 UTC)
-      const morningOf = new Date(appointmentDate);
-      morningOf.setUTCHours(13, 0, 0, 0); // 13:00 UTC = 8:00 AM COT
-      if (morningOf.getTime() > now.getTime() + 60 * 60 * 1000) return morningOf;
+      // Primary: 24h before appointment
+      // Fallback 1: morning of appointment 9 AM COT
+      // Fallback 2: morning of appointment 8 AM COT
+      // Must not collide with caso_exito (at least 2h after)
+      const casoTime = calculateEmailTime("caso_exito", now, appointmentDate, hoursUntilCall);
+
+      const prep24 = validOrNull(new Date(appointmentDate.getTime() - 24 * 3600_000));
+      if (prep24 && (!casoTime || prep24.getTime() >= casoTime.getTime() + 2 * 3600_000)) {
+        return prep24;
+      }
+
+      const morning9 = setCOTHour(appointmentDate, 9, 0);
+      const m9 = validOrNull(morning9);
+      if (m9 && (!casoTime || m9.getTime() >= casoTime.getTime() + 2 * 3600_000)) {
+        return m9;
+      }
+
+      const morning8 = setCOTHour(appointmentDate, 8, 0);
+      const m8 = validOrNull(morning8);
+      if (m8 && (!casoTime || m8.getTime() >= casoTime.getTime() + 2 * 3600_000)) {
+        return m8;
+      }
+
       return null;
     }
 
-    case "recordatorio_6h":
-      // Send 6 hours before appointment
-      if (hoursUntilCall < 2) return null;
-      const reminder6h = new Date(appointmentDate.getTime() - 6 * 60 * 60 * 1000);
-      if (reminder6h.getTime() <= now.getTime()) return null;
-      return reminder6h;
+    case "recordatorio_6h": {
+      const reminder6h = new Date(appointmentDate.getTime() - 6 * 3600_000);
+      return validOrNull(reminder6h);
+    }
 
-    case "micro_recordatorio":
-      // Send 1 hour before appointment
-      const reminder = new Date(appointmentDate.getTime() - 60 * 60 * 1000);
-      if (reminder.getTime() <= now.getTime()) return null;
-      return reminder;
+    case "micro_recordatorio": {
+      const reminder1h = new Date(appointmentDate.getTime() - 60 * 60 * 1000);
+      return validOrNull(reminder1h);
+    }
 
     case "seguimiento_post":
-      // No longer auto-scheduled — triggered manually when meeting is marked "completed" in CRM
+      // Triggered manually when meeting is marked "completed" in CRM
       return null;
 
     default:
@@ -186,6 +217,7 @@ export async function registerRoutes(
   // Newsletter subscription email validation
   const newsletterEmailSchema = z.object({
     email: z.string().email("Email inválido"),
+    language: z.enum(["es", "en"]).optional().default("es"),
   });
 
   // Booked slots for a given date (public, no auth)
@@ -209,8 +241,9 @@ export async function registerRoutes(
     }
 
     const data = parsed.data;
+    const diagLanguage: string = req.body.language === "en" ? "en" : "es";
 
-    log(`Diagnóstico recibido: ${data.empresa} — ${data.participante}`);
+    log(`Diagnóstico recibido: ${data.empresa} — ${data.participante} (${diagLanguage})`);
 
     let insertedId: string | null = null;
 
@@ -370,6 +403,7 @@ export async function registerRoutes(
               telefono: data.telefono || existingContact.telefono,
               status: "scheduled",
               tags: mergedTags,
+              idioma: diagLanguage,
             }).where(eq(contacts.id, existingContact.id)).returning();
             isReturning = true;
             log(`Contacto ${data.email} actualizado con diagnóstico (contacto existente)`);
@@ -418,6 +452,7 @@ export async function registerRoutes(
               nombre: data.participante,
               empresa: data.empresa,
               telefono: data.telefono || null,
+              idioma: diagLanguage,
             }).returning();
             logActivity(contact.id, "form_submitted", `Formulario diagnóstico completado por ${data.participante}`, { empresa: data.empresa, diagnosticId: insertedId });
           }
@@ -536,7 +571,7 @@ export async function registerRoutes(
                   if (template.nombre === "micro_recordatorio") {
                     const r = buildMicroReminderEmail(
                       data.participante, data.horaCita,
-                      diagForAI?.meetLink || null, contact.id
+                      diagForAI?.meetLink || null, contact.id, diagLanguage
                     );
                     subject = r.subject;
                     body = r.body;
@@ -544,12 +579,12 @@ export async function registerRoutes(
                     const r = build6hReminderEmail(
                       data.participante, data.horaCita,
                       diagForAI?.meetLink || null, contact.id,
-                      (diagForAI as any)?._calendarAddUrl || null
+                      (diagForAI as any)?._calendarAddUrl || null, diagLanguage
                     );
                     subject = r.subject;
                     body = r.body;
                   } else {
-                    const r = await generateEmailContent(template, diagForAI || null, contact.id);
+                    const r = await generateEmailContent(template, diagForAI || null, contact.id, diagLanguage);
                     subject = r.subject;
                     body = r.body;
                   }
@@ -586,7 +621,7 @@ export async function registerRoutes(
               try {
                 const auditTemplate = templates.find(t => t.nombre === "mini_auditoria");
                 if (auditTemplate && diagForAI) {
-                  const audit = await generateMiniAudit(diagForAI, contact.id);
+                  const audit = await generateMiniAudit(diagForAI, contact.id, contact.idioma || "es");
                   const auditScheduledFor = new Date(now.getTime() + 60 * 60 * 1000); // +1 hour
 
                   await db.insert(sentEmails).values({
@@ -1079,7 +1114,7 @@ export async function registerRoutes(
       res.status(400).json({ error: "Email inválido" });
       return;
     }
-    const { email } = parsed.data;
+    const { email, language } = parsed.data;
 
     if (!db) {
       return res.status(500).json({ error: "Servicio temporalmente no disponible" });
@@ -1129,6 +1164,7 @@ export async function registerRoutes(
             status: "lead",
             tags: ["newsletter"],
             leadScore: 5,
+            idioma: language,
           }).returning();
           contactId = newContact?.id || null;
           log(`CRM contact created from newsletter: ${email} → id: ${contactId}`);
@@ -1148,8 +1184,21 @@ export async function registerRoutes(
       // Send welcome email only for new subscriptions
       if (!alreadySubscribed && process.env.RESEND_API_KEY) {
         // AI-generated welcome with "dato curioso" — falls back to static template
-        let welcomeSubject = "Bienvenido al newsletter de IM3 Systems";
-        let welcomeHtml = `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+        let welcomeSubject = language === "en" ? "Welcome to the IM3 Systems newsletter" : "Bienvenido al newsletter de IM3 Systems";
+        let welcomeHtml = language === "en"
+          ? `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+          <div style="background:linear-gradient(135deg,#0F172A,#1E293B);padding:24px 32px;border-radius:8px 8px 0 0">
+            <h1 style="color:#fff;font-size:22px;margin:0">IM3 Systems</h1>
+          </div>
+          <div style="padding:32px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+            <h2 style="color:#0F172A;font-size:20px;margin:0 0 16px">Thanks for subscribing!</h2>
+            <p style="line-height:1.6;margin:0 0 16px">Every week you'll receive the most relevant trends in artificial intelligence, automation and technology applied to businesses.</p>
+            <p style="line-height:1.6;margin:0 0 16px">Not just news — we'll share <strong>3 concrete steps</strong> you can implement in your business that same week.</p>
+            <p style="line-height:1.6;margin:0 0 24px">Our goal: that in 2 minutes of reading you get real value for your operation.</p>
+            <p style="line-height:1.6;margin:0;color:#666">— IM3 Systems Team</p>
+          </div>
+        </div>`
+          : `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
           <div style="background:linear-gradient(135deg,#0F172A,#1E293B);padding:24px 32px;border-radius:8px 8px 0 0">
             <h1 style="color:#fff;font-size:22px;margin:0">IM3 Systems</h1>
           </div>
@@ -1162,7 +1211,7 @@ export async function registerRoutes(
           </div>
         </div>`;
         try {
-          const aiWelcome = await generateNewsletterWelcome();
+          const aiWelcome = await generateNewsletterWelcome(language);
           welcomeSubject = aiWelcome.subject;
           welcomeHtml = aiWelcome.body;
         } catch (aiErr) {
@@ -2059,17 +2108,18 @@ export async function registerRoutes(
       let subject: string;
       let body: string;
 
+      const lang = contact.idioma || "es";
       if (template.nombre === "micro_recordatorio") {
         const r = buildMicroReminderEmail(
           diagnostic?.participante || contact.nombre,
           diagnostic?.horaCita || "",
           diagnostic?.meetLink || null,
-          contact.id
+          contact.id, lang
         );
         subject = r.subject;
         body = r.body;
       } else {
-        const r = await generateEmailContent(template, diagnostic || null, contact.id);
+        const r = await generateEmailContent(template, diagnostic || null, contact.id, lang);
         subject = r.subject;
         body = r.body;
       }
@@ -3133,7 +3183,7 @@ export async function registerRoutes(
 
       // Send confirmation email to client
       const confirmEmail = buildFollowUpConfirmationEmail(
-        participante, empresa, date, time, meetLink, contactId, calendarAddUrl
+        participante, empresa, date, time, meetLink, contactId, calendarAddUrl, contact.idioma || "es"
       );
 
       if (isEmailConfigured()) {
@@ -3158,12 +3208,13 @@ export async function registerRoutes(
         let subject: string | null = null;
         let body: string | null = null;
         try {
+          const cLang = contact.idioma || "es";
           if (templateName === "micro_recordatorio") {
-            const r = buildMicroReminderEmail(participante, time, meetLink, contactId);
+            const r = buildMicroReminderEmail(participante, time, meetLink, contactId, cLang);
             subject = r.subject;
             body = r.body;
           } else if (templateName === "recordatorio_6h") {
-            const r = build6hReminderEmail(participante, time, meetLink, contactId, calendarAddUrl);
+            const r = build6hReminderEmail(participante, time, meetLink, contactId, calendarAddUrl, cLang);
             subject = r.subject;
             body = r.body;
           } else if (templateName === "prep_agenda") {
@@ -3173,7 +3224,7 @@ export async function registerRoutes(
             diagForAI.horaCita = time;
             diagForAI.meetLink = meetLink;
             (diagForAI as any)._calendarAddUrl = calendarAddUrl;
-            const r = await generateEmailContent(template, diagForAI, contactId);
+            const r = await generateEmailContent(template, diagForAI, contactId, cLang);
             subject = r.subject;
             body = r.body;
           }
@@ -3331,7 +3382,7 @@ export async function registerRoutes(
 
             if (postTemplate) {
               const { subject, body } = buildNoShowEmail(
-                updated.participante, updated.empresa, contact.id
+                updated.participante, updated.empresa, contact.id, contact.idioma || "es"
               );
               const sendAt = new Date(Date.now() + 2 * 60 * 60 * 1000);
               await db.insert(sentEmails).values({
@@ -4090,6 +4141,32 @@ ${urls}
 
       logActivity(contactId, "status_changed", `Reunión reagendada: ${fechaCita} a las ${horaCita}`);
 
+      // Notify admin about reschedule
+      const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
+      sendEmail(
+        adminEmail,
+        `🔄 Reunión reagendada: ${diag.participante} de ${diag.empresa}`,
+        `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+          <div style="background:#F59E0B;padding:20px 28px;border-radius:8px 8px 0 0">
+            <h1 style="color:#fff;font-size:18px;margin:0">🔄 Reunión Reagendada</h1>
+          </div>
+          <div style="padding:28px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+            <p style="font-size:15px;color:#333;margin:0 0 16px"><strong>${diag.participante}</strong> de <strong>${diag.empresa}</strong> reagendó su sesión de diagnóstico.</p>
+            <table style="width:100%;border-collapse:collapse;font-size:14px">
+              <tr><td style="padding:6px 0;color:#666;width:140px">Nueva fecha</td><td style="padding:6px 0;font-weight:600">${fechaCita}</td></tr>
+              <tr><td style="padding:6px 0;color:#666">Nueva hora</td><td style="padding:6px 0;font-weight:600">${horaCita}</td></tr>
+              <tr><td style="padding:6px 0;color:#666">Email</td><td style="padding:6px 0">${diag.email}</td></tr>
+              ${diag.telefono ? `<tr><td style="padding:6px 0;color:#666">Teléfono</td><td style="padding:6px 0">${diag.telefono}</td></tr>` : ""}
+              <tr><td style="padding:6px 0;color:#666">Industria</td><td style="padding:6px 0">${diag.industria || "—"}</td></tr>
+              ${newMeetLink ? `<tr><td style="padding:6px 0;color:#666">Meet</td><td style="padding:6px 0"><a href="${newMeetLink}" style="color:#3B82F6">${newMeetLink}</a></td></tr>` : ""}
+            </table>
+            <div style="margin-top:20px">
+              <a href="${baseUrl}/admin/contacts/${contactId}" style="display:inline-block;background:#3B82F6;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Ver en CRM →</a>
+            </div>
+          </div>
+        </div>`
+      ).catch((err) => log(`Error sending reschedule admin notification: ${err}`));
+
       // 6. Re-schedule email sequence with new date
       try {
         const templates = await db.select().from(emailTemplates)
@@ -4124,7 +4201,8 @@ ${urls}
           if (template.nombre === "confirmacion") {
             // Send confirmation immediately via AI
             try {
-              const { subject, body } = await generateEmailContent(template, updatedDiag, contactId);
+              const rLang = contact.idioma || "es";
+              const { subject, body } = await generateEmailContent(template, updatedDiag, contactId, rLang);
               preGenSubject = subject;
               preGenBody = body;
               await sendEmail(diag.email, subject, body);
@@ -4143,17 +4221,19 @@ ${urls}
               log(`Error sending reschedule confirmation email: ${err}`);
             }
           } else if (template.nombre === "recordatorio_6h") {
+            const rLang = contact.idioma || "es";
             const result = build6hReminderEmail(
               diag.participante, horaCita,
               updatedDiag?.meetLink || null, contactId,
-              (updatedDiag as any)?._calendarAddUrl
+              (updatedDiag as any)?._calendarAddUrl, rLang
             );
             preGenSubject = result.subject;
             preGenBody = result.body;
           } else if (template.nombre === "micro_recordatorio") {
+            const rLang = contact.idioma || "es";
             const result = buildMicroReminderEmail(
               diag.participante, horaCita,
-              updatedDiag?.meetLink || null, contactId
+              updatedDiag?.meetLink || null, contactId, rLang
             );
             preGenSubject = result.subject;
             preGenBody = result.body;
@@ -4200,6 +4280,38 @@ ${urls}
         if (contact) {
           contactName = contact.nombre;
           logActivity(contactId, "status_changed", "Contacto canceló la reunión desde email");
+
+          // Notify admin about cancellation
+          const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
+          const adminBaseUrl = process.env.BASE_URL || "https://im3systems.com";
+          // Get diagnostic info for notification
+          let diagInfo: any = null;
+          if (contact.diagnosticId) {
+            const [d] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId)).limit(1);
+            diagInfo = d;
+          }
+          sendEmail(
+            adminEmail,
+            `❌ Reunión cancelada: ${contact.nombre} de ${contact.empresa}`,
+            `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+              <div style="background:#EF4444;padding:20px 28px;border-radius:8px 8px 0 0">
+                <h1 style="color:#fff;font-size:18px;margin:0">❌ Reunión Cancelada</h1>
+              </div>
+              <div style="padding:28px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+                <p style="font-size:15px;color:#333;margin:0 0 16px"><strong>${contact.nombre}</strong> de <strong>${contact.empresa}</strong> canceló su sesión de diagnóstico.</p>
+                <table style="width:100%;border-collapse:collapse;font-size:14px">
+                  <tr><td style="padding:6px 0;color:#666;width:140px">Email</td><td style="padding:6px 0">${contact.email}</td></tr>
+                  ${contact.telefono ? `<tr><td style="padding:6px 0;color:#666">Teléfono</td><td style="padding:6px 0">${contact.telefono}</td></tr>` : ""}
+                  ${diagInfo?.fechaCita ? `<tr><td style="padding:6px 0;color:#666">Cita era</td><td style="padding:6px 0">${diagInfo.fechaCita} a las ${diagInfo.horaCita || ""}</td></tr>` : ""}
+                  ${diagInfo?.industria ? `<tr><td style="padding:6px 0;color:#666">Industria</td><td style="padding:6px 0">${diagInfo.industria}</td></tr>` : ""}
+                </table>
+                <p style="font-size:13px;color:#666;margin:16px 0 0">Se cancelaron los emails y eventos de calendario pendientes. El contacto vuelve a estado "lead".</p>
+                <div style="margin-top:20px">
+                  <a href="${adminBaseUrl}/admin/contacts/${contactId}" style="display:inline-block;background:#3B82F6;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Ver en CRM →</a>
+                </div>
+              </div>
+            </div>`
+          ).catch((err) => log(`Error sending cancel admin notification: ${err}`));
 
           if (contact.diagnosticId) {
             // Get diagnostic to find calendar event ID
@@ -4259,6 +4371,488 @@ ${urls}
         </div>
       </body>
     </html>`);
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Portal del Cliente — Seed demo data
+  // ─────────────────────────────────────────────────────────────
+
+  app.post("/api/admin/projects/seed", requireAuth, async (_req, res) => {
+    try {
+      const existing = await db!.select({ total: count() }).from(clientProjects);
+      if (existing[0].total > 0) return res.json({ message: "Ya hay proyectos — seed omitido" });
+
+      // Create demo project
+      const [project] = await db!.insert(clientProjects).values({
+        name: "App Log\u00edstica - TransCarga S.A.",
+        description: "Sistema de gesti\u00f3n log\u00edstica con seguimiento de env\u00edos, flota y rutas. Incluye dashboard operativo, app m\u00f3vil para conductores y portal web para clientes.",
+        status: "in_progress",
+        startDate: new Date("2026-02-10"),
+        estimatedEndDate: new Date("2026-05-15"),
+        totalBudget: 12000,
+        currency: "USD",
+      }).returning();
+
+      // Phases
+      const phaseData = [
+        { name: "Dise\u00f1o UX/UI", description: "Wireframes, mockups y prototipo interactivo", status: "completed", estimatedHours: 40 },
+        { name: "Backend & Base de datos", description: "API REST, modelos, autenticaci\u00f3n y l\u00f3gica de negocio", status: "completed", estimatedHours: 80 },
+        { name: "Frontend Web", description: "Dashboard operativo y portal de clientes", status: "in_progress", estimatedHours: 60 },
+        { name: "App M\u00f3vil (Conductores)", description: "App React Native para conductores en ruta", status: "pending", estimatedHours: 50 },
+      ];
+
+      const phases = [];
+      for (let i = 0; i < phaseData.length; i++) {
+        const [ph] = await db!.insert(projectPhases).values({ projectId: project.id, ...phaseData[i], orderIndex: i }).returning();
+        phases.push(ph);
+      }
+
+      // Tasks per phase
+      const tasksData: Record<number, Array<{ title: string; status: string; priority: string }>> = {
+        0: [
+          { title: "Investigaci\u00f3n de usuarios y flujos", status: "completed", priority: "high" },
+          { title: "Wireframes baja fidelidad", status: "completed", priority: "high" },
+          { title: "Dise\u00f1o UI en Figma", status: "completed", priority: "high" },
+          { title: "Prototipo interactivo", status: "completed", priority: "medium" },
+        ],
+        1: [
+          { title: "Modelo de datos (PostgreSQL)", status: "completed", priority: "high" },
+          { title: "API de env\u00edos (CRUD + tracking)", status: "completed", priority: "high" },
+          { title: "API de flota y conductores", status: "completed", priority: "high" },
+          { title: "Autenticaci\u00f3n JWT + roles", status: "completed", priority: "high" },
+          { title: "Webhooks de notificaciones", status: "completed", priority: "medium" },
+        ],
+        2: [
+          { title: "Dashboard principal con m\u00e9tricas", status: "completed", priority: "high" },
+          { title: "M\u00f3dulo de env\u00edos (lista + detalle)", status: "in_progress", priority: "high" },
+          { title: "Mapa de tracking en tiempo real", status: "in_progress", priority: "high" },
+          { title: "Gesti\u00f3n de clientes", status: "pending", priority: "medium" },
+          { title: "Reportes exportables (PDF/Excel)", status: "pending", priority: "low" },
+        ],
+        3: [
+          { title: "Setup React Native + navegaci\u00f3n", status: "pending", priority: "high" },
+          { title: "Login y selecci\u00f3n de ruta", status: "pending", priority: "high" },
+          { title: "Checklist de entrega", status: "pending", priority: "medium" },
+          { title: "Foto de evidencia + firma digital", status: "pending", priority: "medium" },
+        ],
+      };
+
+      for (let i = 0; i < phases.length; i++) {
+        for (const task of tasksData[i]) {
+          await db!.insert(projectTasks).values({
+            phaseId: phases[i].id,
+            projectId: project.id,
+            title: task.title,
+            status: task.status,
+            priority: task.priority,
+            completedAt: task.status === "completed" ? new Date() : null,
+          });
+        }
+      }
+
+      // Deliverables
+      const delivData = [
+        { title: "Prototipo Figma completo", type: "design", status: "approved", deliveredAt: new Date("2026-02-24"), approvedAt: new Date("2026-02-25") },
+        { title: "API v1 documentada", type: "document", status: "approved", deliveredAt: new Date("2026-03-10"), approvedAt: new Date("2026-03-11") },
+        { title: "Dashboard operativo (v1)", type: "feature", status: "delivered", deliveredAt: new Date("2026-03-22"), approvedAt: null },
+        { title: "M\u00f3dulo de tracking (beta)", type: "feature", status: "delivered", deliveredAt: new Date("2026-03-23"), approvedAt: null },
+        { title: "Integraci\u00f3n con API de mapas", type: "feature", status: "rejected", deliveredAt: new Date("2026-03-15"), approvedAt: null, clientComment: "El mapa no carga en Safari, necesita fix" },
+      ];
+
+      for (const d of delivData) {
+        await db!.insert(projectDeliverables).values({
+          projectId: project.id,
+          phaseId: phases[d.type === "design" ? 0 : 2].id,
+          title: d.title,
+          type: d.type,
+          status: d.status,
+          deliveredAt: d.deliveredAt,
+          approvedAt: d.approvedAt,
+          clientComment: (d as any).clientComment || null,
+        });
+      }
+
+      // Time logs (last 4 weeks)
+      const timeLogs = [
+        { description: "Investigaci\u00f3n UX y benchmark", hours: "6", date: "2026-02-12", category: "design" },
+        { description: "Wireframes p\u00e1ginas principales", hours: "8", date: "2026-02-14", category: "design" },
+        { description: "Dise\u00f1o UI completo", hours: "12", date: "2026-02-18", category: "design" },
+        { description: "Prototipo interactivo", hours: "5", date: "2026-02-21", category: "design" },
+        { description: "Reuni\u00f3n kickoff con cliente", hours: "1.5", date: "2026-02-10", category: "meeting" },
+        { description: "Modelo de datos y migraciones", hours: "8", date: "2026-02-25", category: "development" },
+        { description: "API de env\u00edos CRUD", hours: "10", date: "2026-02-28", category: "development" },
+        { description: "API de flota + auth JWT", hours: "12", date: "2026-03-04", category: "development" },
+        { description: "Webhooks de notificaciones", hours: "4", date: "2026-03-06", category: "development" },
+        { description: "Dashboard principal", hours: "10", date: "2026-03-11", category: "development" },
+        { description: "M\u00f3dulo env\u00edos frontend", hours: "8", date: "2026-03-14", category: "development" },
+        { description: "Integraci\u00f3n mapa tracking", hours: "6", date: "2026-03-17", category: "development" },
+        { description: "Reuni\u00f3n review sprint 2", hours: "1", date: "2026-03-07", category: "meeting" },
+        { description: "Reuni\u00f3n review sprint 3", hours: "1", date: "2026-03-21", category: "meeting" },
+        { description: "Documentaci\u00f3n API", hours: "3", date: "2026-03-09", category: "planning" },
+        { description: "Planeaci\u00f3n sprint 4", hours: "2", date: "2026-03-20", category: "planning" },
+        { description: "Fix bug auth tokens", hours: "2", date: "2026-03-12", category: "support" },
+        { description: "Ajustes de performance queries", hours: "3", date: "2026-03-18", category: "support" },
+      ];
+
+      for (const t of timeLogs) {
+        await db!.insert(projectTimeLog).values({ projectId: project.id, ...t });
+      }
+
+      // Messages
+      const msgs = [
+        { senderType: "team", senderName: "Equipo IM3", content: "Hola! Bienvenido al portal de tu proyecto. Aqu\u00ed puedes ver el avance en tiempo real, revisar entregas y comunicarte con nosotros." },
+        { senderType: "client", senderName: "Carlos M\u00e9ndez", content: "Excelente, gracias! Me encanta la idea de poder ver todo aqu\u00ed. El prototipo de Figma qued\u00f3 muy bien." },
+        { senderType: "team", senderName: "Equipo IM3", content: "Genial! Ya tenemos el backend casi listo. Esta semana estamos arrancando con el dashboard web. Les comparto la primera entrega para review." },
+        { senderType: "client", senderName: "Carlos M\u00e9ndez", content: "Perfecto. Una pregunta \u2014 el mapa de tracking va a funcionar con GPS en tiempo real o es tracking por checkpoints?" },
+        { senderType: "team", senderName: "Equipo IM3", content: "GPS en tiempo real via la app del conductor. El dashboard web muestra la posici\u00f3n actualizada cada 30 segundos. Tambi\u00e9n tiene checkpoints autom\u00e1ticos en cada parada." },
+      ];
+
+      for (const m of msgs) {
+        await db!.insert(projectMessages).values({ projectId: project.id, ...m, isRead: m.senderType === "team" });
+      }
+
+      res.json({ message: "Proyecto demo creado", projectId: project.id, portalToken: project.accessToken });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Portal del Cliente — Admin endpoints (CRUD proyectos)
+  // ─────────────────────────────────────────────────────────────
+
+  // List projects
+  app.get("/api/admin/projects", requireAuth, async (_req, res) => {
+    const projects = await db!.select().from(clientProjects).orderBy(desc(clientProjects.createdAt));
+    // Enrich with contact name
+    const enriched = await Promise.all(projects.map(async (p) => {
+      let contactName = null;
+      if (p.contactId) {
+        const [c] = await db!.select({ nombre: contacts.nombre, empresa: contacts.empresa }).from(contacts).where(eq(contacts.id, p.contactId));
+        if (c) contactName = `${c.nombre} (${c.empresa})`;
+      }
+      // Calculate progress
+      const allTasks = await db!.select({ status: projectTasks.status }).from(projectTasks).where(eq(projectTasks.projectId, p.id));
+      const completedTasks = allTasks.filter(t => t.status === "completed").length;
+      const progress = allTasks.length > 0 ? Math.round((completedTasks / allTasks.length) * 100) : 0;
+      return { ...p, contactName, progress, taskCount: allTasks.length, completedTaskCount: completedTasks };
+    }));
+    res.json(enriched);
+  });
+
+  // Create project
+  app.post("/api/admin/projects", requireAuth, async (req, res) => {
+    const [project] = await db!.insert(clientProjects).values(req.body).returning();
+    res.json(project);
+  });
+
+  // Get project detail
+  app.get("/api/admin/projects/:id", requireAuth, async (req, res) => {
+    const [project] = await db!.select().from(clientProjects).where(eq(clientProjects.id, req.params.id as string));
+    if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+
+    const phases = await db!.select().from(projectPhases).where(eq(projectPhases.projectId, project.id)).orderBy(asc(projectPhases.orderIndex));
+    const allTasks = await db!.select().from(projectTasks).where(eq(projectTasks.projectId, project.id));
+    const deliverables = await db!.select().from(projectDeliverables).where(eq(projectDeliverables.projectId, project.id)).orderBy(desc(projectDeliverables.createdAt));
+    const timeLogs = await db!.select().from(projectTimeLog).where(eq(projectTimeLog.projectId, project.id)).orderBy(desc(projectTimeLog.createdAt));
+    const messages = await db!.select().from(projectMessages).where(eq(projectMessages.projectId, project.id)).orderBy(asc(projectMessages.createdAt));
+
+    let contactName = null;
+    if (project.contactId) {
+      const [c] = await db!.select({ nombre: contacts.nombre, empresa: contacts.empresa }).from(contacts).where(eq(contacts.id, project.contactId));
+      if (c) contactName = `${c.nombre} (${c.empresa})`;
+    }
+
+    const completedTasks = allTasks.filter(t => t.status === "completed").length;
+    const progress = allTasks.length > 0 ? Math.round((completedTasks / allTasks.length) * 100) : 0;
+    const totalHours = timeLogs.reduce((sum, t) => sum + parseFloat(String(t.hours)), 0);
+
+    res.json({
+      ...project,
+      contactName,
+      progress,
+      totalHours,
+      phases: phases.map(ph => ({
+        ...ph,
+        tasks: allTasks.filter(t => t.phaseId === ph.id),
+      })),
+      deliverables,
+      timeLogs,
+      messages,
+    });
+  });
+
+  // Update project
+  app.patch("/api/admin/projects/:id", requireAuth, async (req, res) => {
+    const [updated] = await db!.update(clientProjects).set({ ...req.body, updatedAt: new Date() }).where(eq(clientProjects.id, req.params.id as string)).returning();
+    if (!updated) return res.status(404).json({ message: "Proyecto no encontrado" });
+    res.json(updated);
+  });
+
+  // Delete project
+  app.delete("/api/admin/projects/:id", requireAuth, async (req, res) => {
+    const id = req.params.id as string;
+    await db!.delete(projectMessages).where(eq(projectMessages.projectId, id));
+    await db!.delete(projectTimeLog).where(eq(projectTimeLog.projectId, id));
+    await db!.delete(projectDeliverables).where(eq(projectDeliverables.projectId, id));
+    await db!.delete(projectTasks).where(eq(projectTasks.projectId, id));
+    await db!.delete(projectPhases).where(eq(projectPhases.projectId, id));
+    await db!.delete(clientProjects).where(eq(clientProjects.id, id));
+    res.json({ success: true });
+  });
+
+  // Regenerate access token
+  app.post("/api/admin/projects/:id/regenerate-token", requireAuth, async (req, res) => {
+    const [updated] = await db!.update(clientProjects).set({ accessToken: sql`gen_random_uuid()`, updatedAt: new Date() }).where(eq(clientProjects.id, req.params.id as string)).returning();
+    if (!updated) return res.status(404).json({ message: "Proyecto no encontrado" });
+    res.json({ accessToken: updated.accessToken });
+  });
+
+  // ── Phases ──
+
+  app.get("/api/admin/projects/:id/phases", requireAuth, async (req, res) => {
+    const phases = await db!.select().from(projectPhases).where(eq(projectPhases.projectId, req.params.id as string)).orderBy(asc(projectPhases.orderIndex));
+    res.json(phases);
+  });
+
+  app.post("/api/admin/projects/:id/phases", requireAuth, async (req, res) => {
+    const [phase] = await db!.insert(projectPhases).values({ ...req.body, projectId: req.params.id }).returning();
+    res.json(phase);
+  });
+
+  app.patch("/api/admin/phases/:id", requireAuth, async (req, res) => {
+    const [updated] = await db!.update(projectPhases).set({ ...req.body, updatedAt: new Date() }).where(eq(projectPhases.id, req.params.id as string)).returning();
+    if (!updated) return res.status(404).json({ message: "Fase no encontrada" });
+    res.json(updated);
+  });
+
+  app.delete("/api/admin/phases/:id", requireAuth, async (req, res) => {
+    await db!.delete(projectTasks).where(eq(projectTasks.phaseId, req.params.id as string));
+    await db!.delete(projectPhases).where(eq(projectPhases.id, req.params.id as string));
+    res.json({ success: true });
+  });
+
+  app.patch("/api/admin/phases/reorder", requireAuth, async (req, res) => {
+    const { phases: ordering } = req.body as { phases: { id: string; orderIndex: number }[] };
+    for (const item of ordering) {
+      await db!.update(projectPhases).set({ orderIndex: item.orderIndex }).where(eq(projectPhases.id, item.id));
+    }
+    res.json({ success: true });
+  });
+
+  // ── Tasks ──
+
+  app.post("/api/admin/phases/:id/tasks", requireAuth, async (req, res) => {
+    const [phase] = await db!.select({ projectId: projectPhases.projectId }).from(projectPhases).where(eq(projectPhases.id, req.params.id as string));
+    if (!phase) return res.status(404).json({ message: "Fase no encontrada" });
+    const [task] = await db!.insert(projectTasks).values({ ...req.body, phaseId: req.params.id as string, projectId: phase.projectId }).returning();
+    res.json(task);
+  });
+
+  app.patch("/api/admin/tasks/:id", requireAuth, async (req, res) => {
+    const updates: Record<string, unknown> = { ...req.body, updatedAt: new Date() };
+    if (req.body.status === "completed") updates.completedAt = new Date();
+    const [updated] = await db!.update(projectTasks).set(updates).where(eq(projectTasks.id, req.params.id as string)).returning();
+    if (!updated) return res.status(404).json({ message: "Tarea no encontrada" });
+    res.json(updated);
+  });
+
+  app.delete("/api/admin/tasks/:id", requireAuth, async (req, res) => {
+    await db!.delete(projectTasks).where(eq(projectTasks.id, req.params.id as string));
+    res.json({ success: true });
+  });
+
+  // ── Deliverables ──
+
+  app.post("/api/admin/projects/:id/deliverables", requireAuth, async (req, res) => {
+    const [deliverable] = await db!.insert(projectDeliverables).values({ ...req.body, projectId: req.params.id }).returning();
+    res.json(deliverable);
+  });
+
+  app.patch("/api/admin/deliverables/:id", requireAuth, async (req, res) => {
+    const [updated] = await db!.update(projectDeliverables).set(req.body).where(eq(projectDeliverables.id, req.params.id as string)).returning();
+    if (!updated) return res.status(404).json({ message: "Entrega no encontrada" });
+    res.json(updated);
+  });
+
+  app.delete("/api/admin/deliverables/:id", requireAuth, async (req, res) => {
+    await db!.delete(projectDeliverables).where(eq(projectDeliverables.id, req.params.id as string));
+    res.json({ success: true });
+  });
+
+  // ── Time Log ──
+
+  app.post("/api/admin/projects/:id/timelog", requireAuth, async (req, res) => {
+    const [entry] = await db!.insert(projectTimeLog).values({ ...req.body, projectId: req.params.id }).returning();
+    res.json(entry);
+  });
+
+  app.get("/api/admin/projects/:id/timelog", requireAuth, async (req, res) => {
+    const logs = await db!.select().from(projectTimeLog).where(eq(projectTimeLog.projectId, req.params.id as string)).orderBy(desc(projectTimeLog.createdAt));
+    res.json(logs);
+  });
+
+  app.delete("/api/admin/timelog/:id", requireAuth, async (req, res) => {
+    await db!.delete(projectTimeLog).where(eq(projectTimeLog.id, req.params.id as string));
+    res.json({ success: true });
+  });
+
+  // ── Messages (admin side) ──
+
+  app.get("/api/admin/projects/:id/messages", requireAuth, async (req, res) => {
+    const msgs = await db!.select().from(projectMessages).where(eq(projectMessages.projectId, req.params.id as string)).orderBy(asc(projectMessages.createdAt));
+    res.json(msgs);
+  });
+
+  app.post("/api/admin/projects/:id/messages", requireAuth, async (req, res) => {
+    const [msg] = await db!.insert(projectMessages).values({ ...req.body, projectId: req.params.id as string, senderType: "team" }).returning();
+    res.json(msg);
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Portal del Cliente — Public endpoints (auth by token)
+  // ─────────────────────────────────────────────────────────────
+
+  async function getProjectByToken(token: string) {
+    const [project] = await db!.select().from(clientProjects).where(eq(clientProjects.accessToken, token));
+    return project || null;
+  }
+
+  // Portal overview
+  app.get("/api/portal/:token", async (req, res) => {
+    const project = await getProjectByToken(req.params.token as string);
+    if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+
+    const phases = await db!.select().from(projectPhases).where(eq(projectPhases.projectId, project.id)).orderBy(asc(projectPhases.orderIndex));
+    const allTasks = await db!.select().from(projectTasks).where(eq(projectTasks.projectId, project.id));
+    const timeLogs = await db!.select().from(projectTimeLog).where(eq(projectTimeLog.projectId, project.id));
+    const unreadMessages = await db!.select({ id: projectMessages.id }).from(projectMessages).where(and(eq(projectMessages.projectId, project.id), eq(projectMessages.senderType, "team"), eq(projectMessages.isRead, false)));
+
+    const completedTasks = allTasks.filter(t => t.status === "completed").length;
+    const progress = allTasks.length > 0 ? Math.round((completedTasks / allTasks.length) * 100) : 0;
+    const totalHours = timeLogs.reduce((sum, t) => sum + parseFloat(String(t.hours)), 0);
+
+    let contactName = null;
+    if (project.contactId) {
+      const [c] = await db!.select({ nombre: contacts.nombre, empresa: contacts.empresa }).from(contacts).where(eq(contacts.id, project.contactId));
+      if (c) contactName = `${c.nombre} (${c.empresa})`;
+    }
+
+    res.json({
+      name: project.name,
+      description: project.description,
+      status: project.status,
+      startDate: project.startDate,
+      estimatedEndDate: project.estimatedEndDate,
+      contactName,
+      progress,
+      totalHours,
+      taskCount: allTasks.length,
+      completedTaskCount: completedTasks,
+      unreadMessageCount: unreadMessages.length,
+    });
+  });
+
+  // Portal phases with tasks
+  app.get("/api/portal/:token/phases", async (req, res) => {
+    const project = await getProjectByToken(req.params.token as string);
+    if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+
+    const phases = await db!.select().from(projectPhases).where(eq(projectPhases.projectId, project.id)).orderBy(asc(projectPhases.orderIndex));
+    const allTasks = await db!.select().from(projectTasks).where(eq(projectTasks.projectId, project.id));
+
+    const enriched = phases.map(ph => {
+      const phaseTasks = allTasks.filter(t => t.phaseId === ph.id);
+      const completed = phaseTasks.filter(t => t.status === "completed").length;
+      return {
+        ...ph,
+        tasks: phaseTasks.map(t => ({ id: t.id, title: t.title, status: t.status, priority: t.priority })),
+        progress: phaseTasks.length > 0 ? Math.round((completed / phaseTasks.length) * 100) : 0,
+      };
+    });
+    res.json(enriched);
+  });
+
+  // Portal deliverables
+  app.get("/api/portal/:token/deliverables", async (req, res) => {
+    const project = await getProjectByToken(req.params.token as string);
+    if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+
+    const deliverables = await db!.select().from(projectDeliverables).where(eq(projectDeliverables.projectId, project.id)).orderBy(desc(projectDeliverables.createdAt));
+    res.json(deliverables);
+  });
+
+  // Portal: approve/reject deliverable
+  app.patch("/api/portal/:token/deliverables/:id", async (req, res) => {
+    const project = await getProjectByToken(req.params.token as string);
+    if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+
+    const { status, clientComment } = req.body;
+    if (!["approved", "rejected"].includes(status)) return res.status(400).json({ message: "Estado inválido" });
+
+    const updates: Record<string, unknown> = { status, clientComment };
+    if (status === "approved") updates.approvedAt = new Date();
+
+    const [updated] = await db!.update(projectDeliverables).set(updates).where(and(eq(projectDeliverables.id, req.params.id as string), eq(projectDeliverables.projectId, project.id))).returning();
+    if (!updated) return res.status(404).json({ message: "Entrega no encontrada" });
+    res.json(updated);
+  });
+
+  // Portal time log summary
+  app.get("/api/portal/:token/timelog", async (req, res) => {
+    const project = await getProjectByToken(req.params.token as string);
+    if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+
+    const logs = await db!.select().from(projectTimeLog).where(eq(projectTimeLog.projectId, project.id)).orderBy(desc(projectTimeLog.createdAt));
+
+    // Aggregate by category
+    const byCategory: Record<string, number> = {};
+    const byWeek: Record<string, number> = {};
+    for (const log of logs) {
+      const cat = log.category;
+      const hrs = parseFloat(String(log.hours));
+      byCategory[cat] = (byCategory[cat] || 0) + hrs;
+      // Week key: ISO week
+      const d = new Date(log.date);
+      const weekStart = new Date(d);
+      weekStart.setDate(d.getDate() - d.getDay());
+      const weekKey = weekStart.toISOString().split("T")[0];
+      byWeek[weekKey] = (byWeek[weekKey] || 0) + hrs;
+    }
+
+    res.json({ byCategory, byWeek, totalHours: Object.values(byCategory).reduce((a, b) => a + b, 0) });
+  });
+
+  // Portal messages
+  app.get("/api/portal/:token/messages", async (req, res) => {
+    const project = await getProjectByToken(req.params.token as string);
+    if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+
+    const msgs = await db!.select().from(projectMessages).where(eq(projectMessages.projectId, project.id)).orderBy(asc(projectMessages.createdAt));
+    res.json(msgs);
+  });
+
+  // Portal: send message (client side)
+  app.post("/api/portal/:token/messages", async (req, res) => {
+    const project = await getProjectByToken(req.params.token as string);
+    if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+
+    const [msg] = await db!.insert(projectMessages).values({
+      projectId: project.id,
+      senderType: "client",
+      senderName: req.body.senderName || "Cliente",
+      content: req.body.content,
+    }).returning();
+    res.json(msg);
+  });
+
+  // Portal: mark messages as read
+  app.patch("/api/portal/:token/messages/read", async (req, res) => {
+    const project = await getProjectByToken(req.params.token as string);
+    if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+
+    await db!.update(projectMessages).set({ isRead: true }).where(and(eq(projectMessages.projectId, project.id), eq(projectMessages.senderType, "team")));
+    res.json({ success: true });
   });
 
   return httpServer;

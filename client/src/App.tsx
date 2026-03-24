@@ -56,10 +56,13 @@ const AdminCalendar = lazy(() => import("@/pages/admin/calendar"));
 const AdminTasks = lazy(() => import("@/pages/admin/tasks"));
 const AdminTemplates = lazy(() => import("@/pages/admin/templates"));
 const AdminPipeline = lazy(() => import("@/pages/admin/pipeline"));
+const AdminProjects = lazy(() => import("@/pages/admin/projects"));
+const AdminProjectDetail = lazy(() => import("@/pages/admin/project-detail"));
 const AdminBlog = lazy(() => import("@/pages/admin/blog"));
 const AdminBlogEditor = lazy(() => import("@/pages/admin/blog-editor"));
 const Blog = lazy(() => import("@/pages/blog"));
 const BlogPost = lazy(() => import("@/pages/blog-post"));
+const Portal = lazy(() => import("@/pages/portal"));
 const AdminLayout = lazy(() => import("@/pages/admin/layout"));
 
 function ProtectedAdmin({ children }: { children: React.ReactNode }) {
@@ -88,6 +91,7 @@ function Router() {
         <Route path="/booking" component={Booking} />
         <Route path="/confirmed" component={Confirmed} />
         <Route path="/reschedule/:contactId" component={Reschedule} />
+        <Route path="/portal/:token" component={Portal} />
         <Route path="/blog/:slug" component={BlogPost} />
         <Route path="/blog" component={Blog} />
         <Route path="/admin/login" component={AdminLogin} />
@@ -123,6 +127,18 @@ function Router() {
         <Route path="/admin/calendar">
           <ProtectedAdmin>
             <AdminCalendar />
+          </ProtectedAdmin>
+        </Route>
+        <Route path="/admin/projects/:id">
+          {() => (
+            <ProtectedAdmin>
+              <AdminProjectDetail />
+            </ProtectedAdmin>
+          )}
+        </Route>
+        <Route path="/admin/projects">
+          <ProtectedAdmin>
+            <AdminProjects />
           </ProtectedAdmin>
         </Route>
         <Route path="/admin/pipeline">

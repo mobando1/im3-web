@@ -15,7 +15,7 @@ export const step1Schema = z.object({
   empleados: z.string().min(1, "Seleccione una opción"),
   ciudades: z.string().min(1, "Requerido"),
   participante: z.string().min(1, "Requerido"),
-  telefono: z.string().optional(),
+  telefono: z.string().min(1, "El teléfono es obligatorio"),
 });
 
 // Step 2 — Contexto de la auditoría

@@ -119,10 +119,10 @@ export default function StepGeneral({ form }: StepProps) {
         {errors.participante && <p className="text-xs text-destructive">{errors.participante.message}</p>}
       </div>
 
-      {/* Q7 — Teléfono (opcional) */}
+      {/* Q7 — Teléfono */}
       <div className="space-y-2">
         <Label htmlFor="telefono" className="text-sm font-medium">
-          Teléfono / WhatsApp <span className="text-muted-foreground font-normal">(opcional)</span>
+          Teléfono / WhatsApp
         </Label>
         <Input
           id="telefono"

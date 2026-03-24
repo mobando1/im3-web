@@ -90,7 +90,7 @@ function getCrawlerContent(): string {
     <main>
       <article>
         <h1>IM3 Systems — Desarrollo de software con inteligencia artificial para empresas</h1>
-        <p>Desarrollamos software a medida con inteligencia artificial para PYMEs en Latinoamérica y España. Chatbots de WhatsApp con IA, automatización inteligente de procesos, dashboards con IA y aplicaciones internas. Diagnóstico gratuito.</p>
+        <p>Desarrollamos software a medida con inteligencia artificial para PYMEs. Chatbots de WhatsApp con IA, automatización inteligente de procesos, dashboards con IA y aplicaciones internas. Diagnóstico gratuito.</p>
 
         <section>
           <h2>Qué construimos</h2>
@@ -204,10 +204,10 @@ function getCrawlerContent(): string {
           <p>Cada proyecto es diferente. El diagnóstico inicial es gratuito y al final entregamos una propuesta clara con alcance, tiempos y costos definidos. Sin sorpresas.</p>
 
           <h3>¿Qué tipo de empresas atiende IM3 Systems?</h3>
-          <p>PYMEs en Latinoamérica y España que necesitan software a medida, automatización de procesos o inteligencia artificial aplicada a su operación. Industrias: retail, logística, servicios, educación, alimentos, manufactura.</p>
+          <p>PYMEs que necesitan software a medida, automatización de procesos o inteligencia artificial aplicada a su operación. Industrias: retail, logística, servicios, educación, alimentos, manufactura.</p>
 
           <h3>¿En qué países trabaja IM3 Systems?</h3>
-          <p>Operamos en Colombia y toda Latinoamérica, así como en España. El servicio es completamente remoto.</p>
+          <p>Operamos de forma 100% remota a nivel global.</p>
         </section>
 
         <section>
