@@ -533,6 +533,20 @@ export default function ContactDetailPage() {
     },
   });
 
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteCopied, setInviteCopied] = useState(false);
+
+  const inviteMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/invitations", { contactId });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      const baseUrl = window.location.origin;
+      setInviteLink(`${baseUrl}${data.inviteUrl}`);
+    },
+  });
+
   const deleteContactMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("DELETE", `/api/admin/contacts/${contactId}`);
@@ -696,6 +710,40 @@ export default function ContactDetailPage() {
             <MessageCircle className="w-3.5 h-3.5" />
             {whatsAppMutation.isPending ? "Generando..." : "WhatsApp"}
           </Button>
+          {inviteLink ? (
+            <div className="flex items-center gap-1.5">
+              <Input
+                value={inviteLink}
+                readOnly
+                className="h-8 text-xs w-52 bg-blue-50 border-blue-200 text-blue-700"
+                onClick={(e) => (e.target as HTMLInputElement).select()}
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(inviteLink);
+                  setInviteCopied(true);
+                  setTimeout(() => setInviteCopied(false), 2000);
+                }}
+                className="border-blue-200 text-blue-600 hover:bg-blue-50 gap-1"
+              >
+                {inviteCopied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {inviteCopied ? "Copiado" : "Copiar"}
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => inviteMutation.mutate()}
+              disabled={inviteMutation.isPending}
+              className="border-blue-200 text-blue-600 hover:text-blue-700 hover:bg-blue-50 gap-1.5"
+            >
+              <ExternalLink className="w-3.5 h-3.5" />
+              {inviteMutation.isPending ? "Generando..." : "Invitar al portal"}
+            </Button>
+          )}
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button

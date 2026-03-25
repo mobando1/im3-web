@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, invitations } from "@shared/schema";
 import { generateBlogContent, improveBlogContent } from "./blog-ai";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
@@ -10,7 +10,7 @@ import { createCalendarEvent, deleteCalendarEvent } from "./google-calendar";
 import { isEmailConfigured, sendEmail } from "./email-sender";
 import { generateEmailContent, buildMicroReminderEmail, build6hReminderEmail, buildFollowUpConfirmationEmail, buildNoShowEmail, generateDailyNewsDigest, generateContactInsight, generateWhatsAppMessage, generateNewsletterWelcome, generateMiniAudit, classifyWhatsAppIntent, generateWhatsAppAutoReply, buildWhatsAppNotificationEmail } from "./email-ai";
 import { parseFechaCita } from "./date-utils";
-import { requireAuth, hashPassword } from "./auth";
+import { requireAuth, requireAdmin, requireClient, hashPassword } from "./auth";
 import { calculateLeadScore } from "./lead-scoring";
 import { isWhatsAppConfigured, calculateWhatsAppSchedule, WHATSAPP_SEQUENCE, sendWhatsAppText } from "./whatsapp";
 import passport from "passport";
@@ -1315,7 +1315,7 @@ export async function registerRoutes(
       if (!user) return res.status(401).json({ error: info?.message || "Credenciales inválidas" });
       req.logIn(user, (err) => {
         if (err) return next(err);
-        res.json({ id: user.id, username: user.username });
+        res.json({ id: user.id, username: user.username, role: user.role, displayName: user.displayName });
       });
     })(req, res, next);
   });
@@ -1330,7 +1330,7 @@ export async function registerRoutes(
   app.get("/api/auth/me", (req, res) => {
     if (!req.isAuthenticated()) return res.status(401).json({ error: "No autorizado" });
     const user = req.user as any;
-    res.json({ id: user.id, username: user.username });
+    res.json({ id: user.id, username: user.username, role: user.role, displayName: user.displayName });
   });
 
   // ========== ADMIN API ENDPOINTS ==========
@@ -4259,6 +4259,204 @@ ${urls}
         </div>
       </body>
     </html>`);
+  });
+
+  // ========== INVITATION ENDPOINTS ==========
+
+  // Admin creates invitation for a contact
+  app.post("/api/admin/invitations", requireAdmin, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const { contactId } = req.body;
+      if (!contactId) return res.status(400).json({ error: "contactId requerido" });
+
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId));
+      if (!contact) return res.status(404).json({ error: "Contacto no encontrado" });
+
+      // Check if contact already has an active invitation
+      const [existing] = await db.select().from(invitations)
+        .where(and(eq(invitations.contactId, contactId), eq(invitations.status, "pending")));
+      if (existing) {
+        return res.json({ inviteUrl: `/invite/${existing.token}`, token: existing.token, existing: true });
+      }
+
+      const { randomUUID } = await import("crypto");
+      const token = randomUUID();
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
+
+      const [invitation] = await db.insert(invitations).values({
+        token,
+        contactId,
+        createdBy: (req.user as any).id,
+        email: contact.email,
+        expiresAt,
+      }).returning();
+
+      log(`Invitation created for ${contact.nombre} (${contact.email})`);
+      res.json({ inviteUrl: `/invite/${token}`, token, invitation });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Admin lists invitations
+  app.get("/api/admin/invitations", requireAdmin, async (_req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const all = await db.select().from(invitations).orderBy(desc(invitations.createdAt));
+
+      // Enrich with contact names
+      const enriched = await Promise.all(all.map(async (inv) => {
+        const [contact] = await db.select().from(contacts).where(eq(contacts.id, inv.contactId));
+        return { ...inv, contactName: contact?.nombre, contactEmpresa: contact?.empresa };
+      }));
+
+      res.json(enriched);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Public: validate invitation token
+  app.get("/api/invite/:token", async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const [invitation] = await db.select().from(invitations)
+        .where(eq(invitations.token, req.params.token));
+
+      if (!invitation) return res.status(404).json({ error: "Invitación no encontrada" });
+      if (invitation.status === "accepted") return res.status(400).json({ error: "Esta invitación ya fue utilizada" });
+      if (new Date() > invitation.expiresAt) {
+        await db.update(invitations).set({ status: "expired" }).where(eq(invitations.id, invitation.id));
+        return res.status(400).json({ error: "Esta invitación ha expirado" });
+      }
+
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, invitation.contactId));
+
+      res.json({
+        email: invitation.email,
+        contactName: contact?.nombre || "",
+        contactEmpresa: contact?.empresa || "",
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Public: accept invitation and create client account
+  app.post("/api/invite/:token/accept", async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const [invitation] = await db.select().from(invitations)
+        .where(eq(invitations.token, req.params.token));
+
+      if (!invitation) return res.status(404).json({ error: "Invitación no encontrada" });
+      if (invitation.status === "accepted") return res.status(400).json({ error: "Esta invitación ya fue utilizada" });
+      if (new Date() > invitation.expiresAt) return res.status(400).json({ error: "Esta invitación ha expirado" });
+
+      const { password } = req.body;
+      if (!password || password.length < 6) {
+        return res.status(400).json({ error: "La contraseña debe tener al menos 6 caracteres" });
+      }
+
+      // Check if user already exists for this contact
+      const [existingUser] = await db.select().from(users)
+        .where(eq(users.contactId, invitation.contactId));
+      if (existingUser) return res.status(400).json({ error: "Este contacto ya tiene una cuenta" });
+
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, invitation.contactId));
+
+      const hashedPassword = await hashPassword(password);
+      const [user] = await db.insert(users).values({
+        username: invitation.email,
+        password: hashedPassword,
+        role: "client",
+        contactId: invitation.contactId,
+        displayName: contact?.nombre || invitation.email,
+      }).returning();
+
+      // Mark invitation as accepted
+      await db.update(invitations).set({
+        status: "accepted",
+        acceptedAt: new Date(),
+      }).where(eq(invitations.id, invitation.id));
+
+      // Auto-login
+      req.logIn(user, (err) => {
+        if (err) return res.status(500).json({ error: "Error al iniciar sesión" });
+        log(`Client account created: ${user.username} (${user.displayName})`);
+        res.json({ success: true, user: { id: user.id, username: user.username, role: user.role, displayName: user.displayName } });
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // ========== CLIENT PORTAL ENDPOINTS ==========
+
+  // Get client's project info (their deals)
+  app.get("/api/portal/project", requireClient, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const user = req.user as any;
+      if (!user.contactId) return res.status(400).json({ error: "No hay proyecto asociado" });
+
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, user.contactId));
+      const clientDeals = await db.select().from(deals).where(eq(deals.contactId, user.contactId)).orderBy(desc(deals.createdAt));
+
+      // Get shared notes (contact notes)
+      const notes = await db.select().from(contactNotes)
+        .where(eq(contactNotes.contactId, user.contactId))
+        .orderBy(desc(contactNotes.createdAt))
+        .limit(20);
+
+      res.json({
+        contact: contact ? { nombre: contact.nombre, empresa: contact.empresa, email: contact.email } : null,
+        deals: clientDeals.map(d => ({
+          id: d.id,
+          title: d.title,
+          stage: d.stage,
+          value: d.value,
+          expectedCloseDate: d.expectedCloseDate,
+          notes: d.notes,
+          createdAt: d.createdAt,
+        })),
+        updates: notes.map(n => ({
+          id: n.id,
+          content: n.content,
+          createdAt: n.createdAt,
+        })),
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Get client's profile
+  app.get("/api/portal/profile", requireClient, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+
+    try {
+      const user = req.user as any;
+      if (!user.contactId) return res.status(400).json({ error: "No hay perfil asociado" });
+
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, user.contactId));
+      if (!contact) return res.status(404).json({ error: "Contacto no encontrado" });
+
+      res.json({
+        nombre: contact.nombre,
+        empresa: contact.empresa,
+        email: contact.email,
+        telefono: contact.telefono,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
   });
 
   return httpServer;

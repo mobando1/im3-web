@@ -108,3 +108,23 @@ export const requireAuth: RequestHandler = (req, res, next) => {
   }
   next();
 };
+
+export const requireAdmin: RequestHandler = (req, res, next) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: "No autorizado" });
+  }
+  if ((req.user as any).role !== "admin") {
+    return res.status(403).json({ error: "Acceso denegado" });
+  }
+  next();
+};
+
+export const requireClient: RequestHandler = (req, res, next) => {
+  if (!req.isAuthenticated()) {
+    return res.status(401).json({ error: "No autorizado" });
+  }
+  if ((req.user as any).role !== "client") {
+    return res.status(403).json({ error: "Acceso denegado" });
+  }
+  next();
+};

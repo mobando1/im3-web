@@ -61,9 +61,14 @@ const AdminBlogEditor = lazy(() => import("@/pages/admin/blog-editor"));
 const Blog = lazy(() => import("@/pages/blog"));
 const BlogPost = lazy(() => import("@/pages/blog-post"));
 const AdminLayout = lazy(() => import("@/pages/admin/layout"));
+const InviteLanding = lazy(() => import("@/pages/invite"));
+const PortalLogin = lazy(() => import("@/pages/portal/login"));
+const PortalProject = lazy(() => import("@/pages/portal/project"));
+const PortalProfile = lazy(() => import("@/pages/portal/profile"));
+const PortalLayout = lazy(() => import("@/pages/portal/layout"));
 
 function ProtectedAdmin({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, user } = useAuth();
 
   if (isLoading) {
     return <LoadingSpinner />;
@@ -73,10 +78,36 @@ function ProtectedAdmin({ children }: { children: React.ReactNode }) {
     return <Redirect to="/admin/login" />;
   }
 
+  if (user?.role === "client") {
+    return <Redirect to="/portal" />;
+  }
+
   return (
     <AdminLayout>
       {children}
     </AdminLayout>
+  );
+}
+
+function ProtectedClient({ children }: { children: React.ReactNode }) {
+  const { isAuthenticated, isLoading, user } = useAuth();
+
+  if (isLoading) {
+    return <LoadingSpinner />;
+  }
+
+  if (!isAuthenticated) {
+    return <Redirect to="/portal/login" />;
+  }
+
+  if (user?.role === "admin") {
+    return <Redirect to="/admin" />;
+  }
+
+  return (
+    <PortalLayout>
+      {children}
+    </PortalLayout>
   );
 }
 
@@ -90,6 +121,18 @@ function Router() {
         <Route path="/reschedule/:contactId" component={Reschedule} />
         <Route path="/blog/:slug" component={BlogPost} />
         <Route path="/blog" component={Blog} />
+        <Route path="/invite/:token" component={InviteLanding} />
+        <Route path="/portal/login" component={PortalLogin} />
+        <Route path="/portal/profile">
+          <ProtectedClient>
+            <PortalProfile />
+          </ProtectedClient>
+        </Route>
+        <Route path="/portal">
+          <ProtectedClient>
+            <PortalProject />
+          </ProtectedClient>
+        </Route>
         <Route path="/admin/login" component={AdminLogin} />
         <Route path="/admin/blog/new">
           <ProtectedAdmin>

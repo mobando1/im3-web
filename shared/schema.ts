@@ -7,6 +7,10 @@ export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  role: text("role").notNull().default("admin"), // "admin" | "client"
+  contactId: varchar("contact_id"), // links client to their contact record
+  displayName: text("display_name"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -16,6 +20,21 @@ export const insertUserSchema = createInsertSchema(users).pick({
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
+
+// Portal invitations
+export const invitations = pgTable("invitations", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  token: text("token").notNull().unique(),
+  contactId: varchar("contact_id").notNull(),
+  createdBy: varchar("created_by").notNull(),
+  email: text("email").notNull(),
+  status: text("status").notNull().default("pending"), // "pending" | "accepted" | "expired"
+  expiresAt: timestamp("expires_at").notNull(),
+  acceptedAt: timestamp("accepted_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type Invitation = typeof invitations.$inferSelect;
 
 // Diagnostic form submissions
 export const diagnostics = pgTable("diagnostics", {
