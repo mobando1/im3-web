@@ -31,6 +31,8 @@ type ProjectDetail = {
     description: string | null;
     orderIndex: number;
     status: string;
+    startDate: string | null;
+    endDate: string | null;
     estimatedHours: number | null;
     tasks: Array<{
       id: string;
@@ -40,6 +42,8 @@ type ProjectDetail = {
       priority: string;
       estimatedHours: number | null;
       actualHours: string | null;
+      dueDate: string | null;
+      isMilestone: boolean;
     }>;
   }>;
   deliverables: Array<{
