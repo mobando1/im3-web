@@ -8,7 +8,7 @@ import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
 import { createCalendarEvent, deleteCalendarEvent } from "./google-calendar";
 import { isEmailConfigured, sendEmail } from "./email-sender";
-import { generateEmailContent, buildMicroReminderEmail, build6hReminderEmail, buildFollowUpConfirmationEmail, buildNoShowEmail, generateDailyNewsDigest, generateContactInsight, generateWhatsAppMessage, generateNewsletterWelcome, generateMiniAudit, classifyWhatsAppIntent, generateWhatsAppAutoReply, buildWhatsAppNotificationEmail, buildProjectNotificationEmail } from "./email-ai";
+import { generateEmailContent, buildMicroReminderEmail, build6hReminderEmail, buildFollowUpConfirmationEmail, buildNoShowEmail, generateDailyNewsDigest, generateContactInsight, generateWhatsAppMessage, generateNewsletterWelcome, generateMiniAudit, classifyWhatsAppIntent, generateWhatsAppAutoReply, buildWhatsAppNotificationEmail, buildProjectNotificationEmail, escapeHtml } from "./email-ai";
 import { parseFechaCita } from "./date-utils";
 import { requireAuth, hashPassword } from "./auth";
 import { calculateLeadScore } from "./lead-scoring";
@@ -4703,12 +4703,16 @@ ${urls}
   app.patch("/api/admin/phases/:id", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
+      // Read previous status before updating (to avoid duplicate notifications)
+      const [prev] = await db.select({ status: projectPhases.status }).from(projectPhases).where(eq(projectPhases.id, req.params.id as string)).limit(1);
+      const prevStatus = prev?.status;
+
       const [updated] = await db.update(projectPhases).set({ ...req.body, updatedAt: new Date() }).where(eq(projectPhases.id, req.params.id as string)).returning();
       if (!updated) return res.status(404).json({ message: "Fase no encontrada" });
       res.json(updated);
 
-      // Notify client when phase is completed
-      if (req.body.status === "completed" && updated.projectId) {
+      // Notify client only when phase transitions TO completed (not if already completed)
+      if (req.body.status === "completed" && prevStatus !== "completed" && updated.projectId) {
         const [proj] = await db.select().from(clientProjects).where(eq(clientProjects.id, updated.projectId)).limit(1);
         if (proj?.contactId) {
           const [contact] = await db.select({ nombre: contacts.nombre }).from(contacts).where(eq(contacts.id, proj.contactId)).limit(1);
@@ -4868,8 +4872,11 @@ ${urls}
   // ── Messages (admin side) ──
 
   app.get("/api/admin/projects/:id/messages", requireAuth, async (req, res) => {
-    const msgs = await db!.select().from(projectMessages).where(eq(projectMessages.projectId, req.params.id as string)).orderBy(asc(projectMessages.createdAt));
-    res.json(msgs);
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const msgs = await db.select().from(projectMessages).where(eq(projectMessages.projectId, req.params.id as string)).orderBy(asc(projectMessages.createdAt));
+      res.json(msgs);
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   app.post("/api/admin/projects/:id/messages", requireAuth, async (req, res) => {
@@ -4885,7 +4892,7 @@ ${urls}
         const [contact] = await db.select({ nombre: contacts.nombre }).from(contacts).where(eq(contacts.id, proj.contactId)).limit(1);
         const baseUrl = process.env.BASE_URL || "https://im3systems.com";
         const portalUrl = `${baseUrl}/portal/${proj.accessToken}`;
-        const preview = msg.content.length > 150 ? msg.content.substring(0, 150) + "..." : msg.content;
+        const preview = escapeHtml(msg.content.length > 150 ? msg.content.substring(0, 150) + "..." : msg.content);
         const html = buildProjectNotificationEmail({
           projectName: proj.name,
           clientName: contact?.nombre || "Cliente",
@@ -5011,7 +5018,7 @@ ${urls}
           <p style="font-size:15px;color:#333;margin:0 0 16px">El cliente revisó la entrega <strong>"${updated.title}"</strong> del proyecto <strong>${project.name}</strong>.</p>
           <table style="width:100%;border-collapse:collapse;font-size:14px">
             <tr><td style="padding:6px 0;color:#666;width:120px">Estado</td><td style="padding:6px 0;font-weight:600">${label}${ratingStr}</td></tr>
-            ${clientComment ? `<tr><td style="padding:6px 0;color:#666">Comentario</td><td style="padding:6px 0">${clientComment}</td></tr>` : ""}
+            ${clientComment ? `<tr><td style="padding:6px 0;color:#666">Comentario</td><td style="padding:6px 0">${escapeHtml(clientComment)}</td></tr>` : ""}
           </table>
           <div style="margin-top:20px">
             <a href="${baseUrl}/admin/projects/${project.id}" style="display:inline-block;background:#3B82F6;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Ver proyecto →</a>
@@ -5048,34 +5055,40 @@ ${urls}
 
   // Portal messages
   app.get("/api/portal/:token/messages", async (req, res) => {
-    const project = await getProjectByToken(req.params.token as string);
-    if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
-
-    const msgs = await db!.select().from(projectMessages).where(eq(projectMessages.projectId, project.id)).orderBy(asc(projectMessages.createdAt));
-    res.json(msgs);
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const project = await getProjectByToken(req.params.token as string);
+      if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+      const msgs = await db.select().from(projectMessages).where(eq(projectMessages.projectId, project.id)).orderBy(asc(projectMessages.createdAt));
+      res.json(msgs);
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   // Portal: send message (client side)
   app.post("/api/portal/:token/messages", async (req, res) => {
-    const project = await getProjectByToken(req.params.token as string);
-    if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
-
-    const [msg] = await db!.insert(projectMessages).values({
-      projectId: project.id,
-      senderType: "client",
-      senderName: req.body.senderName || "Cliente",
-      content: req.body.content,
-    }).returning();
-    res.json(msg);
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const project = await getProjectByToken(req.params.token as string);
+      if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+      const [msg] = await db.insert(projectMessages).values({
+        projectId: project.id,
+        senderType: "client",
+        senderName: req.body.senderName || "Cliente",
+        content: req.body.content,
+      }).returning();
+      res.json(msg);
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   // Portal: mark messages as read
   app.patch("/api/portal/:token/messages/read", async (req, res) => {
-    const project = await getProjectByToken(req.params.token as string);
-    if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
-
-    await db!.update(projectMessages).set({ isRead: true }).where(and(eq(projectMessages.projectId, project.id), eq(projectMessages.senderType, "team")));
-    res.json({ success: true });
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const project = await getProjectByToken(req.params.token as string);
+      if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+      await db.update(projectMessages).set({ isRead: true }).where(and(eq(projectMessages.projectId, project.id), eq(projectMessages.senderType, "team")));
+      res.json({ success: true });
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   // Portal: pulse (current task + last 48h activity)

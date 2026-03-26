@@ -1212,6 +1212,11 @@ export function buildWhatsAppNotificationEmail(
   return { subject, body };
 }
 
+/** Escape HTML to prevent XSS in email templates */
+export function escapeHtml(str: string): string {
+  return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+}
+
 /**
  * Build a project notification email for the client portal.
  * Reusable template for all project-related notifications.

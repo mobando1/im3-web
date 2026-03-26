@@ -183,13 +183,13 @@ export default function AdminProjects() {
         </div>
       ) : viewMode === "kanban" ? (
         /* ── KANBAN VIEW ── */
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {["planning", "in_progress", "paused", "completed"].map(status => {
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          {["planning", "in_progress", "paused", "completed", "cancelled"].map(status => {
             const col = filtered.filter(p => p.status === status);
             return (
               <div key={status} className="space-y-3">
                 <div className="flex items-center gap-2 px-1">
-                  <div className={`w-2 h-2 rounded-full ${status === "planning" ? "bg-blue-500" : status === "in_progress" ? "bg-emerald-500" : status === "paused" ? "bg-amber-500" : "bg-gray-400"}`} />
+                  <div className={`w-2 h-2 rounded-full ${status === "planning" ? "bg-blue-500" : status === "in_progress" ? "bg-emerald-500" : status === "paused" ? "bg-amber-500" : status === "cancelled" ? "bg-red-500" : "bg-gray-400"}`} />
                   <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{STATUS_LABELS[status]}</h3>
                   <span className="text-xs text-gray-300">{col.length}</span>
                 </div>
