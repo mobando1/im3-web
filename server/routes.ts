@@ -8,7 +8,7 @@ import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
 import { createCalendarEvent, deleteCalendarEvent } from "./google-calendar";
 import { isEmailConfigured, sendEmail } from "./email-sender";
-import { generateEmailContent, buildMicroReminderEmail, build6hReminderEmail, buildFollowUpConfirmationEmail, buildNoShowEmail, generateDailyNewsDigest, generateContactInsight, generateWhatsAppMessage, generateNewsletterWelcome, generateMiniAudit, classifyWhatsAppIntent, generateWhatsAppAutoReply, buildWhatsAppNotificationEmail } from "./email-ai";
+import { generateEmailContent, buildMicroReminderEmail, build6hReminderEmail, buildFollowUpConfirmationEmail, buildNoShowEmail, generateDailyNewsDigest, generateContactInsight, generateWhatsAppMessage, generateNewsletterWelcome, generateMiniAudit, classifyWhatsAppIntent, generateWhatsAppAutoReply, buildWhatsAppNotificationEmail, buildProjectNotificationEmail } from "./email-ai";
 import { parseFechaCita } from "./date-utils";
 import { requireAuth, hashPassword } from "./auth";
 import { calculateLeadScore } from "./lead-scoring";
@@ -17,6 +17,28 @@ import passport from "passport";
 import { z } from "zod";
 import { analyzeCommitsForProject, generateWeeklySummary, calculateProjectHealth } from "./project-ai";
 import crypto from "crypto";
+
+/**
+ * Send a project notification email to the linked client contact.
+ * Non-blocking — errors are logged but don't affect the caller.
+ */
+async function notifyProjectClient(
+  projectId: string,
+  subject: string,
+  emailHtml: string
+) {
+  if (!db) return;
+  try {
+    const [project] = await db.select().from(clientProjects).where(eq(clientProjects.id, projectId)).limit(1);
+    if (!project?.contactId) return;
+    const [contact] = await db.select({ email: contacts.email, nombre: contacts.nombre, optedOut: contacts.optedOut })
+      .from(contacts).where(eq(contacts.id, project.contactId)).limit(1);
+    if (!contact?.email || contact.optedOut) return;
+    sendEmail(contact.email, subject, emailHtml).catch((err) => log(`Error sending project notification: ${err}`));
+  } catch (err) {
+    log(`Error in notifyProjectClient: ${err}`);
+  }
+}
 
 /**
  * COT timezone helpers — Colombia is UTC-5 with no DST.
@@ -4673,6 +4695,34 @@ ${urls}
       const [updated] = await db.update(projectPhases).set({ ...req.body, updatedAt: new Date() }).where(eq(projectPhases.id, req.params.id as string)).returning();
       if (!updated) return res.status(404).json({ message: "Fase no encontrada" });
       res.json(updated);
+
+      // Notify client when phase is completed
+      if (req.body.status === "completed" && updated.projectId) {
+        const [proj] = await db.select().from(clientProjects).where(eq(clientProjects.id, updated.projectId)).limit(1);
+        if (proj?.contactId) {
+          const [contact] = await db.select({ nombre: contacts.nombre }).from(contacts).where(eq(contacts.id, proj.contactId)).limit(1);
+          const allTasks = await db.select({ status: projectTasks.status }).from(projectTasks).where(eq(projectTasks.projectId, updated.projectId));
+          const completedCount = allTasks.filter(t => t.status === "completed").length;
+          const progress = allTasks.length > 0 ? Math.round((completedCount / allTasks.length) * 100) : 0;
+          const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+          const portalUrl = `${baseUrl}/portal/${proj.accessToken}`;
+          const html = buildProjectNotificationEmail({
+            projectName: proj.name,
+            clientName: contact?.nombre || "Cliente",
+            title: "Fase completada",
+            headerEmoji: "✅",
+            headerColor: "linear-gradient(135deg,#059669,#10B981)",
+            bodyLines: [
+              `La fase <strong>"${updated.name}"</strong> ha sido completada exitosamente.`,
+              `Tu proyecto avanza al <strong>${progress}%</strong> de progreso total.`,
+              "Entra al portal para ver el roadmap actualizado y las próximas fases.",
+            ],
+            ctaText: "Ver roadmap →",
+            ctaUrl: portalUrl,
+          });
+          notifyProjectClient(updated.projectId, `✅ Fase completada: ${updated.name}`, html);
+        }
+      }
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
@@ -4734,6 +4784,30 @@ ${urls}
     try {
       const [deliverable] = await db.insert(projectDeliverables).values({ ...req.body, projectId: req.params.id }).returning();
       res.json(deliverable);
+
+      // Notify client about new deliverable
+      const projectId = req.params.id as string;
+      const [proj] = await db.select().from(clientProjects).where(eq(clientProjects.id, projectId)).limit(1);
+      if (proj?.contactId) {
+        const [contact] = await db.select({ nombre: contacts.nombre }).from(contacts).where(eq(contacts.id, proj.contactId)).limit(1);
+        const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+        const portalUrl = `${baseUrl}/portal/${proj.accessToken}`;
+        const html = buildProjectNotificationEmail({
+          projectName: proj.name,
+          clientName: contact?.nombre || "Cliente",
+          title: "Nueva entrega disponible",
+          headerEmoji: "📦",
+          headerColor: "linear-gradient(135deg,#0F172A,#1E293B)",
+          bodyLines: [
+            `Hay una nueva entrega lista para tu revisión en el proyecto <strong>${proj.name}</strong>.`,
+            `<strong>${deliverable.title}</strong>${deliverable.description ? ` — ${deliverable.description}` : ""}`,
+            "Puedes revisarla, aprobarla o dejar comentarios directamente desde tu portal.",
+          ],
+          ctaText: "Ver entrega →",
+          ctaUrl: portalUrl,
+        });
+        notifyProjectClient(projectId, `📦 Nueva entrega: ${deliverable.title}`, html);
+      }
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
@@ -4788,8 +4862,35 @@ ${urls}
   });
 
   app.post("/api/admin/projects/:id/messages", requireAuth, async (req, res) => {
-    const [msg] = await db!.insert(projectMessages).values({ ...req.body, projectId: req.params.id as string, senderType: "team" }).returning();
-    res.json(msg);
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [msg] = await db.insert(projectMessages).values({ ...req.body, projectId: req.params.id as string, senderType: "team" }).returning();
+      res.json(msg);
+
+      // Notify client about new message
+      const projectId = req.params.id as string;
+      const [proj] = await db.select().from(clientProjects).where(eq(clientProjects.id, projectId)).limit(1);
+      if (proj?.contactId) {
+        const [contact] = await db.select({ nombre: contacts.nombre }).from(contacts).where(eq(contacts.id, proj.contactId)).limit(1);
+        const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+        const portalUrl = `${baseUrl}/portal/${proj.accessToken}`;
+        const preview = msg.content.length > 150 ? msg.content.substring(0, 150) + "..." : msg.content;
+        const html = buildProjectNotificationEmail({
+          projectName: proj.name,
+          clientName: contact?.nombre || "Cliente",
+          title: `Mensaje de ${msg.senderName}`,
+          headerEmoji: "💬",
+          bodyLines: [
+            `<strong>${msg.senderName}</strong> te envió un mensaje:`,
+            `<div style="background:#f8fafc;border-left:3px solid #2FA4A9;padding:12px 16px;border-radius:4px;margin:4px 0">${preview}</div>`,
+            "Responde directamente desde tu portal.",
+          ],
+          ctaText: "Ver conversación →",
+          ctaUrl: portalUrl,
+        });
+        notifyProjectClient(projectId, `💬 Nuevo mensaje en ${proj.name}`, html);
+      }
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   // ─────────────────────────────────────────────────────────────
@@ -5136,11 +5237,39 @@ ${urls}
 
   // Admin: update health status manually
   app.patch("/api/admin/projects/:id/health", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
     const { healthStatus, healthNote } = req.body;
-    const [updated] = await db!.update(clientProjects).set({ healthStatus, healthNote, updatedAt: new Date() })
+    const [updated] = await db.update(clientProjects).set({ healthStatus, healthNote, updatedAt: new Date() })
       .where(eq(clientProjects.id, req.params.id as string)).returning();
     if (!updated) return res.status(404).json({ message: "Proyecto no encontrado" });
     res.json(updated);
+
+    // Notify client about health status change
+    if (updated.contactId) {
+      const [contact] = await db.select({ nombre: contacts.nombre }).from(contacts).where(eq(contacts.id, updated.contactId)).limit(1);
+      const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+      const portalUrl = `${baseUrl}/portal/${updated.accessToken}`;
+      const statusLabels: Record<string, string> = { on_track: "en línea", ahead: "adelantado", at_risk: "en riesgo", behind: "atrasado" };
+      const statusLabel = statusLabels[healthStatus] || healthStatus;
+      const html = buildProjectNotificationEmail({
+        projectName: updated.name,
+        clientName: contact?.nombre || "Cliente",
+        title: "Actualización de estado",
+        headerEmoji: healthStatus === "on_track" || healthStatus === "ahead" ? "✅" : "⚠️",
+        headerColor: healthStatus === "on_track" ? "linear-gradient(135deg,#059669,#10B981)" :
+          healthStatus === "ahead" ? "linear-gradient(135deg,#0F766E,#2FA4A9)" :
+          healthStatus === "at_risk" ? "linear-gradient(135deg,#D97706,#F59E0B)" :
+          "linear-gradient(135deg,#DC2626,#EF4444)",
+        bodyLines: [
+          `El estado de tu proyecto ha sido actualizado a: <strong>${statusLabel}</strong>.`,
+          ...(healthNote ? [`<em>"${healthNote}"</em>`] : []),
+          "Entra al portal para ver los detalles completos.",
+        ],
+        ctaText: "Ver mi proyecto →",
+        ctaUrl: portalUrl,
+      });
+      notifyProjectClient(updated.id, `${healthStatus === "on_track" || healthStatus === "ahead" ? "✅" : "⚠️"} Tu proyecto está ${statusLabel}`, html);
+    }
   });
 
   // Admin: trigger manual analysis (fetch recent commits from GitHub API)

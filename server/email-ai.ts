@@ -1211,3 +1211,41 @@ export function buildWhatsAppNotificationEmail(
 
   return { subject, body };
 }
+
+/**
+ * Build a project notification email for the client portal.
+ * Reusable template for all project-related notifications.
+ */
+export function buildProjectNotificationEmail(opts: {
+  projectName: string;
+  clientName: string;
+  title: string;
+  headerColor?: string;
+  headerEmoji?: string;
+  bodyLines: string[];
+  ctaText: string;
+  ctaUrl: string;
+  footerNote?: string;
+}): string {
+  const { projectName, clientName, title, bodyLines, ctaText, ctaUrl, footerNote } = opts;
+  const headerColor = opts.headerColor || "linear-gradient(135deg,#0F172A,#1E293B)";
+  const headerEmoji = opts.headerEmoji || "📋";
+
+  const bodyHtml = bodyLines.map(line => `<p style="margin:0 0 12px;font-size:14px;line-height:1.6;color:#333">${line}</p>`).join("");
+
+  return `<div style="max-width:600px;margin:0 auto;font-family:'Segoe UI',Roboto,sans-serif;color:#1a1a1a">
+  <div style="background:${headerColor};padding:20px 28px;border-radius:8px 8px 0 0">
+    <h1 style="color:#fff;font-size:18px;margin:0">${headerEmoji} ${title}</h1>
+  </div>
+  <div style="padding:28px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px;background:#fff">
+    <p style="margin:0 0 16px;font-size:15px;color:#333">Hola <strong>${clientName}</strong>,</p>
+    ${bodyHtml}
+    <div style="margin:24px 0 16px;text-align:center">
+      <a href="${ctaUrl}" style="display:inline-block;background:#2FA4A9;color:#fff;padding:12px 28px;border-radius:8px;text-decoration:none;font-weight:600;font-size:14px">${ctaText}</a>
+    </div>
+    ${footerNote ? `<p style="margin:16px 0 0;font-size:12px;color:#999;text-align:center">${footerNote}</p>` : ""}
+    <p style="margin:24px 0 0;font-size:13px;color:#999;text-align:center">Proyecto: <strong>${projectName}</strong></p>
+    <p style="margin:4px 0 0;font-size:11px;color:#bbb;text-align:center">— Equipo IM3 Systems</p>
+  </div>
+</div>`;
+}

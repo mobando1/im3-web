@@ -1,8 +1,8 @@
 import cron from "node-cron";
 import { db } from "./db";
-import { sentEmails, emailTemplates, contacts, diagnostics, abandonedLeads, activityLog, notifications, newsletterSubscribers, newsletterSends, blogPosts, blogCategories, appointments, whatsappMessages } from "@shared/schema";
-import { eq, and, lte, not, gte, desc, inArray, or } from "drizzle-orm";
-import { generateEmailContent, build6hReminderEmail, buildMicroReminderEmail, generateDailyNewsDigest, generateWhatsAppMessage, generateReengagement } from "./email-ai";
+import { sentEmails, emailTemplates, contacts, diagnostics, abandonedLeads, activityLog, notifications, newsletterSubscribers, newsletterSends, blogPosts, blogCategories, appointments, whatsappMessages, clientProjects, projectTasks } from "@shared/schema";
+import { eq, and, lte, not, gte, desc, inArray, or, asc } from "drizzle-orm";
+import { generateEmailContent, build6hReminderEmail, buildMicroReminderEmail, generateDailyNewsDigest, generateWhatsAppMessage, generateReengagement, buildProjectNotificationEmail } from "./email-ai";
 import { sendEmail, isEmailConfigured } from "./email-sender";
 import { isWhatsAppConfigured, sendWhatsAppText, sendWhatsAppTemplate } from "./whatsapp";
 import { parseFechaCita } from "./date-utils";
@@ -960,6 +960,85 @@ async function sendAdminDailyBriefing() {
   }
 }
 
+/**
+ * Send weekly project summary emails to all active project clients.
+ * Uses generateWeeklySummary() from project-ai.ts to create AI summaries.
+ */
+async function sendWeeklyProjectSummaries() {
+  if (!db || !isEmailConfigured()) return;
+
+  try {
+    const { generateWeeklySummary } = await import("./project-ai");
+
+    // Get all active projects (in_progress or planning)
+    const activeProjects = await db.select().from(clientProjects)
+      .where(not(eq(clientProjects.status, "completed")));
+
+    if (activeProjects.length === 0) return;
+
+    let sentCount = 0;
+    const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+
+    for (const project of activeProjects) {
+      if (!project.contactId) continue;
+
+      // Get client contact
+      const [contact] = await db.select({ email: contacts.email, nombre: contacts.nombre, optedOut: contacts.optedOut })
+        .from(contacts).where(eq(contacts.id, project.contactId)).limit(1);
+      if (!contact?.email || contact.optedOut) continue;
+
+      // Generate AI summary
+      const summary = await generateWeeklySummary(project.id).catch(() => null);
+      if (!summary) continue;
+
+      // Calculate progress
+      const allTasks = await db.select({ status: projectTasks.status })
+        .from(projectTasks).where(eq(projectTasks.projectId, project.id));
+      const completedCount = allTasks.filter(t => t.status === "completed").length;
+      const progress = allTasks.length > 0 ? Math.round((completedCount / allTasks.length) * 100) : 0;
+
+      const portalUrl = `${baseUrl}/portal/${project.accessToken}`;
+      const html = buildProjectNotificationEmail({
+        projectName: project.name,
+        clientName: contact.nombre,
+        title: "Resumen semanal",
+        headerEmoji: "📊",
+        headerColor: "linear-gradient(135deg,#0F172A,#1E293B)",
+        bodyLines: [
+          `Aquí tienes el resumen de esta semana en tu proyecto:`,
+          `<div style="background:#f8fafc;border-left:3px solid #2FA4A9;padding:12px 16px;border-radius:4px">${summary}</div>`,
+          `Progreso general: <strong>${progress}%</strong> (${completedCount}/${allTasks.length} tareas completadas)`,
+        ],
+        ctaText: "Ver mi proyecto →",
+        ctaUrl: portalUrl,
+        footerNote: "Recibes este resumen cada lunes.",
+      });
+
+      await sendEmail(contact.email, `📊 Resumen semanal: ${project.name}`, html).catch(() => {});
+      sentCount++;
+
+      // Also post as a message in the portal
+      await db.insert((await import("@shared/schema")).projectMessages).values({
+        projectId: project.id,
+        senderType: "team",
+        senderName: "Resumen semanal",
+        content: summary,
+      }).catch(() => {});
+
+      // Update last summary timestamp
+      await db.update(clientProjects)
+        .set({ lastWeeklySummaryAt: new Date() })
+        .where(eq(clientProjects.id, project.id)).catch(() => {});
+    }
+
+    if (sentCount > 0) {
+      log(`Resúmenes semanales enviados: ${sentCount} proyecto(s)`);
+    }
+  } catch (err: any) {
+    log(`Error en resúmenes semanales de proyectos: ${err?.message || err}`);
+  }
+}
+
 export function startEmailScheduler() {
   if (!isEmailConfigured()) {
     log("⚠ Email system not configured (missing ANTHROPIC_API_KEY or RESEND_API_KEY)");
@@ -985,6 +1064,11 @@ export function startEmailScheduler() {
     await sendAdminDailyBriefing().catch(err => log(`Cron error admin briefing: ${err}`));
   });
 
+  // Weekly project summaries every Monday at 7:15 AM Colombia time (12:15 UTC)
+  cron.schedule("15 12 * * 1", async () => {
+    await sendWeeklyProjectSummaries().catch(err => log(`Cron error project summaries: ${err}`));
+  });
+
   // Weekly newsletter every Monday at 7:30 AM Colombia time (12:30 UTC)
   cron.schedule("30 12 * * 1", async () => {
     await generateAndSendDailyNewsletter().catch(err => log(`Cron error newsletter: ${err}`));
@@ -1007,5 +1091,5 @@ export function startEmailScheduler() {
     }
   }, 15_000);
 
-  log("Email scheduler iniciado (cada 15 min, briefing admin diario 7AM COT, newsletter lunes 7:30AM COT)");
+  log("Email scheduler iniciado (cada 15 min, briefing admin 7AM, resúmenes proyecto lunes 7:15AM, newsletter lunes 7:30AM COT)");
 }
