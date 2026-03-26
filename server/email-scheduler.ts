@@ -961,6 +961,96 @@ async function sendAdminDailyBriefing() {
 }
 
 /**
+ * Auto-analyze recent GitHub commits for all projects with AI tracking enabled.
+ * Fetches last 10 commits from GitHub API and processes any new ones.
+ */
+async function autoAnalyzeProjectCommits() {
+  if (!db) return;
+
+  try {
+    const { analyzeCommitsForProject } = await import("./project-ai");
+    const { projectActivityEntries } = await import("@shared/schema");
+
+    // Get projects with AI tracking enabled and a GitHub repo configured
+    const projects = await db.select().from(clientProjects)
+      .where(and(
+        eq(clientProjects.aiTrackingEnabled, true),
+        not(eq(clientProjects.status, "completed"))
+      ));
+
+    if (projects.length === 0) return;
+
+    let totalEntries = 0;
+
+    for (const project of projects) {
+      if (!project.githubRepoUrl) continue;
+
+      try {
+        const repoPath = project.githubRepoUrl.replace("https://github.com/", "").replace(/\/$/, "");
+        const ghHeaders: Record<string, string> = { "Accept": "application/vnd.github.v3+json", "User-Agent": "IM3-Systems-CRM" };
+        if (process.env.GITHUB_TOKEN) ghHeaders["Authorization"] = `Bearer ${process.env.GITHUB_TOKEN}`;
+
+        const ghRes = await fetch(`https://api.github.com/repos/${repoPath}/commits?per_page=10&since=${new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()}`, { headers: ghHeaders });
+        if (!ghRes.ok) {
+          log(`Auto-analyze: GitHub API error ${ghRes.status} for ${repoPath}`);
+          continue;
+        }
+
+        const ghCommits = await ghRes.json() as any[];
+        if (!ghCommits.length) continue;
+
+        // Check which commits we've already processed
+        const existingEntries = await db.select({ commitShas: projectActivityEntries.commitShas })
+          .from(projectActivityEntries)
+          .where(eq(projectActivityEntries.projectId, project.id));
+
+        const processedShas = new Set<string>();
+        for (const e of existingEntries) {
+          const shas = e.commitShas as string[] | null;
+          if (shas) shas.forEach(s => processedShas.add(s));
+        }
+
+        const newCommits = ghCommits.filter((c: any) => !processedShas.has(c.sha));
+        if (newCommits.length === 0) continue;
+
+        const commits = newCommits.map((c: any) => ({
+          sha: c.sha as string,
+          message: (c.commit?.message || "") as string,
+          filesChanged: [] as string[],
+          timestamp: (c.commit?.author?.date || new Date().toISOString()) as string,
+        }));
+
+        const results = await analyzeCommitsForProject(project.id, commits);
+        const commitShas = commits.map(c => c.sha);
+
+        for (const result of results) {
+          await db.insert(projectActivityEntries).values({
+            projectId: project.id,
+            source: "github_webhook",
+            commitShas: commitShas,
+            summaryLevel1: result.summaryLevel1,
+            summaryLevel2: result.summaryLevel2 || null,
+            summaryLevel3: result.summaryLevel3 || null,
+            category: result.category,
+            aiGenerated: true,
+            isSignificant: result.isSignificant,
+          });
+          totalEntries++;
+        }
+      } catch (err: any) {
+        log(`Auto-analyze error for project ${project.name}: ${err?.message}`);
+      }
+    }
+
+    if (totalEntries > 0) {
+      log(`Auto-analyze completado: ${totalEntries} entradas creadas para ${projects.length} proyecto(s)`);
+    }
+  } catch (err: any) {
+    log(`Error en auto-analyze de proyectos: ${err?.message || err}`);
+  }
+}
+
+/**
  * Send weekly project summary emails to all active project clients.
  * Uses generateWeeklySummary() from project-ai.ts to create AI summaries.
  */
@@ -1062,6 +1152,11 @@ export function startEmailScheduler() {
   // Daily admin briefing at 7:00 AM Colombia time (12:00 UTC) every day
   cron.schedule("0 12 * * *", async () => {
     await sendAdminDailyBriefing().catch(err => log(`Cron error admin briefing: ${err}`));
+  });
+
+  // Daily GitHub commit analysis at 6:00 AM Colombia time (11:00 UTC)
+  cron.schedule("0 11 * * *", async () => {
+    await autoAnalyzeProjectCommits().catch(err => log(`Cron error auto-analyze: ${err}`));
   });
 
   // Weekly project summaries every Monday at 7:15 AM Colombia time (12:15 UTC)

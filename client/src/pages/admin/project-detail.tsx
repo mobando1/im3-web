@@ -23,6 +23,9 @@ type ProjectDetail = {
   totalBudget: number | null;
   currency: string;
   accessToken: string;
+  githubRepoUrl: string | null;
+  githubWebhookSecret: string | null;
+  aiTrackingEnabled: boolean;
   progress: number;
   totalHours: number;
   phases: Array<{
@@ -825,28 +828,65 @@ export default function AdminProjectDetail() {
             </div>
 
             {/* GitHub integration */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
-              <h3 className="font-semibold text-gray-900">GitHub — Auto-tracking con AI</h3>
-              <p className="text-xs text-gray-500">Conecta un repositorio para que el portal se actualice automáticamente con cada push.</p>
-              <div className="space-y-2">
+            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+              <div>
+                <h3 className="font-semibold text-gray-900">GitHub — Auto-tracking con AI</h3>
+                <p className="text-xs text-gray-500 mt-1">Conecta un repositorio para que el portal se actualice automáticamente con cada push.</p>
+              </div>
+
+              <div className="space-y-3">
                 <div className="space-y-1.5">
                   <Label>URL del repositorio</Label>
                   <Input value={editForm.githubRepoUrl || ""} onChange={e => setEditForm(f => ({ ...f, githubRepoUrl: e.target.value }))} placeholder="https://github.com/owner/repo" />
                 </div>
+
                 <div className="space-y-1.5">
-                  <Label>Webhook URL (configurar en GitHub)</Label>
-                  <Input readOnly value={`${window.location.origin}/api/webhooks/github/${params.id}`} className="text-xs font-mono bg-gray-50" />
+                  <Label>Webhook URL <span className="text-gray-400 font-normal">(copiar y pegar en GitHub)</span></Label>
+                  <div className="flex gap-2">
+                    <Input readOnly value={`${window.location.origin}/api/webhooks/github/${params.id}`} className="text-xs font-mono bg-gray-50" />
+                    <Button variant="outline" size="sm" onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/api/webhooks/github/${params.id}`);
+                      toast({ title: "Webhook URL copiada" });
+                    }}><Copy className="w-4 h-4" /></Button>
+                  </div>
                 </div>
+
+                {project.githubWebhookSecret && (
+                  <div className="space-y-1.5">
+                    <Label>Webhook Secret <span className="text-gray-400 font-normal">(copiar en GitHub → Settings → Webhooks)</span></Label>
+                    <div className="flex gap-2">
+                      <Input readOnly value={project.githubWebhookSecret} className="text-xs font-mono bg-gray-50" />
+                      <Button variant="outline" size="sm" onClick={() => {
+                        navigator.clipboard.writeText(project.githubWebhookSecret!);
+                        toast({ title: "Secret copiado" });
+                      }}><Copy className="w-4 h-4" /></Button>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="flex items-center gap-3">
-                <Button size="sm" variant="outline" onClick={() => {
+
+              {/* Setup instructions */}
+              <details className="text-xs text-gray-500">
+                <summary className="cursor-pointer font-medium text-gray-600 hover:text-gray-900">Instrucciones de configuración</summary>
+                <ol className="mt-2 space-y-1.5 pl-4 list-decimal">
+                  <li>Ve a tu repositorio en GitHub → Settings → Webhooks → Add webhook</li>
+                  <li>Pega la <strong>Webhook URL</strong> de arriba en "Payload URL"</li>
+                  <li>Content type: <code>application/json</code></li>
+                  {project.githubWebhookSecret && <li>Pega el <strong>Secret</strong> de arriba</li>}
+                  <li>Selecciona "Just the push event"</li>
+                  <li>Click "Add webhook"</li>
+                </ol>
+              </details>
+
+              <div className="flex flex-wrap items-center gap-2 pt-1">
+                <Button size="sm" className="bg-[#2FA4A9] hover:bg-[#238b8f]" onClick={() => {
                   updateProjectMut.mutate({ githubRepoUrl: editForm.githubRepoUrl || null, aiTrackingEnabled: true });
                 }}>
-                  Guardar y activar AI tracking
+                  {project.aiTrackingEnabled ? "Actualizar" : "Activar AI tracking"}
                 </Button>
                 <Button size="sm" variant="outline" onClick={() => {
                   apiRequest("POST", `/api/admin/projects/${params.id}/analyze`).then(() => {
-                    toast({ title: "Análisis iniciado" });
+                    toast({ title: "Análisis completado" });
                     invalidate();
                   }).catch(() => toast({ title: "Error al analizar", variant: "destructive" }));
                 }}>
@@ -861,6 +901,12 @@ export default function AdminProjectDetail() {
                   Generar resumen semanal
                 </Button>
               </div>
+
+              {project.aiTrackingEnabled && (
+                <p className="text-[11px] text-emerald-600 flex items-center gap-1">
+                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> AI tracking activo — los commits se analizan automáticamente
+                </p>
+              )}
             </div>
 
             {/* Portal link */}

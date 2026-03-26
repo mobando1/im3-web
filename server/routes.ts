@@ -4628,7 +4628,18 @@ ${urls}
   app.patch("/api/admin/projects/:id", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
-      const [updated] = await db.update(clientProjects).set({ ...req.body, updatedAt: new Date() }).where(eq(clientProjects.id, req.params.id as string)).returning();
+      const updates = { ...req.body, updatedAt: new Date() };
+
+      // Auto-generate webhook secret when AI tracking is enabled for the first time
+      if (updates.aiTrackingEnabled) {
+        const [existing] = await db.select({ secret: clientProjects.githubWebhookSecret })
+          .from(clientProjects).where(eq(clientProjects.id, req.params.id as string)).limit(1);
+        if (!existing?.secret) {
+          updates.githubWebhookSecret = crypto.randomBytes(32).toString("hex");
+        }
+      }
+
+      const [updated] = await db.update(clientProjects).set(updates).where(eq(clientProjects.id, req.params.id as string)).returning();
       if (!updated) return res.status(404).json({ message: "Proyecto no encontrado" });
       res.json(updated);
     } catch (err: any) {
@@ -5280,11 +5291,11 @@ ${urls}
     if (!project.githubRepoUrl) return res.status(400).json({ message: "No hay repositorio de GitHub configurado" });
 
     try {
-      // Fetch last 20 commits from GitHub API (public repos, no auth needed)
+      // Fetch last 20 commits from GitHub API (supports private repos with GITHUB_TOKEN)
       const repoPath = project.githubRepoUrl.replace("https://github.com/", "").replace(/\/$/, "");
-      const ghRes = await fetch(`https://api.github.com/repos/${repoPath}/commits?per_page=20`, {
-        headers: { "Accept": "application/vnd.github.v3+json", "User-Agent": "IM3-Systems-CRM" },
-      });
+      const ghHeaders: Record<string, string> = { "Accept": "application/vnd.github.v3+json", "User-Agent": "IM3-Systems-CRM" };
+      if (process.env.GITHUB_TOKEN) ghHeaders["Authorization"] = `Bearer ${process.env.GITHUB_TOKEN}`;
+      const ghRes = await fetch(`https://api.github.com/repos/${repoPath}/commits?per_page=20`, { headers: ghHeaders });
 
       if (!ghRes.ok) return res.status(400).json({ message: `GitHub API error: ${ghRes.status}` });
 
