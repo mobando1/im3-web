@@ -94,6 +94,15 @@ type UnifiedEmailItem = {
   fromEmail: string | null;
 };
 
+type AssociatedEmail = {
+  id: string;
+  contactId: string;
+  email: string;
+  nombre: string | null;
+  role: string | null;
+  createdAt: string;
+};
+
 type ContactNote = {
   id: string;
   contactId: string;
@@ -395,6 +404,10 @@ export default function ContactDetailPage() {
   const [followUpNotes, setFollowUpNotes] = useState("");
   const [emailFilter, setEmailFilter] = useState<"all" | "inbound" | "outbound">("all");
   const [expandedTimelineEmail, setExpandedTimelineEmail] = useState<string | null>(null);
+  const [newAssocEmail, setNewAssocEmail] = useState("");
+  const [newAssocNombre, setNewAssocNombre] = useState("");
+  const [newAssocRole, setNewAssocRole] = useState("");
+  const [showAssocForm, setShowAssocForm] = useState(false);
 
   const contactId = params?.id;
 
@@ -447,6 +460,33 @@ export default function ContactDetailPage() {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/email-timeline`] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/gmail-sync-status"] });
       queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/activity`] });
+    },
+  });
+
+  const { data: associatedEmails = [] } = useQuery<AssociatedEmail[]>({
+    queryKey: [`/api/admin/contacts/${contactId}/associated-emails`],
+    enabled: !!contactId,
+  });
+
+  const addAssocEmailMutation = useMutation({
+    mutationFn: async (data: { email: string; nombre: string; role: string }) => {
+      await apiRequest("POST", `/api/admin/contacts/${contactId}/associated-emails`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/associated-emails`] });
+      setNewAssocEmail("");
+      setNewAssocNombre("");
+      setNewAssocRole("");
+      setShowAssocForm(false);
+    },
+  });
+
+  const deleteAssocEmailMutation = useMutation({
+    mutationFn: async (emailId: string) => {
+      await apiRequest("DELETE", `/api/admin/contacts/${contactId}/associated-emails/${emailId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/associated-emails`] });
     },
   });
 
@@ -1560,6 +1600,96 @@ export default function ContactDetailPage() {
               </CardContent>
             </Card>
           )}
+
+          {/* Associated Emails (stakeholders) */}
+          <Card className="bg-white border-gray-200 shadow-sm">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">
+                  Emails Asociados ({associatedEmails.length})
+                </CardTitle>
+                <button
+                  onClick={() => setShowAssocForm(!showAssocForm)}
+                  className="text-xs text-[#2FA4A9] hover:text-[#238b8f] flex items-center gap-1"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  Agregar
+                </button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-[11px] text-gray-400">
+                Registra emails de personas del equipo del cliente. El sistema detecta automaticamente emails de estos contactos y del mismo dominio.
+              </p>
+
+              {/* Primary email */}
+              <div className="flex items-center gap-2 p-2 rounded-md bg-gray-50">
+                <Mail className="w-3.5 h-3.5 text-[#2FA4A9] shrink-0" />
+                <span className="text-sm text-gray-700 flex-1 truncate">{data?.contact?.email}</span>
+                <Badge variant="outline" className="text-[10px] bg-teal-50 text-teal-600 border-teal-200">Principal</Badge>
+              </div>
+
+              {/* Associated emails */}
+              {associatedEmails.map(ae => (
+                <div key={ae.id} className="flex items-center gap-2 p-2 rounded-md bg-gray-50 group">
+                  <Mail className="w-3.5 h-3.5 text-blue-400 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <span className="text-sm text-gray-700 truncate block">{ae.email}</span>
+                    {(ae.nombre || ae.role) && (
+                      <span className="text-[11px] text-gray-400">{[ae.nombre, ae.role].filter(Boolean).join(" — ")}</span>
+                    )}
+                  </div>
+                  <button
+                    onClick={() => deleteAssocEmailMutation.mutate(ae.id)}
+                    className="text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                    title="Eliminar"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+
+              {/* Add form */}
+              {showAssocForm && (
+                <div className="p-3 rounded-lg border border-gray-200 bg-gray-50 space-y-2">
+                  <Input
+                    placeholder="Email *"
+                    type="email"
+                    value={newAssocEmail}
+                    onChange={e => setNewAssocEmail(e.target.value)}
+                    className="bg-white border-gray-200 text-sm h-9"
+                  />
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Nombre"
+                      value={newAssocNombre}
+                      onChange={e => setNewAssocNombre(e.target.value)}
+                      className="bg-white border-gray-200 text-sm h-9"
+                    />
+                    <Input
+                      placeholder="Rol (CTO, PM...)"
+                      value={newAssocRole}
+                      onChange={e => setNewAssocRole(e.target.value)}
+                      className="bg-white border-gray-200 text-sm h-9"
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => addAssocEmailMutation.mutate({ email: newAssocEmail, nombre: newAssocNombre, role: newAssocRole })}
+                      disabled={!newAssocEmail || addAssocEmailMutation.isPending}
+                      className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white text-xs"
+                    >
+                      {addAssocEmailMutation.isPending ? "Guardando..." : "Guardar"}
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setShowAssocForm(false)} className="border-gray-200 text-gray-600 text-xs">
+                      Cancelar
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Unified Email Timeline (Gmail + Resend) */}
           <Card className="bg-white border-gray-200 shadow-sm">

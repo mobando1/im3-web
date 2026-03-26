@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, gmailEmails, gmailSyncState } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, gmailEmails, gmailSyncState, contactEmails } from "@shared/schema";
 import { syncGmailEmails, isGmailConfigured } from "./google-gmail";
 import { generateBlogContent, improveBlogContent } from "./blog-ai";
 import { log } from "./index";
@@ -2033,6 +2033,7 @@ export async function registerRoutes(
       await db.delete(notifications).where(eq(notifications.contactId, contactId));
       await db.delete(aiInsightsCache).where(eq(aiInsightsCache.contactId, contactId));
       await db.delete(gmailEmails).where(eq(gmailEmails.contactId, contactId));
+      await db.delete(contactEmails).where(eq(contactEmails.contactId, contactId));
 
       // Delete the contact
       await db.delete(contacts).where(eq(contacts.id, contactId));
@@ -6644,6 +6645,64 @@ ${urls}
       });
       res.json({ ok: true });
     } catch { res.json({ ok: true }); }
+  });
+
+  // ───────────────────────────────────────────────────────────────
+  // Contact Associated Emails (stakeholders, team members)
+  // ───────────────────────────────────────────────────────────────
+
+  // List associated emails for a contact
+  app.get("/api/admin/contacts/:id/associated-emails", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const rows = await db.select().from(contactEmails)
+        .where(eq(contactEmails.contactId, req.params.id as string))
+        .orderBy(desc(contactEmails.createdAt));
+      res.json(rows);
+    } catch (err: unknown) {
+      res.status(500).json({ error: "Error fetching associated emails" });
+    }
+  });
+
+  // Add associated email to a contact
+  app.post("/api/admin/contacts/:id/associated-emails", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const { email, nombre, role } = req.body;
+    if (!email) return res.status(400).json({ error: "Email es requerido" });
+
+    try {
+      const [created] = await db.insert(contactEmails).values({
+        contactId: req.params.id as string,
+        email: email.toLowerCase().trim(),
+        nombre: nombre || null,
+        role: role || null,
+      }).returning();
+
+      await logActivity(req.params.id as string, "contact_edited", `Email asociado agregado: ${email}${nombre ? ` (${nombre})` : ""}`, { associatedEmailId: created.id });
+
+      res.json(created);
+    } catch (err: unknown) {
+      log(`Error adding associated email: ${(err as Error).message}`);
+      res.status(500).json({ error: "Error adding associated email" });
+    }
+  });
+
+  // Delete associated email
+  app.delete("/api/admin/contacts/:id/associated-emails/:emailId", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [deleted] = await db.delete(contactEmails)
+        .where(eq(contactEmails.id, req.params.emailId as string))
+        .returning();
+
+      if (!deleted) return res.status(404).json({ error: "Not found" });
+
+      await logActivity(req.params.id as string, "contact_edited", `Email asociado eliminado: ${deleted.email}`);
+
+      res.json({ success: true });
+    } catch (err: unknown) {
+      res.status(500).json({ error: "Error deleting associated email" });
+    }
   });
 
   // ───────────────────────────────────────────────────────────────
