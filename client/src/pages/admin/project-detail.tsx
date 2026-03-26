@@ -1209,9 +1209,22 @@ export default function AdminProjectDetail() {
         {/* ── SESIONES ── */}
         {activeTab === "Sesiones" && (
           <div className="space-y-4">
-            <div className="flex justify-end">
+            {/* CTA to record */}
+            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-5 flex items-center gap-4">
+              <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
+                <Mic className="w-6 h-6" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold text-gray-900">Grabar nueva sesión</h3>
+                <p className="text-xs text-gray-500 mt-0.5">Abre Acta para grabar, transcribir y analizar la reunión con el cliente.</p>
+              </div>
+              <a href="https://brave-kindness-production-049c.up.railway.app" target="_blank" rel="noopener noreferrer">
+                <Button size="sm" className="bg-purple-600 hover:bg-purple-700">
+                  <Mic className="w-3.5 h-3.5 mr-1.5" /> Abrir Acta
+                </Button>
+              </a>
               <Button size="sm" variant="outline" onClick={() => setShowAddSession(true)}>
-                <Mic className="w-3.5 h-3.5 mr-1.5" /> Nueva sesión
+                <Plus className="w-3.5 h-3.5 mr-1.5" /> Registrar manualmente
               </Button>
             </div>
 
