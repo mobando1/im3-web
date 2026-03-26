@@ -5755,6 +5755,90 @@ ${urls}
   });
 
   // ─────────────────────────────────────────────────────────────
+  // Auditorías — Proxy al Audit Generator microservice
+  // ─────────────────────────────────────────────────────────────
+
+  const AUDIT_URL = process.env.AUDIT_GENERATOR_URL || "";
+
+  app.get("/api/admin/auditorias", requireAuth, async (_req, res) => {
+    if (!AUDIT_URL) return res.json([]);
+    try {
+      const r = await fetch(`${AUDIT_URL}/api/audits`);
+      res.json(await r.json());
+    } catch { res.json([]); }
+  });
+
+  app.post("/api/admin/auditorias/generate", requireAuth, async (req, res) => {
+    if (!AUDIT_URL) return res.status(400).json({ message: "Audit Generator no configurado" });
+    try {
+      const r = await fetch(`${AUDIT_URL}/api/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req.body),
+      });
+      res.status(r.status).json(await r.json());
+    } catch (err: unknown) {
+      res.status(500).json({ message: `Error: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  });
+
+  app.get("/api/admin/auditorias/:id/status", requireAuth, async (req, res) => {
+    if (!AUDIT_URL) return res.status(400).json({ message: "No configurado" });
+    try {
+      const r = await fetch(`${AUDIT_URL}/api/status/${req.params.id as string}`);
+      res.status(r.status).json(await r.json());
+    } catch { res.status(500).json({ message: "Error consultando estado" }); }
+  });
+
+  app.get("/api/admin/auditorias/:id/download", requireAuth, async (req, res) => {
+    if (!AUDIT_URL) return res.status(400).json({ message: "No configurado" });
+    try {
+      const r = await fetch(`${AUDIT_URL}/api/download/${req.params.id as string}`);
+      if (!r.ok) return res.status(r.status).json({ message: "PDF no disponible" });
+      res.set("Content-Type", "application/pdf");
+      res.set("Content-Disposition", `attachment; filename="auditoria-${req.params.id}.pdf"`);
+      const buffer = await r.arrayBuffer();
+      res.send(Buffer.from(buffer));
+    } catch { res.status(500).json({ message: "Error descargando PDF" }); }
+  });
+
+  app.get("/api/admin/auditorias/:id/guide", requireAuth, async (req, res) => {
+    if (!AUDIT_URL) return res.status(400).json({ message: "No configurado" });
+    try {
+      const r = await fetch(`${AUDIT_URL}/api/guide/${req.params.id as string}`);
+      res.status(r.status).json(await r.json());
+    } catch { res.status(500).json({ message: "Error obteniendo guía" }); }
+  });
+
+  app.post("/api/admin/auditorias/:id/action-plan", requireAuth, async (req, res) => {
+    if (!AUDIT_URL) return res.status(400).json({ message: "No configurado" });
+    try {
+      const r = await fetch(`${AUDIT_URL}/api/action-plan/${req.params.id as string}`, { method: "POST" });
+      res.status(r.status).json(await r.json());
+    } catch { res.status(500).json({ message: "Error generando plan" }); }
+  });
+
+  app.post("/api/admin/auditorias/extract", requireAuth, async (req, res) => {
+    if (!AUDIT_URL) return res.status(400).json({ message: "No configurado" });
+    try {
+      const r = await fetch(`${AUDIT_URL}/api/extract`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req.body),
+      });
+      res.status(r.status).json(await r.json());
+    } catch { res.status(500).json({ message: "Error extrayendo datos" }); }
+  });
+
+  app.post("/api/admin/auditorias/drive-sync", requireAuth, async (_req, res) => {
+    if (!AUDIT_URL) return res.status(400).json({ message: "No configurado" });
+    try {
+      const r = await fetch(`${AUDIT_URL}/api/drive-sync`, { method: "POST" });
+      res.status(r.status).json(await r.json());
+    } catch { res.status(500).json({ message: "Error sincronizando Drive" }); }
+  });
+
+  // ─────────────────────────────────────────────────────────────
   // GitHub OAuth — connect repos automatically
   // ─────────────────────────────────────────────────────────────
 
