@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews } from "@shared/schema";
 import { generateBlogContent, improveBlogContent } from "./blog-ai";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
@@ -5939,6 +5939,221 @@ ${urls}
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: message });
     }
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Proposals — Commercial proposal generator
+  // ─────────────────────────────────────────────────────────────
+
+  // List proposals
+  app.get("/api/admin/proposals", requireAuth, async (_req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const allProposals = await db.select().from(proposals).orderBy(desc(proposals.createdAt));
+      // Enrich with contact info
+      const enriched = await Promise.all(allProposals.map(async (p) => {
+        const [contact] = await db!.select({ nombre: contacts.nombre, empresa: contacts.empresa, email: contacts.email })
+          .from(contacts).where(eq(contacts.id, p.contactId)).limit(1);
+        return { ...p, contactName: contact?.nombre || "—", contactEmpresa: contact?.empresa || "—", contactEmail: contact?.email || "—" };
+      }));
+      res.json(enriched);
+    } catch (err: any) {
+      log(`Error listing proposals: ${err?.message}`);
+      res.status(500).json({ error: "Error listando propuestas" });
+    }
+  });
+
+  // Get proposal detail
+  app.get("/api/admin/proposals/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [proposal] = await db.select().from(proposals).where(eq(proposals.id, req.params.id as string)).limit(1);
+      if (!proposal) return res.status(404).json({ error: "Propuesta no encontrada" });
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, proposal.contactId)).limit(1);
+      // Get view analytics
+      const views = await db.select().from(proposalViews).where(eq(proposalViews.proposalId, proposal.id)).orderBy(desc(proposalViews.createdAt));
+      res.json({ ...proposal, contact, views, viewCount: views.length });
+    } catch (err: any) {
+      log(`Error getting proposal: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo propuesta" });
+    }
+  });
+
+  // Create proposal (initially as draft)
+  app.post("/api/admin/proposals", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { contactId, title, notes } = req.body;
+      if (!contactId) return res.status(400).json({ error: "contactId requerido" });
+
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId)).limit(1);
+      if (!contact) return res.status(404).json({ error: "Contacto no encontrado" });
+
+      const proposalTitle = title || `Propuesta para ${contact.empresa || contact.nombre}`;
+
+      const [proposal] = await db.insert(proposals).values({
+        contactId,
+        title: proposalTitle,
+        notes: notes || null,
+        status: "draft",
+      }).returning();
+
+      res.json(proposal);
+    } catch (err: any) {
+      log(`Error creating proposal: ${err?.message}`);
+      res.status(500).json({ error: "Error creando propuesta" });
+    }
+  });
+
+  // Update proposal (sections, pricing, timeline, status, etc.)
+  app.patch("/api/admin/proposals/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [updated] = await db.update(proposals)
+        .set({ ...req.body, updatedAt: new Date() })
+        .where(eq(proposals.id, req.params.id as string))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Propuesta no encontrada" });
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error updating proposal: ${err?.message}`);
+      res.status(500).json({ error: "Error actualizando propuesta" });
+    }
+  });
+
+  // Delete proposal
+  app.delete("/api/admin/proposals/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      await db.delete(proposalViews).where(eq(proposalViews.proposalId, req.params.id as string)).catch(() => {});
+      await db.delete(proposals).where(eq(proposals.id, req.params.id as string));
+      res.json({ success: true });
+    } catch (err: any) {
+      log(`Error deleting proposal: ${err?.message}`);
+      res.status(500).json({ error: "Error eliminando propuesta" });
+    }
+  });
+
+  // Send proposal (change status + send email)
+  app.post("/api/admin/proposals/:id/send", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [proposal] = await db.select().from(proposals).where(eq(proposals.id, req.params.id as string)).limit(1);
+      if (!proposal) return res.status(404).json({ error: "Propuesta no encontrada" });
+
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, proposal.contactId)).limit(1);
+      if (!contact?.email) return res.status(400).json({ error: "El contacto no tiene email" });
+
+      // Update status
+      await db.update(proposals).set({ status: "sent", sentAt: new Date(), updatedAt: new Date() }).where(eq(proposals.id, proposal.id));
+
+      // Send email
+      const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+      const proposalUrl = `${baseUrl}/proposal/${proposal.accessToken}`;
+      const html = buildProjectNotificationEmail({
+        projectName: proposal.title,
+        clientName: contact.nombre,
+        title: "Propuesta comercial",
+        headerEmoji: "📄",
+        headerColor: "linear-gradient(135deg,#0F172A,#1E293B)",
+        bodyLines: [
+          `Te compartimos la propuesta que preparamos para <strong>${contact.empresa || contact.nombre}</strong> basada en nuestras conversaciones y el diagnóstico tecnológico.`,
+          "La propuesta incluye el alcance completo, timeline, inversión y ROI estimado. Puedes revisarla online o descargarla como PDF.",
+        ],
+        ctaText: "Ver propuesta →",
+        ctaUrl: proposalUrl,
+        footerNote: "Si tienes preguntas, responde a este email o agenda una llamada.",
+      });
+
+      await sendEmail(contact.email, `📄 ${proposal.title}`, html).catch((err) => log(`Error sending proposal email: ${err}`));
+
+      res.json({ success: true, proposalUrl });
+    } catch (err: any) {
+      log(`Error sending proposal: ${err?.message}`);
+      res.status(500).json({ error: "Error enviando propuesta" });
+    }
+  });
+
+  // ── Public proposal endpoints (token-based, no auth) ──
+
+  // Get proposal by token (public view)
+  app.get("/api/proposal/:token", async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [proposal] = await db.select().from(proposals).where(eq(proposals.accessToken, req.params.token as string)).limit(1);
+      if (!proposal) return res.status(404).json({ error: "Propuesta no encontrada" });
+
+      // Mark as viewed on first open
+      if (!proposal.viewedAt) {
+        await db.update(proposals).set({ viewedAt: new Date(), status: proposal.status === "sent" ? "viewed" : proposal.status }).where(eq(proposals.id, proposal.id));
+        // Notify admin
+        const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
+        const [contact] = await db.select({ nombre: contacts.nombre, empresa: contacts.empresa }).from(contacts).where(eq(contacts.id, proposal.contactId)).limit(1);
+        sendEmail(adminEmail, `👀 Propuesta abierta: ${contact?.empresa || proposal.title}`, `<p><strong>${contact?.nombre}</strong> abrió la propuesta "${proposal.title}".</p>`).catch(() => {});
+      }
+
+      const [contact] = await db.select({ nombre: contacts.nombre, empresa: contacts.empresa }).from(contacts).where(eq(contacts.id, proposal.contactId)).limit(1);
+      res.json({ ...proposal, contactName: contact?.nombre, contactEmpresa: contact?.empresa });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Accept proposal (public)
+  app.post("/api/proposal/:token/accept", async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [proposal] = await db.select().from(proposals).where(eq(proposals.accessToken, req.params.token as string)).limit(1);
+      if (!proposal) return res.status(404).json({ error: "Propuesta no encontrada" });
+      if (proposal.status === "accepted") return res.json({ message: "Ya fue aceptada" });
+
+      const { fullName, selectedOption } = req.body;
+      await db.update(proposals).set({
+        status: "accepted",
+        acceptedAt: new Date(),
+        acceptedBy: fullName || null,
+        acceptedOption: selectedOption || null,
+        acceptanceDetails: { ...req.body, ip: req.ip, userAgent: req.headers["user-agent"], timestamp: new Date().toISOString() },
+        updatedAt: new Date(),
+      }).where(eq(proposals.id, proposal.id));
+
+      // Notify admin
+      const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
+      const [contact] = await db.select({ nombre: contacts.nombre, empresa: contacts.empresa }).from(contacts).where(eq(contacts.id, proposal.contactId)).limit(1);
+      sendEmail(adminEmail, `✅ Propuesta ACEPTADA: ${contact?.empresa || proposal.title}`,
+        `<div style="max-width:600px;margin:0 auto;font-family:sans-serif">
+          <div style="background:linear-gradient(135deg,#059669,#10B981);padding:20px 28px;border-radius:8px 8px 0 0">
+            <h1 style="color:#fff;font-size:18px;margin:0">✅ Propuesta Aceptada</h1>
+          </div>
+          <div style="padding:28px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+            <p><strong>${contact?.nombre}</strong> de <strong>${contact?.empresa}</strong> aceptó la propuesta "${proposal.title}".</p>
+            ${fullName ? `<p>Firmada por: <strong>${escapeHtml(fullName)}</strong></p>` : ""}
+            ${selectedOption ? `<p>Opción elegida: <strong>${escapeHtml(selectedOption)}</strong></p>` : ""}
+          </div>
+        </div>`
+      ).catch(() => {});
+
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Track view analytics (public)
+  app.post("/api/proposal/:token/track", async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [proposal] = await db.select({ id: proposals.id }).from(proposals).where(eq(proposals.accessToken, req.params.token as string)).limit(1);
+      if (!proposal) return res.status(404).json({ error: "Not found" });
+      await db.insert(proposalViews).values({
+        proposalId: proposal.id,
+        section: req.body.section || null,
+        timeSpent: req.body.timeSpent || null,
+        device: req.body.device || null,
+        ip: req.ip || null,
+      });
+      res.json({ ok: true });
+    } catch { res.json({ ok: true }); }
   });
 
   return httpServer;

@@ -294,6 +294,43 @@ export async function runMigrations() {
     // Project deliverables: client rating
     await pool.query(`ALTER TABLE "project_deliverables" ADD COLUMN IF NOT EXISTS "client_rating" integer;`).catch(() => {});
 
+    // Proposals
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "proposals" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "contact_id" varchar NOT NULL,
+        "title" text NOT NULL,
+        "status" text DEFAULT 'draft' NOT NULL,
+        "sections" json DEFAULT '{}'::json,
+        "pricing" json,
+        "timeline_data" json,
+        "notes" text,
+        "access_token" varchar DEFAULT gen_random_uuid() NOT NULL,
+        "sent_at" timestamp,
+        "viewed_at" timestamp,
+        "accepted_at" timestamp,
+        "accepted_by" text,
+        "accepted_option" text,
+        "acceptance_details" json,
+        "expires_at" timestamp,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "updated_at" timestamp DEFAULT now() NOT NULL,
+        CONSTRAINT "proposals_access_token_unique" UNIQUE("access_token")
+      );
+    `).catch(() => {});
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "proposal_views" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "proposal_id" varchar NOT NULL,
+        "section" text,
+        "time_spent" integer,
+        "device" text,
+        "ip" text,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+
     console.log("✓ Database tables and indexes ensured");
 
     // Ensure admin user exists with correct password

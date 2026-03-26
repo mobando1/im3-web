@@ -7,6 +7,8 @@ export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   username: text("username").notNull().unique(),
   password: text("password").notNull(),
+  githubAccessToken: text("github_access_token"),
+  githubUsername: text("github_username"),
 });
 
 export const insertUserSchema = createInsertSchema(users).pick({
@@ -582,3 +584,50 @@ export const projectIdeas = pgTable("project_ideas", {
 });
 
 export type ProjectIdea = typeof projectIdeas.$inferSelect;
+
+// ───────────────────────────────────────────────────────────────
+// Commercial Proposals
+// ───────────────────────────────────────────────────────────────
+
+export const proposals = pgTable("proposals", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contactId: varchar("contact_id").notNull(),
+  title: text("title").notNull(),
+  status: text("status").notNull().default("draft"), // draft | sent | viewed | accepted | rejected | expired
+  sections: json("sections").$type<Record<string, string>>().default({}),
+  pricing: json("pricing").$type<{
+    options: Array<{ name: string; price: number; features: string[]; recommended: boolean }>;
+    currency: string;
+    paymentOptions: string[];
+  }>(),
+  timelineData: json("timeline_data").$type<{
+    phases: Array<{ name: string; weeks: number; deliverables: string[] }>;
+    totalWeeks: number;
+  }>(),
+  notes: text("notes"), // internal admin notes
+  accessToken: varchar("access_token").default(sql`gen_random_uuid()`).notNull().unique(),
+  sentAt: timestamp("sent_at"),
+  viewedAt: timestamp("viewed_at"),
+  acceptedAt: timestamp("accepted_at"),
+  acceptedBy: text("accepted_by"),
+  acceptedOption: text("accepted_option"),
+  acceptanceDetails: json("acceptance_details").$type<Record<string, unknown>>(),
+  expiresAt: timestamp("expires_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type Proposal = typeof proposals.$inferSelect;
+export type InsertProposal = typeof proposals.$inferInsert;
+
+export const proposalViews = pgTable("proposal_views", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  proposalId: varchar("proposal_id").notNull(),
+  section: text("section"),
+  timeSpent: integer("time_spent"), // seconds
+  device: text("device"), // mobile | desktop
+  ip: text("ip"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ProposalView = typeof proposalViews.$inferSelect;
