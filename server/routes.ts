@@ -4403,6 +4403,121 @@ ${urls}
   // Portal del Cliente — Seed demo data
   // ─────────────────────────────────────────────────────────────
 
+  // Seed P2F project
+  app.post("/api/admin/projects/seed-p2f", requireAuth, async (_req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      // Check if P2F already exists
+      const existing = await db.select().from(clientProjects).where(eq(clientProjects.name, "Portal P2F — Passport2Fluency")).limit(1);
+      if (existing.length > 0) return res.json({ message: "Proyecto P2F ya existe", projectId: existing[0].id, portalToken: existing[0].accessToken });
+
+      // Create contact
+      let contactId: string;
+      const [existingContact] = await db.select().from(contacts).where(eq(contacts.email, "info@passport2fluency.com")).limit(1);
+      if (existingContact) {
+        contactId = existingContact.id;
+      } else {
+        const [c] = await db.insert(contacts).values({ nombre: "Sebastián Garzón", empresa: "P2F Passport2Fluency", email: "info@passport2fluency.com", status: "converted", leadScore: 100 }).returning();
+        contactId = c.id;
+      }
+
+      // Create project
+      const [project] = await db.insert(clientProjects).values({
+        contactId, name: "Portal P2F — Passport2Fluency",
+        description: "Plataforma SaaS de aprendizaje de idiomas con tutores en vivo, práctica con IA (Lingo), gamificación, pagos Stripe, Google Meet y CRM integrado.",
+        status: "in_progress", startDate: new Date("2025-10-01"), estimatedEndDate: new Date("2026-06-30"),
+        totalBudget: 7500, currency: "USD", healthStatus: "on_track",
+        healthNote: "Proyecto en fase de corrección y pulido. 7 de 10 fases completadas.",
+      }).returning();
+
+      const phases = [
+        { phase: { name: "Arquitectura y Base", description: "Auth, DB, roles, deploy", status: "completed", estimatedHours: 60, startDate: new Date("2025-10-01"), endDate: new Date("2025-11-15") },
+          tasks: [
+            { title: "Auth local + Google + Microsoft OAuth", status: "completed", priority: "high", clientFacingTitle: "Sistema de login seguro" },
+            { title: "PostgreSQL + Drizzle ORM (26+ tablas)", status: "completed", priority: "high", clientFacingTitle: "Base de datos completa" },
+            { title: "Estructura 3 roles (estudiante, tutor, admin)", status: "completed", priority: "high", clientFacingTitle: "Sistema de roles y permisos" },
+            { title: "Deploy en Railway + middleware rutas", status: "completed", priority: "high", clientFacingTitle: "Servidor en producción" },
+          ]},
+        { phase: { name: "Portal del Estudiante", description: "Dashboard, tutores, clases, mensajes, soporte", status: "completed", estimatedHours: 120, startDate: new Date("2026-01-10"), endDate: new Date("2026-02-10") },
+          tasks: [
+            { title: "Dashboard con clases y progreso", status: "completed", priority: "high", clientFacingTitle: "Panel principal del estudiante" },
+            { title: "Catálogo de tutores con filtros", status: "completed", priority: "high", clientFacingTitle: "Búsqueda de tutores" },
+            { title: "Reserva de clases con calendario", status: "completed", priority: "high", clientFacingTitle: "Agendamiento de clases" },
+            { title: "Perfil, configuración y mensajes", status: "completed", priority: "medium", clientFacingTitle: "Perfil y chat con tutores" },
+            { title: "Soporte (tickets) + guía", status: "completed", priority: "medium", clientFacingTitle: "Centro de ayuda" },
+          ]},
+        { phase: { name: "Portal del Tutor", description: "Calendario, materiales, pagos, IA, invitaciones", status: "completed", estimatedHours: 100, startDate: new Date("2026-02-10"), endDate: new Date("2026-03-01") },
+          tasks: [
+            { title: "Dashboard + calendario visual", status: "completed", priority: "high", clientFacingTitle: "Panel del tutor" },
+            { title: "Disponibilidad semanal + excepciones", status: "completed", priority: "high", clientFacingTitle: "Gestión de horarios" },
+            { title: "Notas, tareas y biblioteca de materiales", status: "completed", priority: "medium", clientFacingTitle: "Materiales didácticos" },
+            { title: "Pagos, liquidaciones y métricas", status: "completed", priority: "high", clientFacingTitle: "Pagos del tutor" },
+            { title: "Asistente IA + sistema de invitación", status: "completed", priority: "medium", clientFacingTitle: "IA para clases e invitaciones" },
+          ]},
+        { phase: { name: "Inteligencia Artificial", description: "Partner Lingo, correcciones, vocabulario, memoria", status: "completed", estimatedHours: 80, startDate: new Date("2026-02-15"), endDate: new Date("2026-03-05") },
+          tasks: [
+            { title: "Partner de práctica Lingo (Claude)", status: "completed", priority: "high", clientFacingTitle: "Compañero de práctica IA" },
+            { title: "Correcciones gramaticales en tiempo real", status: "completed", priority: "high", clientFacingTitle: "Correcciones automáticas" },
+            { title: "Vocabulario + memoria contextual", status: "completed", priority: "medium", clientFacingTitle: "Seguimiento inteligente" },
+          ]},
+        { phase: { name: "Gamificación y Learning Path", description: "Camino A1→B2, XP, rachas, logros", status: "completed", estimatedHours: 60, startDate: new Date("2026-03-01"), endDate: new Date("2026-03-10") },
+          tasks: [
+            { title: "Snake path visual (A1→B2)", status: "completed", priority: "high", clientFacingTitle: "Camino de aprendizaje" },
+            { title: "XP, rachas y logros", status: "completed", priority: "medium", clientFacingTitle: "Puntos y logros" },
+            { title: "Quizzes, flashcards, speaking", status: "completed", priority: "medium", clientFacingTitle: "Ejercicios interactivos" },
+          ]},
+        { phase: { name: "Pagos y Suscripciones", description: "Stripe: 3 planes + paquetes + webhooks", status: "completed", estimatedHours: 50, startDate: new Date("2026-02-20"), endDate: new Date("2026-03-08") },
+          tasks: [
+            { title: "Stripe suscripciones + paquetes", status: "completed", priority: "high", clientFacingTitle: "Pasarela de pagos" },
+            { title: "3 planes ($119/$219/$299) + à-la-carte", status: "completed", priority: "high", clientFacingTitle: "Planes y paquetes" },
+            { title: "Webhooks ciclo de vida", status: "completed", priority: "high", clientFacingTitle: "Automatización de cobros" },
+          ]},
+        { phase: { name: "Integraciones Externas", description: "Meet, Calendar, High Level, Resend, Reviews", status: "completed", estimatedHours: 70, startDate: new Date("2026-02-25"), endDate: new Date("2026-03-15") },
+          tasks: [
+            { title: "Google Meet + Calendar", status: "completed", priority: "high", clientFacingTitle: "Videollamadas y calendario" },
+            { title: "High Level CRM sync", status: "completed", priority: "medium", clientFacingTitle: "Integración CRM" },
+            { title: "Resend emails + reviews", status: "completed", priority: "medium", clientFacingTitle: "Emails y calificaciones" },
+          ]},
+        { phase: { name: "Corrección y Pulido", description: "Bugs, pagos, UX, testing, performance", status: "in_progress", estimatedHours: 40, startDate: new Date("2026-03-15"), endDate: new Date("2026-04-15") },
+          tasks: [
+            { title: "Corregir errores portales estudiante/tutor", status: "in_progress", priority: "high", clientFacingTitle: "Correcciones de portales" },
+            { title: "Corregir pasarelas de pago", status: "in_progress", priority: "high", clientFacingTitle: "Ajustes en pagos" },
+            { title: "Pulir UX/UI general", status: "pending", priority: "medium", clientFacingTitle: "Mejoras visuales" },
+            { title: "Testing end-to-end", status: "pending", priority: "high", clientFacingTitle: "Pruebas completas" },
+            { title: "Optimización de rendimiento", status: "pending", priority: "medium", clientFacingTitle: "Mejorar velocidad" },
+          ]},
+        { phase: { name: "Mejoras de IA y Personalización", description: "Paquetes personalizados, más IA", status: "pending", estimatedHours: 50, startDate: new Date("2026-04-15"), endDate: new Date("2026-05-15") },
+          tasks: [
+            { title: "Paquetes personalizados por perfil", status: "pending", priority: "high", clientFacingTitle: "Paquetes a la medida", isMilestone: true },
+            { title: "Mejoras learning path + más IA", status: "pending", priority: "medium", clientFacingTitle: "Experiencia más inteligente" },
+          ]},
+        { phase: { name: "Migración y Go-Live", description: "Migrar desde High Level, pruebas, lanzamiento", status: "pending", estimatedHours: 30, startDate: new Date("2026-05-15"), endDate: new Date("2026-06-30") },
+          tasks: [
+            { title: "Migrar estudiantes y contactos", status: "pending", priority: "high", clientFacingTitle: "Migración de datos" },
+            { title: "Pruebas con usuarios reales", status: "pending", priority: "high", clientFacingTitle: "Pruebas beta" },
+            { title: "Go-live", status: "pending", priority: "high", clientFacingTitle: "Lanzamiento oficial", isMilestone: true },
+          ]},
+      ];
+
+      for (let i = 0; i < phases.length; i++) {
+        const { phase, tasks } = phases[i];
+        const [ph] = await db.insert(projectPhases).values({ projectId: project.id, ...phase, orderIndex: i }).returning();
+        for (const task of tasks) {
+          await db.insert(projectTasks).values({ projectId: project.id, phaseId: ph.id, ...task, isMilestone: (task as any).isMilestone || false });
+        }
+      }
+
+      await db.insert(projectMessages).values({
+        projectId: project.id, senderType: "team", senderName: "Equipo IM3 Systems",
+        content: "¡Bienvenido al portal de tu proyecto, Sebastián! Aquí puedes ver el avance en tiempo real de Passport2Fluency. Estamos en la fase de corrección y pulido — 7 de 10 fases completadas. Cualquier duda, escríbenos por aquí.",
+      });
+
+      res.json({ message: "Proyecto P2F creado", projectId: project.id, portalToken: project.accessToken });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
   app.post("/api/admin/projects/seed", requireAuth, async (_req, res) => {
     try {
       const existing = await db!.select({ total: count() }).from(clientProjects);

@@ -141,6 +141,18 @@ export default function AdminProjects() {
               </button>
             ))}
           </div>
+          <Button
+            variant="outline"
+            onClick={() => {
+              apiRequest("POST", "/api/admin/projects/seed-p2f").then(r => r.json()).then(data => {
+                queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] });
+                toast({ title: data.message || "Proyecto P2F creado" });
+              }).catch(() => toast({ title: "Error creando P2F", variant: "destructive" }));
+            }}
+            className="gap-1.5"
+          >
+            <Sparkles className="w-4 h-4" /> P2F
+          </Button>
           <Button onClick={() => setShowCreate(true)} className="bg-[#2FA4A9] hover:bg-[#238b8f]">
             <Plus className="w-4 h-4 mr-2" /> Nuevo proyecto
           </Button>
