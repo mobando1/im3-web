@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { Plus, FolderKanban, ExternalLink, Copy, Sparkles, Trash2 } from "lucide-react";
+import { Plus, FolderKanban, ExternalLink, Copy, Sparkles, Trash2, List, LayoutGrid, GanttChart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -51,6 +51,7 @@ export default function AdminProjects() {
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
+  const [viewMode, setViewMode] = useState<"list" | "kanban" | "timeline">(() => (localStorage.getItem("im3_projects_view") as any) || "list");
   const [form, setForm] = useState({ name: "", description: "", status: "planning", totalBudget: "", currency: "USD", contactId: "" });
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
@@ -127,9 +128,23 @@ export default function AdminProjects() {
           <h1 className="text-2xl font-bold text-gray-900">Proyectos</h1>
           <p className="text-sm text-gray-500 mt-1">{projects.length} proyectos en total</p>
         </div>
-        <Button onClick={() => setShowCreate(true)} className="bg-[#2FA4A9] hover:bg-[#238b8f]">
-          <Plus className="w-4 h-4 mr-2" /> Nuevo proyecto
-        </Button>
+        <div className="flex items-center gap-2">
+          <div className="flex bg-gray-100 rounded-lg p-0.5">
+            {([["list", List, "Lista"], ["kanban", LayoutGrid, "Kanban"], ["timeline", GanttChart, "Timeline"]] as const).map(([mode, Icon, label]) => (
+              <button
+                key={mode}
+                onClick={() => { setViewMode(mode); localStorage.setItem("im3_projects_view", mode); }}
+                className={`p-1.5 rounded-md transition-colors ${viewMode === mode ? "bg-white text-[#2FA4A9] shadow-sm" : "text-gray-400 hover:text-gray-600"}`}
+                title={label}
+              >
+                <Icon className="w-4 h-4" />
+              </button>
+            ))}
+          </div>
+          <Button onClick={() => setShowCreate(true)} className="bg-[#2FA4A9] hover:bg-[#238b8f]">
+            <Plus className="w-4 h-4 mr-2" /> Nuevo proyecto
+          </Button>
+        </div>
       </div>
 
       {/* Filters */}
@@ -166,7 +181,103 @@ export default function AdminProjects() {
             </Button>
           )}
         </div>
+      ) : viewMode === "kanban" ? (
+        /* ── KANBAN VIEW ── */
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {["planning", "in_progress", "paused", "completed"].map(status => {
+            const col = filtered.filter(p => p.status === status);
+            return (
+              <div key={status} className="space-y-3">
+                <div className="flex items-center gap-2 px-1">
+                  <div className={`w-2 h-2 rounded-full ${status === "planning" ? "bg-blue-500" : status === "in_progress" ? "bg-emerald-500" : status === "paused" ? "bg-amber-500" : "bg-gray-400"}`} />
+                  <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{STATUS_LABELS[status]}</h3>
+                  <span className="text-xs text-gray-300">{col.length}</span>
+                </div>
+                <div className="space-y-2 min-h-[120px]">
+                  {col.map(p => (
+                    <div
+                      key={p.id}
+                      onClick={() => navigate(`/admin/projects/${p.id}`)}
+                      className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow space-y-3"
+                    >
+                      <div>
+                        <p className="font-medium text-gray-900 text-sm">{p.name}</p>
+                        {p.contactName && <p className="text-xs text-gray-400 mt-0.5">{p.contactName}</p>}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-[#2FA4A9] rounded-full" style={{ width: `${p.progress}%` }} />
+                        </div>
+                        <span className="text-[11px] text-gray-400 font-medium">{p.progress}%</span>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-[11px] text-gray-400">{p.completedTaskCount}/{p.taskCount} tareas</span>
+                        <div className="flex gap-1" onClick={e => e.stopPropagation()}>
+                          <button onClick={() => copyPortalLink(p.accessToken)} className="p-1 rounded text-gray-300 hover:text-[#2FA4A9] transition-colors"><Copy className="w-3.5 h-3.5" /></button>
+                          <button onClick={() => { if (confirm(`¿Eliminar "${p.name}"?`)) deleteProjectMutation.mutate(p.id); }} className="p-1 rounded text-gray-300 hover:text-red-500 transition-colors"><Trash2 className="w-3.5 h-3.5" /></button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      ) : viewMode === "timeline" ? (
+        /* ── TIMELINE VIEW ── */
+        <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
+          {filtered.map(p => {
+            const start = p.startDate ? new Date(p.startDate) : p.createdAt ? new Date(p.createdAt) : new Date();
+            const end = p.estimatedEndDate ? new Date(p.estimatedEndDate) : new Date(start.getTime() + 90 * 24 * 60 * 60 * 1000);
+            const now = new Date();
+            const totalMs = end.getTime() - start.getTime();
+            const elapsedMs = Math.max(0, Math.min(now.getTime() - start.getTime(), totalMs));
+            const timeProgress = totalMs > 0 ? Math.round((elapsedMs / totalMs) * 100) : 0;
+
+            return (
+              <div
+                key={p.id}
+                className="flex items-center gap-4 py-3 cursor-pointer hover:bg-gray-50 -mx-2 px-2 rounded-lg transition-colors"
+                onClick={() => navigate(`/admin/projects/${p.id}`)}
+              >
+                <div className="w-48 shrink-0">
+                  <p className="font-medium text-gray-900 text-sm truncate">{p.name}</p>
+                  <p className="text-[11px] text-gray-400">{p.contactName || "Sin cliente"}</p>
+                </div>
+                <div className="text-[11px] text-gray-400 w-16 shrink-0 text-center">
+                  {start.toLocaleDateString("es-CO", { day: "numeric", month: "short" })}
+                </div>
+                <div className="flex-1 relative">
+                  <div className="h-8 bg-gray-50 rounded-lg overflow-hidden relative">
+                    <div
+                      className={`h-full rounded-lg ${p.status === "completed" ? "bg-gray-200" : p.status === "paused" ? "bg-amber-100" : "bg-[#2FA4A9]/15"}`}
+                      style={{ width: `${Math.max(p.progress, 5)}%` }}
+                    />
+                    <div className="absolute inset-0 flex items-center px-3">
+                      <span className="text-[11px] font-medium text-gray-700">{p.progress}% completado</span>
+                    </div>
+                    {p.status !== "completed" && (
+                      <div
+                        className="absolute top-0 bottom-0 w-0.5 bg-red-400"
+                        style={{ left: `${Math.min(timeProgress, 100)}%` }}
+                        title={`Hoy: ${timeProgress}% del tiempo transcurrido`}
+                      />
+                    )}
+                  </div>
+                </div>
+                <div className="text-[11px] text-gray-400 w-16 shrink-0 text-center">
+                  {end.toLocaleDateString("es-CO", { day: "numeric", month: "short" })}
+                </div>
+                <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 ${STATUS_COLORS[p.status]}`}>
+                  {STATUS_LABELS[p.status]}
+                </span>
+              </div>
+            );
+          })}
+        </div>
       ) : (
+        /* ── LIST VIEW (default) ── */
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
           <table className="w-full">
             <thead>

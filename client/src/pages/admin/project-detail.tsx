@@ -116,11 +116,11 @@ export default function AdminProjectDetail() {
 
   // Phase creation
   const [showAddPhase, setShowAddPhase] = useState(false);
-  const [phaseForm, setPhaseForm] = useState({ name: "", description: "", estimatedHours: "" });
+  const [phaseForm, setPhaseForm] = useState({ name: "", description: "", estimatedHours: "", startDate: "", endDate: "" });
 
   // Task creation
   const [addingTaskPhase, setAddingTaskPhase] = useState<string | null>(null);
-  const [taskForm, setTaskForm] = useState({ title: "", priority: "medium" });
+  const [taskForm, setTaskForm] = useState({ title: "", priority: "medium", dueDate: "", isMilestone: false });
 
   // Deliverable creation
   const [showAddDeliverable, setShowAddDeliverable] = useState(false);
@@ -163,12 +163,12 @@ export default function AdminProjectDetail() {
   // Mutations
   const addPhaseMut = useMutation({
     mutationFn: async (data: Record<string, unknown>) => { await apiRequest("POST", `/api/admin/projects/${params.id}/phases`, data); },
-    onSuccess: () => { invalidate(); setShowAddPhase(false); setPhaseForm({ name: "", description: "", estimatedHours: "" }); },
+    onSuccess: () => { invalidate(); setShowAddPhase(false); setPhaseForm({ name: "", description: "", estimatedHours: "", startDate: "", endDate: "" }); },
   });
 
   const addTaskMut = useMutation({
     mutationFn: async ({ phaseId, data }: { phaseId: string; data: Record<string, unknown> }) => { await apiRequest("POST", `/api/admin/phases/${phaseId}/tasks`, data); },
-    onSuccess: () => { invalidate(); setAddingTaskPhase(null); setTaskForm({ title: "", priority: "medium" }); },
+    onSuccess: () => { invalidate(); setAddingTaskPhase(null); setTaskForm({ title: "", priority: "medium", dueDate: "", isMilestone: false }); },
   });
 
   const updateTaskMut = useMutation({
@@ -342,6 +342,11 @@ export default function AdminProjectDetail() {
                             <h3 className="font-medium text-gray-900">{phase.name}</h3>
                           </div>
                           {phase.description && <p className="text-xs text-gray-400 mt-0.5">{phase.description}</p>}
+                          {(phase.startDate || phase.endDate) && (
+                            <p className="text-[11px] text-gray-400 mt-0.5">
+                              {phase.startDate ? new Date(phase.startDate).toLocaleDateString("es-CO", { day: "numeric", month: "short" }) : "?"} — {phase.endDate ? new Date(phase.endDate).toLocaleDateString("es-CO", { day: "numeric", month: "short" }) : "?"}
+                            </p>
+                          )}
                         </div>
                         <div className="flex items-center gap-3">
                           <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
@@ -376,13 +381,19 @@ export default function AdminProjectDetail() {
                           {phase.tasks.map(task => {
                             const Icon = TASK_STATUS_ICONS[task.status] || Circle;
                             return (
-                              <div key={task.id} className="flex items-center gap-3 py-1.5 group">
+                              <div key={task.id} className={`flex items-center gap-3 py-1.5 group ${task.isMilestone ? "bg-amber-50/50 -mx-2 px-2 rounded-lg" : ""}`}>
                                 <button onClick={() => cycleTaskStatus(task)} className="shrink-0">
                                   <Icon className={`w-4 h-4 ${TASK_STATUS_COLORS[task.status]}`} />
                                 </button>
-                                <span className={`text-sm flex-1 ${task.status === "completed" ? "line-through text-gray-400" : "text-gray-700"}`}>
+                                {task.isMilestone && <span className="text-amber-500 text-sm">🏁</span>}
+                                <span className={`text-sm flex-1 ${task.status === "completed" ? "line-through text-gray-400" : "text-gray-700"} ${task.isMilestone ? "font-semibold" : ""}`}>
                                   {task.title}
                                 </span>
+                                {task.dueDate && (
+                                  <span className="text-[10px] text-gray-400">
+                                    {new Date(task.dueDate).toLocaleDateString("es-CO", { day: "numeric", month: "short" })}
+                                  </span>
+                                )}
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                                   task.priority === "high" ? "bg-red-50 text-red-600" :
                                   task.priority === "medium" ? "bg-amber-50 text-amber-600" :
@@ -399,26 +410,46 @@ export default function AdminProjectDetail() {
                           })}
 
                           {addingTaskPhase === phase.id ? (
-                            <div className="flex items-center gap-2 pt-2">
-                              <Input
-                                value={taskForm.title}
-                                onChange={e => setTaskForm(f => ({ ...f, title: e.target.value }))}
-                                placeholder="Nueva tarea..."
-                                className="h-8 text-sm"
-                                autoFocus
-                                onKeyDown={e => { if (e.key === "Enter" && taskForm.title) addTaskMut.mutate({ phaseId: phase.id, data: taskForm }); if (e.key === "Escape") setAddingTaskPhase(null); }}
-                              />
-                              <Select value={taskForm.priority} onValueChange={v => setTaskForm(f => ({ ...f, priority: v }))}>
-                                <SelectTrigger className="h-8 w-24 text-xs"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="low">Low</SelectItem>
-                                  <SelectItem value="medium">Medium</SelectItem>
-                                  <SelectItem value="high">High</SelectItem>
-                                </SelectContent>
-                              </Select>
-                              <Button size="sm" className="h-8" onClick={() => { if (taskForm.title) addTaskMut.mutate({ phaseId: phase.id, data: taskForm }); }}>
-                                <Plus className="w-3.5 h-3.5" />
-                              </Button>
+                            <div className="space-y-2 pt-2">
+                              <div className="flex items-center gap-2">
+                                <Input
+                                  value={taskForm.title}
+                                  onChange={e => setTaskForm(f => ({ ...f, title: e.target.value }))}
+                                  placeholder="Nueva tarea..."
+                                  className="h-8 text-sm"
+                                  autoFocus
+                                  onKeyDown={e => { if (e.key === "Enter" && taskForm.title) addTaskMut.mutate({ phaseId: phase.id, data: { ...taskForm, dueDate: taskForm.dueDate || null } }); if (e.key === "Escape") setAddingTaskPhase(null); }}
+                                />
+                                <Select value={taskForm.priority} onValueChange={v => setTaskForm(f => ({ ...f, priority: v }))}>
+                                  <SelectTrigger className="h-8 w-24 text-xs"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="low">Low</SelectItem>
+                                    <SelectItem value="medium">Medium</SelectItem>
+                                    <SelectItem value="high">High</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                                <Button size="sm" className="h-8" onClick={() => { if (taskForm.title) addTaskMut.mutate({ phaseId: phase.id, data: { ...taskForm, dueDate: taskForm.dueDate || null } }); }}>
+                                  <Plus className="w-3.5 h-3.5" />
+                                </Button>
+                              </div>
+                              <div className="flex items-center gap-3">
+                                <Input
+                                  type="date"
+                                  value={taskForm.dueDate}
+                                  onChange={e => setTaskForm(f => ({ ...f, dueDate: e.target.value }))}
+                                  className="h-7 text-xs w-36"
+                                  placeholder="Fecha límite"
+                                />
+                                <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
+                                  <input
+                                    type="checkbox"
+                                    checked={taskForm.isMilestone}
+                                    onChange={e => setTaskForm(f => ({ ...f, isMilestone: e.target.checked }))}
+                                    className="rounded border-gray-300 text-amber-500 focus:ring-amber-500"
+                                  />
+                                  🏁 Milestone
+                                </label>
+                              </div>
                             </div>
                           ) : (
                             <button
@@ -449,6 +480,16 @@ export default function AdminProjectDetail() {
                     <Label>Descripción</Label>
                     <Input value={phaseForm.description} onChange={e => setPhaseForm(f => ({ ...f, description: e.target.value }))} placeholder="Opcional" />
                   </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Fecha inicio</Label>
+                      <Input type="date" value={phaseForm.startDate} onChange={e => setPhaseForm(f => ({ ...f, startDate: e.target.value }))} />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Fecha fin</Label>
+                      <Input type="date" value={phaseForm.endDate} onChange={e => setPhaseForm(f => ({ ...f, endDate: e.target.value }))} />
+                    </div>
+                  </div>
                   <div className="space-y-1.5">
                     <Label>Horas estimadas</Label>
                     <Input type="number" value={phaseForm.estimatedHours} onChange={e => setPhaseForm(f => ({ ...f, estimatedHours: e.target.value }))} placeholder="40" />
@@ -456,7 +497,7 @@ export default function AdminProjectDetail() {
                   <Button
                     className="w-full bg-[#2FA4A9] hover:bg-[#238b8f]"
                     disabled={!phaseForm.name}
-                    onClick={() => addPhaseMut.mutate({ name: phaseForm.name, description: phaseForm.description || null, estimatedHours: phaseForm.estimatedHours ? parseInt(phaseForm.estimatedHours) : null, orderIndex: project.phases.length })}
+                    onClick={() => addPhaseMut.mutate({ name: phaseForm.name, description: phaseForm.description || null, estimatedHours: phaseForm.estimatedHours ? parseInt(phaseForm.estimatedHours) : null, startDate: phaseForm.startDate || null, endDate: phaseForm.endDate || null, orderIndex: project.phases.length })}
                   >
                     Crear fase
                   </Button>

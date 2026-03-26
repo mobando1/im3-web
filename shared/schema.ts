@@ -420,6 +420,9 @@ export const projectTasks = pgTable("project_tasks", {
   clientFacingDescription: text("client_facing_description"), // plain-language explanation
   status: text("status").notNull().default("pending"), // pending | in_progress | completed | blocked
   priority: text("priority").notNull().default("medium"), // low | medium | high
+  startDate: timestamp("start_date"),
+  dueDate: timestamp("due_date"),
+  isMilestone: boolean("is_milestone").default(false).notNull(),
   estimatedHours: integer("estimated_hours"),
   actualHours: numeric("actual_hours", { precision: 6, scale: 2 }),
   completedAt: timestamp("completed_at"),
@@ -448,6 +451,7 @@ export const projectDeliverables = pgTable("project_deliverables", {
   deliveredAt: timestamp("delivered_at"),
   approvedAt: timestamp("approved_at"),
   clientComment: text("client_comment"),
+  clientRating: integer("client_rating"), // 1-5 stars
   screenshotUrl: text("screenshot_url"),
   demoUrl: text("demo_url"),
   createdAt: timestamp("created_at").defaultNow().notNull(),

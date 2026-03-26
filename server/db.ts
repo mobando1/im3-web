@@ -286,6 +286,14 @@ export async function runMigrations() {
       );
     `).catch(() => {});
 
+    // Project tasks: dates + milestones
+    await pool.query(`ALTER TABLE "project_tasks" ADD COLUMN IF NOT EXISTS "start_date" timestamp;`).catch(() => {});
+    await pool.query(`ALTER TABLE "project_tasks" ADD COLUMN IF NOT EXISTS "due_date" timestamp;`).catch(() => {});
+    await pool.query(`ALTER TABLE "project_tasks" ADD COLUMN IF NOT EXISTS "is_milestone" boolean DEFAULT false NOT NULL;`).catch(() => {});
+
+    // Project deliverables: client rating
+    await pool.query(`ALTER TABLE "project_deliverables" ADD COLUMN IF NOT EXISTS "client_rating" integer;`).catch(() => {});
+
     console.log("✓ Database tables and indexes ensured");
 
     // Ensure admin user exists with correct password

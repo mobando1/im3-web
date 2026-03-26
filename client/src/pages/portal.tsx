@@ -32,7 +32,7 @@ type Phase = {
   startDate: string | null;
   endDate: string | null;
   progress: number;
-  tasks: Array<{ id: string; title: string; clientFacingTitle: string | null; status: string; priority: string }>;
+  tasks: Array<{ id: string; title: string; clientFacingTitle: string | null; status: string; priority: string; isMilestone?: boolean; dueDate?: string | null }>;
 };
 
 type Deliverable = {
@@ -233,6 +233,7 @@ export default function Portal() {
   const [clientName, setClientName] = useState(() => localStorage.getItem("portal_client_name") || "");
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewComment, setReviewComment] = useState("");
+  const [reviewRating, setReviewRating] = useState(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const base = `/api/portal/${token}`;
@@ -261,6 +262,24 @@ export default function Portal() {
     if (clientName) localStorage.setItem("portal_client_name", clientName);
   }, [clientName]);
 
+  // "What's new" tracking
+  const lastVisitKey = `portal_last_visit_${token}`;
+  const [lastVisit] = useState(() => {
+    const saved = localStorage.getItem(lastVisitKey);
+    return saved ? new Date(saved) : new Date(0);
+  });
+
+  useEffect(() => {
+    // Update last visit timestamp after a short delay so badges show briefly
+    const timer = setTimeout(() => {
+      localStorage.setItem(lastVisitKey, new Date().toISOString());
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [lastVisitKey]);
+
+  const newActivityCount = activityEntries.filter(a => new Date(a.createdAt) > lastVisit).length;
+  const newDeliverableCount = deliverables.filter(d => d.deliveredAt && new Date(d.deliveredAt) > lastVisit).length;
+
   // Mutations
   const sendMsgMut = useMutation({
     mutationFn: async (content: string) => {
@@ -274,14 +293,14 @@ export default function Portal() {
   });
 
   const reviewDelivMut = useMutation({
-    mutationFn: async ({ id, status, comment }: { id: string; status: string; comment: string }) => {
+    mutationFn: async ({ id, status, comment, rating }: { id: string; status: string; comment: string; rating: number }) => {
       await fetch(`${base}/deliverables/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status, clientComment: comment || null }),
+        body: JSON.stringify({ status, clientComment: comment || null, clientRating: rating || null }),
       });
     },
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`${base}/deliverables`] }); setReviewingId(null); setReviewComment(""); },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`${base}/deliverables`] }); setReviewingId(null); setReviewComment(""); setReviewRating(0); },
   });
 
   // Loading & error states
@@ -376,6 +395,16 @@ export default function Portal() {
                 {s === "Entregas" && pendingDeliverables.length > 0 && (
                   <span className="ml-1.5 bg-blue-500 text-white text-[10px] font-bold rounded-full w-4 h-4 inline-flex items-center justify-center">
                     {pendingDeliverables.length}
+                  </span>
+                )}
+                {s === "Timeline" && newActivityCount > 0 && (
+                  <span className="ml-1.5 bg-[#2FA4A9] text-white text-[10px] font-bold rounded-full px-1.5 h-4 inline-flex items-center justify-center">
+                    {newActivityCount}
+                  </span>
+                )}
+                {s === "Entregas" && newDeliverableCount > 0 && pendingDeliverables.length === 0 && (
+                  <span className="ml-1.5 bg-[#2FA4A9] text-white text-[10px] font-bold rounded-full px-1.5 h-4 inline-flex items-center justify-center">
+                    {newDeliverableCount}
                   </span>
                 )}
               </button>
@@ -547,11 +576,16 @@ export default function Portal() {
                       {phase.tasks.map(task => {
                         const Icon = TASK_ICONS[task.status] || Circle;
                         return (
-                          <div key={task.id} className="flex items-center gap-3 py-1">
-                            <Icon className={`w-4 h-4 shrink-0 ${TASK_COLORS[task.status]}`} />
-                            <span className={`text-sm ${task.status === "completed" ? "line-through text-gray-400" : "text-gray-700"}`}>
+                          <div key={task.id} className={`flex items-center gap-3 py-1 ${task.isMilestone ? "bg-amber-50/60 -mx-1 px-1 rounded" : ""}`}>
+                            {task.isMilestone ? <span className="text-amber-500 shrink-0">🏁</span> : <Icon className={`w-4 h-4 shrink-0 ${TASK_COLORS[task.status]}`} />}
+                            <span className={`text-sm flex-1 ${task.status === "completed" ? "line-through text-gray-400" : "text-gray-700"} ${task.isMilestone ? "font-semibold" : ""}`}>
                               {task.clientFacingTitle || task.title}
                             </span>
+                            {task.dueDate && (
+                              <span className="text-[10px] text-gray-400 shrink-0">
+                                {new Date(task.dueDate).toLocaleDateString("es-CO", { day: "numeric", month: "short" })}
+                              </span>
+                            )}
                           </div>
                         );
                       })}
@@ -611,11 +645,25 @@ export default function Portal() {
                     <div className="mt-4 pt-3 border-t border-gray-100">
                       {reviewingId === d.id ? (
                         <div className="space-y-3">
+                          <div>
+                            <p className="text-xs text-gray-500 mb-1.5">¿Cómo calificas esta entrega?</p>
+                            <div className="flex gap-1">
+                              {[1, 2, 3, 4, 5].map(star => (
+                                <button
+                                  key={star}
+                                  onClick={() => setReviewRating(star)}
+                                  className={`text-xl transition-colors ${star <= reviewRating ? "text-amber-400" : "text-gray-200 hover:text-amber-200"}`}
+                                >
+                                  ★
+                                </button>
+                              ))}
+                            </div>
+                          </div>
                           <Textarea value={reviewComment} onChange={e => setReviewComment(e.target.value)} placeholder="Comentario opcional..." rows={2} />
                           <div className="flex gap-2">
-                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => reviewDelivMut.mutate({ id: d.id, status: "approved", comment: reviewComment })}>Aprobar</Button>
-                            <Button size="sm" variant="destructive" onClick={() => reviewDelivMut.mutate({ id: d.id, status: "rejected", comment: reviewComment })}>Rechazar</Button>
-                            <Button size="sm" variant="ghost" onClick={() => { setReviewingId(null); setReviewComment(""); }}><X className="w-4 h-4" /></Button>
+                            <Button size="sm" className="bg-emerald-600 hover:bg-emerald-700" onClick={() => reviewDelivMut.mutate({ id: d.id, status: "approved", comment: reviewComment, rating: reviewRating })}>Aprobar</Button>
+                            <Button size="sm" variant="destructive" onClick={() => reviewDelivMut.mutate({ id: d.id, status: "rejected", comment: reviewComment, rating: reviewRating })}>Rechazar</Button>
+                            <Button size="sm" variant="ghost" onClick={() => { setReviewingId(null); setReviewComment(""); setReviewRating(0); }}><X className="w-4 h-4" /></Button>
                           </div>
                         </div>
                       ) : (
