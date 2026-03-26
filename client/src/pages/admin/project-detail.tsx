@@ -229,6 +229,7 @@ export default function AdminProjectDetail() {
   const deleteProjectMut = useMutation({
     mutationFn: async () => { await apiRequest("DELETE", `/api/admin/projects/${params.id}`); },
     onSuccess: () => { navigate("/admin/projects"); toast({ title: "Proyecto eliminado" }); queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] }); },
+    onError: (err: any) => { toast({ title: "Error eliminando proyecto", description: err?.message || "Intenta de nuevo", variant: "destructive" }); },
   });
 
   if (isLoading || !project) {

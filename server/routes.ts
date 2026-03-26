@@ -4620,13 +4620,14 @@ ${urls}
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
       const id = req.params.id as string;
-      await db.delete(githubWebhookEvents).where(eq(githubWebhookEvents.projectId, id));
-      await db.delete(projectActivityEntries).where(eq(projectActivityEntries.projectId, id));
-      await db.delete(projectMessages).where(eq(projectMessages.projectId, id));
-      await db.delete(projectTimeLog).where(eq(projectTimeLog.projectId, id));
-      await db.delete(projectDeliverables).where(eq(projectDeliverables.projectId, id));
-      await db.delete(projectTasks).where(eq(projectTasks.projectId, id));
-      await db.delete(projectPhases).where(eq(projectPhases.projectId, id));
+      // Delete all related records (catch individually in case table doesn't exist yet)
+      await db.delete(githubWebhookEvents).where(eq(githubWebhookEvents.projectId, id)).catch(() => {});
+      await db.delete(projectActivityEntries).where(eq(projectActivityEntries.projectId, id)).catch(() => {});
+      await db.delete(projectMessages).where(eq(projectMessages.projectId, id)).catch(() => {});
+      await db.delete(projectTimeLog).where(eq(projectTimeLog.projectId, id)).catch(() => {});
+      await db.delete(projectDeliverables).where(eq(projectDeliverables.projectId, id)).catch(() => {});
+      await db.delete(projectTasks).where(eq(projectTasks.projectId, id)).catch(() => {});
+      await db.delete(projectPhases).where(eq(projectPhases.projectId, id)).catch(() => {});
       await db.delete(clientProjects).where(eq(clientProjects.id, id));
       res.json({ success: true });
     } catch (err: any) {
