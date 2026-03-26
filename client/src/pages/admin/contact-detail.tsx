@@ -62,6 +62,9 @@ import {
   DollarSign,
   Briefcase,
   MessageCircle,
+  Inbox,
+  Paperclip,
+  Filter,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -73,6 +76,22 @@ type EmailItem = {
   scheduledFor: string;
   sentAt: string | null;
   templateName: string;
+};
+
+type UnifiedEmailItem = {
+  id: string;
+  source: "resend" | "gmail";
+  direction: "inbound" | "outbound";
+  subject: string | null;
+  bodyHtml: string | null;
+  bodyText: string | null;
+  snippet: string | null;
+  status: string | null;
+  date: string;
+  templateName: string | null;
+  gmailThreadId: string | null;
+  hasAttachments: boolean;
+  fromEmail: string | null;
 };
 
 type ContactNote = {
@@ -264,6 +283,8 @@ const activityIcons: Record<string, any> = {
   score_changed: Target,
   opted_out: X,
   ai_insight_generated: Sparkles,
+  gmail_received: Inbox,
+  gmail_sent: Send,
 };
 
 const activityColors: Record<string, string> = {
@@ -281,6 +302,8 @@ const activityColors: Record<string, string> = {
   score_changed: "bg-amber-50 text-amber-600",
   opted_out: "bg-red-50 text-red-600",
   ai_insight_generated: "bg-purple-50 text-purple-600",
+  gmail_received: "bg-blue-50 text-blue-600",
+  gmail_sent: "bg-teal-50 text-teal-600",
 };
 
 const priorityColors: Record<string, string> = {
@@ -370,6 +393,8 @@ export default function ContactDetailPage() {
   const [followUpDate, setFollowUpDate] = useState("");
   const [followUpTime, setFollowUpTime] = useState("");
   const [followUpNotes, setFollowUpNotes] = useState("");
+  const [emailFilter, setEmailFilter] = useState<"all" | "inbound" | "outbound">("all");
+  const [expandedTimelineEmail, setExpandedTimelineEmail] = useState<string | null>(null);
 
   const contactId = params?.id;
 
@@ -401,6 +426,28 @@ export default function ContactDetailPage() {
   const { data: contactDeals = [] } = useQuery<DealItem[]>({
     queryKey: [`/api/admin/deals?contactId=${contactId}`],
     enabled: !!contactId,
+  });
+
+  const { data: emailTimeline = [], isLoading: timelineLoading } = useQuery<UnifiedEmailItem[]>({
+    queryKey: [`/api/admin/contacts/${contactId}/email-timeline`],
+    enabled: !!contactId,
+  });
+
+  const { data: gmailSyncStatus } = useQuery<{ lastSyncAt: string | null }>({
+    queryKey: ["/api/admin/gmail-sync-status"],
+    enabled: !!contactId,
+  });
+
+  const gmailSyncMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/gmail-sync");
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/email-timeline`] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/gmail-sync-status"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/activity`] });
+    },
   });
 
   const statusMutation = useMutation({
@@ -1514,62 +1561,166 @@ export default function ContactDetailPage() {
             </Card>
           )}
 
-          {/* Email Timeline */}
+          {/* Unified Email Timeline (Gmail + Resend) */}
           <Card className="bg-white border-gray-200 shadow-sm">
             <CardHeader className="pb-3">
-              <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">Conversacion de Emails ({emails.length})</CardTitle>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">
+                  Comunicaciones ({emailTimeline.length})
+                </CardTitle>
+                <div className="flex items-center gap-2">
+                  {/* Filter toggles */}
+                  <div className="flex rounded-md border border-gray-200 overflow-hidden">
+                    {(["all", "inbound", "outbound"] as const).map(f => (
+                      <button
+                        key={f}
+                        onClick={() => setEmailFilter(f)}
+                        className={`px-2.5 py-1 text-[10px] font-medium transition-colors ${emailFilter === f ? "bg-[#2FA4A9] text-white" : "bg-white text-gray-500 hover:bg-gray-50"}`}
+                      >
+                        {f === "all" ? "Todos" : f === "inbound" ? "Recibidos" : "Enviados"}
+                      </button>
+                    ))}
+                  </div>
+                  {/* Sync button */}
+                  <button
+                    onClick={() => gmailSyncMutation.mutate()}
+                    disabled={gmailSyncMutation.isPending}
+                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#2FA4A9] transition-colors"
+                    title="Sincronizar Gmail"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${gmailSyncMutation.isPending ? "animate-spin" : ""}`} />
+                  </button>
+                </div>
+              </div>
+              {gmailSyncStatus?.lastSyncAt && (
+                <p className="text-[10px] text-gray-300 mt-1">Ultima sync: {new Date(gmailSyncStatus.lastSyncAt).toLocaleString("es-CO")}</p>
+              )}
             </CardHeader>
             <CardContent>
-              {emails.length === 0 ? (
-                <p className="text-gray-400 text-sm text-center py-4">No hay emails programados</p>
+              {timelineLoading ? (
+                <p className="text-gray-400 text-sm text-center py-4">Cargando...</p>
+              ) : emailTimeline.length === 0 ? (
+                <p className="text-gray-400 text-sm text-center py-4">No hay emails registrados</p>
               ) : (
                 <div className="space-y-0">
-                  {emails.map((email, index) => {
-                    const isSent = email.status === "sent" || email.status === "opened" || email.status === "clicked";
-                    const isFailed = email.status === "failed" || email.status === "bounced";
-                    const isExpired = email.status === "expired";
-                    const isPending = email.status === "pending";
-                    const isExpanded = expandedEmail === email.id;
-                    const isEditing = editingEmailId === email.id;
+                  {emailTimeline
+                    .filter(e => emailFilter === "all" || e.direction === emailFilter)
+                    .map((email, index, arr) => {
+                    const isGmail = email.source === "gmail";
+                    const isInbound = email.direction === "inbound";
+                    const isExpanded = expandedTimelineEmail === email.id;
+                    const dotColor = isInbound ? "bg-blue-400" : "bg-[#2FA4A9]";
+
                     return (
                       <div key={email.id} className="flex gap-4 relative">
                         <div className="flex flex-col items-center shrink-0">
-                          <div className={`w-3 h-3 rounded-full mt-1.5 z-10 ${isSent ? "bg-[#2FA4A9]" : isPending ? "bg-gray-300" : isExpired ? "bg-amber-400" : isFailed ? "bg-red-400" : "bg-gray-300"}`} />
-                          {index < emails.length - 1 && <div className="w-px flex-1 bg-gray-200" />}
+                          <div className={`w-3 h-3 rounded-full mt-1.5 z-10 ${dotColor}`} />
+                          {index < arr.length - 1 && <div className="w-px flex-1 bg-gray-200" />}
                         </div>
-                        <div className="flex-1 min-w-0 pb-6">
+                        <div className="flex-1 min-w-0 pb-5">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-sm font-medium text-gray-900">{templateLabels[email.templateName] || email.templateName}</span>
-                            <Badge variant="outline" className={`text-xs ${emailStatusColors[email.status] || ""}`}>{email.status}</Badge>
-                            <div className="ml-auto flex items-center gap-1.5">
-                              <button onClick={() => setExpandedEmail(isExpanded ? null : email.id)} className="text-gray-400 hover:text-gray-700 transition-colors flex items-center gap-1 text-xs" title="Ver email">
+                            {isInbound ? (
+                              <Inbox className="w-3.5 h-3.5 text-blue-500 shrink-0" />
+                            ) : (
+                              <Send className="w-3.5 h-3.5 text-[#2FA4A9] shrink-0" />
+                            )}
+                            <span className="text-sm font-medium text-gray-900 truncate">
+                              {email.subject || "Sin asunto"}
+                            </span>
+                            <Badge variant="outline" className={`text-[10px] ${isGmail ? "bg-white text-gray-500 border-gray-200" : "bg-teal-50 text-teal-600 border-teal-200"}`}>
+                              {isGmail ? "Gmail" : "Secuencia"}
+                            </Badge>
+                            {email.hasAttachments && <Paperclip className="w-3 h-3 text-gray-400" />}
+                            {email.status && (
+                              <Badge variant="outline" className={`text-[10px] ${emailStatusColors[email.status] || ""}`}>{email.status}</Badge>
+                            )}
+                            <div className="ml-auto">
+                              <button onClick={() => setExpandedTimelineEmail(isExpanded ? null : email.id)} className="text-gray-400 hover:text-gray-700 transition-colors flex items-center gap-1 text-xs p-1" title="Ver email">
                                 <Eye className="w-3.5 h-3.5" />{isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                               </button>
-                              {isPending && email.body && <button onClick={() => startEditEmail(email)} className="text-gray-400 hover:text-[#2FA4A9] transition-colors text-xs" title="Editar"><Pencil className="w-3 h-3" /></button>}
-                              {isPending && (
-                                <button onClick={() => regenerateMutation.mutate(email.id)} disabled={regenerateMutation.isPending} className="text-gray-400 hover:text-purple-600 transition-colors text-xs flex items-center gap-1" title={email.body ? "Regenerar con IA" : "Generar preview"}>
-                                  {regenerateMutation.isPending ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
-                                </button>
-                              )}
                             </div>
                           </div>
-                          {email.subject && <p className="text-sm text-gray-600 mt-1 truncate">{email.subject}</p>}
-                          <p className="text-xs text-gray-400 mt-1">{email.sentAt ? `Enviado: ${new Date(email.sentAt).toLocaleString("es-CO")}` : `Programado: ${new Date(email.scheduledFor).toLocaleString("es-CO")}`}</p>
-                          {isExpanded && email.body && !isEditing && (
+                          {email.fromEmail && isInbound && (
+                            <p className="text-[11px] text-gray-400 mt-0.5">De: {email.fromEmail}</p>
+                          )}
+                          {!isExpanded && email.snippet && (
+                            <p className="text-xs text-gray-500 mt-1 line-clamp-2">{email.snippet}</p>
+                          )}
+                          <p className="text-[11px] text-gray-300 mt-1">{new Date(email.date).toLocaleString("es-CO")}</p>
+                          {isExpanded && (email.bodyHtml || email.bodyText) && (
                             <div className="mt-3 rounded-lg border border-gray-200 overflow-hidden">
                               <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-100">
-                                <p className="text-xs text-gray-400 font-medium">Vista previa del email</p>
-                                {isPending && <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-600 border-amber-200">Pendiente de envio</Badge>}
+                                <p className="text-xs text-gray-400 font-medium">
+                                  {isInbound ? "Email recibido" : "Email enviado"}
+                                </p>
+                                <Badge variant="outline" className={`text-[10px] ${isInbound ? "bg-blue-50 text-blue-600 border-blue-200" : "bg-teal-50 text-teal-600 border-teal-200"}`}>
+                                  {isInbound ? "Entrante" : "Saliente"}
+                                </Badge>
                               </div>
-                              <iframe srcDoc={email.body} sandbox="" className="w-full border-0 bg-white" style={{ minHeight: "250px" }} onLoad={(e) => { const iframe = e.target as HTMLIFrameElement; if (iframe.contentDocument) { iframe.style.height = (iframe.contentDocument.body.scrollHeight + 20) + "px"; } }} />
+                              {email.bodyHtml ? (
+                                <iframe srcDoc={email.bodyHtml} sandbox="" className="w-full border-0 bg-white" style={{ minHeight: "200px" }} onLoad={(e) => { const iframe = e.target as HTMLIFrameElement; if (iframe.contentDocument) { iframe.style.height = (iframe.contentDocument.body.scrollHeight + 20) + "px"; } }} />
+                              ) : (
+                                <div className="p-4 text-sm text-gray-700 whitespace-pre-wrap">{email.bodyText}</div>
+                              )}
                             </div>
                           )}
-                          {isExpanded && !email.body && isPending && !isEditing && (
-                            <div className="mt-3 p-4 bg-gray-50 rounded-lg border border-gray-100 text-center">
-                              <p className="text-sm text-gray-400">Contenido aun no generado</p>
-                              <button onClick={() => regenerateMutation.mutate(email.id)} disabled={regenerateMutation.isPending} className="mt-2 text-xs text-[#2FA4A9] hover:underline flex items-center gap-1 mx-auto">
-                                <Sparkles className="w-3 h-3" />{regenerateMutation.isPending ? "Generando..." : "Generar preview ahora"}
-                              </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Legacy Sequence Emails (pending/editable) */}
+          {emails.some(e => e.status === "pending") && (
+          <Card className="bg-white border-gray-200 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">Emails Pendientes de Secuencia ({emails.filter(e => e.status === "pending").length})</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-0">
+                {emails.filter(e => e.status === "pending").map((email, index, arr) => {
+                  const isExpanded = expandedEmail === email.id;
+                  const isEditing = editingEmailId === email.id;
+                  return (
+                    <div key={email.id} className="flex gap-4 relative">
+                      <div className="flex flex-col items-center shrink-0">
+                        <div className="w-3 h-3 rounded-full mt-1.5 z-10 bg-gray-300" />
+                        {index < arr.length - 1 && <div className="w-px flex-1 bg-gray-200" />}
+                      </div>
+                      <div className="flex-1 min-w-0 pb-6">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium text-gray-900">{templateLabels[email.templateName] || email.templateName}</span>
+                          <Badge variant="outline" className="text-xs bg-gray-50 text-gray-500">pending</Badge>
+                          <div className="ml-auto flex items-center gap-1.5">
+                            <button onClick={() => setExpandedEmail(isExpanded ? null : email.id)} className="text-gray-400 hover:text-gray-700 transition-colors flex items-center gap-1 text-xs" title="Ver email">
+                              <Eye className="w-3.5 h-3.5" />{isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                            </button>
+                            {email.body && <button onClick={() => startEditEmail(email)} className="text-gray-400 hover:text-[#2FA4A9] transition-colors text-xs" title="Editar"><Pencil className="w-3 h-3" /></button>}
+                            <button onClick={() => regenerateMutation.mutate(email.id)} disabled={regenerateMutation.isPending} className="text-gray-400 hover:text-purple-600 transition-colors text-xs flex items-center gap-1" title={email.body ? "Regenerar con IA" : "Generar preview"}>
+                              {regenerateMutation.isPending ? <RefreshCw className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />}
+                            </button>
+                          </div>
+                        </div>
+                        {email.subject && <p className="text-sm text-gray-600 mt-1 truncate">{email.subject}</p>}
+                        <p className="text-xs text-gray-400 mt-1">Programado: {new Date(email.scheduledFor).toLocaleString("es-CO")}</p>
+                        {isExpanded && email.body && !isEditing && (
+                          <div className="mt-3 rounded-lg border border-gray-200 overflow-hidden">
+                            <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b border-gray-100">
+                              <p className="text-xs text-gray-400 font-medium">Vista previa del email</p>
+                              <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-600 border-amber-200">Pendiente de envio</Badge>
+                            </div>
+                            <iframe srcDoc={email.body} sandbox="" className="w-full border-0 bg-white" style={{ minHeight: "250px" }} onLoad={(e) => { const iframe = e.target as HTMLIFrameElement; if (iframe.contentDocument) { iframe.style.height = (iframe.contentDocument.body.scrollHeight + 20) + "px"; } }} />
+                          </div>
+                        )}
+                        {isExpanded && !email.body && !isEditing && (
+                          <div className="mt-3 p-4 bg-gray-50 rounded-lg border border-gray-100 text-center">
+                            <p className="text-sm text-gray-400">Contenido aun no generado</p>
+                            <button onClick={() => regenerateMutation.mutate(email.id)} disabled={regenerateMutation.isPending} className="mt-2 text-xs text-[#2FA4A9] hover:underline flex items-center gap-1 mx-auto">
+                              <Sparkles className="w-3 h-3" />{regenerateMutation.isPending ? "Generando..." : "Generar preview ahora"}
+                            </button>
                             </div>
                           )}
                           {isEditing && (
@@ -1587,9 +1738,9 @@ export default function ContactDetailPage() {
                     );
                   })}
                 </div>
-              )}
             </CardContent>
           </Card>
+          )}
         </TabsContent>
 
         {/* ===== TAB: ACTIVIDAD ===== */}

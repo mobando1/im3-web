@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "./db";
-import { contacts, diagnostics, sentEmails, contactNotes, activityLog, aiInsightsCache } from "@shared/schema";
+import { contacts, diagnostics, sentEmails, contactNotes, activityLog, aiInsightsCache, gmailEmails } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { log } from "./index";
 
@@ -51,6 +51,14 @@ async function gatherContactContext(contactId: string): Promise<string> {
   const emails = await db.select().from(sentEmails).where(eq(sentEmails.contactId, contactId)).orderBy(desc(sentEmails.sentAt)).limit(10);
   if (emails.length > 0) {
     parts.push(`EMAILS ENVIADOS (${emails.length}):\n${emails.map(e => `- [${e.status}] ${e.subject || "Sin asunto"}`).join("\n")}`);
+  }
+
+  // Gmail conversation history
+  const gmailMessages = await db.select().from(gmailEmails).where(eq(gmailEmails.contactId, contactId)).orderBy(desc(gmailEmails.gmailDate)).limit(15);
+  if (gmailMessages.length > 0) {
+    parts.push(`HISTORIAL DE EMAILS GMAIL (${gmailMessages.length}):\n${gmailMessages.map(m =>
+      `- [${m.direction === "inbound" ? "RECIBIDO" : "ENVIADO"}] ${m.subject || "Sin asunto"} (${m.gmailDate.toLocaleDateString("es-CO")})\n  ${(m.bodyText || m.snippet || "").substring(0, 300)}`
+    ).join("\n")}`);
   }
 
   // Activity log

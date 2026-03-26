@@ -2,7 +2,8 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, gmailEmails, gmailSyncState } from "@shared/schema";
+import { syncGmailEmails, isGmailConfigured } from "./google-gmail";
 import { generateBlogContent, improveBlogContent } from "./blog-ai";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
@@ -2030,6 +2031,7 @@ export async function registerRoutes(
       await db.delete(deals).where(eq(deals.contactId, contactId));
       await db.delete(notifications).where(eq(notifications.contactId, contactId));
       await db.delete(aiInsightsCache).where(eq(aiInsightsCache.contactId, contactId));
+      await db.delete(gmailEmails).where(eq(gmailEmails.contactId, contactId));
 
       // Delete the contact
       await db.delete(contacts).where(eq(contacts.id, contactId));
@@ -6571,6 +6573,116 @@ ${urls}
       });
       res.json({ ok: true });
     } catch { res.json({ ok: true }); }
+  });
+
+  // ───────────────────────────────────────────────────────────────
+  // Gmail Sync — Email Timeline
+  // ───────────────────────────────────────────────────────────────
+
+  // Unified email timeline for a contact (Gmail + Resend merged)
+  app.get("/api/admin/contacts/:id/email-timeline", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const contactId = req.params.id as string;
+
+    try {
+      // Fetch Resend-sent emails
+      const resendRows = await db
+        .select()
+        .from(sentEmails)
+        .where(eq(sentEmails.contactId, contactId))
+        .orderBy(desc(sentEmails.scheduledFor));
+
+      // Fetch Gmail emails
+      const gmailRows = await db
+        .select()
+        .from(gmailEmails)
+        .where(eq(gmailEmails.contactId, contactId))
+        .orderBy(desc(gmailEmails.gmailDate));
+
+      // Map to unified shape
+      type UnifiedEmail = {
+        id: string;
+        source: "resend" | "gmail";
+        direction: "inbound" | "outbound";
+        subject: string | null;
+        bodyHtml: string | null;
+        bodyText: string | null;
+        snippet: string | null;
+        status: string | null;
+        date: string;
+        templateName: string | null;
+        gmailThreadId: string | null;
+        hasAttachments: boolean;
+        fromEmail: string | null;
+      };
+
+      const resendItems: UnifiedEmail[] = resendRows.map(e => ({
+        id: e.id,
+        source: "resend",
+        direction: "outbound",
+        subject: e.subject,
+        bodyHtml: e.body,
+        bodyText: null,
+        snippet: null,
+        status: e.status,
+        date: (e.sentAt || e.scheduledFor).toISOString(),
+        templateName: e.templateId,
+        gmailThreadId: null,
+        hasAttachments: false,
+        fromEmail: null,
+      }));
+
+      const gmailItems: UnifiedEmail[] = gmailRows.map(e => ({
+        id: e.id,
+        source: "gmail",
+        direction: e.direction as "inbound" | "outbound",
+        subject: e.subject,
+        bodyHtml: e.bodyHtml,
+        bodyText: e.bodyText,
+        snippet: e.snippet,
+        status: null,
+        date: e.gmailDate.toISOString(),
+        templateName: null,
+        gmailThreadId: e.gmailThreadId,
+        hasAttachments: e.hasAttachments,
+        fromEmail: e.fromEmail,
+      }));
+
+      // Merge and sort by date descending
+      const timeline = [...resendItems, ...gmailItems].sort(
+        (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
+      );
+
+      res.json(timeline);
+    } catch (err: unknown) {
+      log(`Error fetching email timeline: ${(err as Error).message}`);
+      res.status(500).json({ error: "Error fetching email timeline" });
+    }
+  });
+
+  // Manual Gmail sync trigger
+  app.post("/api/admin/gmail-sync", requireAuth, async (req, res) => {
+    if (!isGmailConfigured()) {
+      return res.status(400).json({ error: "Gmail not configured" });
+    }
+    try {
+      const result = await syncGmailEmails();
+      res.json(result);
+    } catch (err: unknown) {
+      log(`Manual Gmail sync error: ${(err as Error).message}`);
+      res.status(500).json({ error: "Gmail sync failed" });
+    }
+  });
+
+  // Gmail sync status
+  app.get("/api/admin/gmail-sync-status", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [state] = await db.select().from(gmailSyncState).limit(1);
+      res.json(state || { lastSyncAt: null, lastHistoryId: null });
+    } catch (err: unknown) {
+      res.status(500).json({ error: "Error fetching sync status" });
+    }
   });
 
   return httpServer;

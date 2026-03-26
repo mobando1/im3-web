@@ -631,3 +631,38 @@ export const proposalViews = pgTable("proposal_views", {
 });
 
 export type ProposalView = typeof proposalViews.$inferSelect;
+
+// ───────────────────────────────────────────────────────────────
+// Gmail Email Sync
+// ───────────────────────────────────────────────────────────────
+
+export const gmailEmails = pgTable("gmail_emails", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  gmailMessageId: text("gmail_message_id").notNull().unique(),
+  gmailThreadId: text("gmail_thread_id"),
+  contactId: varchar("contact_id"), // nullable — unmatched emails still stored
+  direction: text("direction").notNull(), // "inbound" | "outbound"
+  fromEmail: text("from_email").notNull(),
+  toEmails: json("to_emails").$type<string[]>().default([]),
+  subject: text("subject"),
+  bodyText: text("body_text"), // plain text for AI context
+  bodyHtml: text("body_html"), // HTML for UI rendering
+  snippet: text("snippet"),
+  labelIds: json("label_ids").$type<string[]>().default([]),
+  hasAttachments: boolean("has_attachments").default(false).notNull(),
+  gmailDate: timestamp("gmail_date").notNull(),
+  syncedAt: timestamp("synced_at").defaultNow().notNull(),
+});
+
+export type GmailEmail = typeof gmailEmails.$inferSelect;
+export type InsertGmailEmail = typeof gmailEmails.$inferInsert;
+
+export const gmailSyncState = pgTable("gmail_sync_state", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull().unique(),
+  lastHistoryId: text("last_history_id"),
+  lastSyncAt: timestamp("last_sync_at"),
+  lastFullSyncAt: timestamp("last_full_sync_at"),
+});
+
+export type GmailSyncState = typeof gmailSyncState.$inferSelect;
