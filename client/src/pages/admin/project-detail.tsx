@@ -2,7 +2,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useRef, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Copy, ExternalLink, Plus, Trash2, Send, Clock, CheckCircle2, Circle, AlertCircle, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Plus, Trash2, Send, Clock, CheckCircle2, Circle, AlertCircle, ChevronDown, ChevronRight, Github, CalendarDays, BarChart3, Diamond, TrendingUp, Package, MessageSquare, Timer } from "lucide-react";
+import { format, parseISO, differenceInDays, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameMonth, addMonths, subMonths, isWithinInterval } from "date-fns";
+import { es } from "date-fns/locale";
+import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -109,7 +112,17 @@ const CATEGORY_LABELS: Record<string, string> = {
   planning: "Planeación",
 };
 
-const tabs = ["Roadmap", "Entregas", "Horas", "Mensajes", "Config"];
+const TAB_ICONS: Record<string, typeof Circle> = {
+  Roadmap: BarChart3,
+  Timeline: TrendingUp,
+  Calendario: CalendarDays,
+  Entregas: Package,
+  Horas: Timer,
+  Mensajes: MessageSquare,
+  Config: Circle,
+};
+
+const tabs = ["Roadmap", "Timeline", "Calendario", "Entregas", "Horas", "Mensajes", "Config"];
 
 export default function AdminProjectDetail() {
   const params = useParams<{ id: string }>();
@@ -118,6 +131,7 @@ export default function AdminProjectDetail() {
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState("Roadmap");
   const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set());
+  const [calendarMonth, setCalendarMonth] = useState(new Date());
 
   const { data: project, isLoading } = useQuery<ProjectDetail>({
     queryKey: [`/api/admin/projects/${params.id}`],
@@ -290,36 +304,55 @@ export default function AdminProjectDetail() {
         </div>
       </div>
 
-      {/* Stats bar */}
+      {/* Stats bar — premium design */}
       <div className="grid grid-cols-4 gap-4">
         {[
-          { label: "Progreso", value: `${project.progress}%` },
-          { label: "Horas", value: project.totalHours.toFixed(1) },
-          { label: "Entregas", value: `${project.deliverables.filter(d => d.status === "approved").length}/${project.deliverables.length}` },
-          { label: "Mensajes", value: project.messages.length.toString() },
-        ].map(s => (
-          <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-4">
-            <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">{s.label}</p>
-            <p className="text-2xl font-bold text-gray-900 mt-1">{s.value}</p>
-          </div>
-        ))}
+          { label: "Progreso", value: `${project.progress}%`, icon: TrendingUp, color: "bg-teal-50 text-teal-600", accent: "#2FA4A9" },
+          { label: "Horas", value: project.totalHours.toFixed(1), icon: Timer, color: "bg-blue-50 text-blue-600", accent: "#3B82F6" },
+          { label: "Entregas", value: `${project.deliverables.filter(d => d.status === "approved").length}/${project.deliverables.length}`, icon: Package, color: "bg-purple-50 text-purple-600", accent: "#8B5CF6" },
+          { label: "Mensajes", value: project.messages.length.toString(), icon: MessageSquare, color: "bg-amber-50 text-amber-600", accent: "#D97706" },
+        ].map(s => {
+          const Icon = s.icon;
+          return (
+            <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-4 relative overflow-hidden group hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider">{s.label}</p>
+                  <p className="text-2xl font-bold text-gray-900 mt-1">{s.value}</p>
+                </div>
+                <div className={`w-10 h-10 rounded-xl ${s.color} flex items-center justify-center`}>
+                  <Icon className="w-5 h-5" />
+                </div>
+              </div>
+              {s.label === "Progreso" && (
+                <div className="mt-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                  <motion.div initial={{ width: 0 }} animate={{ width: `${project.progress}%` }} transition={{ duration: 1, ease: "easeOut" }} className="h-full rounded-full" style={{ background: s.accent }} />
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      {/* Tabs */}
-      <div className="flex gap-1 border-b border-gray-200">
-        {tabs.map(t => (
-          <button
-            key={t}
-            onClick={() => setActiveTab(t)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors ${
-              activeTab === t
-                ? "border-[#2FA4A9] text-[#2FA4A9]"
-                : "border-transparent text-gray-500 hover:text-gray-700"
-            }`}
-          >
-            {t}
-          </button>
-        ))}
+      {/* Tabs — with icons */}
+      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
+        {tabs.map(t => {
+          const TabIcon = TAB_ICONS[t] || Circle;
+          return (
+            <button
+              key={t}
+              onClick={() => setActiveTab(t)}
+              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+                activeTab === t
+                  ? "border-[#2FA4A9] text-[#2FA4A9]"
+                  : "border-transparent text-gray-500 hover:text-gray-700"
+              }`}
+            >
+              <TabIcon className="w-3.5 h-3.5" />
+              {t}
+            </button>
+          );
+        })}
       </div>
 
       {/* Tab content */}
@@ -520,6 +553,224 @@ export default function AdminProjectDetail() {
             </Dialog>
           </div>
         )}
+
+        {/* ── TIMELINE (Gantt) ── */}
+        {activeTab === "Timeline" && (() => {
+          const allDates: Date[] = [];
+          project.phases.forEach(phase => {
+            if (phase.startDate) allDates.push(parseISO(phase.startDate));
+            if (phase.endDate) allDates.push(parseISO(phase.endDate));
+            phase.tasks.forEach(t => { if (t.dueDate) allDates.push(parseISO(t.dueDate)); });
+          });
+          if (allDates.length < 2) {
+            return (
+              <div className="text-center py-20">
+                <CalendarDays className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-400 text-sm">Agrega fechas a las fases y tareas para ver el timeline</p>
+              </div>
+            );
+          }
+          const minDate = new Date(Math.min(...allDates.map(d => d.getTime())));
+          const maxDate = new Date(Math.max(...allDates.map(d => d.getTime())));
+          const totalDays = Math.max(differenceInDays(maxDate, minDate), 1);
+          const today = new Date();
+          const todayPos = Math.max(0, Math.min(100, (differenceInDays(today, minDate) / totalDays) * 100));
+
+          const PHASE_COLORS = ["#2FA4A9", "#3B82F6", "#8B5CF6", "#D97706", "#EC4899", "#10B981"];
+
+          const getPos = (dateStr: string | null) => {
+            if (!dateStr) return null;
+            return Math.max(0, Math.min(100, (differenceInDays(parseISO(dateStr), minDate) / totalDays) * 100));
+          };
+
+          return (
+            <div className="space-y-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-6 overflow-x-auto">
+                {/* Date axis */}
+                <div className="relative min-w-[600px]">
+                  <div className="flex justify-between text-[10px] text-gray-400 mb-6 px-1">
+                    <span>{format(minDate, "d MMM yyyy", { locale: es })}</span>
+                    <span>{format(maxDate, "d MMM yyyy", { locale: es })}</span>
+                  </div>
+
+                  {/* Phases */}
+                  <div className="space-y-5">
+                    {project.phases.map((phase, idx) => {
+                      const color = PHASE_COLORS[idx % PHASE_COLORS.length];
+                      const left = getPos(phase.startDate) ?? 0;
+                      const right = getPos(phase.endDate) ?? 100;
+                      const width = Math.max(right - left, 2);
+                      const phaseProgress = phase.tasks.length > 0
+                        ? (phase.tasks.filter(t => t.status === "completed").length / phase.tasks.length) * 100
+                        : 0;
+
+                      return (
+                        <div key={phase.id}>
+                          <div className="flex items-center gap-3 mb-2">
+                            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider w-20 shrink-0">Fase {idx + 1}</span>
+                            <span className="text-sm font-semibold text-gray-800 truncate">{phase.name}</span>
+                            <span className="text-[10px] text-gray-400 ml-auto">{Math.round(phaseProgress)}%</span>
+                          </div>
+                          {/* Phase bar */}
+                          <div className="relative h-8 bg-gray-50 rounded-lg ml-20">
+                            <div
+                              className="absolute h-full rounded-lg opacity-20"
+                              style={{ left: `${left}%`, width: `${width}%`, background: color }}
+                            />
+                            <div
+                              className="absolute h-full rounded-lg"
+                              style={{ left: `${left}%`, width: `${width * (phaseProgress / 100)}%`, background: color }}
+                            />
+                            {/* Phase label on bar */}
+                            <div className="absolute top-0 h-full flex items-center" style={{ left: `${left + 1}%` }}>
+                              <span className="text-[10px] font-semibold text-white drop-shadow-sm">{phase.name}</span>
+                            </div>
+                          </div>
+                          {/* Task bars */}
+                          {phase.tasks.filter(t => t.dueDate).map(task => {
+                            const taskLeft = getPos(task.dueDate);
+                            if (taskLeft === null) return null;
+                            return (
+                              <div key={task.id} className="relative h-5 ml-20 mt-1">
+                                {task.isMilestone ? (
+                                  <div className="absolute top-0.5" style={{ left: `${taskLeft}%` }}>
+                                    <Diamond className="w-4 h-4 text-amber-500 fill-amber-500" />
+                                  </div>
+                                ) : (
+                                  <div
+                                    className="absolute h-3 rounded-full top-1"
+                                    style={{
+                                      left: `${Math.max(taskLeft - 2, 0)}%`,
+                                      width: "4%",
+                                      background: task.status === "completed" ? "#10B981" : task.status === "in_progress" ? "#3B82F6" : "#D1D5DB",
+                                    }}
+                                  />
+                                )}
+                                <span className="absolute text-[9px] text-gray-500 top-0" style={{ left: `${Math.min(taskLeft + 5, 85)}%` }}>
+                                  {task.title.length > 25 ? task.title.slice(0, 25) + "…" : task.title}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Today line */}
+                  <div className="absolute top-0 bottom-0 w-px bg-red-400 z-10" style={{ left: `${todayPos}%` }}>
+                    <div className="absolute -top-5 -translate-x-1/2 text-[9px] font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded">Hoy</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+        {/* ── CALENDARIO ── */}
+        {activeTab === "Calendario" && (() => {
+          const monthStart = startOfMonth(calendarMonth);
+          const monthEnd = endOfMonth(calendarMonth);
+          const days = eachDayOfInterval({ start: monthStart, end: monthEnd });
+          const startDay = monthStart.getDay(); // 0=Sun
+
+          // Collect all events for this month
+          type CalEvent = { date: Date; label: string; type: "phase_start" | "phase_end" | "task" | "milestone"; status: string; color: string };
+          const events: CalEvent[] = [];
+          const PHASE_COLORS_CAL = ["#2FA4A9", "#3B82F6", "#8B5CF6", "#D97706", "#EC4899", "#10B981"];
+          project.phases.forEach((phase, idx) => {
+            const color = PHASE_COLORS_CAL[idx % PHASE_COLORS_CAL.length];
+            if (phase.startDate) events.push({ date: parseISO(phase.startDate), label: `${phase.name} (inicio)`, type: "phase_start", status: phase.status, color });
+            if (phase.endDate) events.push({ date: parseISO(phase.endDate), label: `${phase.name} (fin)`, type: "phase_end", status: phase.status, color });
+            phase.tasks.forEach(t => {
+              if (t.dueDate) {
+                events.push({
+                  date: parseISO(t.dueDate),
+                  label: t.title,
+                  type: t.isMilestone ? "milestone" : "task",
+                  status: t.status,
+                  color: t.status === "completed" ? "#10B981" : t.status === "in_progress" ? "#3B82F6" : t.status === "blocked" ? "#EF4444" : "#9CA3AF",
+                });
+              }
+            });
+          });
+
+          const getEventsForDay = (day: Date) => events.filter(e => isSameDay(e.date, day));
+          const today = new Date();
+
+          return (
+            <div className="space-y-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-6">
+                {/* Month navigation */}
+                <div className="flex items-center justify-between mb-6">
+                  <button onClick={() => setCalendarMonth(prev => subMonths(prev, 1))} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500">
+                    <ChevronDown className="w-4 h-4 rotate-90" />
+                  </button>
+                  <h3 className="text-lg font-bold text-gray-900 capitalize">
+                    {format(calendarMonth, "MMMM yyyy", { locale: es })}
+                  </h3>
+                  <button onClick={() => setCalendarMonth(prev => addMonths(prev, 1))} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500">
+                    <ChevronDown className="w-4 h-4 -rotate-90" />
+                  </button>
+                </div>
+
+                {/* Day headers */}
+                <div className="grid grid-cols-7 gap-px mb-1">
+                  {["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"].map(d => (
+                    <div key={d} className="text-center text-[10px] font-semibold text-gray-400 uppercase tracking-wider py-2">{d}</div>
+                  ))}
+                </div>
+
+                {/* Calendar grid */}
+                <div className="grid grid-cols-7 gap-px">
+                  {/* Empty cells for offset */}
+                  {Array.from({ length: startDay }).map((_, i) => (
+                    <div key={`empty-${i}`} className="h-24 bg-gray-50/50 rounded-lg" />
+                  ))}
+                  {days.map(day => {
+                    const dayEvents = getEventsForDay(day);
+                    const isToday = isSameDay(day, today);
+                    return (
+                      <div
+                        key={day.toISOString()}
+                        className={`h-24 rounded-lg p-1.5 border transition-colors ${
+                          isToday ? "border-[#2FA4A9] bg-teal-50/30" : "border-transparent hover:bg-gray-50"
+                        }`}
+                      >
+                        <div className={`text-[11px] font-medium mb-1 ${isToday ? "text-[#2FA4A9] font-bold" : "text-gray-500"}`}>
+                          {format(day, "d")}
+                        </div>
+                        <div className="space-y-0.5 overflow-hidden">
+                          {dayEvents.slice(0, 3).map((ev, i) => (
+                            <div key={i} className="flex items-center gap-1">
+                              {ev.type === "milestone" ? (
+                                <Diamond className="w-2.5 h-2.5 shrink-0 text-amber-500 fill-amber-500" />
+                              ) : (
+                                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: ev.color }} />
+                              )}
+                              <span className="text-[9px] text-gray-600 truncate">{ev.label}</span>
+                            </div>
+                          ))}
+                          {dayEvents.length > 3 && (
+                            <span className="text-[9px] text-gray-400">+{dayEvents.length - 3} más</span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Legend */}
+                <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gray-100">
+                  <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500" /><span className="text-[10px] text-gray-500">Completada</span></div>
+                  <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-500" /><span className="text-[10px] text-gray-500">En progreso</span></div>
+                  <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-gray-400" /><span className="text-[10px] text-gray-500">Pendiente</span></div>
+                  <div className="flex items-center gap-1.5"><Diamond className="w-2.5 h-2.5 text-amber-500 fill-amber-500" /><span className="text-[10px] text-gray-500">Milestone</span></div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
 
         {/* ── ENTREGAS ── */}
         {activeTab === "Entregas" && (
@@ -775,6 +1026,90 @@ export default function AdminProjectDetail() {
         {/* ── CONFIG ── */}
         {activeTab === "Config" && (
           <div className="max-w-lg space-y-6">
+            {/* GitHub first — most visual impact */}
+            <div className={`bg-white rounded-xl border p-6 space-y-4 ${project.aiTrackingEnabled ? "border-emerald-200 ring-1 ring-emerald-100" : "border-gray-200"}`}>
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${project.aiTrackingEnabled ? "bg-emerald-50 text-emerald-600" : "bg-gray-100 text-gray-500"}`}>
+                  <Github className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-gray-900">GitHub — Auto-tracking con AI</h3>
+                  <p className="text-xs text-gray-500">Conecta un repositorio para que el portal se actualice automáticamente.</p>
+                </div>
+                {project.aiTrackingEnabled && (
+                  <span className="ml-auto flex items-center gap-1.5 text-[11px] text-emerald-600 font-medium bg-emerald-50 px-2.5 py-1 rounded-full">
+                    <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" />
+                    Activo
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-3">
+                <div className="space-y-1.5">
+                  <Label>Repositorio</Label>
+                  <Input value={editForm.githubRepoUrl || ""} onChange={e => setEditForm(f => ({ ...f, githubRepoUrl: e.target.value }))} placeholder="https://github.com/owner/repo" />
+                </div>
+                <div className="space-y-1.5">
+                  <Label>Webhook URL <span className="text-gray-400 font-normal">(copiar en GitHub)</span></Label>
+                  <div className="flex gap-2">
+                    <Input readOnly value={`${window.location.origin}/api/webhooks/github/${params.id}`} className="text-xs font-mono bg-gray-50" />
+                    <Button variant="outline" size="sm" onClick={() => {
+                      navigator.clipboard.writeText(`${window.location.origin}/api/webhooks/github/${params.id}`);
+                      toast({ title: "URL copiada" });
+                    }}><Copy className="w-3.5 h-3.5" /></Button>
+                  </div>
+                </div>
+                {project.githubWebhookSecret && (
+                  <div className="space-y-1.5">
+                    <Label>Webhook Secret</Label>
+                    <div className="flex gap-2">
+                      <Input readOnly value={project.githubWebhookSecret} className="text-xs font-mono bg-gray-50" />
+                      <Button variant="outline" size="sm" onClick={() => {
+                        navigator.clipboard.writeText(project.githubWebhookSecret!);
+                        toast({ title: "Secret copiado" });
+                      }}><Copy className="w-3.5 h-3.5" /></Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              <details className="text-xs text-gray-500">
+                <summary className="cursor-pointer font-medium hover:text-gray-700">Instrucciones de configuración</summary>
+                <ol className="mt-2 space-y-1 list-decimal list-inside">
+                  <li>Ve a tu repo en GitHub → Settings → Webhooks → Add webhook</li>
+                  <li>Pega la <strong>Webhook URL</strong> de arriba en "Payload URL"</li>
+                  <li>Content type: <code className="bg-gray-100 px-1 rounded">application/json</code></li>
+                  {project.githubWebhookSecret && <li>Pega el <strong>Secret</strong> de arriba</li>}
+                  <li>Events: "Just the push event"</li>
+                  <li>Click "Add webhook"</li>
+                </ol>
+              </details>
+
+              <div className="flex gap-2 pt-2">
+                <Button size="sm" onClick={() => {
+                  updateProjectMut.mutate({ githubRepoUrl: editForm.githubRepoUrl || null, aiTrackingEnabled: true });
+                }}>{project.aiTrackingEnabled ? "Actualizar" : "Activar AI tracking"}</Button>
+                {project.aiTrackingEnabled && (
+                  <>
+                    <Button variant="outline" size="sm" onClick={async () => {
+                      try {
+                        await apiRequest("POST", `/api/admin/projects/${params.id}/analyze-commits`);
+                        invalidate();
+                        toast({ title: "Commits analizados" });
+                      } catch { toast({ title: "Error analizando", variant: "destructive" }); }
+                    }}>Analizar commits</Button>
+                    <Button variant="outline" size="sm" onClick={async () => {
+                      try {
+                        await apiRequest("POST", `/api/admin/projects/${params.id}/weekly-summary`);
+                        toast({ title: "Resumen generado y enviado" });
+                      } catch { toast({ title: "Error generando resumen", variant: "destructive" }); }
+                    }}>Resumen semanal</Button>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Project settings */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
               <h3 className="font-semibold text-gray-900">Configuración del proyecto</h3>
               <div className="space-y-3">
@@ -858,88 +1193,6 @@ export default function AdminProjectDetail() {
               }}>
                 Actualizar estado
               </Button>
-            </div>
-
-            {/* GitHub integration */}
-            <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-              <div>
-                <h3 className="font-semibold text-gray-900">GitHub — Auto-tracking con AI</h3>
-                <p className="text-xs text-gray-500 mt-1">Conecta un repositorio para que el portal se actualice automáticamente con cada push.</p>
-              </div>
-
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label>URL del repositorio</Label>
-                  <Input value={editForm.githubRepoUrl || ""} onChange={e => setEditForm(f => ({ ...f, githubRepoUrl: e.target.value }))} placeholder="https://github.com/owner/repo" />
-                </div>
-
-                <div className="space-y-1.5">
-                  <Label>Webhook URL <span className="text-gray-400 font-normal">(copiar y pegar en GitHub)</span></Label>
-                  <div className="flex gap-2">
-                    <Input readOnly value={`${window.location.origin}/api/webhooks/github/${params.id}`} className="text-xs font-mono bg-gray-50" />
-                    <Button variant="outline" size="sm" onClick={() => {
-                      navigator.clipboard.writeText(`${window.location.origin}/api/webhooks/github/${params.id}`);
-                      toast({ title: "Webhook URL copiada" });
-                    }}><Copy className="w-4 h-4" /></Button>
-                  </div>
-                </div>
-
-                {project.githubWebhookSecret && (
-                  <div className="space-y-1.5">
-                    <Label>Webhook Secret <span className="text-gray-400 font-normal">(copiar en GitHub → Settings → Webhooks)</span></Label>
-                    <div className="flex gap-2">
-                      <Input readOnly value={project.githubWebhookSecret} className="text-xs font-mono bg-gray-50" />
-                      <Button variant="outline" size="sm" onClick={() => {
-                        navigator.clipboard.writeText(project.githubWebhookSecret!);
-                        toast({ title: "Secret copiado" });
-                      }}><Copy className="w-4 h-4" /></Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              {/* Setup instructions */}
-              <details className="text-xs text-gray-500">
-                <summary className="cursor-pointer font-medium text-gray-600 hover:text-gray-900">Instrucciones de configuración</summary>
-                <ol className="mt-2 space-y-1.5 pl-4 list-decimal">
-                  <li>Ve a tu repositorio en GitHub → Settings → Webhooks → Add webhook</li>
-                  <li>Pega la <strong>Webhook URL</strong> de arriba en "Payload URL"</li>
-                  <li>Content type: <code>application/json</code></li>
-                  {project.githubWebhookSecret && <li>Pega el <strong>Secret</strong> de arriba</li>}
-                  <li>Selecciona "Just the push event"</li>
-                  <li>Click "Add webhook"</li>
-                </ol>
-              </details>
-
-              <div className="flex flex-wrap items-center gap-2 pt-1">
-                <Button size="sm" className="bg-[#2FA4A9] hover:bg-[#238b8f]" onClick={() => {
-                  updateProjectMut.mutate({ githubRepoUrl: editForm.githubRepoUrl || null, aiTrackingEnabled: true });
-                }}>
-                  {project.aiTrackingEnabled ? "Actualizar" : "Activar AI tracking"}
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => {
-                  apiRequest("POST", `/api/admin/projects/${params.id}/analyze`).then(() => {
-                    toast({ title: "Análisis completado" });
-                    invalidate();
-                  }).catch(() => toast({ title: "Error al analizar", variant: "destructive" }));
-                }}>
-                  Analizar commits ahora
-                </Button>
-                <Button size="sm" variant="outline" onClick={() => {
-                  apiRequest("POST", `/api/admin/projects/${params.id}/weekly-summary`).then(() => {
-                    toast({ title: "Resumen semanal generado" });
-                    invalidate();
-                  }).catch(() => toast({ title: "Error al generar resumen", variant: "destructive" }));
-                }}>
-                  Generar resumen semanal
-                </Button>
-              </div>
-
-              {project.aiTrackingEnabled && (
-                <p className="text-[11px] text-emerald-600 flex items-center gap-1">
-                  <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full animate-pulse" /> AI tracking activo — los commits se analizan automáticamente
-                </p>
-              )}
             </div>
 
             {/* Portal link */}
