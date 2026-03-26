@@ -6352,8 +6352,9 @@ ${urls}
       const result = await generateProposal(proposal.contactId, proposal.notes || req.body?.notes);
       if (!result) return res.status(500).json({ error: "Error generando propuesta con IA" });
 
+      const sectionsWithAlcance = { ...result.sections, _alcanceDetallado: JSON.stringify(result.alcanceDetallado) };
       const [updated] = await db.update(proposals).set({
-        sections: result.sections,
+        sections: sectionsWithAlcance,
         pricing: result.pricing,
         timelineData: result.timelineData,
         updatedAt: new Date(),

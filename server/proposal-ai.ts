@@ -67,8 +67,9 @@ async function gatherContactContext(contactId: string): Promise<string> {
  */
 export async function generateProposal(contactId: string, adminNotes?: string): Promise<{
   sections: Record<string, string>;
-  pricing: { options: Array<{ name: string; price: number; features: string[]; recommended: boolean }>; currency: string; paymentOptions: string[] };
+  pricing: { total: number; currency: string; includes: string[]; paymentOptions: string[] };
   timelineData: { phases: Array<{ name: string; weeks: number; deliverables: string[] }>; totalWeeks: number };
+  alcanceDetallado: Array<{ fase: string; areas: Array<{ nombre: string; tareas: string[] }> }>;
 } | null> {
   const anthropic = getClient();
   if (!anthropic) return null;
@@ -108,26 +109,32 @@ ${adminNotes ? `INSTRUCCIONES ADICIONALES DEL ADMIN:\n${adminNotes}\n\n` : ""}
 CONTEXTO DEL CLIENTE:
 ${context}
 
+SOBRE EL PRICING:
+- Un SOLO precio fijo. IM3 ofrece servicio premium completo — NO hay versión light.
+- El precio incluye SIEMPRE: desarrollo completo, acompañamiento, tutor virtual IA post-entrega, portal de seguimiento, soporte post-implementación.
+- Precio realista para Latinoamérica basado en la complejidad del proyecto.
+
+SOBRE EL ALCANCE:
+- Genera el alcance con PROFUNDIDAD: cada fase tiene sub-áreas, y cada sub-área tiene tareas específicas.
+- Esto permite que el cliente haga drill-down para ver el detalle sin sentirse abrumado.
+
 Responde SOLO con un JSON válido (sin markdown, sin \`\`\`json) con esta estructura exacta:
 {
   "sections": {
     "resumen": "<HTML del resumen ejecutivo — 2-3 párrafos>",
     "problema": "<HTML describiendo los dolores/problemas del cliente>",
     "solucion": "<HTML describiendo qué vamos a construir y por qué>",
-    "alcance": "<HTML con fases y entregables>",
+    "alcance": "<HTML resumen general del alcance — las fases a alto nivel>",
     "tecnologia": "<HTML simplificado del stack técnico>",
-    "inversion": "<HTML explicando el valor de la inversión>",
-    "roi": "<HTML con cálculo de ROI estimado>",
-    "equipo": "<HTML sobre IM3 Systems>",
+    "inversion": "<HTML explicando el valor de la inversión y por qué es una inversión, no un gasto>",
+    "roi": "<HTML con cálculo de ROI estimado basado en datos reales>",
+    "equipo": "<HTML sobre IM3 Systems — diferenciadores, experiencia>",
     "siguientes_pasos": "<HTML con próximos pasos después de aceptar>"
   },
   "pricing": {
-    "options": [
-      { "name": "Esencial", "price": 0, "features": ["..."], "recommended": false },
-      { "name": "Completo", "price": 0, "features": ["..."], "recommended": true },
-      { "name": "Premium", "price": 0, "features": ["..."], "recommended": false }
-    ],
+    "total": 0,
     "currency": "USD",
+    "includes": ["Desarrollo completo", "Portal de seguimiento en tiempo real", "Tutor virtual IA post-entrega", "Soporte y acompañamiento", "Manuales y documentación"],
     "paymentOptions": ["50% inicio + 50% entrega", "3 pagos iguales", "Mensual durante el proyecto"]
   },
   "timelineData": {
@@ -135,7 +142,16 @@ Responde SOLO con un JSON válido (sin markdown, sin \`\`\`json) con esta estruc
       { "name": "Fase 1: ...", "weeks": 0, "deliverables": ["..."] }
     ],
     "totalWeeks": 0
-  }
+  },
+  "alcanceDetallado": [
+    {
+      "fase": "Fase 1: Nombre",
+      "areas": [
+        { "nombre": "Área 1", "tareas": ["Tarea específica 1", "Tarea específica 2"] },
+        { "nombre": "Área 2", "tareas": ["Tarea 1", "Tarea 2"] }
+      ]
+    }
+  ]
 }`
     }],
   });
@@ -149,8 +165,9 @@ Responde SOLO con un JSON válido (sin markdown, sin \`\`\`json) con esta estruc
     const parsed = JSON.parse(cleaned);
     return {
       sections: parsed.sections || {},
-      pricing: parsed.pricing || { options: [], currency: "USD", paymentOptions: [] },
+      pricing: parsed.pricing || { total: 0, currency: "USD", includes: [], paymentOptions: [] },
       timelineData: parsed.timelineData || { phases: [], totalWeeks: 0 },
+      alcanceDetallado: parsed.alcanceDetallado || [],
     };
   } catch (err) {
     log(`Error parsing proposal AI response: ${err}`);

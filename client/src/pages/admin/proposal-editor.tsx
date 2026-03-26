@@ -220,7 +220,7 @@ export default function ProposalEditor() {
                       : "text-gray-600 hover:bg-gray-100"
                   }`}
                 >
-                  Opciones de precio
+                  Inversión
                 </button>
               )}
             </nav>
@@ -230,25 +230,22 @@ export default function ProposalEditor() {
           <div className="lg:col-span-3">
             {activeSection === "pricing" ? (
               <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-                <h2 className="text-lg font-bold text-gray-900">Opciones de precio</h2>
-                {pricing?.options?.map((opt: any, idx: number) => (
-                  <div key={idx} className={`border rounded-xl p-5 ${opt.recommended ? "border-[#2FA4A9] bg-[#2FA4A9]/5" : "border-gray-200"}`}>
-                    <div className="flex items-center justify-between mb-2">
-                      <h3 className="font-semibold text-gray-900">{opt.name}</h3>
-                      <div className="flex items-center gap-2">
-                        {opt.recommended && <span className="text-[10px] bg-[#2FA4A9] text-white px-2 py-0.5 rounded-full font-medium">Recomendado</span>}
-                        <span className="text-xl font-bold text-gray-900">${opt.price?.toLocaleString()} <span className="text-sm text-gray-400 font-normal">{pricing.currency}</span></span>
-                      </div>
-                    </div>
+                <h2 className="text-lg font-bold text-gray-900">Inversión</h2>
+                <div className="text-center py-4">
+                  <p className="text-4xl font-bold text-gray-900">${pricing?.total?.toLocaleString()} <span className="text-lg text-gray-400">{pricing?.currency}</span></p>
+                </div>
+                {pricing?.includes && (
+                  <div className="bg-[#2FA4A9]/5 rounded-xl p-4">
+                    <p className="text-sm font-medium text-gray-900 mb-2">Incluye:</p>
                     <ul className="space-y-1">
-                      {opt.features?.map((f: string, i: number) => (
+                      {pricing.includes.map((item: string, i: number) => (
                         <li key={i} className="text-sm text-gray-600 flex items-center gap-2">
-                          <span className="text-emerald-500">✓</span> {f}
+                          <span className="text-emerald-500">✓</span> {item}
                         </li>
                       ))}
                     </ul>
                   </div>
-                ))}
+                )}
                 {pricing?.paymentOptions && (
                   <div className="pt-2">
                     <p className="text-xs text-gray-500 font-medium mb-1">Opciones de pago:</p>

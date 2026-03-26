@@ -161,46 +161,71 @@ export default function ProposalView() {
           );
         })}
 
-        {/* Pricing section */}
-        {pricing?.options && (
+        {/* Alcance detallado (drill-down) */}
+        {sections._alcanceDetallado && (() => {
+          let alcance: Array<{ fase: string; areas: Array<{ nombre: string; tareas: string[] }> }> = [];
+          try { alcance = JSON.parse(sections._alcanceDetallado); } catch {}
+          if (alcance.length === 0) return null;
+          return (
+            <section className="bg-white rounded-2xl border border-gray-200 p-6 sm:p-8 shadow-sm">
+              <h2 className="text-xl font-bold text-gray-900 mb-4 pb-3 border-b border-gray-100">Alcance Detallado</h2>
+              <p className="text-sm text-gray-500 mb-6">Haz click en cada fase para ver el detalle. Cada área se expande para mostrar las tareas específicas.</p>
+              <div className="space-y-3">
+                {alcance.map((fase, fi) => (
+                  <details key={fi} className="group border border-gray-200 rounded-xl overflow-hidden">
+                    <summary className="flex items-center gap-3 px-5 py-4 cursor-pointer hover:bg-gray-50 transition-colors list-none">
+                      <div className="w-8 h-8 rounded-full bg-[#2FA4A9]/10 text-[#2FA4A9] flex items-center justify-center text-sm font-bold shrink-0">{fi + 1}</div>
+                      <span className="font-semibold text-gray-900 text-sm flex-1">{fase.fase}</span>
+                      <ChevronDown className="w-4 h-4 text-gray-400 group-open:rotate-180 transition-transform" />
+                    </summary>
+                    <div className="px-5 pb-4 space-y-2 border-t border-gray-100 pt-3">
+                      {fase.areas.map((area, ai) => (
+                        <details key={ai} className="group/area">
+                          <summary className="flex items-center gap-2 py-2 cursor-pointer text-sm text-gray-700 hover:text-[#2FA4A9] transition-colors list-none">
+                            <ChevronDown className="w-3.5 h-3.5 text-gray-400 group-open/area:rotate-180 transition-transform shrink-0" />
+                            <span className="font-medium">{area.nombre}</span>
+                            <span className="text-[10px] text-gray-400 ml-auto">{area.tareas.length} tareas</span>
+                          </summary>
+                          <ul className="ml-6 pb-2 space-y-1">
+                            {area.tareas.map((tarea, ti) => (
+                              <li key={ti} className="text-xs text-gray-500 flex items-center gap-2 py-0.5">
+                                <span className="w-1 h-1 bg-[#2FA4A9] rounded-full shrink-0" />
+                                {tarea}
+                              </li>
+                            ))}
+                          </ul>
+                        </details>
+                      ))}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </section>
+          );
+        })()}
+
+        {/* Pricing section — single price */}
+        {pricing?.total && (
           <section id="pricing-section" className="bg-white rounded-2xl border border-gray-200 p-6 sm:p-8 shadow-sm">
             <h2 className="text-xl font-bold text-gray-900 mb-6 pb-3 border-b border-gray-100">Inversión</h2>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {pricing.options.map((opt: any, idx: number) => (
-                <div
-                  key={idx}
-                  onClick={() => setSelectedOption(opt.name)}
-                  className={`rounded-xl border-2 p-5 cursor-pointer transition-all ${
-                    selectedOption === opt.name
-                      ? "border-[#2FA4A9] bg-[#2FA4A9]/5 shadow-md"
-                      : opt.recommended
-                        ? "border-[#2FA4A9]/30 bg-[#2FA4A9]/5"
-                        : "border-gray-200 hover:border-gray-300"
-                  }`}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <h3 className="font-semibold text-gray-900">{opt.name}</h3>
-                    {opt.recommended && <span className="text-[10px] bg-[#2FA4A9] text-white px-2 py-0.5 rounded-full font-medium">Recomendado</span>}
-                  </div>
-                  <p className="text-3xl font-bold text-gray-900 mb-4">
-                    ${opt.price?.toLocaleString()} <span className="text-sm text-gray-400 font-normal">{pricing.currency}</span>
-                  </p>
-                  <ul className="space-y-2">
-                    {opt.features?.map((f: string, i: number) => (
-                      <li key={i} className="text-sm text-gray-600 flex items-start gap-2">
-                        <span className="text-emerald-500 mt-0.5">✓</span> {f}
-                      </li>
-                    ))}
-                  </ul>
-                  {selectedOption === opt.name && (
-                    <div className="mt-4 pt-3 border-t border-[#2FA4A9]/20 text-center">
-                      <span className="text-sm text-[#2FA4A9] font-medium">Seleccionado ✓</span>
-                    </div>
-                  )}
-                </div>
-              ))}
+            <div className="text-center py-6">
+              <p className="text-sm text-gray-500 mb-2">Inversión total del proyecto</p>
+              <p className="text-5xl font-bold text-gray-900">
+                ${pricing.total?.toLocaleString()} <span className="text-lg text-gray-400 font-normal">{pricing.currency}</span>
+              </p>
             </div>
-
+            {pricing.includes && (
+              <div className="bg-[#2FA4A9]/5 rounded-xl p-5 mt-4">
+                <p className="text-sm font-semibold text-gray-900 mb-3">Tu inversión incluye:</p>
+                <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  {pricing.includes.map((item: string, i: number) => (
+                    <li key={i} className="text-sm text-gray-700 flex items-center gap-2">
+                      <span className="text-[#2FA4A9]">✓</span> {item}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
             {pricing.paymentOptions && (
               <div className="mt-6 pt-4 border-t border-gray-100">
                 <p className="text-xs text-gray-500 font-medium mb-2">Opciones de pago disponibles:</p>
