@@ -425,6 +425,26 @@ export default function AdminProjectDetail() {
                       {/* Tasks */}
                       {isExpanded && (
                         <div className="border-t border-gray-100 px-5 py-3 space-y-1">
+                          {/* Inline date editing for phase */}
+                          <div className="flex items-center gap-2 py-2 mb-2 border-b border-gray-50">
+                            <CalendarDays className="w-3.5 h-3.5 text-gray-400" />
+                            <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Fechas:</span>
+                            <input
+                              type="date"
+                              value={phase.startDate ? phase.startDate.split("T")[0] : ""}
+                              onChange={e => updatePhaseMut.mutate({ id: phase.id, data: { startDate: e.target.value || null } })}
+                              className="text-xs border border-gray-200 rounded px-2 py-1 text-gray-600 focus:border-[#2FA4A9] focus:ring-1 focus:ring-[#2FA4A9]/20 outline-none"
+                              onClick={e => e.stopPropagation()}
+                            />
+                            <span className="text-gray-300">→</span>
+                            <input
+                              type="date"
+                              value={phase.endDate ? phase.endDate.split("T")[0] : ""}
+                              onChange={e => updatePhaseMut.mutate({ id: phase.id, data: { endDate: e.target.value || null } })}
+                              className="text-xs border border-gray-200 rounded px-2 py-1 text-gray-600 focus:border-[#2FA4A9] focus:ring-1 focus:ring-[#2FA4A9]/20 outline-none"
+                              onClick={e => e.stopPropagation()}
+                            />
+                          </div>
                           {phase.tasks.map(task => {
                             const Icon = TASK_STATUS_ICONS[task.status] || Circle;
                             return (
@@ -436,11 +456,13 @@ export default function AdminProjectDetail() {
                                 <span className={`text-sm flex-1 ${task.status === "completed" ? "line-through text-gray-400" : "text-gray-700"} ${task.isMilestone ? "font-semibold" : ""}`}>
                                   {task.title}
                                 </span>
-                                {task.dueDate && (
-                                  <span className="text-[10px] text-gray-400">
-                                    {new Date(task.dueDate).toLocaleDateString("es-CO", { day: "numeric", month: "short" })}
-                                  </span>
-                                )}
+                                <input
+                                  type="date"
+                                  value={task.dueDate ? task.dueDate.split("T")[0] : ""}
+                                  onChange={e => updateTaskMut.mutate({ id: task.id, data: { dueDate: e.target.value || null } })}
+                                  className={`text-[10px] border rounded px-1.5 py-0.5 outline-none w-28 ${task.dueDate ? "border-gray-200 text-gray-500" : "border-dashed border-gray-300 text-gray-400"} focus:border-[#2FA4A9]`}
+                                  title="Fecha límite"
+                                />
                                 <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
                                   task.priority === "high" ? "bg-red-50 text-red-600" :
                                   task.priority === "medium" ? "bg-amber-50 text-amber-600" :
@@ -566,7 +588,11 @@ export default function AdminProjectDetail() {
             return (
               <div className="text-center py-20">
                 <CalendarDays className="w-12 h-12 text-gray-300 mx-auto mb-3" />
-                <p className="text-gray-400 text-sm">Agrega fechas a las fases y tareas para ver el timeline</p>
+                <p className="text-gray-500 text-sm font-medium mb-1">Timeline vacío</p>
+                <p className="text-gray-400 text-xs mb-4">Agrega fechas de inicio y fin a las fases en el Roadmap para ver el timeline.</p>
+                <Button variant="outline" size="sm" onClick={() => setActiveTab("Roadmap")}>
+                  Ir al Roadmap →
+                </Button>
               </div>
             );
           }
@@ -700,6 +726,18 @@ export default function AdminProjectDetail() {
 
           return (
             <div className="space-y-4">
+              {events.length === 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-3">
+                  <CalendarDays className="w-5 h-5 text-amber-500 shrink-0" />
+                  <div>
+                    <p className="text-sm text-amber-800 font-medium">Calendario vacío</p>
+                    <p className="text-xs text-amber-600">Agrega fechas a las fases y tareas en el Roadmap para verlas aquí.</p>
+                  </div>
+                  <Button variant="outline" size="sm" className="ml-auto shrink-0 border-amber-300 text-amber-700 hover:bg-amber-100" onClick={() => setActiveTab("Roadmap")}>
+                    Ir al Roadmap
+                  </Button>
+                </div>
+              )}
               <div className="bg-white rounded-xl border border-gray-200 p-6">
                 {/* Month navigation */}
                 <div className="flex items-center justify-between mb-6">
