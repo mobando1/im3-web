@@ -3,7 +3,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useState, useRef, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { ArrowLeft, Copy, ExternalLink, Plus, Trash2, Send, Clock, CheckCircle2, Circle, AlertCircle, ChevronDown, ChevronRight, Github, CalendarDays, BarChart3, Diamond, TrendingUp, Package, MessageSquare, Timer, Mic, FolderOpen, Lightbulb, FileText, Image, File, ThumbsUp, X } from "lucide-react";
-import { format, parseISO, differenceInDays, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameMonth, addMonths, subMonths, isWithinInterval } from "date-fns";
+import { format, parseISO, differenceInDays, startOfMonth, endOfMonth, eachDayOfInterval, eachMonthOfInterval, isSameDay, isSameMonth, addMonths, subMonths, isWithinInterval } from "date-fns";
 import { es } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -835,18 +835,52 @@ export default function AdminProjectDetail() {
             return Math.max(0, Math.min(100, (differenceInDays(parseISO(dateStr), minDate) / totalDays) * 100));
           };
 
+          // Generate monthly tick marks
+          const months = eachMonthOfInterval({ start: minDate, end: maxDate });
+
           return (
             <div className="space-y-4">
               <div className="bg-white rounded-xl border border-gray-200 p-6 overflow-x-auto">
-                {/* Date axis */}
-                <div className="relative min-w-[600px]">
-                  <div className="flex justify-between text-[10px] text-gray-400 mb-6 px-1">
-                    <span>{format(minDate, "d MMM yyyy", { locale: es })}</span>
-                    <span>{format(maxDate, "d MMM yyyy", { locale: es })}</span>
+                <div className="relative min-w-[700px]">
+                  {/* ── Monthly axis ── */}
+                  <div className="relative h-10 mb-4">
+                    {/* Baseline */}
+                    <div className="absolute bottom-0 left-0 right-0 h-px bg-gray-200" />
+                    {/* Month ticks */}
+                    {months.map((month, i) => {
+                      const pos = Math.max(0, Math.min(100, (differenceInDays(month, minDate) / totalDays) * 100));
+                      const isJan = month.getMonth() === 0;
+                      return (
+                        <div key={i} className="absolute bottom-0" style={{ left: `${pos}%` }}>
+                          <div className="absolute bottom-0 w-px h-3 bg-gray-300" />
+                          <div className="absolute bottom-[-18px] -translate-x-1/2 whitespace-nowrap">
+                            <span className={`text-[10px] ${isJan ? "font-bold text-gray-600" : "text-gray-400"}`}>
+                              {format(month, isJan ? "MMM yyyy" : "MMM", { locale: es })}
+                            </span>
+                          </div>
+                          {/* Vertical guide line */}
+                          <div className="absolute top-6 w-px bg-gray-100" style={{ height: `${project.phases.length * 70 + 40}px` }} />
+                        </div>
+                      );
+                    })}
+                    {/* Today marker on axis */}
+                    <motion.div
+                      className="absolute bottom-0 z-20"
+                      style={{ left: `${todayPos}%` }}
+                      initial={{ opacity: 0, y: -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.5, duration: 0.4 }}
+                    >
+                      <div className="absolute -top-7 -translate-x-1/2 text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full shadow-sm">Hoy</div>
+                      <div className="absolute bottom-0 w-px h-3 bg-red-400" />
+                    </motion.div>
                   </div>
 
-                  {/* Phases */}
-                  <div className="space-y-6">
+                  {/* Spacer for month labels */}
+                  <div className="h-4" />
+
+                  {/* ── Phase bars ── */}
+                  <div className="space-y-5">
                     {project.phases.map((phase, idx) => {
                       const color = PHASE_COLORS[idx % PHASE_COLORS.length];
                       const left = getPos(phase.startDate) ?? 0;
@@ -856,10 +890,16 @@ export default function AdminProjectDetail() {
                         ? (phase.tasks.filter(t => t.status === "completed").length / phase.tasks.length) * 100
                         : 0;
                       const isComplete = phaseProgress === 100;
+                      const completedTasks = phase.tasks.filter(t => t.status === "completed").length;
 
                       return (
-                        <div key={phase.id}>
-                          {/* Phase header — above bar for clarity */}
+                        <motion.div
+                          key={phase.id}
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: idx * 0.08, duration: 0.4, ease: "easeOut" }}
+                        >
+                          {/* Phase header */}
                           <div className="flex items-center gap-3 mb-1.5">
                             <span className="text-[10px] font-bold uppercase tracking-wider w-16 shrink-0" style={{ color }}>{`Fase ${idx + 1}`}</span>
                             <span className="text-sm font-semibold text-gray-800">{phase.name}</span>
@@ -872,48 +912,78 @@ export default function AdminProjectDetail() {
                               <span className={`text-[11px] font-bold ${isComplete ? "text-emerald-600" : "text-gray-500"}`}>{Math.round(phaseProgress)}%</span>
                             </div>
                           </div>
-                          {/* Phase bar — clean two-layer design */}
-                          <div className="relative h-7 rounded-lg ml-16 overflow-hidden" style={{ background: `${color}15` }}>
-                            {/* Progress fill */}
-                            <div
-                              className="absolute h-full rounded-lg transition-all duration-500"
-                              style={{ left: `${left}%`, width: `${width * (phaseProgress / 100)}%`, background: color, opacity: isComplete ? 0.85 : 1 }}
+                          {/* Phase bar with hover tooltip */}
+                          <div className="relative h-7 rounded-lg ml-16 overflow-hidden group cursor-default" style={{ background: `${color}10` }}>
+                            {/* Progress fill — animated */}
+                            <motion.div
+                              className="absolute h-full rounded-lg"
+                              style={{ left: `${left}%`, background: color, opacity: isComplete ? 0.85 : 1 }}
+                              initial={{ width: 0 }}
+                              animate={{ width: `${width * (phaseProgress / 100)}%` }}
+                              transition={{ delay: idx * 0.08 + 0.3, duration: 0.8, ease: "easeOut" }}
                             />
                             {/* Full range outline */}
-                            <div
+                            <motion.div
                               className="absolute h-full rounded-lg border-2"
-                              style={{ left: `${left}%`, width: `${width}%`, borderColor: color, opacity: 0.3 }}
+                              style={{ left: `${left}%`, borderColor: color, opacity: 0.25 }}
+                              initial={{ width: 0 }}
+                              animate={{ width: `${width}%` }}
+                              transition={{ delay: idx * 0.08 + 0.1, duration: 0.5, ease: "easeOut" }}
                             />
-                            {/* Status icon inside bar */}
+                            {/* Completada badge */}
                             {isComplete && (
-                              <div className="absolute h-full flex items-center" style={{ left: `${left + 1}%` }}>
+                              <motion.div
+                                className="absolute h-full flex items-center"
+                                style={{ left: `${left + 1}%` }}
+                                initial={{ opacity: 0, scale: 0.8 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: idx * 0.08 + 0.8, duration: 0.3 }}
+                              >
                                 <span className="text-white text-[10px] font-bold ml-2 flex items-center gap-1">✓ Completada</span>
-                              </div>
+                              </motion.div>
                             )}
+                            {/* Hover tooltip */}
+                            <div className="absolute opacity-0 group-hover:opacity-100 transition-opacity duration-200 -top-16 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[10px] rounded-lg px-3 py-2 shadow-lg pointer-events-none whitespace-nowrap z-30">
+                              <p className="font-semibold">{phase.name}</p>
+                              <p className="text-gray-300">{completedTasks}/{phase.tasks.length} tareas · {Math.round(phaseProgress)}% completado</p>
+                              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-2 h-2 bg-gray-900 rotate-45" />
+                            </div>
                           </div>
                           {/* Milestone markers */}
                           {phase.tasks.filter(t => t.isMilestone && t.dueDate).map(task => {
                             const taskLeft = getPos(task.dueDate);
                             if (taskLeft === null) return null;
                             return (
-                              <div key={task.id} className="relative h-5 ml-16 mt-0.5">
+                              <motion.div
+                                key={task.id}
+                                className="relative h-5 ml-16 mt-0.5"
+                                initial={{ opacity: 0, scale: 0 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: idx * 0.08 + 1, duration: 0.3 }}
+                              >
                                 <div className="absolute flex items-center gap-1" style={{ left: `${taskLeft}%` }}>
-                                  <Diamond className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
+                                  <Diamond className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0 drop-shadow-[0_0_4px_rgba(217,119,6,0.4)]" />
                                   <span className="text-[9px] text-amber-600 font-medium whitespace-nowrap">{task.clientFacingTitle || task.title}</span>
                                 </div>
-                              </div>
+                              </motion.div>
                             );
                           })}
-                        </div>
+                        </motion.div>
                       );
                     })}
                   </div>
 
-                  {/* Today line */}
-                  <div className="absolute top-0 bottom-0 z-10" style={{ left: `${todayPos}%` }}>
-                    <div className="absolute top-0 bottom-0 w-0.5 bg-red-400" />
-                    <div className="absolute -top-6 -translate-x-1/2 text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full shadow-sm">Hoy</div>
-                  </div>
+                  {/* Today vertical line — full height with pulse */}
+                  <motion.div
+                    className="absolute z-10"
+                    style={{ left: `${todayPos}%`, top: "40px", bottom: "0" }}
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    transition={{ delay: 0.6, duration: 0.5 }}
+                  >
+                    <div className="absolute top-0 bottom-0 w-0.5 bg-red-400/60" />
+                    <div className="absolute top-0 bottom-0 w-0.5 bg-red-400 animate-pulse" />
+                  </motion.div>
                 </div>
               </div>
             </div>
