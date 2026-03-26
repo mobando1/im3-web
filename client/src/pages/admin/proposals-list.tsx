@@ -98,9 +98,23 @@ export default function AdminProposals() {
           <h1 className="text-2xl font-bold text-gray-900">Propuestas</h1>
           <p className="text-sm text-gray-500 mt-1">{proposals.length} propuestas en total</p>
         </div>
+        <div className="flex gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            apiRequest("POST", "/api/admin/seed-test-contact").then(r => r.json()).then(data => {
+              queryClient.invalidateQueries({ queryKey: ["/api/admin/contacts"] });
+              toast({ title: data.message });
+            }).catch(() => toast({ title: "Error", variant: "destructive" }));
+          }}
+        >
+          <Sparkles className="w-4 h-4 mr-1" /> Contacto demo
+        </Button>
         <Button onClick={() => setShowCreate(true)} className="bg-[#2FA4A9] hover:bg-[#238b8f]">
           <Plus className="w-4 h-4 mr-2" /> Nueva propuesta
         </Button>
+        </div>
       </div>
 
       {isLoading ? (
