@@ -360,7 +360,14 @@ export default function AdminProjectDetail() {
         {/* ── ROADMAP ── */}
         {activeTab === "Roadmap" && (
           <div className="space-y-4">
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="outline" onClick={() => {
+                apiRequest("POST", `/api/admin/projects/${params.id}/auto-dates`, { force: true })
+                  .then(() => { invalidate(); toast({ title: "Fechas distribuidas automáticamente" }); })
+                  .catch(() => toast({ title: "Error distribuyendo fechas", variant: "destructive" }));
+              }}>
+                <Clock className="w-3.5 h-3.5 mr-1.5" /> Auto-fechas
+              </Button>
               <Button size="sm" variant="outline" onClick={() => setShowAddPhase(true)}>
                 <Plus className="w-3.5 h-3.5 mr-1.5" /> Fase
               </Button>

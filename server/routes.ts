@@ -41,6 +41,51 @@ async function notifyProjectClient(
 }
 
 /**
+ * Auto-distribute phase dates proportionally based on estimated hours.
+ * Only updates phases that don't have manually-set dates (or all if force=true).
+ * Completed phases keep their existing dates.
+ */
+async function autoDistributePhaseDates(projectId: string, force = false) {
+  if (!db) return;
+
+  const [project] = await db.select().from(clientProjects).where(eq(clientProjects.id, projectId)).limit(1);
+  if (!project?.startDate || !project?.estimatedEndDate) return;
+
+  const phases = await db.select().from(projectPhases)
+    .where(eq(projectPhases.projectId, projectId))
+    .orderBy(asc(projectPhases.orderIndex));
+
+  if (phases.length === 0) return;
+
+  const projectStart = project.startDate.getTime();
+  const projectEnd = project.estimatedEndDate.getTime();
+  const totalMs = projectEnd - projectStart;
+
+  // Calculate total estimated hours (use 1 as minimum for phases without estimate)
+  const totalHours = phases.reduce((sum, p) => sum + (p.estimatedHours || 1), 0);
+
+  let cursor = projectStart;
+
+  for (const phase of phases) {
+    // Skip completed phases that already have dates (unless force)
+    if (!force && phase.status === "completed" && phase.startDate && phase.endDate) continue;
+    // Skip phases with manually-set dates (unless force)
+    if (!force && phase.startDate && phase.endDate) continue;
+
+    const phaseHours = phase.estimatedHours || 1;
+    const phaseDuration = Math.round((phaseHours / totalHours) * totalMs);
+    const phaseStart = new Date(cursor);
+    const phaseEnd = new Date(cursor + phaseDuration);
+
+    await db.update(projectPhases)
+      .set({ startDate: phaseStart, endDate: phaseEnd })
+      .where(eq(projectPhases.id, phase.id));
+
+    cursor += phaseDuration;
+  }
+}
+
+/**
  * COT timezone helpers — Colombia is UTC-5 with no DST.
  */
 function cotDayStartUTC(d: Date): Date {
@@ -4784,6 +4829,21 @@ ${urls}
     }
   });
 
+  // Auto-distribute phase dates
+  app.post("/api/admin/projects/:id/auto-dates", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const force = req.body?.force === true;
+      await autoDistributePhaseDates(req.params.id as string, force);
+      const phases = await db.select().from(projectPhases)
+        .where(eq(projectPhases.projectId, req.params.id as string))
+        .orderBy(asc(projectPhases.orderIndex));
+      res.json({ message: "Fechas distribuidas", phases });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
   // Regenerate access token
   app.post("/api/admin/projects/:id/regenerate-token", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
@@ -4811,6 +4871,10 @@ ${urls}
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
       const [phase] = await db.insert(projectPhases).values({ ...req.body, projectId: req.params.id }).returning();
+      // Auto-distribute dates if phase was created without explicit dates
+      if (!req.body.startDate && !req.body.endDate) {
+        autoDistributePhaseDates(req.params.id as string).catch(() => {});
+      }
       res.json(phase);
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
