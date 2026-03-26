@@ -6528,6 +6528,14 @@ ${urls}
     try {
       const [proposal] = await db.select().from(proposals).where(eq(proposals.id, req.params.id as string)).limit(1);
       if (!proposal) return res.status(404).json({ error: "Propuesta no encontrada" });
+      if (!proposal.contactId) return res.status(400).json({ error: "Propuesta sin contacto asociado" });
+
+      // Warn if contact already has projects (allow but log)
+      const existingProjects = await db.select({ id: clientProjects.id }).from(clientProjects)
+        .where(eq(clientProjects.contactId, proposal.contactId!)).limit(5);
+      if (existingProjects.length > 0) {
+        log(`Propuesta ${proposal.id} convertida — contacto ya tiene ${existingProjects.length} proyecto(s)`);
+      }
 
       const startDate = req.body.startDate ? new Date(req.body.startDate) : new Date();
 
@@ -6550,10 +6558,17 @@ ${urls}
     }
   });
 
-  // Activate draft project (make portal accessible)
+  // Activate planning project (make portal accessible)
   app.post("/api/admin/projects/:id/activate", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
+      // Validate project exists and is in planning status
+      const [project] = await db.select().from(clientProjects).where(eq(clientProjects.id, req.params.id as string)).limit(1);
+      if (!project) return res.status(404).json({ error: "Proyecto no encontrado" });
+      if (project.status !== "planning") {
+        return res.status(400).json({ error: `Solo proyectos en planeación pueden activarse (estado actual: ${project.status})` });
+      }
+
       const [updated] = await db.update(clientProjects)
         .set({ status: "in_progress", updatedAt: new Date() })
         .where(eq(clientProjects.id, req.params.id as string))
@@ -6715,19 +6730,23 @@ ${urls}
     const contactId = req.params.id as string;
 
     try {
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+
       // Fetch Resend-sent emails
       const resendRows = await db
         .select()
         .from(sentEmails)
         .where(eq(sentEmails.contactId, contactId))
-        .orderBy(desc(sentEmails.scheduledFor));
+        .orderBy(desc(sentEmails.scheduledFor))
+        .limit(limit);
 
       // Fetch Gmail emails
       const gmailRows = await db
         .select()
         .from(gmailEmails)
         .where(eq(gmailEmails.contactId, contactId))
-        .orderBy(desc(gmailEmails.gmailDate));
+        .orderBy(desc(gmailEmails.gmailDate))
+        .limit(limit);
 
       // Map to unified shape
       type UnifiedEmail = {
@@ -6746,7 +6765,7 @@ ${urls}
         fromEmail: string | null;
       };
 
-      const resendItems: UnifiedEmail[] = resendRows.map(e => ({
+      const resendItems: UnifiedEmail[] = resendRows.filter(e => e.status !== "pending").map(e => ({
         id: e.id,
         source: "resend",
         direction: "outbound",

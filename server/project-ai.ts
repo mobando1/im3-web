@@ -288,7 +288,7 @@ export async function generateProjectFromProposal(proposal: {
     contactId: proposal.contactId,
     name: proposal.title.replace(/^Propuesta:?\s*/i, "").trim() || "Nuevo proyecto",
     description: resumen.substring(0, 500) || solucion.substring(0, 500) || "Proyecto generado desde propuesta",
-    status: "draft",
+    status: "planning",
     startDate,
     estimatedEndDate: timeline?.totalWeeks
       ? new Date(startDate.getTime() + (timeline.totalWeeks * 7 * 24 * 60 * 60 * 1000))
@@ -450,7 +450,7 @@ Reglas:
       for (const idea of ideas) {
         await database.insert(projectIdeas).values({ projectId: project.id, ...idea, suggestedBy: "team", status: "suggested" });
       }
-    } catch { /* ideas are optional */ }
+    } catch (err) { log(`Ideas generation failed (optional): ${err}`); }
   }
 
   log(`Proyecto generado desde propuesta: ${project.id} — ${timeline?.phases?.length || 0} fases, ${totalTasks} tareas, ${totalDeliverables} entregas`);
