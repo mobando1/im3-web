@@ -100,6 +100,19 @@ export const contacts = pgTable("contacts", {
 export type Contact = typeof contacts.$inferSelect;
 export type InsertContact = typeof contacts.$inferInsert;
 
+// Additional email addresses associated with a contact (stakeholders, team members)
+export const contactEmails = pgTable("contact_emails", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contactId: varchar("contact_id").notNull(),
+  email: text("email").notNull(),
+  nombre: text("nombre"), // name of the person (e.g. "Carlos - CTO")
+  role: text("role"), // e.g. "CTO", "Gerente de Proyecto", "Asistente"
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ContactEmail = typeof contactEmails.$inferSelect;
+export type InsertContactEmail = typeof contactEmails.$inferInsert;
+
 // Email templates (prompts for Claude API)
 export const emailTemplates = pgTable("email_templates", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

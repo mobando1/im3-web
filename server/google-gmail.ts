@@ -1,7 +1,7 @@
 import { google, gmail_v1 } from "googleapis";
 import { db } from "./db";
-import { gmailEmails, gmailSyncState, contacts, sentEmails, activityLog } from "@shared/schema";
-import { eq, and, gte, lte, or } from "drizzle-orm";
+import { gmailEmails, gmailSyncState, contacts, sentEmails, activityLog, contactEmails } from "@shared/schema";
+import { eq, and, gte, lte, ilike } from "drizzle-orm";
 import { log } from "./index";
 
 const SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"];
@@ -86,17 +86,58 @@ function hasAttachmentParts(payload: gmail_v1.Schema$MessagePart): boolean {
 
 /**
  * Match an email address to a CRM contact.
+ * Strategy: 1) exact match on contacts.email, 2) match on contact_emails table,
+ * 3) domain fallback — match @domain.com against existing contacts.
  */
 async function matchEmailToContact(emailAddress: string): Promise<string | null> {
   if (!db) return null;
 
-  const [contact] = await db
+  const normalized = emailAddress.toLowerCase().trim();
+
+  // 1. Exact match on primary contact email
+  const [directMatch] = await db
     .select({ id: contacts.id })
     .from(contacts)
-    .where(eq(contacts.email, emailAddress.toLowerCase()))
+    .where(eq(contacts.email, normalized))
     .limit(1);
 
-  return contact?.id || null;
+  if (directMatch) return directMatch.id;
+
+  // 2. Match on associated emails (contact_emails table)
+  const [assocMatch] = await db
+    .select({ contactId: contactEmails.contactId })
+    .from(contactEmails)
+    .where(eq(contactEmails.email, normalized))
+    .limit(1);
+
+  if (assocMatch) return assocMatch.contactId;
+
+  // 3. Domain fallback — extract domain and find a contact with same domain
+  const domain = normalized.split("@")[1];
+  if (domain && !isGenericDomain(domain)) {
+    const [domainMatch] = await db
+      .select({ id: contacts.id })
+      .from(contacts)
+      .where(ilike(contacts.email, `%@${domain}`))
+      .limit(1);
+
+    if (domainMatch) return domainMatch.id;
+  }
+
+  return null;
+}
+
+/**
+ * Check if a domain is generic (gmail, hotmail, etc.) to avoid false matches.
+ */
+function isGenericDomain(domain: string): boolean {
+  const generic = [
+    "gmail.com", "googlemail.com", "hotmail.com", "outlook.com", "live.com",
+    "yahoo.com", "yahoo.es", "icloud.com", "me.com", "mac.com",
+    "aol.com", "protonmail.com", "proton.me", "mail.com",
+    "msn.com", "ymail.com", "gmx.com", "zoho.com",
+  ];
+  return generic.includes(domain.toLowerCase());
 }
 
 /**
