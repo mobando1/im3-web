@@ -59,6 +59,8 @@ const AdminPipeline = lazy(() => import("@/pages/admin/pipeline"));
 const AdminProjects = lazy(() => import("@/pages/admin/projects"));
 const AdminProjectDetail = lazy(() => import("@/pages/admin/project-detail"));
 const AdminSessions = lazy(() => import("@/pages/admin/sessions"));
+const AdminProposals = lazy(() => import("@/pages/admin/proposals-list"));
+const AdminProposalEditor = lazy(() => import("@/pages/admin/proposal-editor"));
 const AdminBlog = lazy(() => import("@/pages/admin/blog"));
 const AdminBlogEditor = lazy(() => import("@/pages/admin/blog-editor"));
 const Blog = lazy(() => import("@/pages/blog"));
@@ -145,6 +147,18 @@ function Router() {
         <Route path="/admin/projects">
           <ProtectedAdmin>
             <AdminProjects />
+          </ProtectedAdmin>
+        </Route>
+        <Route path="/admin/proposals/:id">
+          {() => (
+            <ProtectedAdmin>
+              <AdminProposalEditor />
+            </ProtectedAdmin>
+          )}
+        </Route>
+        <Route path="/admin/proposals">
+          <ProtectedAdmin>
+            <AdminProposals />
           </ProtectedAdmin>
         </Route>
         <Route path="/admin/pipeline">
