@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
 import { useParams } from "wouter";
-import { Send, CheckCircle2, Circle, Clock, AlertCircle, ChevronDown, ChevronRight, ExternalLink, X, Zap, ArrowRight } from "lucide-react";
+import { Send, CheckCircle2, Circle, Clock, AlertCircle, ChevronDown, ChevronRight, ExternalLink, X, Zap, ArrowRight, FileText, Mic, Image, ClipboardCheck, FileSignature, FolderOpen, Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -147,7 +147,7 @@ const DELIV_COLORS: Record<string, string> = {
   rejected: "bg-red-100 text-red-700",
 };
 
-const sections = ["Pulso", "Timeline", "Roadmap", "Entregas", "Inversión", "Mensajes"];
+const sections = ["Pulso", "Timeline", "Roadmap", "Entregas", "Documentos", "Inversión", "Mensajes"];
 
 // ── Helpers ──
 
@@ -248,6 +248,9 @@ export default function Portal() {
   const { data: deliverables = [] } = useQuery<Deliverable[]>({ queryKey: [`${base}/deliverables`], enabled: !!overview });
   const { data: investment } = useQuery<InvestmentData>({ queryKey: [`${base}/investment`], enabled: !!overview });
   const { data: messages = [] } = useQuery<Message[]>({ queryKey: [`${base}/messages`], enabled: !!overview });
+  const { data: files = [] } = useQuery<Array<{ id: string; name: string; type: string; url: string; size: number | null; uploadedBy: string; createdAt: string }>>({
+    queryKey: [`${base}/files`], enabled: !!overview,
+  });
 
   useEffect(() => {
     if (phases.length > 0) setExpandedPhases(new Set(phases.map(p => p.id)));
@@ -727,6 +730,107 @@ export default function Portal() {
             )}
           </div>
         )}
+
+        {/* ── DOCUMENTOS ── */}
+        {activeSection === "Documentos" && (() => {
+          const FILE_ICONS: Record<string, typeof FileText> = {
+            document: FileText,
+            contract: FileSignature,
+            image: Image,
+            design: Image,
+            recording: Mic,
+            transcript: FileText,
+            other: FolderOpen,
+          };
+          const FILE_TYPE_LABELS: Record<string, string> = {
+            document: "Documento",
+            contract: "Contrato",
+            image: "Imagen",
+            design: "Diseño",
+            recording: "Grabación",
+            transcript: "Transcripción",
+            other: "Archivo",
+          };
+          const FILE_TYPE_COLORS: Record<string, string> = {
+            document: "bg-blue-100 text-blue-700",
+            contract: "bg-purple-100 text-purple-700",
+            image: "bg-pink-100 text-pink-700",
+            design: "bg-indigo-100 text-indigo-700",
+            recording: "bg-amber-100 text-amber-700",
+            transcript: "bg-emerald-100 text-emerald-700",
+            other: "bg-gray-100 text-gray-600",
+          };
+
+          // Group by type
+          const grouped: Record<string, typeof files> = {};
+          for (const f of files) {
+            const t = f.type || "other";
+            if (!grouped[t]) grouped[t] = [];
+            grouped[t].push(f);
+          }
+
+          return (
+            <div className="space-y-6">
+              {files.length === 0 ? (
+                <div className="text-center py-12">
+                  <FolderOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500">No hay documentos disponibles aún.</p>
+                  <p className="text-xs text-gray-400 mt-1">Los archivos aparecerán aquí cuando el equipo los comparta.</p>
+                </div>
+              ) : (
+                <>
+                  {/* Summary */}
+                  <div className="flex items-center gap-3 flex-wrap">
+                    {Object.entries(grouped).map(([type, items]) => (
+                      <span key={type} className={`text-xs px-2.5 py-1 rounded-full font-medium ${FILE_TYPE_COLORS[type] || FILE_TYPE_COLORS.other}`}>
+                        {FILE_TYPE_LABELS[type] || type} ({items.length})
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Files by type */}
+                  {Object.entries(grouped).map(([type, items]) => {
+                    const Icon = FILE_ICONS[type] || FolderOpen;
+                    return (
+                      <div key={type}>
+                        <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3 flex items-center gap-2">
+                          <Icon className="w-3.5 h-3.5" />
+                          {FILE_TYPE_LABELS[type] || type}
+                        </h3>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                          {items.map(file => {
+                            const FileIcon = FILE_ICONS[file.type] || FolderOpen;
+                            return (
+                              <a
+                                key={file.id}
+                                href={file.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="bg-white rounded-xl border border-gray-200 p-4 flex items-start gap-3 hover:border-[#2FA4A9]/30 hover:shadow-sm transition-all group"
+                              >
+                                <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${FILE_TYPE_COLORS[file.type] || FILE_TYPE_COLORS.other}`}>
+                                  <FileIcon className="w-5 h-5" />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-gray-900 truncate group-hover:text-[#2FA4A9] transition-colors">{file.name}</p>
+                                  <p className="text-xs text-gray-400 mt-0.5">
+                                    {new Date(file.createdAt).toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" })}
+                                    {file.size && ` · ${(file.size / 1024 / 1024).toFixed(1)} MB`}
+                                  </p>
+                                </div>
+                                <ExternalLink className="w-4 h-4 text-gray-300 group-hover:text-[#2FA4A9] shrink-0 mt-1 transition-colors" />
+                              </a>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── INVERSIÓN ── */}
         {activeSection === "Inversión" && (

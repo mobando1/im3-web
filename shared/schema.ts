@@ -375,6 +375,7 @@ export const clientProjects = pgTable("client_projects", {
   githubWebhookSecret: text("github_webhook_secret"),
   aiTrackingEnabled: boolean("ai_tracking_enabled").default(false).notNull(),
   lastWeeklySummaryAt: timestamp("last_weekly_summary_at"),
+  driveFolderId: text("drive_folder_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

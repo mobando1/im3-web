@@ -16,7 +16,8 @@ import { calculateLeadScore } from "./lead-scoring";
 import { isWhatsAppConfigured, calculateWhatsAppSchedule, WHATSAPP_SEQUENCE, sendWhatsAppText } from "./whatsapp";
 import passport from "passport";
 import { z } from "zod";
-import { analyzeCommitsForProject, generateWeeklySummary, calculateProjectHealth } from "./project-ai";
+import { analyzeCommitsForProject, generateWeeklySummary, calculateProjectHealth, generateProjectFromProposal } from "./project-ai";
+import { syncDriveFilesToProject } from "./drive-file-sync";
 import { generateProposal } from "./proposal-ai";
 import crypto from "crypto";
 
@@ -6282,6 +6283,33 @@ ${urls}
     }
   });
 
+  // Sync Drive files to project
+  app.post("/api/admin/projects/:id/sync-drive", requireAuth, async (req, res) => {
+    const projectId = req.params.id as string;
+    const { folderId } = req.body as { folderId?: string };
+
+    // Use project's stored folderId or the one provided
+    let driveId = folderId;
+    if (!driveId) {
+      const [project] = await db!.select().from(clientProjects).where(eq(clientProjects.id, projectId));
+      driveId = project?.driveFolderId || undefined;
+    }
+
+    if (!driveId) return res.status(400).json({ message: "No hay carpeta de Drive configurada. Configúrala en el tab Config." });
+
+    try {
+      // Save folderId if provided
+      if (folderId) {
+        await db!.update(clientProjects).set({ driveFolderId: folderId, updatedAt: new Date() }).where(eq(clientProjects.id, projectId));
+      }
+
+      const result = await syncDriveFilesToProject(projectId, driveId);
+      res.json({ message: `${result.synced} archivos nuevos sincronizados`, ...result });
+    } catch (err: unknown) {
+      res.status(500).json({ message: `Error: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  });
+
   // ── Admin: Ideas CRUD ──
 
   app.get("/api/admin/projects/:id/ideas", requireAuth, async (req, res) => {
@@ -6490,6 +6518,49 @@ ${urls}
     } catch (err: any) {
       log(`Error sending proposal: ${err?.message}`);
       res.status(500).json({ error: "Error enviando propuesta" });
+    }
+  });
+
+  // Convert proposal to project (AI-generated plan)
+  app.post("/api/admin/proposals/:id/convert-to-project", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [proposal] = await db.select().from(proposals).where(eq(proposals.id, req.params.id as string)).limit(1);
+      if (!proposal) return res.status(404).json({ error: "Propuesta no encontrada" });
+
+      const startDate = req.body.startDate ? new Date(req.body.startDate) : new Date();
+
+      const result = await generateProjectFromProposal({
+        id: proposal.id,
+        contactId: proposal.contactId,
+        title: proposal.title,
+        sections: (proposal.sections as Record<string, string>) || {},
+        pricing: proposal.pricing as any,
+        timelineData: proposal.timelineData as any,
+      }, startDate);
+
+      res.json({
+        message: "Proyecto creado desde propuesta",
+        ...result,
+      });
+    } catch (err: any) {
+      log(`Error converting proposal to project: ${err?.message}`);
+      res.status(500).json({ error: err?.message || "Error creando proyecto" });
+    }
+  });
+
+  // Activate draft project (make portal accessible)
+  app.post("/api/admin/projects/:id/activate", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [updated] = await db.update(clientProjects)
+        .set({ status: "in_progress", updatedAt: new Date() })
+        .where(eq(clientProjects.id, req.params.id as string))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Proyecto no encontrado" });
+      res.json({ message: "Portal activado", projectId: updated.id, portalToken: updated.accessToken });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
     }
   });
 

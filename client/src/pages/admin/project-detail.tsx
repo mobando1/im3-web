@@ -435,6 +435,12 @@ export default function AdminProjectDetail() {
     onError: (err: any) => { toast({ title: "Error eliminando proyecto", description: err?.message || "Intenta de nuevo", variant: "destructive" }); },
   });
 
+  const activateProjectMut = useMutation({
+    mutationFn: async () => { await apiRequest("POST", `/api/admin/projects/${params.id}/activate`); },
+    onSuccess: () => { invalidate(); toast({ title: "Portal activado — el cliente ya puede acceder" }); },
+    onError: () => toast({ title: "Error activando portal", variant: "destructive" }),
+  });
+
   // Sessions, Files, Ideas queries
   const { data: sessions = [] } = useQuery<any[]>({ queryKey: [`/api/admin/projects/${params.id}/sessions`], enabled: activeTab === "Sesiones" });
   const { data: files = [] } = useQuery<any[]>({ queryKey: [`/api/admin/projects/${params.id}/files`], enabled: activeTab === "Archivos" });
@@ -522,6 +528,27 @@ export default function AdminProjectDetail() {
           </a>
         </div>
       </div>
+
+      {/* Draft banner */}
+      {project.status === "draft" && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 flex items-center gap-4">
+          <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-600 flex items-center justify-center shrink-0">
+            <AlertCircle className="w-5 h-5" />
+          </div>
+          <div className="flex-1">
+            <p className="text-sm font-semibold text-amber-800">Proyecto en borrador — generado por AI</p>
+            <p className="text-xs text-amber-600 mt-0.5">Revisa las fases, tareas y entregas antes de activar el portal. El cliente no puede ver este proyecto hasta que lo actives.</p>
+          </div>
+          <Button
+            size="sm"
+            className="bg-amber-600 hover:bg-amber-700 text-white shrink-0"
+            onClick={() => activateProjectMut.mutate()}
+            disabled={activateProjectMut.isPending}
+          >
+            {activateProjectMut.isPending ? "Activando..." : "Activar portal →"}
+          </Button>
+        </div>
+      )}
 
       {/* Stats bar — premium design */}
       <div className="grid grid-cols-4 gap-4">
@@ -1568,7 +1595,19 @@ export default function AdminProjectDetail() {
         {/* ── ARCHIVOS ── */}
         {activeTab === "Archivos" && (
           <div className="space-y-4">
-            <div className="flex justify-end">
+            <div className="flex justify-end gap-2">
+              <Button size="sm" variant="outline" onClick={async () => {
+                const folderId = (project as any).driveFolderId || prompt("ID de carpeta de Google Drive:");
+                if (!folderId) return;
+                try {
+                  const res = await apiRequest("POST", `/api/admin/projects/${params.id}/sync-drive`, { folderId });
+                  const data = await res.json() as { synced?: number; message?: string };
+                  toast({ title: data.message || `${data.synced} archivos sincronizados` });
+                  invalidate();
+                } catch { toast({ title: "Error sincronizando Drive", variant: "destructive" }); }
+              }}>
+                <FolderOpen className="w-3.5 h-3.5 mr-1.5" /> Sincronizar Drive
+              </Button>
               <Button size="sm" variant="outline" onClick={() => setShowAddFile(true)}>
                 <Plus className="w-3.5 h-3.5 mr-1.5" /> Agregar archivo
               </Button>
