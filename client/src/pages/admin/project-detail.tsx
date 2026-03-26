@@ -44,6 +44,7 @@ type ProjectDetail = {
       id: string;
       title: string;
       description: string | null;
+      clientFacingTitle: string | null;
       status: string;
       priority: string;
       estimatedHours: number | null;
@@ -132,6 +133,8 @@ export default function AdminProjectDetail() {
   const [activeTab, setActiveTab] = useState("Roadmap");
   const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set());
   const [calendarMonth, setCalendarMonth] = useState(new Date());
+  const [selectedDay, setSelectedDay] = useState<Date | null>(null);
+  const [calQuickTask, setCalQuickTask] = useState({ title: "", phaseId: "" });
 
   const { data: project, isLoading } = useQuery<ProjectDetail>({
     queryKey: [`/api/admin/projects/${params.id}`],
@@ -627,61 +630,61 @@ export default function AdminProjectDetail() {
                   </div>
 
                   {/* Phases */}
-                  <div className="space-y-5">
+                  <div className="space-y-6">
                     {project.phases.map((phase, idx) => {
                       const color = PHASE_COLORS[idx % PHASE_COLORS.length];
                       const left = getPos(phase.startDate) ?? 0;
                       const right = getPos(phase.endDate) ?? 100;
-                      const width = Math.max(right - left, 2);
+                      const width = Math.max(right - left, 3);
                       const phaseProgress = phase.tasks.length > 0
                         ? (phase.tasks.filter(t => t.status === "completed").length / phase.tasks.length) * 100
                         : 0;
+                      const isComplete = phaseProgress === 100;
 
                       return (
                         <div key={phase.id}>
-                          <div className="flex items-center gap-3 mb-2">
-                            <span className="text-[11px] font-bold text-gray-500 uppercase tracking-wider w-20 shrink-0">Fase {idx + 1}</span>
-                            <span className="text-sm font-semibold text-gray-800 truncate">{phase.name}</span>
-                            <span className="text-[10px] text-gray-400 ml-auto">{Math.round(phaseProgress)}%</span>
-                          </div>
-                          {/* Phase bar */}
-                          <div className="relative h-8 bg-gray-50 rounded-lg ml-20">
-                            <div
-                              className="absolute h-full rounded-lg opacity-20"
-                              style={{ left: `${left}%`, width: `${width}%`, background: color }}
-                            />
-                            <div
-                              className="absolute h-full rounded-lg"
-                              style={{ left: `${left}%`, width: `${width * (phaseProgress / 100)}%`, background: color }}
-                            />
-                            {/* Phase label on bar */}
-                            <div className="absolute top-0 h-full flex items-center" style={{ left: `${left + 1}%` }}>
-                              <span className="text-[10px] font-semibold text-white drop-shadow-sm">{phase.name}</span>
+                          {/* Phase header — above bar for clarity */}
+                          <div className="flex items-center gap-3 mb-1.5">
+                            <span className="text-[10px] font-bold uppercase tracking-wider w-16 shrink-0" style={{ color }}>{`Fase ${idx + 1}`}</span>
+                            <span className="text-sm font-semibold text-gray-800">{phase.name}</span>
+                            <div className="flex items-center gap-2 ml-auto">
+                              {phase.startDate && phase.endDate && (
+                                <span className="text-[10px] text-gray-400">
+                                  {format(parseISO(phase.startDate), "d MMM", { locale: es })} → {format(parseISO(phase.endDate), "d MMM", { locale: es })}
+                                </span>
+                              )}
+                              <span className={`text-[11px] font-bold ${isComplete ? "text-emerald-600" : "text-gray-500"}`}>{Math.round(phaseProgress)}%</span>
                             </div>
                           </div>
-                          {/* Task bars */}
-                          {phase.tasks.filter(t => t.dueDate).map(task => {
+                          {/* Phase bar — clean two-layer design */}
+                          <div className="relative h-7 rounded-lg ml-16 overflow-hidden" style={{ background: `${color}15` }}>
+                            {/* Progress fill */}
+                            <div
+                              className="absolute h-full rounded-lg transition-all duration-500"
+                              style={{ left: `${left}%`, width: `${width * (phaseProgress / 100)}%`, background: color, opacity: isComplete ? 0.85 : 1 }}
+                            />
+                            {/* Full range outline */}
+                            <div
+                              className="absolute h-full rounded-lg border-2"
+                              style={{ left: `${left}%`, width: `${width}%`, borderColor: color, opacity: 0.3 }}
+                            />
+                            {/* Status icon inside bar */}
+                            {isComplete && (
+                              <div className="absolute h-full flex items-center" style={{ left: `${left + 1}%` }}>
+                                <span className="text-white text-[10px] font-bold ml-2 flex items-center gap-1">✓ Completada</span>
+                              </div>
+                            )}
+                          </div>
+                          {/* Milestone markers */}
+                          {phase.tasks.filter(t => t.isMilestone && t.dueDate).map(task => {
                             const taskLeft = getPos(task.dueDate);
                             if (taskLeft === null) return null;
                             return (
-                              <div key={task.id} className="relative h-5 ml-20 mt-1">
-                                {task.isMilestone ? (
-                                  <div className="absolute top-0.5" style={{ left: `${taskLeft}%` }}>
-                                    <Diamond className="w-4 h-4 text-amber-500 fill-amber-500" />
-                                  </div>
-                                ) : (
-                                  <div
-                                    className="absolute h-3 rounded-full top-1"
-                                    style={{
-                                      left: `${Math.max(taskLeft - 2, 0)}%`,
-                                      width: "4%",
-                                      background: task.status === "completed" ? "#10B981" : task.status === "in_progress" ? "#3B82F6" : "#D1D5DB",
-                                    }}
-                                  />
-                                )}
-                                <span className="absolute text-[9px] text-gray-500 top-0" style={{ left: `${Math.min(taskLeft + 5, 85)}%` }}>
-                                  {task.title.length > 25 ? task.title.slice(0, 25) + "…" : task.title}
-                                </span>
+                              <div key={task.id} className="relative h-5 ml-16 mt-0.5">
+                                <div className="absolute flex items-center gap-1" style={{ left: `${taskLeft}%` }}>
+                                  <Diamond className="w-3.5 h-3.5 text-amber-500 fill-amber-500 shrink-0" />
+                                  <span className="text-[9px] text-amber-600 font-medium whitespace-nowrap">{task.clientFacingTitle || task.title}</span>
+                                </div>
                               </div>
                             );
                           })}
@@ -691,8 +694,9 @@ export default function AdminProjectDetail() {
                   </div>
 
                   {/* Today line */}
-                  <div className="absolute top-0 bottom-0 w-px bg-red-400 z-10" style={{ left: `${todayPos}%` }}>
-                    <div className="absolute -top-5 -translate-x-1/2 text-[9px] font-bold text-red-500 bg-red-50 px-1.5 py-0.5 rounded">Hoy</div>
+                  <div className="absolute top-0 bottom-0 z-10" style={{ left: `${todayPos}%` }}>
+                    <div className="absolute top-0 bottom-0 w-0.5 bg-red-400" />
+                    <div className="absolute -top-6 -translate-x-1/2 text-[10px] font-bold text-red-600 bg-red-50 border border-red-200 px-2 py-0.5 rounded-full shadow-sm">Hoy</div>
                   </div>
                 </div>
               </div>
@@ -708,13 +712,13 @@ export default function AdminProjectDetail() {
           const startDay = monthStart.getDay(); // 0=Sun
 
           // Collect all events for this month
-          type CalEvent = { date: Date; label: string; type: "phase_start" | "phase_end" | "task" | "milestone"; status: string; color: string };
+          type CalEvent = { date: Date; label: string; type: "phase_start" | "phase_end" | "task" | "milestone"; status: string; color: string; taskId?: string; phaseId: string; phaseName: string };
           const events: CalEvent[] = [];
           const PHASE_COLORS_CAL = ["#2FA4A9", "#3B82F6", "#8B5CF6", "#D97706", "#EC4899", "#10B981"];
           project.phases.forEach((phase, idx) => {
             const color = PHASE_COLORS_CAL[idx % PHASE_COLORS_CAL.length];
-            if (phase.startDate) events.push({ date: parseISO(phase.startDate), label: `${phase.name} (inicio)`, type: "phase_start", status: phase.status, color });
-            if (phase.endDate) events.push({ date: parseISO(phase.endDate), label: `${phase.name} (fin)`, type: "phase_end", status: phase.status, color });
+            if (phase.startDate) events.push({ date: parseISO(phase.startDate), label: `${phase.name} (inicio)`, type: "phase_start", status: phase.status, color, phaseId: phase.id, phaseName: phase.name });
+            if (phase.endDate) events.push({ date: parseISO(phase.endDate), label: `${phase.name} (fin)`, type: "phase_end", status: phase.status, color, phaseId: phase.id, phaseName: phase.name });
             phase.tasks.forEach(t => {
               if (t.dueDate) {
                 events.push({
@@ -723,6 +727,9 @@ export default function AdminProjectDetail() {
                   type: t.isMilestone ? "milestone" : "task",
                   status: t.status,
                   color: t.status === "completed" ? "#10B981" : t.status === "in_progress" ? "#3B82F6" : t.status === "blocked" ? "#EF4444" : "#9CA3AF",
+                  taskId: t.id,
+                  phaseId: phase.id,
+                  phaseName: phase.name,
                 });
               }
             });
@@ -730,6 +737,7 @@ export default function AdminProjectDetail() {
 
           const getEventsForDay = (day: Date) => events.filter(e => isSameDay(e.date, day));
           const today = new Date();
+          const selectedDayEvents = selectedDay ? getEventsForDay(selectedDay) : [];
 
           return (
             <div className="space-y-4">
@@ -745,73 +753,188 @@ export default function AdminProjectDetail() {
                   </Button>
                 </div>
               )}
-              <div className="bg-white rounded-xl border border-gray-200 p-6">
-                {/* Month navigation */}
-                <div className="flex items-center justify-between mb-6">
-                  <button onClick={() => setCalendarMonth(prev => subMonths(prev, 1))} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500">
-                    <ChevronDown className="w-4 h-4 rotate-90" />
-                  </button>
-                  <h3 className="text-lg font-bold text-gray-900 capitalize">
-                    {format(calendarMonth, "MMMM yyyy", { locale: es })}
-                  </h3>
-                  <button onClick={() => setCalendarMonth(prev => addMonths(prev, 1))} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500">
-                    <ChevronDown className="w-4 h-4 -rotate-90" />
-                  </button>
-                </div>
 
-                {/* Day headers */}
-                <div className="grid grid-cols-7 gap-px mb-1">
-                  {["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"].map(d => (
-                    <div key={d} className="text-center text-[10px] font-semibold text-gray-400 uppercase tracking-wider py-2">{d}</div>
-                  ))}
-                </div>
-
+              <div className="flex gap-4">
                 {/* Calendar grid */}
-                <div className="grid grid-cols-7 gap-px">
-                  {/* Empty cells for offset */}
-                  {Array.from({ length: startDay }).map((_, i) => (
-                    <div key={`empty-${i}`} className="h-24 bg-gray-50/50 rounded-lg" />
-                  ))}
-                  {days.map(day => {
-                    const dayEvents = getEventsForDay(day);
-                    const isToday = isSameDay(day, today);
-                    return (
-                      <div
-                        key={day.toISOString()}
-                        className={`h-24 rounded-lg p-1.5 border transition-colors ${
-                          isToday ? "border-[#2FA4A9] bg-teal-50/30" : "border-transparent hover:bg-gray-50"
-                        }`}
-                      >
-                        <div className={`text-[11px] font-medium mb-1 ${isToday ? "text-[#2FA4A9] font-bold" : "text-gray-500"}`}>
-                          {format(day, "d")}
+                <div className={`bg-white rounded-xl border border-gray-200 p-6 ${selectedDay ? "flex-1" : "w-full"} transition-all`}>
+                  {/* Month navigation */}
+                  <div className="flex items-center justify-between mb-6">
+                    <button onClick={() => setCalendarMonth(prev => subMonths(prev, 1))} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500">
+                      <ChevronDown className="w-4 h-4 rotate-90" />
+                    </button>
+                    <div className="flex items-center gap-3">
+                      <h3 className="text-lg font-bold text-gray-900 capitalize">
+                        {format(calendarMonth, "MMMM yyyy", { locale: es })}
+                      </h3>
+                      <button onClick={() => { setCalendarMonth(new Date()); setSelectedDay(new Date()); }} className="text-[10px] text-[#2FA4A9] font-medium hover:underline">
+                        Hoy
+                      </button>
+                    </div>
+                    <button onClick={() => setCalendarMonth(prev => addMonths(prev, 1))} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500">
+                      <ChevronDown className="w-4 h-4 -rotate-90" />
+                    </button>
+                  </div>
+
+                  {/* Day headers */}
+                  <div className="grid grid-cols-7 gap-px mb-1">
+                    {["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"].map(d => (
+                      <div key={d} className="text-center text-[10px] font-semibold text-gray-400 uppercase tracking-wider py-2">{d}</div>
+                    ))}
+                  </div>
+
+                  {/* Calendar grid */}
+                  <div className="grid grid-cols-7 gap-px">
+                    {Array.from({ length: startDay }).map((_, i) => (
+                      <div key={`empty-${i}`} className="h-24 bg-gray-50/30 rounded-lg" />
+                    ))}
+                    {days.map(day => {
+                      const dayEvents = getEventsForDay(day);
+                      const isToday = isSameDay(day, today);
+                      const isSelected = selectedDay && isSameDay(day, selectedDay);
+                      return (
+                        <div
+                          key={day.toISOString()}
+                          onClick={() => setSelectedDay(day)}
+                          className={`h-24 rounded-lg p-1.5 border cursor-pointer transition-all ${
+                            isSelected ? "border-[#2FA4A9] bg-teal-50/50 ring-1 ring-[#2FA4A9]/20"
+                            : isToday ? "border-[#2FA4A9]/40 bg-teal-50/20"
+                            : "border-transparent hover:bg-gray-50 hover:border-gray-200"
+                          }`}
+                        >
+                          <div className={`text-[11px] font-medium mb-1 ${isSelected ? "text-[#2FA4A9] font-bold" : isToday ? "text-[#2FA4A9] font-bold" : "text-gray-500"}`}>
+                            {format(day, "d")}
+                          </div>
+                          <div className="space-y-0.5 overflow-hidden">
+                            {dayEvents.slice(0, 3).map((ev, i) => (
+                              <div key={i} className="flex items-center gap-1">
+                                {ev.type === "milestone" ? (
+                                  <Diamond className="w-2.5 h-2.5 shrink-0 text-amber-500 fill-amber-500" />
+                                ) : (
+                                  <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: ev.color }} />
+                                )}
+                                <span className="text-[9px] text-gray-600 truncate">{ev.label}</span>
+                              </div>
+                            ))}
+                            {dayEvents.length > 3 && (
+                              <span className="text-[9px] text-gray-400">+{dayEvents.length - 3} más</span>
+                            )}
+                          </div>
                         </div>
-                        <div className="space-y-0.5 overflow-hidden">
-                          {dayEvents.slice(0, 3).map((ev, i) => (
-                            <div key={i} className="flex items-center gap-1">
-                              {ev.type === "milestone" ? (
-                                <Diamond className="w-2.5 h-2.5 shrink-0 text-amber-500 fill-amber-500" />
-                              ) : (
-                                <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: ev.color }} />
-                              )}
-                              <span className="text-[9px] text-gray-600 truncate">{ev.label}</span>
-                            </div>
-                          ))}
-                          {dayEvents.length > 3 && (
-                            <span className="text-[9px] text-gray-400">+{dayEvents.length - 3} más</span>
-                          )}
+                      );
+                    })}
+                  </div>
+
+                  {/* Legend */}
+                  <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gray-100">
+                    <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500" /><span className="text-[10px] text-gray-500">Completada</span></div>
+                    <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-500" /><span className="text-[10px] text-gray-500">En progreso</span></div>
+                    <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-gray-400" /><span className="text-[10px] text-gray-500">Pendiente</span></div>
+                    <div className="flex items-center gap-1.5"><Diamond className="w-2.5 h-2.5 text-amber-500 fill-amber-500" /><span className="text-[10px] text-gray-500">Milestone</span></div>
+                  </div>
+                </div>
+
+                {/* Side panel — day detail */}
+                <AnimatePresence>
+                  {selectedDay && (
+                    <motion.div
+                      initial={{ width: 0, opacity: 0 }}
+                      animate={{ width: 340, opacity: 1 }}
+                      exit={{ width: 0, opacity: 0 }}
+                      transition={{ duration: 0.2 }}
+                      className="shrink-0 overflow-hidden"
+                    >
+                      <div className="bg-white rounded-xl border border-gray-200 p-5 h-full w-[340px]">
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            <p className="text-sm font-bold text-gray-900 capitalize">{format(selectedDay, "EEEE", { locale: es })}</p>
+                            <p className="text-xs text-gray-400">{format(selectedDay, "d 'de' MMMM, yyyy", { locale: es })}</p>
+                          </div>
+                          <button onClick={() => setSelectedDay(null)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">✕</button>
+                        </div>
+
+                        {selectedDayEvents.length === 0 ? (
+                          <div className="text-center py-8">
+                            <CalendarDays className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                            <p className="text-xs text-gray-400 mb-3">Sin eventos este día</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2 mb-4">
+                            {selectedDayEvents.map((ev, i) => {
+                              const StatusIcon = ev.taskId ? (TASK_STATUS_ICONS[ev.status] || Circle) : Circle;
+                              return (
+                                <div key={i} className="flex items-start gap-3 p-3 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors group">
+                                  <div className="w-1 h-full rounded-full shrink-0 self-stretch" style={{ background: ev.color }} />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="text-sm font-medium text-gray-800 truncate">{ev.label}</p>
+                                    <p className="text-[10px] text-gray-400">{ev.phaseName}</p>
+                                    {ev.type === "milestone" && <span className="text-[10px] text-amber-600 font-medium">🏁 Milestone</span>}
+                                    {(ev.type === "phase_start" || ev.type === "phase_end") && (
+                                      <span className="text-[10px] text-gray-400">{ev.type === "phase_start" ? "Inicio de fase" : "Fin de fase"}</span>
+                                    )}
+                                  </div>
+                                  {ev.taskId && (
+                                    <button
+                                      onClick={() => {
+                                        const order = ["pending", "in_progress", "completed"];
+                                        const next = order[(order.indexOf(ev.status) + 1) % order.length];
+                                        updateTaskMut.mutate({ id: ev.taskId!, data: { status: next } });
+                                      }}
+                                      className="shrink-0"
+                                      title="Cambiar estado"
+                                    >
+                                      <StatusIcon className={`w-4 h-4 ${TASK_STATUS_COLORS[ev.status]} hover:scale-110 transition-transform`} />
+                                    </button>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+
+                        {/* Quick add task */}
+                        <div className="border-t border-gray-100 pt-3 mt-3">
+                          <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-2">Agregar tarea rápida</p>
+                          <div className="space-y-2">
+                            <Input
+                              placeholder="Nombre de la tarea"
+                              value={calQuickTask.title}
+                              onChange={e => setCalQuickTask(f => ({ ...f, title: e.target.value }))}
+                              className="h-8 text-xs"
+                            />
+                            {project.phases.length > 0 && (
+                              <Select value={calQuickTask.phaseId} onValueChange={v => setCalQuickTask(f => ({ ...f, phaseId: v }))}>
+                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar fase" /></SelectTrigger>
+                                <SelectContent>
+                                  {project.phases.map(p => (
+                                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            )}
+                            <Button
+                              size="sm"
+                              className="w-full h-8 text-xs bg-[#2FA4A9] hover:bg-[#238b8f]"
+                              disabled={!calQuickTask.title || !calQuickTask.phaseId}
+                              onClick={() => {
+                                addTaskMut.mutate({
+                                  phaseId: calQuickTask.phaseId,
+                                  data: {
+                                    title: calQuickTask.title,
+                                    priority: "medium",
+                                    dueDate: format(selectedDay, "yyyy-MM-dd"),
+                                  },
+                                });
+                                setCalQuickTask({ title: "", phaseId: "" });
+                              }}
+                            >
+                              <Plus className="w-3 h-3 mr-1" /> Crear tarea para este día
+                            </Button>
+                          </div>
                         </div>
                       </div>
-                    );
-                  })}
-                </div>
-
-                {/* Legend */}
-                <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gray-100">
-                  <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500" /><span className="text-[10px] text-gray-500">Completada</span></div>
-                  <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-500" /><span className="text-[10px] text-gray-500">En progreso</span></div>
-                  <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-gray-400" /><span className="text-[10px] text-gray-500">Pendiente</span></div>
-                  <div className="flex items-center gap-1.5"><Diamond className="w-2.5 h-2.5 text-amber-500 fill-amber-500" /><span className="text-[10px] text-gray-500">Milestone</span></div>
-                </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </div>
           );
