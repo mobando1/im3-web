@@ -6756,5 +6756,57 @@ ${urls}
     }
   });
 
+  // Seed test contact with full diagnostic for proposal testing
+  app.post("/api/admin/seed-test-contact", requireAuth, async (_req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [existing] = await db.select().from(contacts).where(eq(contacts.email, "carlos@caferoma.co")).limit(1);
+      if (existing) return res.json({ message: "Contacto de prueba ya existe", contactId: existing.id });
+
+      const [diag] = await db.insert(diagnostics).values({
+        fechaCita: "2026-04-05",
+        horaCita: "10:00 AM",
+        empresa: "Café & Aroma S.A.S",
+        industria: "Alimentos y bebidas / Cafeterías",
+        anosOperacion: "8 años",
+        empleados: "25-50",
+        ciudades: "Bogotá, Medellín",
+        participante: "Carlos Méndez",
+        email: "carlos@caferoma.co",
+        telefono: "+57 310 555 1234",
+        areaPrioridad: "Gestión de inventario y pedidos",
+        objetivos: "Automatizar el proceso de pedidos a proveedores, tener visibilidad en tiempo real del inventario en las 3 sedes, reducir desperdicio de insumos perecederos",
+        herramientas: "Excel para inventario, WhatsApp para pedidos a proveedores, POS básico en cada sede",
+        presupuesto: "$5,000 - $10,000 USD",
+        meetLink: null,
+      }).returning();
+
+      const [contact] = await db.insert(contacts).values({
+        nombre: "Carlos Méndez",
+        empresa: "Café & Aroma S.A.S",
+        email: "carlos@caferoma.co",
+        telefono: "+57 310 555 1234",
+        diagnosticId: diag.id,
+        status: "scheduled",
+        leadScore: 75,
+      }).returning();
+
+      // Add some notes
+      await db.insert(contactNotes).values({
+        contactId: contact.id,
+        content: "Carlos tiene 3 sedes en Bogotá y 1 en Medellín. Su mayor dolor es el desperdicio de café e insumos porque no tienen visibilidad del inventario. Pide pedidos por WhatsApp a 5 proveedores diferentes. Quiere un sistema que le diga cuándo pedir y cuánto.",
+      });
+
+      await db.insert(contactNotes).values({
+        contactId: contact.id,
+        content: "En la reunión mencionó que pierde aprox $800 USD/mes en desperdicio de insumos. Su equipo dedica 15 horas/semana a gestionar pedidos manualmente. Está dispuesto a invertir si ve ROI claro en 3-4 meses.",
+      });
+
+      res.json({ message: "Contacto de prueba creado: Carlos Méndez (Café & Aroma)", contactId: contact.id });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
   return httpServer;
 }

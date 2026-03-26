@@ -1,6 +1,6 @@
 import { google, gmail_v1 } from "googleapis";
 import { db } from "./db";
-import { gmailEmails, gmailSyncState, contacts, sentEmails } from "@shared/schema";
+import { gmailEmails, gmailSyncState, contacts, sentEmails, activityLog } from "@shared/schema";
 import { eq, and, gte, lte, or } from "drizzle-orm";
 import { log } from "./index";
 
@@ -191,7 +191,7 @@ async function fetchAndStoreMessage(
   const { text, html } = extractBodies(msg.payload);
   const hasAttach = hasAttachmentParts(msg.payload);
 
-  await db.insert(gmailEmails).values({
+  const [inserted] = await db.insert(gmailEmails).values({
     gmailMessageId: messageId,
     gmailThreadId: msg.threadId || null,
     contactId,
@@ -205,7 +205,24 @@ async function fetchAndStoreMessage(
     labelIds: msg.labelIds || [],
     hasAttachments: hasAttach,
     gmailDate,
-  });
+  }).returning({ id: gmailEmails.id });
+
+  // Log activity for matched contacts
+  if (contactId) {
+    try {
+      const actType = direction === "inbound" ? "gmail_received" : "gmail_sent";
+      const actDesc = `Email ${direction === "inbound" ? "recibido" : "enviado"}: "${(subject || "Sin asunto").substring(0, 80)}"`;
+      await db.insert(activityLog).values({
+        contactId,
+        type: actType,
+        description: actDesc,
+        metadata: { gmailEmailId: inserted.id, gmailMessageId: messageId },
+      });
+      await db.update(contacts).set({ lastActivityAt: new Date() }).where(eq(contacts.id, contactId));
+    } catch (err: unknown) {
+      log(`[Gmail Sync] Error logging activity: ${(err as Error).message}`);
+    }
+  }
 
   return { stored: true, contactId };
 }

@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { log } from "./index";
 import { db } from "./db";
-import { clientProjects, projectPhases, projectTasks, projectActivityEntries, projectTimeLog } from "@shared/schema";
+import { clientProjects, projectPhases, projectTasks, projectDeliverables, projectActivityEntries, projectTimeLog, projectIdeas } from "@shared/schema";
 import { eq, desc, gte, asc } from "drizzle-orm";
 
 let client: Anthropic | null = null;
@@ -248,4 +248,212 @@ export async function calculateProjectHealth(projectId: string): Promise<{
   await db.update(clientProjects).set({ healthStatus, healthNote, updatedAt: new Date() }).where(eq(clientProjects.id, projectId));
 
   return { healthStatus, healthNote };
+}
+
+/**
+ * Generate a full project plan from a proposal using AI.
+ * Uses proposal timeline, pricing, and scope to create phases, tasks, deliverables, and ideas.
+ */
+export async function generateProjectFromProposal(proposal: {
+  id: string;
+  contactId: string | null;
+  title: string;
+  sections: Record<string, string>;
+  pricing: { total: number; currency: string; includes?: string[] } | null;
+  timelineData: { phases: Array<{ name: string; weeks: number; deliverables?: string[] }>; totalWeeks?: number } | null;
+}, startDate: Date = new Date()): Promise<{
+  projectId: string;
+  phasesCreated: number;
+  tasksCreated: number;
+  deliverablesCreated: number;
+}> {
+  const anthropic = getClient();
+
+  // Extract proposal data
+  const timeline = proposal.timelineData;
+  const pricing = proposal.pricing;
+  const sections = proposal.sections || {};
+
+  if (!db) throw new Error("Database not configured");
+  const database = db; // TS narrowing
+
+  // Strip HTML from sections for AI context
+  const stripHtml = (html: string) => html?.replace(/<[^>]*>/g, "").replace(/&[^;]+;/g, " ").trim() || "";
+  const resumen = stripHtml(sections.resumen || "");
+  const solucion = stripHtml(sections.solucion || "");
+  const alcance = stripHtml(sections.alcance || "");
+
+  // 1. Create project
+  const [project] = await database.insert(clientProjects).values({
+    contactId: proposal.contactId,
+    name: proposal.title.replace(/^Propuesta:?\s*/i, "").trim() || "Nuevo proyecto",
+    description: resumen.substring(0, 500) || solucion.substring(0, 500) || "Proyecto generado desde propuesta",
+    status: "draft",
+    startDate,
+    estimatedEndDate: timeline?.totalWeeks
+      ? new Date(startDate.getTime() + (timeline.totalWeeks * 7 * 24 * 60 * 60 * 1000))
+      : new Date(startDate.getTime() + 90 * 24 * 60 * 60 * 1000),
+    totalBudget: pricing?.total || 0,
+    currency: pricing?.currency || "USD",
+    healthStatus: "on_track",
+    healthNote: "Proyecto recién creado — pendiente de activación.",
+  }).returning();
+
+  let totalTasks = 0;
+  let totalDeliverables = 0;
+
+  // 2. Create phases from timeline
+  if (timeline?.phases && timeline.phases.length > 0) {
+    let currentDate = new Date(startDate);
+
+    for (let i = 0; i < timeline.phases.length; i++) {
+      const p = timeline.phases[i];
+      const phaseEndDate = new Date(currentDate.getTime() + (p.weeks * 7 * 24 * 60 * 60 * 1000));
+
+      const [phase] = await database.insert(projectPhases).values({
+        projectId: project.id,
+        name: p.name,
+        orderIndex: i,
+        status: "pending",
+        startDate: currentDate,
+        endDate: phaseEndDate,
+        estimatedHours: Math.round(p.weeks * 40), // ~40h per week
+      }).returning();
+
+      // Create deliverables from phase deliverables
+      if (p.deliverables && p.deliverables.length > 0) {
+        for (const d of p.deliverables) {
+          await database.insert(projectDeliverables).values({
+            projectId: project.id,
+            phaseId: phase.id,
+            title: d,
+            type: d.toLowerCase().includes("diseño") || d.toLowerCase().includes("mockup") || d.toLowerCase().includes("figma") ? "design"
+              : d.toLowerCase().includes("documento") || d.toLowerCase().includes("spec") ? "document"
+              : "feature",
+            status: "pending",
+          });
+          totalDeliverables++;
+        }
+      }
+
+      currentDate = phaseEndDate;
+    }
+  }
+
+  // 3. Use AI to generate detailed tasks if anthropic is available
+  if (anthropic && timeline?.phases) {
+    try {
+      const context = `
+Propuesta: ${proposal.title}
+Resumen: ${resumen}
+Solución: ${solucion}
+Alcance: ${alcance}
+Fases del timeline: ${timeline.phases.map((p, i) => `${i + 1}. ${p.name} (${p.weeks} semanas)`).join(", ")}
+Presupuesto: ${pricing?.total || "N/A"} ${pricing?.currency || "USD"}
+`.trim();
+
+      const response = await anthropic.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 3000,
+        system: `Eres un project manager senior. Genera tareas detalladas para cada fase de un proyecto de desarrollo de software/tecnología.
+
+Responde SOLO con un JSON array válido. Sin texto antes ni después. Sin bloques de código markdown.
+
+Formato:
+[
+  {
+    "phaseIndex": 0,
+    "tasks": [
+      { "title": "título de la tarea", "priority": "high|medium|low", "isMilestone": false, "clientFacingTitle": "título para el cliente (sin jerga técnica)" }
+    ]
+  }
+]
+
+Reglas:
+- 4-8 tareas por fase
+- La primera tarea de cada fase debe ser el kickoff/planeación
+- La última tarea de cada fase debe ser un milestone (isMilestone: true) con la entrega principal
+- Prioridades realistas: 2-3 high, resto medium/low
+- clientFacingTitle debe ser comprensible para un empresario no técnico
+- Tareas específicas al alcance descrito, NO genéricas`,
+        messages: [{
+          role: "user",
+          content: `Genera tareas para este proyecto:\n\n${context}`,
+        }],
+      });
+
+      const text = response.content?.[0]?.type === "text" ? response.content[0].text.trim() : "[]";
+      const cleaned = text.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim();
+      const phaseTasks = JSON.parse(cleaned) as Array<{
+        phaseIndex: number;
+        tasks: Array<{ title: string; priority: string; isMilestone?: boolean; clientFacingTitle?: string }>;
+      }>;
+
+      // Get created phases
+      const phases = await database.select().from(projectPhases)
+        .where(eq(projectPhases.projectId, project.id))
+        .orderBy(asc(projectPhases.orderIndex));
+
+      for (const pt of phaseTasks) {
+        const phase = phases[pt.phaseIndex];
+        if (!phase) continue;
+
+        const phaseStart = phase.startDate ? new Date(phase.startDate) : startDate;
+        const phaseEnd = phase.endDate ? new Date(phase.endDate) : new Date(phaseStart.getTime() + 14 * 24 * 60 * 60 * 1000);
+        const phaseDays = Math.max(1, Math.round((phaseEnd.getTime() - phaseStart.getTime()) / (24 * 60 * 60 * 1000)));
+
+        for (let j = 0; j < pt.tasks.length; j++) {
+          const t = pt.tasks[j];
+          const taskDueDate = new Date(phaseStart.getTime() + ((j + 1) / pt.tasks.length) * phaseDays * 24 * 60 * 60 * 1000);
+
+          await database.insert(projectTasks).values({
+            phaseId: phase.id,
+            projectId: project.id,
+            title: t.title,
+            clientFacingTitle: t.clientFacingTitle || t.title,
+            priority: t.priority || "medium",
+            isMilestone: t.isMilestone || false,
+            status: "pending",
+            dueDate: taskDueDate,
+          });
+          totalTasks++;
+        }
+      }
+    } catch (err) {
+      log(`AI task generation failed, creating basic tasks: ${err}`);
+      // Fallback: create 1 basic task per phase
+      const phases = await database.select().from(projectPhases)
+        .where(eq(projectPhases.projectId, project.id))
+        .orderBy(asc(projectPhases.orderIndex));
+
+      for (const phase of phases) {
+        await database.insert(projectTasks).values({
+          phaseId: phase.id, projectId: project.id,
+          title: `Completar ${phase.name}`, priority: "high", status: "pending", isMilestone: true,
+        });
+        totalTasks++;
+      }
+    }
+  }
+
+  // 4. Generate ideas for future phases
+  if (anthropic) {
+    try {
+      const ideasResponse = await anthropic.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 500,
+        system: "Genera 3 ideas de mejoras futuras para un proyecto de tecnología. JSON array: [{\"title\": \"...\", \"description\": \"...\", \"priority\": \"medium\"}]. Sin markdown.",
+        messages: [{ role: "user", content: `Proyecto: ${proposal.title}. Alcance: ${alcance.substring(0, 300)}` }],
+      });
+      const ideasText = ideasResponse.content?.[0]?.type === "text" ? ideasResponse.content[0].text.trim() : "[]";
+      const ideas = JSON.parse(ideasText.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim());
+      for (const idea of ideas) {
+        await database.insert(projectIdeas).values({ projectId: project.id, ...idea, suggestedBy: "team", status: "suggested" });
+      }
+    } catch { /* ideas are optional */ }
+  }
+
+  log(`Proyecto generado desde propuesta: ${project.id} — ${timeline?.phases?.length || 0} fases, ${totalTasks} tareas, ${totalDeliverables} entregas`);
+
+  return { projectId: project.id, phasesCreated: timeline?.phases?.length || 0, tasksCreated: totalTasks, deliverablesCreated: totalDeliverables };
 }

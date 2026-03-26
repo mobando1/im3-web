@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Copy, ExternalLink, Send, Sparkles, Save, Eye } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Send, Sparkles, Save, Eye, FolderKanban } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -92,6 +92,19 @@ export default function ProposalEditor() {
     onError: () => toast({ title: "Error enviando propuesta", variant: "destructive" }),
   });
 
+  // Convert to project
+  const convertMut = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/proposals/${id}/convert-to-project`, { startDate: new Date().toISOString() });
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: `Proyecto creado: ${data.phasesCreated} fases, ${data.tasksCreated} tareas` });
+      navigate(`/admin/projects/${data.projectId}`);
+    },
+    onError: () => toast({ title: "Error creando proyecto", variant: "destructive" }),
+  });
+
   // Auto-generate on first load if sections are empty
   useEffect(() => {
     if (proposal && (!proposal.sections || Object.keys(proposal.sections).length === 0) && !generateMut.isPending) {
@@ -175,6 +188,18 @@ export default function ProposalEditor() {
           >
             <Send className="w-4 h-4" />
             {sendMut.isPending ? "Enviando..." : "Enviar al cliente"}
+          </Button>
+        )}
+        {hasSections && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => convertMut.mutate()}
+            disabled={convertMut.isPending}
+            className="gap-1.5"
+          >
+            <FolderKanban className="w-4 h-4" />
+            {convertMut.isPending ? "Creando proyecto..." : "Crear proyecto"}
           </Button>
         )}
       </div>
