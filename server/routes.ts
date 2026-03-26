@@ -5760,7 +5760,7 @@ ${urls}
 
   const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || "";
   const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || "";
-  const GITHUB_CALLBACK_URL = process.env.GITHUB_CALLBACK_URL || "https://www.im3systems.com/api/github/callback";
+  const GITHUB_CALLBACK_URL = process.env.GITHUB_CALLBACK_URL || "https://hub.im3systems.com/api/github/callback";
 
   // Check if GitHub OAuth is configured
   app.get("/api/admin/github/status", requireAuth, async (req, res) => {
