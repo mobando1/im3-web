@@ -29,9 +29,11 @@ function getSystemPrompt(language: string = "es"): string {
 - NO incluyas links de reagendar o cancelar en tu HTML — se agregan automáticamente en el footer de cada email.`;
 
   if (language === "en") {
-    return `You are the IM3 Systems team, a technology company specialized in artificial intelligence, automation, and custom software development for businesses.
+    return `You are the IM3 Systems team, a TECHNOLOGY company specialized in artificial intelligence, automation, and custom software development for businesses.
 
-Your task is to generate professional and personalized emails for clients who scheduled a technology diagnostic session.
+Your task is to generate professional and personalized emails for clients who scheduled a TECHNOLOGY DIAGNOSTIC session (technology consulting about AI, automation, and software).
+
+FORBIDDEN: NEVER use medical terminology. This is NOT a medical appointment. It is a TECHNOLOGY DIAGNOSTIC — a consulting session about AI, automation, and software. NEVER say "medical appointment", "medical consultation", "patient", "doctor", "health", "clinic", "hospital", "treatment" or similar terms.
 
 Rules:
 - Tone: professional yet approachable, like a tech consultant who knows their stuff. NOT generic corporate.
@@ -48,9 +50,11 @@ Rules:
 ${shared}`;
   }
 
-  return `Eres el equipo de IM3 Systems, una empresa de tecnología especializada en inteligencia artificial, automatización y desarrollo de software para empresas.
+  return `Eres el equipo de IM3 Systems, una empresa de TECNOLOGÍA especializada en inteligencia artificial, automatización y desarrollo de software para empresas.
 
-Tu tarea es generar emails profesionales y personalizados para clientes que agendaron una sesión de diagnóstico tecnológico.
+Tu tarea es generar emails profesionales y personalizados para clientes que agendaron una sesión de DIAGNÓSTICO TECNOLÓGICO (consultoría de tecnología, IA y automatización).
+
+PROHIBIDO: NUNCA uses terminología médica. Esto NO es una cita médica ni una consulta de salud. Es un DIAGNÓSTICO TECNOLÓGICO — una sesión de consultoría sobre IA, automatización y software. NUNCA digas "cita médica", "consulta médica", "paciente", "doctor", "salud", "clínica", "hospital", "tratamiento" ni términos similares.
 
 Reglas:
 - Tono: profesional pero cercano, como un consultor tech que sabe lo que hace. NO corporativo genérico.
@@ -348,9 +352,10 @@ export async function generateEmailContent(
   const subjectResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 100,
+    temperature: 0.3,
     system: language === "en"
-      ? "Generate ONLY the email subject text. No quotes, no prefix, just the text. Max 60 characters. Write in English."
-      : "Genera SOLO el texto del subject de un email. Sin comillas, sin prefijo, solo el texto. Máximo 60 caracteres.",
+      ? "Generate ONLY the email subject text. No quotes, no prefix, just the text. Max 60 characters. Write in English. This is a TECHNOLOGY diagnostic session about AI and software, NOT medical."
+      : "Genera SOLO el texto del subject de un email. Sin comillas, sin prefijo, solo el texto. Máximo 60 caracteres. Esto es un DIAGNÓSTICO TECNOLÓGICO sobre IA y software, NO médico.",
     messages: [
       {
         role: "user",
@@ -370,6 +375,7 @@ export async function generateEmailContent(
   const bodyResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 1500,
+    temperature: 0.3,
     system: getSystemPrompt(language),
     messages: [
       {
@@ -386,6 +392,30 @@ export async function generateEmailContent(
 
   // Strip markdown code block wrappers if AI included them
   body = body.replace(/^```html\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+
+  // Validate: reject medical terminology (AI hallucination guard)
+  const FORBIDDEN_TERMS = ["cita médica", "consulta médica", "paciente", "médico", "clínica", "hospital", "tratamiento", "medical appointment", "medical consultation"];
+  const bodyLower = body.toLowerCase();
+  const subjectLower = subject.toLowerCase();
+  const hasForbiddenBody = FORBIDDEN_TERMS.some(t => bodyLower.includes(t));
+  const hasForbiddenSubject = FORBIDDEN_TERMS.some(t => subjectLower.includes(t));
+
+  if (hasForbiddenBody || hasForbiddenSubject) {
+    log(`⚠ Email para ${diagnosticData?.empresa || "?"} contenía términos médicos — regenerando con temperature 0.1`);
+    const retryResponse = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1500,
+      temperature: 0.1,
+      system: getSystemPrompt(language),
+      messages: [{
+        role: "user",
+        content: `${template.bodyPrompt}\n\nCRÍTICO: Esto es un DIAGNÓSTICO TECNOLÓGICO de IM3 Systems (empresa de tecnología). NO es médico.\n\n${language === "en" ? "IMPORTANT: Write ALL content in English." : ""}\n\n${context}\n\nGenera el email completo en HTML PURO con estilos inline. NO uses bloques de código markdown. Devuelve SOLO el HTML directo sin \`\`\`html ni \`\`\`. Wrapper: max-width:600px, font-family:'Segoe UI',Roboto,sans-serif. Header con background:linear-gradient(135deg,#0F172A,#1E293B) y título blanco. Links y CTAs en color #3B82F6.`,
+      }],
+    });
+    body = retryResponse.content?.[0]?.type === "text"
+      ? retryResponse.content[0].text.trim().replace(/^```html\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim()
+      : "<p>Error generando contenido</p>";
+  }
 
   // Add footer with reschedule/cancel (pre-meeting) + unsubscribe
   if (contactId) {
@@ -411,6 +441,7 @@ export async function generateNewsletterWelcome(language: string = "es"): Promis
   const subjectResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 100,
+    temperature: 0.5,
     system: language === "en"
       ? "Generate ONLY the email subject text for a tech newsletter welcome. It should be intriguing with a fun fact or question. No quotes, no prefix, just the text. Max 60 characters."
       : "Genera SOLO el texto del subject de un email de bienvenida a un newsletter de tecnología. Debe ser intrigante y contener un dato curioso o pregunta que enganche. Sin comillas, sin prefijo, solo el texto. Máximo 60 caracteres. Español latinoamericano.",
@@ -432,6 +463,7 @@ export async function generateNewsletterWelcome(language: string = "es"): Promis
   const bodyResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 1500,
+    temperature: 0.5,
     system: getSystemPrompt(language),
     messages: [
       {
@@ -547,6 +579,7 @@ Responde con este JSON exacto:
   const response = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 1000,
+    temperature: 0.2,
     messages: [{ role: "user", content: prompt }],
   });
 
@@ -611,6 +644,7 @@ export async function generateDailyNewsDigest(language: string = "es"): Promise<
   const blogResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 3000,
+    temperature: 0.5,
     system: isEn
       ? `You are a tech analyst at IM3 Systems writing a weekly summary of AI, automation and technology news for businesses.
 
@@ -734,9 +768,10 @@ export async function generateWhatsAppMessage(
   const response = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 300,
+    temperature: 0.3,
     system: language === "en"
-      ? `Generate a short WhatsApp message (max 3 sentences) in professional English. Tone: professional but approachable, like a friendly tech consultant. NO excessive emojis (max 1). NO HTML format. Plain text only. Start with "Hi {name}". Sign as "— IM3 Systems Team". The message must be relevant to the contact's current status and data.`
-      : `Genera un mensaje corto de WhatsApp (máximo 3 oraciones) en español latinoamericano. Tono: profesional pero cercano, como un consultor tech amigable. NO uses emojis excesivos (máximo 1). NO uses formato HTML. Texto plano solamente. Empieza con "Hola {nombre}". Firma como "— Equipo IM3 Systems". El mensaje debe ser relevante al status actual del contacto y sus datos.`,
+      ? `Generate a short WhatsApp message (max 3 sentences) in professional English. Tone: professional but approachable, like a friendly tech consultant. NO excessive emojis (max 1). NO HTML format. Plain text only. Start with "Hi {name}". Sign as "— IM3 Systems Team". The message must be relevant to the contact's current status and data. This is a TECHNOLOGY consulting company, NOT medical.`
+      : `Genera un mensaje corto de WhatsApp (máximo 3 oraciones) en español latinoamericano. Tono: profesional pero cercano, como un consultor tech amigable. NO uses emojis excesivos (máximo 1). NO uses formato HTML. Texto plano solamente. Empieza con "Hola {nombre}". Firma como "— Equipo IM3 Systems". El mensaje debe ser relevante al status actual del contacto y sus datos. Esto es una empresa de TECNOLOGÍA, NO médica.`,
     messages: [{
       role: "user",
       content: `Genera un mensaje de WhatsApp para este contacto.\n\nStatus: ${contact.status}\nSubstatus: ${contact.substatus || "ninguno"}\n\n${context}`,
@@ -886,8 +921,9 @@ export async function generateMiniAudit(
   const subjectResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 100,
+    temperature: 0.3,
     system: isEn
-      ? "Generate ONLY the email subject text. No quotes, no prefix, just the text. Max 60 characters. Professional and moderate tone — don't exaggerate or promise too much."
+      ? "Generate ONLY the email subject text. No quotes, no prefix, just the text. Max 60 characters. Professional and moderate tone — don't exaggerate or promise too much. This is a TECHNOLOGY diagnostic, NOT medical."
       : "Genera SOLO el texto del subject de un email. Sin comillas, sin prefijo, solo el texto. Maximo 60 caracteres. Tono profesional y moderado — no exagerar ni prometer demasiado.",
     messages: [{
       role: "user",
@@ -905,6 +941,7 @@ export async function generateMiniAudit(
   const insightsResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 1200,
+    temperature: 0.3,
     system: isEn
       ? `You are a senior technology and AI consultant at IM3 Systems. You make initial observations about company diagnostics — areas worth exploring, not promises.
 
@@ -1000,6 +1037,7 @@ export async function generateReengagement(
   const subjectResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 100,
+    temperature: 0.5,
     system: language === "en"
       ? "Generate ONLY the email subject text. No quotes, no prefix, just the text. Max 60 characters. Must be COMPLETELY different from diagnostic/audit emails. Intrigue with an industry fact or provocative question."
       : "Genera SOLO el texto del subject de un email. Sin comillas, sin prefijo, solo el texto. Máximo 60 caracteres. Debe ser COMPLETAMENTE diferente a emails de diagnóstico/auditoría. Intriga con un dato de su industria o pregunta provocadora.",
@@ -1018,6 +1056,7 @@ export async function generateReengagement(
   const bodyResponse = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 1200,
+    temperature: 0.5,
     system: getSystemPrompt(language),
     messages: [{
       role: "user",
@@ -1075,6 +1114,7 @@ export async function classifyWhatsAppIntent(
   const response = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 50,
+    temperature: 0.1,
     system: `Clasifica el intent de este mensaje de WhatsApp de un lead de consultoría tecnológica. Responde SOLO con un JSON: {"type": "question"|"reschedule"|"interest"|"rejection"|"other", "confidence": 0.0-1.0}
 - question: pregunta sobre el servicio, auditoría, precios
 - reschedule: quiere cambiar fecha/hora de su cita
@@ -1114,7 +1154,8 @@ export async function generateWhatsAppAutoReply(
   const response = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 300,
-    system: `Responde un mensaje de WhatsApp como si fueras del equipo de IM3 Systems. Máximo 3-4 oraciones. Texto plano (no HTML). Tono: profesional pero cercano. Responde basándote en el contexto del diagnóstico del cliente. Si no sabes algo, di que lo revisarás con el equipo. Firma: "— Equipo IM3". No uses emojis excesivos (máximo 1).`,
+    temperature: 0.3,
+    system: `Responde un mensaje de WhatsApp como si fueras del equipo de IM3 Systems (empresa de TECNOLOGÍA, IA y automatización — NO médica). Máximo 3-4 oraciones. Texto plano (no HTML). Tono: profesional pero cercano. Responde basándote en el contexto del diagnóstico del cliente. Si no sabes algo, di que lo revisarás con el equipo. Firma: "— Equipo IM3". No uses emojis excesivos (máximo 1).`,
     messages: [{
       role: "user",
       content: `El contacto ${contact.nombre} de ${contact.empresa} pregunta por WhatsApp: "${questionText}"\n\n${context}`,

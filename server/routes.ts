@@ -4525,178 +4525,254 @@ ${urls}
 
   // List projects
   app.get("/api/admin/projects", requireAuth, async (_req, res) => {
-    const projects = await db!.select().from(clientProjects).orderBy(desc(clientProjects.createdAt));
-    // Enrich with contact name
-    const enriched = await Promise.all(projects.map(async (p) => {
-      let contactName = null;
-      if (p.contactId) {
-        const [c] = await db!.select({ nombre: contacts.nombre, empresa: contacts.empresa }).from(contacts).where(eq(contacts.id, p.contactId));
-        if (c) contactName = `${c.nombre} (${c.empresa})`;
-      }
-      // Calculate progress
-      const allTasks = await db!.select({ status: projectTasks.status }).from(projectTasks).where(eq(projectTasks.projectId, p.id));
-      const completedTasks = allTasks.filter(t => t.status === "completed").length;
-      const progress = allTasks.length > 0 ? Math.round((completedTasks / allTasks.length) * 100) : 0;
-      return { ...p, contactName, progress, taskCount: allTasks.length, completedTaskCount: completedTasks };
-    }));
-    res.json(enriched);
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const projects = await db.select().from(clientProjects).orderBy(desc(clientProjects.createdAt));
+      const enriched = await Promise.all(projects.map(async (p) => {
+        let contactName = null;
+        if (p.contactId) {
+          const [c] = await db!.select({ nombre: contacts.nombre, empresa: contacts.empresa }).from(contacts).where(eq(contacts.id, p.contactId));
+          if (c) contactName = `${c.nombre} (${c.empresa})`;
+        }
+        const allTasks = await db!.select({ status: projectTasks.status }).from(projectTasks).where(eq(projectTasks.projectId, p.id));
+        const completedTasks = allTasks.filter(t => t.status === "completed").length;
+        const progress = allTasks.length > 0 ? Math.round((completedTasks / allTasks.length) * 100) : 0;
+        return { ...p, contactName, progress, taskCount: allTasks.length, completedTaskCount: completedTasks };
+      }));
+      res.json(enriched);
+    } catch (err: any) {
+      log(`Error listing projects: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo proyectos" });
+    }
   });
 
   // Create project
   app.post("/api/admin/projects", requireAuth, async (req, res) => {
-    const [project] = await db!.insert(clientProjects).values(req.body).returning();
-    res.json(project);
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [project] = await db.insert(clientProjects).values(req.body).returning();
+      res.json(project);
+    } catch (err: any) {
+      log(`Error creating project: ${err?.message}`);
+      res.status(500).json({ error: "Error creando proyecto" });
+    }
   });
 
   // Get project detail
   app.get("/api/admin/projects/:id", requireAuth, async (req, res) => {
-    const [project] = await db!.select().from(clientProjects).where(eq(clientProjects.id, req.params.id as string));
-    if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [project] = await db.select().from(clientProjects).where(eq(clientProjects.id, req.params.id as string));
+      if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
-    const phases = await db!.select().from(projectPhases).where(eq(projectPhases.projectId, project.id)).orderBy(asc(projectPhases.orderIndex));
-    const allTasks = await db!.select().from(projectTasks).where(eq(projectTasks.projectId, project.id));
-    const deliverables = await db!.select().from(projectDeliverables).where(eq(projectDeliverables.projectId, project.id)).orderBy(desc(projectDeliverables.createdAt));
-    const timeLogs = await db!.select().from(projectTimeLog).where(eq(projectTimeLog.projectId, project.id)).orderBy(desc(projectTimeLog.createdAt));
-    const messages = await db!.select().from(projectMessages).where(eq(projectMessages.projectId, project.id)).orderBy(asc(projectMessages.createdAt));
+      const phases = await db.select().from(projectPhases).where(eq(projectPhases.projectId, project.id)).orderBy(asc(projectPhases.orderIndex));
+      const allTasks = await db.select().from(projectTasks).where(eq(projectTasks.projectId, project.id));
+      const deliverables = await db.select().from(projectDeliverables).where(eq(projectDeliverables.projectId, project.id)).orderBy(desc(projectDeliverables.createdAt));
+      const timeLogs = await db.select().from(projectTimeLog).where(eq(projectTimeLog.projectId, project.id)).orderBy(desc(projectTimeLog.createdAt));
+      const messages = await db.select().from(projectMessages).where(eq(projectMessages.projectId, project.id)).orderBy(asc(projectMessages.createdAt));
 
-    let contactName = null;
-    if (project.contactId) {
-      const [c] = await db!.select({ nombre: contacts.nombre, empresa: contacts.empresa }).from(contacts).where(eq(contacts.id, project.contactId));
-      if (c) contactName = `${c.nombre} (${c.empresa})`;
+      let contactName = null;
+      if (project.contactId) {
+        const [c] = await db.select({ nombre: contacts.nombre, empresa: contacts.empresa }).from(contacts).where(eq(contacts.id, project.contactId));
+        if (c) contactName = `${c.nombre} (${c.empresa})`;
+      }
+
+      const completedTasks = allTasks.filter(t => t.status === "completed").length;
+      const progress = allTasks.length > 0 ? Math.round((completedTasks / allTasks.length) * 100) : 0;
+      const totalHours = timeLogs.reduce((sum, t) => sum + parseFloat(String(t.hours)), 0);
+
+      res.json({
+        ...project,
+        contactName,
+        progress,
+        totalHours,
+        phases: phases.map(ph => ({
+          ...ph,
+          tasks: allTasks.filter(t => t.phaseId === ph.id),
+        })),
+        deliverables,
+        timeLogs,
+        messages,
+      });
+    } catch (err: any) {
+      log(`Error getting project detail: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo proyecto" });
     }
-
-    const completedTasks = allTasks.filter(t => t.status === "completed").length;
-    const progress = allTasks.length > 0 ? Math.round((completedTasks / allTasks.length) * 100) : 0;
-    const totalHours = timeLogs.reduce((sum, t) => sum + parseFloat(String(t.hours)), 0);
-
-    res.json({
-      ...project,
-      contactName,
-      progress,
-      totalHours,
-      phases: phases.map(ph => ({
-        ...ph,
-        tasks: allTasks.filter(t => t.phaseId === ph.id),
-      })),
-      deliverables,
-      timeLogs,
-      messages,
-    });
   });
 
   // Update project
   app.patch("/api/admin/projects/:id", requireAuth, async (req, res) => {
-    const [updated] = await db!.update(clientProjects).set({ ...req.body, updatedAt: new Date() }).where(eq(clientProjects.id, req.params.id as string)).returning();
-    if (!updated) return res.status(404).json({ message: "Proyecto no encontrado" });
-    res.json(updated);
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [updated] = await db.update(clientProjects).set({ ...req.body, updatedAt: new Date() }).where(eq(clientProjects.id, req.params.id as string)).returning();
+      if (!updated) return res.status(404).json({ message: "Proyecto no encontrado" });
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error updating project: ${err?.message}`);
+      res.status(500).json({ error: "Error actualizando proyecto" });
+    }
   });
 
   // Delete project
   app.delete("/api/admin/projects/:id", requireAuth, async (req, res) => {
-    const id = req.params.id as string;
-    await db!.delete(projectMessages).where(eq(projectMessages.projectId, id));
-    await db!.delete(projectTimeLog).where(eq(projectTimeLog.projectId, id));
-    await db!.delete(projectDeliverables).where(eq(projectDeliverables.projectId, id));
-    await db!.delete(projectTasks).where(eq(projectTasks.projectId, id));
-    await db!.delete(projectPhases).where(eq(projectPhases.projectId, id));
-    await db!.delete(clientProjects).where(eq(clientProjects.id, id));
-    res.json({ success: true });
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const id = req.params.id as string;
+      await db.delete(projectMessages).where(eq(projectMessages.projectId, id));
+      await db.delete(projectTimeLog).where(eq(projectTimeLog.projectId, id));
+      await db.delete(projectDeliverables).where(eq(projectDeliverables.projectId, id));
+      await db.delete(projectTasks).where(eq(projectTasks.projectId, id));
+      await db.delete(projectPhases).where(eq(projectPhases.projectId, id));
+      await db.delete(clientProjects).where(eq(clientProjects.id, id));
+      res.json({ success: true });
+    } catch (err: any) {
+      log(`Error deleting project: ${err?.message}`);
+      res.status(500).json({ error: "Error eliminando proyecto" });
+    }
   });
 
   // Regenerate access token
   app.post("/api/admin/projects/:id/regenerate-token", requireAuth, async (req, res) => {
-    const [updated] = await db!.update(clientProjects).set({ accessToken: sql`gen_random_uuid()`, updatedAt: new Date() }).where(eq(clientProjects.id, req.params.id as string)).returning();
-    if (!updated) return res.status(404).json({ message: "Proyecto no encontrado" });
-    res.json({ accessToken: updated.accessToken });
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [updated] = await db.update(clientProjects).set({ accessToken: sql`gen_random_uuid()`, updatedAt: new Date() }).where(eq(clientProjects.id, req.params.id as string)).returning();
+      if (!updated) return res.status(404).json({ message: "Proyecto no encontrado" });
+      res.json({ accessToken: updated.accessToken });
+    } catch (err: any) {
+      log(`Error regenerating token: ${err?.message}`);
+      res.status(500).json({ error: "Error regenerando token" });
+    }
   });
 
   // ── Phases ──
 
   app.get("/api/admin/projects/:id/phases", requireAuth, async (req, res) => {
-    const phases = await db!.select().from(projectPhases).where(eq(projectPhases.projectId, req.params.id as string)).orderBy(asc(projectPhases.orderIndex));
-    res.json(phases);
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const phases = await db.select().from(projectPhases).where(eq(projectPhases.projectId, req.params.id as string)).orderBy(asc(projectPhases.orderIndex));
+      res.json(phases);
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   app.post("/api/admin/projects/:id/phases", requireAuth, async (req, res) => {
-    const [phase] = await db!.insert(projectPhases).values({ ...req.body, projectId: req.params.id }).returning();
-    res.json(phase);
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [phase] = await db.insert(projectPhases).values({ ...req.body, projectId: req.params.id }).returning();
+      res.json(phase);
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   app.patch("/api/admin/phases/:id", requireAuth, async (req, res) => {
-    const [updated] = await db!.update(projectPhases).set({ ...req.body, updatedAt: new Date() }).where(eq(projectPhases.id, req.params.id as string)).returning();
-    if (!updated) return res.status(404).json({ message: "Fase no encontrada" });
-    res.json(updated);
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [updated] = await db.update(projectPhases).set({ ...req.body, updatedAt: new Date() }).where(eq(projectPhases.id, req.params.id as string)).returning();
+      if (!updated) return res.status(404).json({ message: "Fase no encontrada" });
+      res.json(updated);
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   app.delete("/api/admin/phases/:id", requireAuth, async (req, res) => {
-    await db!.delete(projectTasks).where(eq(projectTasks.phaseId, req.params.id as string));
-    await db!.delete(projectPhases).where(eq(projectPhases.id, req.params.id as string));
-    res.json({ success: true });
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      await db.delete(projectTasks).where(eq(projectTasks.phaseId, req.params.id as string));
+      await db.delete(projectPhases).where(eq(projectPhases.id, req.params.id as string));
+      res.json({ success: true });
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   app.patch("/api/admin/phases/reorder", requireAuth, async (req, res) => {
-    const { phases: ordering } = req.body as { phases: { id: string; orderIndex: number }[] };
-    for (const item of ordering) {
-      await db!.update(projectPhases).set({ orderIndex: item.orderIndex }).where(eq(projectPhases.id, item.id));
-    }
-    res.json({ success: true });
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { phases: ordering } = req.body as { phases: { id: string; orderIndex: number }[] };
+      for (const item of ordering) {
+        await db.update(projectPhases).set({ orderIndex: item.orderIndex }).where(eq(projectPhases.id, item.id));
+      }
+      res.json({ success: true });
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   // ── Tasks ──
 
   app.post("/api/admin/phases/:id/tasks", requireAuth, async (req, res) => {
-    const [phase] = await db!.select({ projectId: projectPhases.projectId }).from(projectPhases).where(eq(projectPhases.id, req.params.id as string));
-    if (!phase) return res.status(404).json({ message: "Fase no encontrada" });
-    const [task] = await db!.insert(projectTasks).values({ ...req.body, phaseId: req.params.id as string, projectId: phase.projectId }).returning();
-    res.json(task);
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [phase] = await db.select({ projectId: projectPhases.projectId }).from(projectPhases).where(eq(projectPhases.id, req.params.id as string));
+      if (!phase) return res.status(404).json({ message: "Fase no encontrada" });
+      const [task] = await db.insert(projectTasks).values({ ...req.body, phaseId: req.params.id as string, projectId: phase.projectId }).returning();
+      res.json(task);
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   app.patch("/api/admin/tasks/:id", requireAuth, async (req, res) => {
-    const updates: Record<string, unknown> = { ...req.body, updatedAt: new Date() };
-    if (req.body.status === "completed") updates.completedAt = new Date();
-    const [updated] = await db!.update(projectTasks).set(updates).where(eq(projectTasks.id, req.params.id as string)).returning();
-    if (!updated) return res.status(404).json({ message: "Tarea no encontrada" });
-    res.json(updated);
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const updates: Record<string, unknown> = { ...req.body, updatedAt: new Date() };
+      if (req.body.status === "completed") updates.completedAt = new Date();
+      const [updated] = await db.update(projectTasks).set(updates).where(eq(projectTasks.id, req.params.id as string)).returning();
+      if (!updated) return res.status(404).json({ message: "Tarea no encontrada" });
+      res.json(updated);
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   app.delete("/api/admin/tasks/:id", requireAuth, async (req, res) => {
-    await db!.delete(projectTasks).where(eq(projectTasks.id, req.params.id as string));
-    res.json({ success: true });
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      await db.delete(projectTasks).where(eq(projectTasks.id, req.params.id as string));
+      res.json({ success: true });
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   // ── Deliverables ──
 
   app.post("/api/admin/projects/:id/deliverables", requireAuth, async (req, res) => {
-    const [deliverable] = await db!.insert(projectDeliverables).values({ ...req.body, projectId: req.params.id }).returning();
-    res.json(deliverable);
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [deliverable] = await db.insert(projectDeliverables).values({ ...req.body, projectId: req.params.id }).returning();
+      res.json(deliverable);
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   app.patch("/api/admin/deliverables/:id", requireAuth, async (req, res) => {
-    const [updated] = await db!.update(projectDeliverables).set(req.body).where(eq(projectDeliverables.id, req.params.id as string)).returning();
-    if (!updated) return res.status(404).json({ message: "Entrega no encontrada" });
-    res.json(updated);
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [updated] = await db.update(projectDeliverables).set(req.body).where(eq(projectDeliverables.id, req.params.id as string)).returning();
+      if (!updated) return res.status(404).json({ message: "Entrega no encontrada" });
+      res.json(updated);
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   app.delete("/api/admin/deliverables/:id", requireAuth, async (req, res) => {
-    await db!.delete(projectDeliverables).where(eq(projectDeliverables.id, req.params.id as string));
-    res.json({ success: true });
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      await db.delete(projectDeliverables).where(eq(projectDeliverables.id, req.params.id as string));
+      res.json({ success: true });
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   // ── Time Log ──
 
   app.post("/api/admin/projects/:id/timelog", requireAuth, async (req, res) => {
-    const [entry] = await db!.insert(projectTimeLog).values({ ...req.body, projectId: req.params.id }).returning();
-    res.json(entry);
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [entry] = await db.insert(projectTimeLog).values({ ...req.body, projectId: req.params.id }).returning();
+      res.json(entry);
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   app.get("/api/admin/projects/:id/timelog", requireAuth, async (req, res) => {
-    const logs = await db!.select().from(projectTimeLog).where(eq(projectTimeLog.projectId, req.params.id as string)).orderBy(desc(projectTimeLog.createdAt));
-    res.json(logs);
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const logs = await db.select().from(projectTimeLog).where(eq(projectTimeLog.projectId, req.params.id as string)).orderBy(desc(projectTimeLog.createdAt));
+      res.json(logs);
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   app.delete("/api/admin/timelog/:id", requireAuth, async (req, res) => {
-    await db!.delete(projectTimeLog).where(eq(projectTimeLog.id, req.params.id as string));
-    res.json({ success: true });
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      await db.delete(projectTimeLog).where(eq(projectTimeLog.id, req.params.id as string));
+      res.json({ success: true });
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   // ── Messages (admin side) ──

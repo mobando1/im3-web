@@ -43,6 +43,13 @@
       "when": 1773728900000,
       "tag": "0005_thick_veda",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1774492595565,
+      "tag": "0006_minor_silver_fox",
+      "breakpoints": true
     }
   ]
 }
