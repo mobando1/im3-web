@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { Plus, FolderKanban, ExternalLink, Copy } from "lucide-react";
+import { Plus, FolderKanban, ExternalLink, Copy, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -75,6 +75,20 @@ export default function AdminProjects() {
     },
   });
 
+  const seedMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/projects/seed");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] });
+      toast({ title: data.message || "Proyecto demo creado" });
+    },
+    onError: () => {
+      toast({ title: "Error creando proyecto demo", variant: "destructive" });
+    },
+  });
+
   const filtered = filterStatus === "all" ? projects : projects.filter(p => p.status === filterStatus);
 
   const handleCreate = () => {
@@ -124,9 +138,20 @@ export default function AdminProjects() {
       {isLoading ? (
         <div className="text-center py-12 text-gray-400">Cargando...</div>
       ) : filtered.length === 0 ? (
-        <div className="text-center py-12">
+        <div className="text-center py-12 space-y-4">
           <FolderKanban className="w-12 h-12 text-gray-300 mx-auto mb-3" />
           <p className="text-gray-500">No hay proyectos{filterStatus !== "all" ? ` en estado "${STATUS_LABELS[filterStatus]}"` : ""}</p>
+          {filterStatus === "all" && (
+            <Button
+              variant="outline"
+              onClick={() => seedMutation.mutate()}
+              disabled={seedMutation.isPending}
+              className="gap-2"
+            >
+              <Sparkles className="w-4 h-4" />
+              {seedMutation.isPending ? "Creando..." : "Crear proyecto demo"}
+            </Button>
+          )}
         </div>
       ) : (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
