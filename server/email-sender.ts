@@ -26,6 +26,13 @@ export async function sendEmail(
     return null;
   }
 
+  // Safety net: validate email format before calling Resend to avoid 422 errors
+  const emailValid = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/.test(to);
+  if (!emailValid) {
+    log(`Email inválido, no se envía: "${to}"`);
+    return null;
+  }
+
   const from = process.env.EMAIL_FROM || "IM3 Systems <info@im3systems.com>";
 
   const { data, error } = await client.emails.send({

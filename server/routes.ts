@@ -1079,7 +1079,9 @@ export async function registerRoutes(
   app.post("/api/track-email", async (req, res) => {
     const { email } = req.body;
 
-    if (!db || !email) {
+    // Validate email format before saving — prevents Resend 422 errors later
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[a-zA-Z]{2,}$/;
+    if (!db || !email || !emailRegex.test(email)) {
       res.json({ tracked: true });
       return;
     }
