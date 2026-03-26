@@ -4620,6 +4620,8 @@ ${urls}
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
       const id = req.params.id as string;
+      await db.delete(githubWebhookEvents).where(eq(githubWebhookEvents.projectId, id));
+      await db.delete(projectActivityEntries).where(eq(projectActivityEntries.projectId, id));
       await db.delete(projectMessages).where(eq(projectMessages.projectId, id));
       await db.delete(projectTimeLog).where(eq(projectTimeLog.projectId, id));
       await db.delete(projectDeliverables).where(eq(projectDeliverables.projectId, id));
