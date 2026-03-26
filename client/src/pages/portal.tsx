@@ -234,6 +234,8 @@ export default function Portal() {
   const [reviewingId, setReviewingId] = useState<string | null>(null);
   const [reviewComment, setReviewComment] = useState("");
   const [reviewRating, setReviewRating] = useState(0);
+  const [delivFilter, setDelivFilter] = useState<string>("all");
+  const [timelineFilter, setTimelineFilter] = useState<string>("all");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const base = `/api/portal/${token}`;
@@ -330,13 +332,15 @@ export default function Portal() {
     });
   };
 
-  // Group activity by day
+  // Group activity by day (with optional filter)
+  const filteredActivities = timelineFilter === "all" ? activityEntries : activityEntries.filter(e => e.category === timelineFilter);
   const activityByDay: Record<string, ActivityEntry[]> = {};
-  for (const entry of activityEntries) {
+  for (const entry of filteredActivities) {
     const dayKey = new Date(entry.createdAt).toISOString().split("T")[0];
     if (!activityByDay[dayKey]) activityByDay[dayKey] = [];
     activityByDay[dayKey].push(entry);
   }
+  const activityCategories = [...new Set(activityEntries.map(e => e.category))];
 
   const pendingDeliverables = deliverables.filter(d => d.status === "delivered");
   const healthStyle = HEALTH_STYLES[overview.healthStatus] || HEALTH_STYLES.on_track;
@@ -483,6 +487,31 @@ export default function Portal() {
         {/* ── TIMELINE ── */}
         {activeSection === "Timeline" && (
           <div className="space-y-6">
+            {/* Category filters */}
+            {activityCategories.length > 1 && (
+              <div className="flex gap-1.5 overflow-x-auto">
+                <button
+                  onClick={() => setTimelineFilter("all")}
+                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${
+                    timelineFilter === "all" ? "bg-[#2FA4A9] text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                  }`}
+                >
+                  Todas ({activityEntries.length})
+                </button>
+                {activityCategories.map(cat => (
+                  <button
+                    key={cat}
+                    onClick={() => setTimelineFilter(cat)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${
+                      timelineFilter === cat ? "bg-[#2FA4A9] text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                    }`}
+                  >
+                    {CATEGORY_LABELS[cat] || cat} ({activityEntries.filter(e => e.category === cat).length})
+                  </button>
+                ))}
+              </div>
+            )}
+
             {Object.keys(activityByDay).length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-gray-400">No hay actividad registrada aún.</p>
@@ -612,12 +641,34 @@ export default function Portal() {
               </div>
             )}
 
+            {/* Filter tabs */}
+            {deliverables.length > 0 && (
+              <div className="flex gap-1.5 overflow-x-auto">
+                {[
+                  { key: "all", label: "Todas", count: deliverables.length },
+                  { key: "delivered", label: "Por revisar", count: deliverables.filter(d => d.status === "delivered").length },
+                  { key: "approved", label: "Aprobadas", count: deliverables.filter(d => d.status === "approved").length },
+                  { key: "rejected", label: "Rechazadas", count: deliverables.filter(d => d.status === "rejected").length },
+                ].filter(f => f.key === "all" || f.count > 0).map(f => (
+                  <button
+                    key={f.key}
+                    onClick={() => setDelivFilter(f.key)}
+                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${
+                      delivFilter === f.key ? "bg-[#2FA4A9] text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                    }`}
+                  >
+                    {f.label} ({f.count})
+                  </button>
+                ))}
+              </div>
+            )}
+
             {deliverables.length === 0 ? (
               <div className="text-center py-12">
                 <p className="text-gray-400">Las entregas aparecerán aquí cuando el equipo las registre.</p>
               </div>
             ) : (
-              deliverables.map(d => (
+              (delivFilter === "all" ? deliverables : deliverables.filter(d => d.status === delivFilter)).map(d => (
                 <div key={d.id} className="bg-white rounded-xl border border-gray-200 p-5">
                   <div className="flex items-start gap-4">
                     {d.screenshotUrl && (

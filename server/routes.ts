@@ -4984,15 +4984,41 @@ ${urls}
     const project = await getProjectByToken(req.params.token as string);
     if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
-    const { status, clientComment } = req.body;
+    const { status, clientComment, clientRating } = req.body;
     if (!["approved", "rejected"].includes(status)) return res.status(400).json({ message: "Estado inválido" });
 
-    const updates: Record<string, unknown> = { status, clientComment };
+    const updates: Record<string, unknown> = { status, clientComment, clientRating: clientRating || null };
     if (status === "approved") updates.approvedAt = new Date();
 
     const [updated] = await db!.update(projectDeliverables).set(updates).where(and(eq(projectDeliverables.id, req.params.id as string), eq(projectDeliverables.projectId, project.id))).returning();
     if (!updated) return res.status(404).json({ message: "Entrega no encontrada" });
     res.json(updated);
+
+    // Notify admin about client review
+    const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
+    const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+    const emoji = status === "approved" ? "✅" : "❌";
+    const label = status === "approved" ? "Aprobada" : "Rechazada";
+    const ratingStr = clientRating ? ` — ${"★".repeat(clientRating)}${"☆".repeat(5 - clientRating)}` : "";
+    sendEmail(
+      adminEmail,
+      `${emoji} Entrega ${label.toLowerCase()}: ${updated.title}`,
+      `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+        <div style="background:${status === "approved" ? "linear-gradient(135deg,#059669,#10B981)" : "linear-gradient(135deg,#DC2626,#EF4444)"};padding:20px 28px;border-radius:8px 8px 0 0">
+          <h1 style="color:#fff;font-size:18px;margin:0">${emoji} Entrega ${label}</h1>
+        </div>
+        <div style="padding:28px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+          <p style="font-size:15px;color:#333;margin:0 0 16px">El cliente revisó la entrega <strong>"${updated.title}"</strong> del proyecto <strong>${project.name}</strong>.</p>
+          <table style="width:100%;border-collapse:collapse;font-size:14px">
+            <tr><td style="padding:6px 0;color:#666;width:120px">Estado</td><td style="padding:6px 0;font-weight:600">${label}${ratingStr}</td></tr>
+            ${clientComment ? `<tr><td style="padding:6px 0;color:#666">Comentario</td><td style="padding:6px 0">${clientComment}</td></tr>` : ""}
+          </table>
+          <div style="margin-top:20px">
+            <a href="${baseUrl}/admin/projects/${project.id}" style="display:inline-block;background:#3B82F6;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Ver proyecto →</a>
+          </div>
+        </div>
+      </div>`
+    ).catch((err) => log(`Error sending deliverable review notification: ${err}`));
   });
 
   // Portal time log summary

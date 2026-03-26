@@ -58,6 +58,8 @@ type ProjectDetail = {
     deliveredAt: string | null;
     approvedAt: string | null;
     clientComment: string | null;
+    clientRating: number | null;
+    screenshotUrl: string | null;
     demoUrl: string | null;
   }>;
   timeLogs: Array<{
@@ -131,7 +133,7 @@ export default function AdminProjectDetail() {
 
   // Deliverable creation
   const [showAddDeliverable, setShowAddDeliverable] = useState(false);
-  const [delivForm, setDelivForm] = useState({ title: "", description: "", type: "feature", phaseId: "" });
+  const [delivForm, setDelivForm] = useState({ title: "", description: "", type: "feature", phaseId: "", screenshotUrl: "", demoUrl: "" });
 
   // Time log creation
   const [showAddTime, setShowAddTime] = useState(false);
@@ -200,7 +202,12 @@ export default function AdminProjectDetail() {
 
   const addDelivMut = useMutation({
     mutationFn: async (data: Record<string, unknown>) => { await apiRequest("POST", `/api/admin/projects/${params.id}/deliverables`, data); },
-    onSuccess: () => { invalidate(); setShowAddDeliverable(false); setDelivForm({ title: "", description: "", type: "feature", phaseId: "" }); },
+    onSuccess: () => { invalidate(); setShowAddDeliverable(false); setDelivForm({ title: "", description: "", type: "feature", phaseId: "", screenshotUrl: "", demoUrl: "" }); },
+  });
+
+  const updateDelivMut = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => { await apiRequest("PATCH", `/api/admin/deliverables/${id}`, data); },
+    onSuccess: () => { invalidate(); toast({ title: "Entrega actualizada" }); },
   });
 
   const deleteDelivMut = useMutation({
@@ -542,10 +549,28 @@ export default function AdminProjectDetail() {
                             Comentario del cliente: {d.clientComment}
                           </p>
                         )}
+                        {d.clientRating && (
+                          <p className="text-xs text-gray-400 mt-1">
+                            Rating: {"★".repeat(d.clientRating)}{"☆".repeat(5 - d.clientRating)}
+                          </p>
+                        )}
                         {d.demoUrl && (
                           <a href={d.demoUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-[#2FA4A9] hover:underline mt-1 inline-block">
                             Ver demo
                           </a>
+                        )}
+                        {d.status === "rejected" && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="mt-2 text-xs"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              updateDelivMut.mutate({ id: d.id, data: { status: "delivered", deliveredAt: new Date().toISOString() } });
+                            }}
+                          >
+                            Re-entregar
+                          </Button>
                         )}
                       </div>
                       <button onClick={() => deleteDelivMut.mutate(d.id)} className="p-1 rounded text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
@@ -580,10 +605,18 @@ export default function AdminProjectDetail() {
                       </SelectContent>
                     </Select>
                   </div>
+                  <div className="space-y-1.5">
+                    <Label>Screenshot URL <span className="text-gray-400 font-normal">(opcional)</span></Label>
+                    <Input value={delivForm.screenshotUrl} onChange={e => setDelivForm(f => ({ ...f, screenshotUrl: e.target.value }))} placeholder="https://..." />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Demo URL <span className="text-gray-400 font-normal">(opcional)</span></Label>
+                    <Input value={delivForm.demoUrl} onChange={e => setDelivForm(f => ({ ...f, demoUrl: e.target.value }))} placeholder="https://..." />
+                  </div>
                   <Button
                     className="w-full bg-[#2FA4A9] hover:bg-[#238b8f]"
                     disabled={!delivForm.title}
-                    onClick={() => addDelivMut.mutate({ title: delivForm.title, description: delivForm.description || null, type: delivForm.type, status: "delivered", deliveredAt: new Date().toISOString(), phaseId: delivForm.phaseId || null })}
+                    onClick={() => addDelivMut.mutate({ title: delivForm.title, description: delivForm.description || null, type: delivForm.type, status: "delivered", deliveredAt: new Date().toISOString(), phaseId: delivForm.phaseId || null, screenshotUrl: delivForm.screenshotUrl || null, demoUrl: delivForm.demoUrl || null })}
                   >
                     Registrar entrega
                   </Button>
