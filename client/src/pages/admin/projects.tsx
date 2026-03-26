@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { Plus, FolderKanban, ExternalLink, Copy, Sparkles } from "lucide-react";
+import { Plus, FolderKanban, ExternalLink, Copy, Sparkles, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -72,6 +72,19 @@ export default function AdminProjects() {
       setShowCreate(false);
       setForm({ name: "", description: "", status: "planning", totalBudget: "", currency: "USD", contactId: "" });
       toast({ title: "Proyecto creado" });
+    },
+  });
+
+  const deleteProjectMutation = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/projects/${id}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] });
+      toast({ title: "Proyecto eliminado" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error eliminando proyecto", description: err?.message, variant: "destructive" });
     },
   });
 
@@ -208,6 +221,17 @@ export default function AdminProjects() {
                       >
                         <ExternalLink className="w-4 h-4" />
                       </a>
+                      <button
+                        onClick={() => {
+                          if (confirm(`¿Eliminar "${p.name}" permanentemente?`)) {
+                            deleteProjectMutation.mutate(p.id);
+                          }
+                        }}
+                        className="p-1.5 rounded-md text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors"
+                        title="Eliminar proyecto"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
                     </div>
                   </td>
                 </tr>
