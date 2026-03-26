@@ -533,3 +533,52 @@ export const githubWebhookEvents = pgTable("github_webhook_events", {
 });
 
 export type GithubWebhookEvent = typeof githubWebhookEvents.$inferSelect;
+
+// Project sessions (meeting recordings & transcriptions)
+export const projectSessions = pgTable("project_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull(),
+  contactId: varchar("contact_id"),
+  title: text("title").notNull(),
+  date: timestamp("date").notNull(),
+  duration: integer("duration"), // minutes
+  recordingUrl: text("recording_url"),
+  transcription: text("transcription"),
+  summary: text("summary"),
+  actionItems: json("action_items").$type<string[]>().default([]),
+  speakers: json("speakers").$type<string[]>().default([]),
+  status: text("status").notNull().default("ready"), // recording|processing|ready
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ProjectSession = typeof projectSessions.$inferSelect;
+
+// Project files (documents, contracts, designs, etc.)
+export const projectFiles = pgTable("project_files", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull(),
+  sessionId: varchar("session_id"),
+  name: text("name").notNull(),
+  type: text("type").notNull().default("other"), // document|contract|image|recording|transcript|design|other
+  url: text("url").notNull(),
+  size: integer("size"), // bytes
+  uploadedBy: text("uploaded_by").default("team"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ProjectFile = typeof projectFiles.$inferSelect;
+
+// Project ideas (feature suggestions & voting)
+export const projectIdeas = pgTable("project_ideas", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull(),
+  title: text("title").notNull(),
+  description: text("description"),
+  priority: text("priority").default("medium"), // low|medium|high
+  status: text("status").default("suggested"), // suggested|considering|planned|implemented|dismissed
+  suggestedBy: text("suggested_by").default("team"), // team|client
+  votes: integer("votes").default(0),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ProjectIdea = typeof projectIdeas.$inferSelect;

@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useRef, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Copy, ExternalLink, Plus, Trash2, Send, Clock, CheckCircle2, Circle, AlertCircle, ChevronDown, ChevronRight, Github, CalendarDays, BarChart3, Diamond, TrendingUp, Package, MessageSquare, Timer } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Plus, Trash2, Send, Clock, CheckCircle2, Circle, AlertCircle, ChevronDown, ChevronRight, Github, CalendarDays, BarChart3, Diamond, TrendingUp, Package, MessageSquare, Timer, Mic, FolderOpen, Lightbulb, FileText, Image, File, ThumbsUp, X } from "lucide-react";
 import { format, parseISO, differenceInDays, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, isSameMonth, addMonths, subMonths, isWithinInterval } from "date-fns";
 import { es } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
@@ -119,11 +119,14 @@ const TAB_ICONS: Record<string, typeof Circle> = {
   Calendario: CalendarDays,
   Entregas: Package,
   Horas: Timer,
+  Sesiones: Mic,
+  Archivos: FolderOpen,
+  Ideas: Lightbulb,
   Mensajes: MessageSquare,
   Config: Circle,
 };
 
-const tabs = ["Roadmap", "Timeline", "Calendario", "Entregas", "Horas", "Mensajes", "Config"];
+const tabs = ["Roadmap", "Timeline", "Calendario", "Entregas", "Horas", "Sesiones", "Archivos", "Ideas", "Mensajes", "Config"];
 
 export default function AdminProjectDetail() {
   const params = useParams<{ id: string }>();
@@ -151,6 +154,18 @@ export default function AdminProjectDetail() {
   // Deliverable creation
   const [showAddDeliverable, setShowAddDeliverable] = useState(false);
   const [delivForm, setDelivForm] = useState({ title: "", description: "", type: "feature", phaseId: "", screenshotUrl: "", demoUrl: "" });
+
+  // Session creation
+  const [showAddSession, setShowAddSession] = useState(false);
+  const [sessionForm, setSessionForm] = useState({ title: "", date: new Date().toISOString().split("T")[0], duration: "", transcription: "", summary: "", actionItems: "" });
+
+  // File creation
+  const [showAddFile, setShowAddFile] = useState(false);
+  const [fileForm, setFileForm] = useState({ name: "", type: "document", url: "" });
+
+  // Idea creation
+  const [showAddIdea, setShowAddIdea] = useState(false);
+  const [ideaForm, setIdeaForm] = useState({ title: "", description: "", priority: "medium" });
 
   // Time log creation
   const [showAddTime, setShowAddTime] = useState(false);
@@ -261,6 +276,50 @@ export default function AdminProjectDetail() {
     mutationFn: async () => { await apiRequest("DELETE", `/api/admin/projects/${params.id}`); },
     onSuccess: () => { navigate("/admin/projects"); toast({ title: "Proyecto eliminado" }); queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] }); },
     onError: (err: any) => { toast({ title: "Error eliminando proyecto", description: err?.message || "Intenta de nuevo", variant: "destructive" }); },
+  });
+
+  // Sessions, Files, Ideas queries
+  const { data: sessions = [] } = useQuery<any[]>({ queryKey: [`/api/admin/projects/${params.id}/sessions`], enabled: activeTab === "Sesiones" });
+  const { data: files = [] } = useQuery<any[]>({ queryKey: [`/api/admin/projects/${params.id}/files`], enabled: activeTab === "Archivos" });
+  const { data: ideas = [] } = useQuery<any[]>({ queryKey: [`/api/admin/projects/${params.id}/ideas`], enabled: activeTab === "Ideas" });
+
+  const invalidateSessions = () => queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${params.id}/sessions`] });
+  const invalidateFiles = () => queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${params.id}/files`] });
+  const invalidateIdeas = () => queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${params.id}/ideas`] });
+
+  const addSessionMut = useMutation({
+    mutationFn: async (data: Record<string, unknown>) => { await apiRequest("POST", `/api/admin/projects/${params.id}/sessions`, data); },
+    onSuccess: () => { invalidateSessions(); setShowAddSession(false); setSessionForm({ title: "", date: new Date().toISOString().split("T")[0], duration: "", transcription: "", summary: "", actionItems: "" }); },
+  });
+
+  const deleteSessionMut = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/admin/sessions/${id}`); },
+    onSuccess: invalidateSessions,
+  });
+
+  const addFileMut = useMutation({
+    mutationFn: async (data: Record<string, unknown>) => { await apiRequest("POST", `/api/admin/projects/${params.id}/files`, data); },
+    onSuccess: () => { invalidateFiles(); setShowAddFile(false); setFileForm({ name: "", type: "document", url: "" }); },
+  });
+
+  const deleteFileMut = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/admin/files/${id}`); },
+    onSuccess: invalidateFiles,
+  });
+
+  const addIdeaMut = useMutation({
+    mutationFn: async (data: Record<string, unknown>) => { await apiRequest("POST", `/api/admin/projects/${params.id}/ideas`, data); },
+    onSuccess: () => { invalidateIdeas(); setShowAddIdea(false); setIdeaForm({ title: "", description: "", priority: "medium" }); },
+  });
+
+  const updateIdeaMut = useMutation({
+    mutationFn: async ({ id, data }: { id: string; data: Record<string, unknown> }) => { await apiRequest("PATCH", `/api/admin/ideas/${id}`, data); },
+    onSuccess: invalidateIdeas,
+  });
+
+  const deleteIdeaMut = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/admin/ideas/${id}`); },
+    onSuccess: invalidateIdeas,
   });
 
   if (isLoading || !project) {
@@ -1140,6 +1199,304 @@ export default function AdminProjectDetail() {
                     onClick={() => addTimeMut.mutate({ description: timeForm.description, hours: timeForm.hours, date: timeForm.date, category: timeForm.category })}
                   >
                     Registrar
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        )}
+
+        {/* ── SESIONES ── */}
+        {activeTab === "Sesiones" && (
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button size="sm" variant="outline" onClick={() => setShowAddSession(true)}>
+                <Mic className="w-3.5 h-3.5 mr-1.5" /> Nueva sesión
+              </Button>
+            </div>
+
+            {sessions.length === 0 ? (
+              <div className="text-center py-16">
+                <Mic className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                <p className="text-sm text-gray-400">Sin sesiones grabadas</p>
+                <p className="text-xs text-gray-300 mt-1">Registra reuniones con el cliente para tener todo centralizado.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {sessions.map((s: any) => (
+                  <div key={s.id} className="bg-white rounded-xl border border-gray-200 p-5 group">
+                    <div className="flex items-start gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center shrink-0">
+                        <Mic className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-semibold text-gray-900">{s.title}</h4>
+                          {s.duration && <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{s.duration} min</span>}
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {new Date(s.date).toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
+                          {s.speakers?.length > 0 && ` · ${s.speakers.join(", ")}`}
+                        </p>
+                        {s.summary && (
+                          <div className="mt-3 p-3 bg-gray-50 rounded-lg">
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Resumen</p>
+                            <p className="text-sm text-gray-700 leading-relaxed">{s.summary}</p>
+                          </div>
+                        )}
+                        {s.actionItems?.length > 0 && (
+                          <div className="mt-2">
+                            <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider mb-1">Action items</p>
+                            <ul className="space-y-1">
+                              {(s.actionItems as string[]).map((item: string, i: number) => (
+                                <li key={i} className="text-xs text-gray-600 flex items-start gap-2">
+                                  <CheckCircle2 className="w-3 h-3 text-teal-500 mt-0.5 shrink-0" />
+                                  {item}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        {s.transcription && (
+                          <details className="mt-2">
+                            <summary className="text-xs text-[#2FA4A9] cursor-pointer font-medium hover:underline">Ver transcripción completa</summary>
+                            <pre className="mt-2 text-xs text-gray-600 whitespace-pre-wrap bg-gray-50 p-3 rounded-lg max-h-60 overflow-y-auto">{s.transcription}</pre>
+                          </details>
+                        )}
+                      </div>
+                      <button onClick={() => deleteSessionMut.mutate(s.id)} className="p-1 text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add session dialog */}
+            <Dialog open={showAddSession} onOpenChange={setShowAddSession}>
+              <DialogContent className="sm:max-w-lg">
+                <DialogHeader><DialogTitle>Registrar sesión</DialogTitle></DialogHeader>
+                <div className="space-y-3 pt-2">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1.5">
+                      <Label>Título</Label>
+                      <Input value={sessionForm.title} onChange={e => setSessionForm(f => ({ ...f, title: e.target.value }))} placeholder="Diagnóstico inicial" />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label>Fecha</Label>
+                      <Input type="date" value={sessionForm.date} onChange={e => setSessionForm(f => ({ ...f, date: e.target.value }))} />
+                    </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Duración (minutos)</Label>
+                    <Input type="number" value={sessionForm.duration} onChange={e => setSessionForm(f => ({ ...f, duration: e.target.value }))} placeholder="45" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Resumen</Label>
+                    <Textarea value={sessionForm.summary} onChange={e => setSessionForm(f => ({ ...f, summary: e.target.value }))} rows={2} placeholder="Resumen de lo que se habló..." />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Action items <span className="text-gray-400 font-normal">(uno por línea)</span></Label>
+                    <Textarea value={sessionForm.actionItems} onChange={e => setSessionForm(f => ({ ...f, actionItems: e.target.value }))} rows={3} placeholder="Enviar propuesta&#10;Definir cronograma&#10;Revisar presupuesto" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Transcripción <span className="text-gray-400 font-normal">(opcional)</span></Label>
+                    <Textarea value={sessionForm.transcription} onChange={e => setSessionForm(f => ({ ...f, transcription: e.target.value }))} rows={4} placeholder="Transcripción completa..." />
+                  </div>
+                  <Button
+                    className="w-full bg-[#2FA4A9] hover:bg-[#238b8f]"
+                    disabled={!sessionForm.title}
+                    onClick={() => addSessionMut.mutate({
+                      title: sessionForm.title,
+                      date: sessionForm.date,
+                      duration: sessionForm.duration ? parseInt(sessionForm.duration) : null,
+                      summary: sessionForm.summary || null,
+                      transcription: sessionForm.transcription || null,
+                      actionItems: sessionForm.actionItems ? sessionForm.actionItems.split("\n").filter(Boolean) : [],
+                    })}
+                  >
+                    Guardar sesión
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        )}
+
+        {/* ── ARCHIVOS ── */}
+        {activeTab === "Archivos" && (
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button size="sm" variant="outline" onClick={() => setShowAddFile(true)}>
+                <Plus className="w-3.5 h-3.5 mr-1.5" /> Agregar archivo
+              </Button>
+            </div>
+
+            {files.length === 0 ? (
+              <div className="text-center py-16">
+                <FolderOpen className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                <p className="text-sm text-gray-400">Sin archivos</p>
+                <p className="text-xs text-gray-300 mt-1">Sube contratos, diseños, specs y más.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-3">
+                {files.map((f: any) => {
+                  const typeIcons: Record<string, typeof File> = { document: FileText, contract: FileText, image: Image, design: Image, recording: Mic, transcript: FileText };
+                  const typeColors: Record<string, string> = { document: "bg-blue-50 text-blue-600", contract: "bg-amber-50 text-amber-600", image: "bg-pink-50 text-pink-600", design: "bg-purple-50 text-purple-600", recording: "bg-red-50 text-red-600", transcript: "bg-teal-50 text-teal-600" };
+                  const FileIcon = typeIcons[f.type] || File;
+                  const colorClass = typeColors[f.type] || "bg-gray-50 text-gray-500";
+                  return (
+                    <div key={f.id} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3 group hover:shadow-sm transition-shadow">
+                      <div className={`w-10 h-10 rounded-xl ${colorClass} flex items-center justify-center shrink-0`}>
+                        <FileIcon className="w-5 h-5" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-gray-900 hover:text-[#2FA4A9] truncate block">{f.name}</a>
+                        <p className="text-[10px] text-gray-400">{f.type} · {new Date(f.createdAt).toLocaleDateString("es-CO", { day: "numeric", month: "short" })}</p>
+                      </div>
+                      <a href={f.url} target="_blank" rel="noopener noreferrer" className="p-1 text-gray-300 hover:text-[#2FA4A9]">
+                        <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                      <button onClick={() => deleteFileMut.mutate(f.id)} className="p-1 text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <Dialog open={showAddFile} onOpenChange={setShowAddFile}>
+              <DialogContent className="sm:max-w-sm">
+                <DialogHeader><DialogTitle>Agregar archivo</DialogTitle></DialogHeader>
+                <div className="space-y-3 pt-2">
+                  <div className="space-y-1.5">
+                    <Label>Nombre</Label>
+                    <Input value={fileForm.name} onChange={e => setFileForm(f => ({ ...f, name: e.target.value }))} placeholder="Contrato v1.pdf" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Tipo</Label>
+                    <Select value={fileForm.type} onValueChange={v => setFileForm(f => ({ ...f, type: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="document">Documento</SelectItem>
+                        <SelectItem value="contract">Contrato</SelectItem>
+                        <SelectItem value="image">Imagen</SelectItem>
+                        <SelectItem value="design">Diseño</SelectItem>
+                        <SelectItem value="recording">Grabación</SelectItem>
+                        <SelectItem value="transcript">Transcripción</SelectItem>
+                        <SelectItem value="other">Otro</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>URL del archivo</Label>
+                    <Input value={fileForm.url} onChange={e => setFileForm(f => ({ ...f, url: e.target.value }))} placeholder="https://drive.google.com/..." />
+                  </div>
+                  <Button
+                    className="w-full bg-[#2FA4A9] hover:bg-[#238b8f]"
+                    disabled={!fileForm.name || !fileForm.url}
+                    onClick={() => addFileMut.mutate(fileForm)}
+                  >
+                    Guardar archivo
+                  </Button>
+                </div>
+              </DialogContent>
+            </Dialog>
+          </div>
+        )}
+
+        {/* ── IDEAS ── */}
+        {activeTab === "Ideas" && (
+          <div className="space-y-4">
+            <div className="flex justify-end">
+              <Button size="sm" variant="outline" onClick={() => setShowAddIdea(true)}>
+                <Lightbulb className="w-3.5 h-3.5 mr-1.5" /> Nueva idea
+              </Button>
+            </div>
+
+            {ideas.length === 0 ? (
+              <div className="text-center py-16">
+                <Lightbulb className="w-10 h-10 text-gray-200 mx-auto mb-3" />
+                <p className="text-sm text-gray-400">Sin ideas registradas</p>
+                <p className="text-xs text-gray-300 mt-1">Registra ideas, mejoras futuras y recomendaciones para el cliente.</p>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {ideas.map((idea: any) => {
+                  const statusLabels: Record<string, string> = { suggested: "Sugerida", considering: "En evaluación", planned: "Planeada", implemented: "Implementada", dismissed: "Descartada" };
+                  const statusColors: Record<string, string> = { suggested: "bg-gray-100 text-gray-600", considering: "bg-blue-100 text-blue-700", planned: "bg-purple-100 text-purple-700", implemented: "bg-emerald-100 text-emerald-700", dismissed: "bg-red-100 text-red-600" };
+                  const prioColors: Record<string, string> = { high: "bg-red-50 text-red-600", medium: "bg-amber-50 text-amber-600", low: "bg-gray-50 text-gray-400" };
+                  return (
+                    <div key={idea.id} className="bg-white rounded-xl border border-gray-200 p-5 group">
+                      <div className="flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center shrink-0 mt-0.5">
+                          <Lightbulb className="w-4 h-4" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <h4 className="font-semibold text-gray-900">{idea.title}</h4>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColors[idea.status] || statusColors.suggested}`}>{statusLabels[idea.status] || idea.status}</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${prioColors[idea.priority] || prioColors.medium}`}>{idea.priority}</span>
+                            {idea.suggestedBy === "client" && <span className="text-[10px] bg-teal-50 text-teal-600 px-2 py-0.5 rounded-full">Cliente</span>}
+                          </div>
+                          {idea.description && <p className="text-sm text-gray-500 mt-1">{idea.description}</p>}
+                          {idea.votes > 0 && (
+                            <span className="inline-flex items-center gap-1 text-[10px] text-gray-400 mt-1">
+                              <ThumbsUp className="w-3 h-3" /> {idea.votes} votos
+                            </span>
+                          )}
+                        </div>
+                        <Select value={idea.status} onValueChange={v => updateIdeaMut.mutate({ id: idea.id, data: { status: v } })}>
+                          <SelectTrigger className="h-7 w-32 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="suggested">Sugerida</SelectItem>
+                            <SelectItem value="considering">En evaluación</SelectItem>
+                            <SelectItem value="planned">Planeada</SelectItem>
+                            <SelectItem value="implemented">Implementada</SelectItem>
+                            <SelectItem value="dismissed">Descartada</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <button onClick={() => deleteIdeaMut.mutate(idea.id)} className="p-1 text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            <Dialog open={showAddIdea} onOpenChange={setShowAddIdea}>
+              <DialogContent className="sm:max-w-sm">
+                <DialogHeader><DialogTitle>Nueva idea</DialogTitle></DialogHeader>
+                <div className="space-y-3 pt-2">
+                  <div className="space-y-1.5">
+                    <Label>Título</Label>
+                    <Input value={ideaForm.title} onChange={e => setIdeaForm(f => ({ ...f, title: e.target.value }))} placeholder="Chatbot de WhatsApp para ventas" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Descripción</Label>
+                    <Textarea value={ideaForm.description} onChange={e => setIdeaForm(f => ({ ...f, description: e.target.value }))} rows={3} placeholder="Detalles de la idea..." />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label>Prioridad</Label>
+                    <Select value={ideaForm.priority} onValueChange={v => setIdeaForm(f => ({ ...f, priority: v }))}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">Baja</SelectItem>
+                        <SelectItem value="medium">Media</SelectItem>
+                        <SelectItem value="high">Alta</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    className="w-full bg-[#2FA4A9] hover:bg-[#238b8f]"
+                    disabled={!ideaForm.title}
+                    onClick={() => addIdeaMut.mutate({ ...ideaForm, suggestedBy: "team" })}
+                  >
+                    Guardar idea
                   </Button>
                 </div>
               </DialogContent>

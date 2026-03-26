@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas } from "@shared/schema";
 import { generateBlogContent, improveBlogContent } from "./blog-ai";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
@@ -4948,6 +4948,9 @@ ${urls}
     try {
       const id = req.params.id as string;
       // Delete all related records (catch individually in case table doesn't exist yet)
+      await db.delete(projectSessions).where(eq(projectSessions.projectId, id)).catch(() => {});
+      await db.delete(projectFiles).where(eq(projectFiles.projectId, id)).catch(() => {});
+      await db.delete(projectIdeas).where(eq(projectIdeas.projectId, id)).catch(() => {});
       await db.delete(githubWebhookEvents).where(eq(githubWebhookEvents.projectId, id)).catch(() => {});
       await db.delete(projectActivityEntries).where(eq(projectActivityEntries.projectId, id)).catch(() => {});
       await db.delete(projectMessages).where(eq(projectMessages.projectId, id)).catch(() => {});
@@ -5523,6 +5526,84 @@ ${urls}
     });
   });
 
+  // ── Portal: Sessions (read-only) ──
+
+  app.get("/api/portal/:token/sessions", async (req, res) => {
+    try {
+      const project = await getProjectByToken(req.params.token as string);
+      if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+      const sessions = await db!.select().from(projectSessions)
+        .where(eq(projectSessions.projectId, project.id))
+        .orderBy(desc(projectSessions.date));
+      res.json(sessions);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // ── Portal: Files (read-only) ──
+
+  app.get("/api/portal/:token/files", async (req, res) => {
+    try {
+      const project = await getProjectByToken(req.params.token as string);
+      if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+      const files = await db!.select().from(projectFiles)
+        .where(eq(projectFiles.projectId, project.id))
+        .orderBy(desc(projectFiles.createdAt));
+      res.json(files);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // ── Portal: Ideas (read + create + vote) ──
+
+  app.get("/api/portal/:token/ideas", async (req, res) => {
+    try {
+      const project = await getProjectByToken(req.params.token as string);
+      if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+      const ideas = await db!.select().from(projectIdeas)
+        .where(eq(projectIdeas.projectId, project.id))
+        .orderBy(desc(projectIdeas.createdAt));
+      res.json(ideas);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.post("/api/portal/:token/ideas", async (req, res) => {
+    try {
+      const project = await getProjectByToken(req.params.token as string);
+      if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+      const [idea] = await db!.insert(projectIdeas).values({
+        projectId: project.id,
+        suggestedBy: "client",
+        ...req.body,
+      }).returning();
+      res.json(idea);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.patch("/api/portal/:token/ideas/:ideaId/vote", async (req, res) => {
+    try {
+      const project = await getProjectByToken(req.params.token as string);
+      if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+      const [idea] = await db!.select().from(projectIdeas).where(eq(projectIdeas.id, req.params.ideaId as string)).limit(1);
+      if (!idea || idea.projectId !== project.id) return res.status(404).json({ message: "Idea no encontrada" });
+      const [updated] = await db!.update(projectIdeas).set({ votes: (idea.votes || 0) + 1 }).where(eq(projectIdeas.id, idea.id)).returning();
+      res.json(updated);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
   // ─────────────────────────────────────────────────────────────
   // GitHub Webhook — receives push events
   // ─────────────────────────────────────────────────────────────
@@ -5712,6 +5793,152 @@ ${urls}
       .orderBy(desc(projectActivityEntries.createdAt))
       .limit(50);
     res.json(entries);
+  });
+
+  // ── Admin: Sessions CRUD ──
+
+  app.get("/api/admin/projects/:id/sessions", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const sessions = await db.select().from(projectSessions)
+        .where(eq(projectSessions.projectId, req.params.id as string))
+        .orderBy(desc(projectSessions.date));
+      res.json(sessions);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.post("/api/admin/projects/:id/sessions", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [session] = await db.insert(projectSessions).values({
+        projectId: req.params.id as string,
+        ...req.body,
+      }).returning();
+      res.json(session);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.patch("/api/admin/sessions/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [updated] = await db.update(projectSessions).set(req.body)
+        .where(eq(projectSessions.id, req.params.id as string)).returning();
+      if (!updated) return res.status(404).json({ message: "Sesión no encontrada" });
+      res.json(updated);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.delete("/api/admin/sessions/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      await db.delete(projectSessions).where(eq(projectSessions.id, req.params.id as string));
+      res.json({ success: true });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // ── Admin: Files CRUD ──
+
+  app.get("/api/admin/projects/:id/files", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const files = await db.select().from(projectFiles)
+        .where(eq(projectFiles.projectId, req.params.id as string))
+        .orderBy(desc(projectFiles.createdAt));
+      res.json(files);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.post("/api/admin/projects/:id/files", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [file] = await db.insert(projectFiles).values({
+        projectId: req.params.id as string,
+        ...req.body,
+      }).returning();
+      res.json(file);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.delete("/api/admin/files/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      await db.delete(projectFiles).where(eq(projectFiles.id, req.params.id as string));
+      res.json({ success: true });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // ── Admin: Ideas CRUD ──
+
+  app.get("/api/admin/projects/:id/ideas", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const ideas = await db.select().from(projectIdeas)
+        .where(eq(projectIdeas.projectId, req.params.id as string))
+        .orderBy(desc(projectIdeas.createdAt));
+      res.json(ideas);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.post("/api/admin/projects/:id/ideas", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [idea] = await db.insert(projectIdeas).values({
+        projectId: req.params.id as string,
+        ...req.body,
+      }).returning();
+      res.json(idea);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.patch("/api/admin/ideas/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [updated] = await db.update(projectIdeas).set(req.body)
+        .where(eq(projectIdeas.id, req.params.id as string)).returning();
+      if (!updated) return res.status(404).json({ message: "Idea no encontrada" });
+      res.json(updated);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  app.delete("/api/admin/ideas/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      await db.delete(projectIdeas).where(eq(projectIdeas.id, req.params.id as string));
+      res.json({ success: true });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
   });
 
   return httpServer;
