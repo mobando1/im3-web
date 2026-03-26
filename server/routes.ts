@@ -4563,6 +4563,140 @@ ${urls}
     }
   });
 
+  // Seed P2F hours + deliverables data
+  app.post("/api/admin/projects/seed-p2f-data", requireAuth, async (_req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [project] = await db.select().from(clientProjects).where(eq(clientProjects.name, "Portal P2F — Passport2Fluency")).limit(1);
+      if (!project) return res.status(404).json({ error: "Proyecto P2F no encontrado" });
+
+      // Check if data already exists
+      const existingLogs = await db.select({ id: projectTimeLog.id }).from(projectTimeLog).where(eq(projectTimeLog.projectId, project.id)).limit(1);
+      if (existingLogs.length > 0) return res.json({ message: "Datos ya existen — seed omitido" });
+
+      // Get phases
+      const phases = await db.select().from(projectPhases).where(eq(projectPhases.projectId, project.id)).orderBy(asc(projectPhases.orderIndex));
+
+      // ── TIME LOGS ──
+      const timeEntries: Array<{ description: string; hours: string; date: string; category: string }> = [
+        // Fase 1: Arquitectura (60h) — oct-nov 2025
+        { description: "Diseño de schema PostgreSQL (26 tablas)", hours: "12", date: "2025-10-08", category: "development" },
+        { description: "Auth local + bcrypt + sesiones", hours: "8", date: "2025-10-12", category: "development" },
+        { description: "Google OAuth integration", hours: "6", date: "2025-10-15", category: "development" },
+        { description: "Microsoft OAuth integration", hours: "5", date: "2025-10-18", category: "development" },
+        { description: "Middleware de roles y protección de rutas", hours: "6", date: "2025-10-22", category: "development" },
+        { description: "Deploy Railway + CI/CD", hours: "4", date: "2025-10-25", category: "development" },
+        { description: "Diseño de arquitectura y estructura", hours: "8", date: "2025-10-05", category: "planning" },
+        { description: "Reunión kickoff con Sebastián", hours: "2", date: "2025-10-03", category: "meeting" },
+        { description: "Wireframes iniciales", hours: "6", date: "2025-10-07", category: "design" },
+        { description: "Configuración entorno desarrollo", hours: "3", date: "2025-10-04", category: "support" },
+        // Fase 2: Estudiante (120h) — ene-feb 2026
+        { description: "Dashboard principal estudiante", hours: "10", date: "2026-01-13", category: "development" },
+        { description: "Catálogo de tutores + filtros", hours: "12", date: "2026-01-16", category: "development" },
+        { description: "Sistema de reserva de clases", hours: "14", date: "2026-01-21", category: "development" },
+        { description: "Calendario de reservas + disponibilidad", hours: "10", date: "2026-01-24", category: "development" },
+        { description: "Perfil del estudiante + settings", hours: "6", date: "2026-01-28", category: "development" },
+        { description: "Mensajes directos tutor-estudiante", hours: "10", date: "2026-01-31", category: "development" },
+        { description: "WebSocket real-time messaging", hours: "8", date: "2026-02-03", category: "development" },
+        { description: "Sistema de soporte (tickets)", hours: "8", date: "2026-02-05", category: "development" },
+        { description: "Guía de aprendizaje", hours: "4", date: "2026-02-07", category: "development" },
+        { description: "Diseño UI portal estudiante", hours: "14", date: "2026-01-10", category: "design" },
+        { description: "Reunión review sprint 1", hours: "2", date: "2026-01-17", category: "meeting" },
+        { description: "Reunión review sprint 2", hours: "2", date: "2026-01-31", category: "meeting" },
+        { description: "Planeación sprint 1", hours: "4", date: "2026-01-10", category: "planning" },
+        { description: "Planeación sprint 2", hours: "3", date: "2026-01-24", category: "planning" },
+        { description: "QA y corrección de bugs sprint 1", hours: "6", date: "2026-01-23", category: "support" },
+        { description: "Responsive mobile-first adjustments", hours: "7", date: "2026-02-06", category: "design" },
+        // Fase 3: Tutor (100h) — feb-mar 2026
+        { description: "Dashboard tutor + calendario visual", hours: "12", date: "2026-02-11", category: "development" },
+        { description: "Gestión disponibilidad semanal", hours: "10", date: "2026-02-14", category: "development" },
+        { description: "Excepciones de calendario", hours: "6", date: "2026-02-17", category: "development" },
+        { description: "Notas de sesión y homework", hours: "8", date: "2026-02-19", category: "development" },
+        { description: "Biblioteca de materiales", hours: "10", date: "2026-02-21", category: "development" },
+        { description: "Sistema de pagos a tutores", hours: "12", date: "2026-02-25", category: "development" },
+        { description: "Asistente IA para clases", hours: "8", date: "2026-02-27", category: "development" },
+        { description: "Sistema de invitación de tutores", hours: "6", date: "2026-02-28", category: "development" },
+        { description: "Diseño UI portal tutor", hours: "10", date: "2026-02-10", category: "design" },
+        { description: "Reunión review portal tutor", hours: "2", date: "2026-02-20", category: "meeting" },
+        { description: "Planeación fase tutor", hours: "4", date: "2026-02-10", category: "planning" },
+        { description: "QA portal tutor", hours: "6", date: "2026-03-01", category: "support" },
+        { description: "Métricas de rendimiento tutor", hours: "6", date: "2026-02-26", category: "development" },
+        // Fase 4: IA (80h) — feb-mar 2026
+        { description: "Integración Anthropic Claude API", hours: "10", date: "2026-02-16", category: "development" },
+        { description: "Partner de práctica Lingo", hours: "14", date: "2026-02-20", category: "development" },
+        { description: "Correcciones gramaticales real-time", hours: "12", date: "2026-02-24", category: "development" },
+        { description: "Tracking de vocabulario", hours: "8", date: "2026-02-27", category: "development" },
+        { description: "Perfiles con memoria contextual", hours: "10", date: "2026-03-01", category: "development" },
+        { description: "Diseño UX conversación IA", hours: "8", date: "2026-02-15", category: "design" },
+        { description: "Prompt engineering y testing", hours: "10", date: "2026-03-03", category: "development" },
+        { description: "Reunión demo IA", hours: "2", date: "2026-03-04", category: "meeting" },
+        { description: "Planeación módulo IA", hours: "4", date: "2026-02-15", category: "planning" },
+        { description: "QA módulo IA", hours: "2", date: "2026-03-05", category: "support" },
+        // Fase 5: Gamificación (60h) — mar 2026
+        { description: "Learning path snake visualization", hours: "10", date: "2026-03-03", category: "development" },
+        { description: "Sistema XP + rachas + logros", hours: "10", date: "2026-03-05", category: "development" },
+        { description: "Quizzes por nivel", hours: "8", date: "2026-03-07", category: "development" },
+        { description: "Flashcards interactivas", hours: "6", date: "2026-03-08", category: "development" },
+        { description: "Speaking prompts + evaluación", hours: "6", date: "2026-03-09", category: "development" },
+        { description: "Diseño gamificación y animaciones", hours: "8", date: "2026-03-02", category: "design" },
+        { description: "Planeación learning path", hours: "4", date: "2026-03-01", category: "planning" },
+        { description: "Reunión demo gamificación", hours: "1.5", date: "2026-03-10", category: "meeting" },
+        { description: "Ajustes de performance animaciones", hours: "4", date: "2026-03-10", category: "support" },
+        // Fase 6: Pagos (50h) — feb-mar 2026
+        { description: "Integración Stripe Checkout", hours: "10", date: "2026-02-22", category: "development" },
+        { description: "Suscripciones recurrentes", hours: "8", date: "2026-02-25", category: "development" },
+        { description: "Paquetes à-la-carte", hours: "6", date: "2026-02-28", category: "development" },
+        { description: "Stripe webhooks lifecycle", hours: "8", date: "2026-03-03", category: "development" },
+        { description: "Checkout flow UX", hours: "6", date: "2026-02-21", category: "design" },
+        { description: "Testing pagos sandbox", hours: "6", date: "2026-03-05", category: "support" },
+        { description: "Planeación módulo pagos", hours: "3", date: "2026-02-20", category: "planning" },
+        { description: "Reunión revisión pagos", hours: "1.5", date: "2026-03-06", category: "meeting" },
+        // Fase 7: Integraciones (70h) — feb-mar 2026
+        { description: "Google Meet API integration", hours: "10", date: "2026-02-26", category: "development" },
+        { description: "Google Calendar sync", hours: "8", date: "2026-03-01", category: "development" },
+        { description: "High Level CRM webhooks", hours: "10", date: "2026-03-05", category: "development" },
+        { description: "High Level contactos + calendarios", hours: "8", date: "2026-03-08", category: "development" },
+        { description: "Resend emails transaccionales", hours: "6", date: "2026-03-10", category: "development" },
+        { description: "Sistema de reviews", hours: "8", date: "2026-03-12", category: "development" },
+        { description: "Drip email campaigns", hours: "6", date: "2026-03-14", category: "development" },
+        { description: "Reunión review integraciones", hours: "2", date: "2026-03-13", category: "meeting" },
+        { description: "Planeación integraciones", hours: "4", date: "2026-02-25", category: "planning" },
+        { description: "Testing integraciones end-to-end", hours: "6", date: "2026-03-15", category: "support" },
+        // Fase 8: Corrección (20h parcial) — mar 2026
+        { description: "Auditoría general de bugs", hours: "4", date: "2026-03-17", category: "support" },
+        { description: "Fix bugs portal estudiante", hours: "6", date: "2026-03-19", category: "development" },
+        { description: "Fix bugs portal tutor", hours: "4", date: "2026-03-21", category: "development" },
+        { description: "Ajustes pasarela de pago", hours: "4", date: "2026-03-24", category: "development" },
+        { description: "Reunión status correcciones", hours: "2", date: "2026-03-20", category: "meeting" },
+      ];
+
+      for (const entry of timeEntries) {
+        await db.insert(projectTimeLog).values({ projectId: project.id, ...entry });
+      }
+
+      // ── DELIVERABLES ──
+      const deliverables = [
+        { title: "Infraestructura base desplegada", description: "Auth (local + Google + Microsoft), DB con 26 tablas, 3 roles, deploy en Railway", type: "other" as const, status: "approved", deliveredAt: new Date("2025-11-15"), approvedAt: new Date("2025-11-16"), phaseId: phases[0]?.id },
+        { title: "Portal del estudiante funcional", description: "Dashboard, catálogo de tutores, reserva de clases, mensajes directos, soporte, guía de aprendizaje", type: "feature" as const, status: "approved", deliveredAt: new Date("2026-02-10"), approvedAt: new Date("2026-02-11"), phaseId: phases[1]?.id },
+        { title: "Portal del tutor completo", description: "Calendario visual, disponibilidad, notas de sesión, biblioteca de materiales, pagos, asistente IA, invitaciones", type: "feature" as const, status: "approved", deliveredAt: new Date("2026-03-01"), approvedAt: new Date("2026-03-02"), phaseId: phases[2]?.id },
+        { title: "Compañero de práctica Lingo", description: "Partner de conversación con IA (Claude), correcciones gramaticales en tiempo real, tracking de vocabulario, memoria contextual", type: "feature" as const, status: "approved", deliveredAt: new Date("2026-03-05"), approvedAt: new Date("2026-03-06"), phaseId: phases[3]?.id },
+        { title: "Camino de aprendizaje gamificado", description: "Snake path visual A1→B2, sistema de XP y rachas, logros, quizzes, flashcards, speaking prompts", type: "feature" as const, status: "approved", deliveredAt: new Date("2026-03-10"), approvedAt: new Date("2026-03-11"), phaseId: phases[4]?.id },
+        { title: "Sistema de pagos Stripe integrado", description: "3 planes de suscripción ($119/$219/$299), paquetes à-la-carte, webhooks para ciclo de vida automático", type: "feature" as const, status: "approved", deliveredAt: new Date("2026-03-08"), approvedAt: new Date("2026-03-09"), phaseId: phases[5]?.id },
+        { title: "Integraciones externas configuradas", description: "Google Meet, Google Calendar, High Level CRM sync, Resend emails, sistema de reviews", type: "feature" as const, status: "approved", deliveredAt: new Date("2026-03-15"), approvedAt: new Date("2026-03-16"), phaseId: phases[6]?.id },
+      ];
+
+      for (const d of deliverables) {
+        if (d.phaseId) {
+          await db.insert(projectDeliverables).values({ projectId: project.id, ...d });
+        }
+      }
+
+      res.json({ message: `Datos P2F poblados: ${timeEntries.length} registros de horas + ${deliverables.length} entregas` });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
   app.post("/api/admin/projects/seed", requireAuth, async (_req, res) => {
     try {
       const existing = await db!.select({ total: count() }).from(clientProjects);

@@ -153,6 +153,19 @@ export default function AdminProjects() {
           >
             <Sparkles className="w-4 h-4" /> P2F
           </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              apiRequest("POST", "/api/admin/projects/seed-p2f-data").then(r => r.json()).then(data => {
+                queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] });
+                toast({ title: data.message || "Datos P2F poblados" });
+              }).catch(() => toast({ title: "Error poblando datos", variant: "destructive" }));
+            }}
+            className="gap-1.5 text-xs"
+          >
+            P2F Datos
+          </Button>
           <Button onClick={() => setShowCreate(true)} className="bg-[#2FA4A9] hover:bg-[#238b8f]">
             <Plus className="w-4 h-4 mr-2" /> Nuevo proyecto
           </Button>
