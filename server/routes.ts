@@ -4838,6 +4838,155 @@ ${urls}
     }
   });
 
+  // Seed IM3 Systems — internal project
+  app.post("/api/admin/projects/seed-im3", requireAuth, async (_req, res) => {
+    try {
+      // Check if already seeded
+      const existing = await db!.select().from(clientProjects).where(eq(clientProjects.name, "IM3 Systems — Desarrollo Interno")).limit(1);
+      if (existing.length > 0) return res.json({ message: "Proyecto IM3 ya existe", projectId: existing[0].id });
+
+      // Create or find contact
+      let contactId: string;
+      const [existingContact] = await db!.select().from(contacts).where(eq(contacts.email, "info@im3systems.com")).limit(1);
+      if (existingContact) {
+        contactId = existingContact.id;
+      } else {
+        const [c] = await db!.insert(contacts).values({ nombre: "Isabel Montenegro", empresa: "IM3 Systems", email: "info@im3systems.com", status: "converted", leadScore: 100 }).returning();
+        contactId = c.id;
+      }
+
+      // Create project
+      const [project] = await db!.insert(clientProjects).values({
+        contactId, name: "IM3 Systems — Desarrollo Interno",
+        description: "Ecosistema completo de herramientas IM3: Website + CRM, Acta (grabación de reuniones), Audit Generator (reportes de auditoría), IM3 Tutor (widget de IA embebible). Gestión interna de desarrollo.",
+        status: "in_progress", startDate: new Date("2026-01-15"), estimatedEndDate: new Date("2026-12-31"),
+        totalBudget: 0, currency: "USD", healthStatus: "on_track",
+        healthNote: "4 productos en desarrollo activo. CRM y Acta en producción, Audit Generator completado, Tutor en MVP.",
+        githubRepoUrl: "https://github.com/mobando1/im3-web.git",
+        aiTrackingEnabled: true,
+      }).returning();
+
+      // ── FASES ──
+      const phasesData = [
+        {
+          phase: { name: "IM3 Website + CRM", description: "Sitio web público + CRM de ventas + portal de proyectos + blog + email marketing", status: "in_progress", estimatedHours: 400, startDate: new Date("2026-01-15") },
+          tasks: [
+            { title: "Landing page con animaciones y SEO", status: "completed", priority: "high", isMilestone: true, dueDate: new Date("2026-01-25") },
+            { title: "Formulario de diagnóstico multi-step", status: "completed", priority: "high", dueDate: new Date("2026-01-30") },
+            { title: "Sistema de emails AI (confirmación, mini-auditoría, re-engagement)", status: "completed", priority: "high", dueDate: new Date("2026-02-10") },
+            { title: "CRM completo: contactos, pipeline, deals, tareas, calendario", status: "completed", priority: "high", isMilestone: true, dueDate: new Date("2026-02-20") },
+            { title: "Blog + newsletter semanal con noticias AI", status: "completed", priority: "medium", dueDate: new Date("2026-02-25") },
+            { title: "Portal de proyectos: fases, entregas, Gantt, calendario, mensajes", status: "completed", priority: "high", isMilestone: true, dueDate: new Date("2026-03-10") },
+            { title: "GitHub integration + AI commit tracking", status: "completed", priority: "medium", dueDate: new Date("2026-03-15") },
+            { title: "Módulo sesiones, archivos e ideas", status: "completed", priority: "medium", dueDate: new Date("2026-03-26") },
+            { title: "Propuestas AI (generación + vista pública)", status: "completed", priority: "high", dueDate: new Date("2026-03-25") },
+            { title: "Subdomain hub.im3systems.com", status: "completed", priority: "low", dueDate: new Date("2026-03-24") },
+            { title: "Multi-idioma emails (español + inglés)", status: "completed", priority: "medium", dueDate: new Date("2026-03-24") },
+            { title: "WhatsApp integration (recepción + clasificación AI)", status: "completed", priority: "high", dueDate: new Date("2026-03-20") },
+            { title: "Portal del cliente: Sesiones + Archivos + Ideas", status: "in_progress", priority: "high", dueDate: new Date("2026-04-05") },
+            { title: "File upload con Supabase Storage", status: "pending", priority: "medium", dueDate: new Date("2026-04-15") },
+          ],
+        },
+        {
+          phase: { name: "Acta — Grabación de reuniones", description: "App móvil para grabar, transcribir y analizar reuniones con IA. Integrada al CRM.", status: "in_progress", estimatedHours: 200, startDate: new Date("2026-02-01") },
+          tasks: [
+            { title: "Recording con MediaRecorder API + visualizador de onda", status: "completed", priority: "high", isMilestone: true, dueDate: new Date("2026-02-10") },
+            { title: "Transcripción OpenAI Whisper (multi-idioma + diarización)", status: "completed", priority: "high", dueDate: new Date("2026-02-15") },
+            { title: "Análisis GPT-4o: resumen, action items, insights", status: "completed", priority: "high", dueDate: new Date("2026-02-20") },
+            { title: "Hub por cliente con historial de reuniones", status: "completed", priority: "high", dueDate: new Date("2026-02-25") },
+            { title: "Reportes públicos compartibles (token + PDF)", status: "completed", priority: "medium", dueDate: new Date("2026-03-01") },
+            { title: "Stripe billing: freemium + créditos por minuto", status: "completed", priority: "high", isMilestone: true, dueDate: new Date("2026-03-05") },
+            { title: "IndexedDB backup + wake lock + pause/resume", status: "completed", priority: "medium", dueDate: new Date("2026-03-10") },
+            { title: "Integración con CRM (iframe en sidebar)", status: "completed", priority: "medium", dueDate: new Date("2026-03-26") },
+            { title: "Coaching de ventas (% tiempo hablado, objeciones)", status: "pending", priority: "medium", dueDate: new Date("2026-05-01") },
+            { title: "Google Drive sync automático", status: "pending", priority: "low", dueDate: new Date("2026-05-15") },
+          ],
+        },
+        {
+          phase: { name: "Audit Generator", description: "Generador de reportes de auditoría operativa premium con IA, benchmarking y PDF consulting-grade.", status: "completed", estimatedHours: 120, startDate: new Date("2026-02-10"), endDate: new Date("2026-03-17") },
+          tasks: [
+            { title: "Pre-audit + full-audit forms", status: "completed", priority: "high", dueDate: new Date("2026-02-15") },
+            { title: "Motor de métricas y benchmarking por industria", status: "completed", priority: "high", dueDate: new Date("2026-02-22") },
+            { title: "Generación PDF premium con Playwright", status: "completed", priority: "high", isMilestone: true, dueDate: new Date("2026-03-01") },
+            { title: "Diagramas: Mermaid + ECharts (funnel, radar, heatmaps)", status: "completed", priority: "medium", dueDate: new Date("2026-03-05") },
+            { title: "Anti-hallucination validation engine", status: "completed", priority: "high", dueDate: new Date("2026-03-10") },
+            { title: "Google Drive auto-upload de reportes", status: "completed", priority: "medium", dueDate: new Date("2026-03-12") },
+            { title: "Frontend Next.js para gestión de auditorías", status: "completed", priority: "medium", dueDate: new Date("2026-03-17") },
+          ],
+        },
+        {
+          phase: { name: "IM3 Tutor — Widget de IA", description: "SaaS de tutores virtuales con IA, embebibles como widget JS en cualquier app. RAG con Claude.", status: "in_progress", estimatedHours: 150, startDate: new Date("2026-03-15") },
+          tasks: [
+            { title: "Schema PostgreSQL + Drizzle ORM", status: "completed", priority: "high", dueDate: new Date("2026-03-18") },
+            { title: "RAG pipeline: PDFs → chunks → embeddings", status: "in_progress", priority: "high", isMilestone: true, dueDate: new Date("2026-03-30") },
+            { title: "Widget embebible (Shadow DOM + vanilla JS)", status: "in_progress", priority: "high", dueDate: new Date("2026-04-05") },
+            { title: "API REST para integración con CRM", status: "pending", priority: "high", dueDate: new Date("2026-04-10") },
+            { title: "Multi-idioma (español + inglés)", status: "pending", priority: "medium", dueDate: new Date("2026-04-15") },
+            { title: "Customización de tema y branding por cliente", status: "pending", priority: "medium", dueDate: new Date("2026-04-20") },
+          ],
+        },
+      ];
+
+      const phases = [];
+      for (let i = 0; i < phasesData.length; i++) {
+        const [ph] = await db!.insert(projectPhases).values({
+          projectId: project.id, ...phasesData[i].phase, orderIndex: i,
+        }).returning();
+        phases.push(ph);
+
+        for (const task of phasesData[i].tasks) {
+          await db!.insert(projectTasks).values({
+            phaseId: ph.id, projectId: project.id, ...task,
+          });
+        }
+      }
+
+      // ── IDEAS (backlog) ──
+      const ideasData = [
+        { title: "Coaching de ventas en Acta", description: "Detectar % de tiempo hablado por participante, identificar objeciones, generar score de la reunión.", priority: "high", status: "considering", suggestedBy: "team" },
+        { title: "Google Drive sync por cliente", description: "Sincronizar automáticamente carpetas de Google Drive con cada proyecto del CRM.", priority: "medium", status: "suggested", suggestedBy: "team" },
+        { title: "Voice Agent para llamadas", description: "Agente de IA que puede hacer y recibir llamadas telefónicas para calificación de leads.", priority: "high", status: "considering", suggestedBy: "team" },
+        { title: "Scrapper SECOP II", description: "Monitorear licitaciones públicas relevantes para clientes del sector gobierno.", priority: "low", status: "suggested", suggestedBy: "team" },
+        { title: "App de logística y rastreo", description: "Sistema de tracking GPS para flotas con dashboard operativo y app móvil para conductores.", priority: "medium", status: "planned", suggestedBy: "team" },
+        { title: "WhatsApp Bot con IA avanzada", description: "Bot que maneja ventas, soporte y calificación de leads de forma autónoma via WhatsApp.", priority: "high", status: "considering", suggestedBy: "team" },
+        { title: "App de procesos y checklists", description: "Sistema de checklists operativos digitales con trazabilidad y auditorías automáticas.", priority: "medium", status: "suggested", suggestedBy: "team" },
+        { title: "Sistema de turnos", description: "Gestión de turnos de trabajo integrada al CRM con notificaciones y reportes.", priority: "low", status: "suggested", suggestedBy: "team" },
+      ];
+
+      for (const idea of ideasData) {
+        await db!.insert(projectIdeas).values({ projectId: project.id, ...idea });
+      }
+
+      // ── ARCHIVOS ──
+      const filesData = [
+        { name: "IM3 Website — Repositorio GitHub", type: "document", url: "https://github.com/mobando1/im3-web" },
+        { name: "Acta — Repositorio GitHub", type: "document", url: "https://github.com/mobando1/Acta" },
+        { name: "Audit Generator — Repositorio GitHub", type: "document", url: "https://github.com/mobando1/audit-generator-im3" },
+        { name: "IM3 Website — Deploy producción", type: "other", url: "https://www.im3systems.com" },
+        { name: "CRM Hub — Deploy producción", type: "other", url: "https://hub.im3systems.com" },
+        { name: "Acta — Deploy producción", type: "other", url: "https://brave-kindness-production-049c.up.railway.app" },
+      ];
+
+      for (const file of filesData) {
+        await db!.insert(projectFiles).values({ projectId: project.id, ...file });
+      }
+
+      // ── MENSAJES ──
+      const msgs = [
+        { senderType: "team", senderName: "Equipo IM3", content: "Proyecto interno IM3 Systems creado. Aquí centralizamos todo el desarrollo de nuestras herramientas: Website, CRM, Acta, Audit Generator y Tutor." },
+        { senderType: "team", senderName: "Equipo IM3", content: "Prioridades actuales: completar el portal del cliente con sesiones y archivos, y avanzar el MVP del IM3 Tutor (RAG + widget embebible)." },
+      ];
+
+      for (const m of msgs) {
+        await db!.insert(projectMessages).values({ projectId: project.id, ...m, isRead: true });
+      }
+
+      res.json({ message: "Proyecto IM3 Systems creado", projectId: project.id, portalToken: project.accessToken });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
   // ─────────────────────────────────────────────────────────────
   // Portal del Cliente — Admin endpoints (CRUD proyectos)
   // ─────────────────────────────────────────────────────────────
