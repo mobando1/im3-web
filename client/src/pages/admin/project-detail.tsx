@@ -858,8 +858,8 @@ export default function AdminProjectDetail() {
                               {format(month, isJan ? "MMM yyyy" : "MMM", { locale: es })}
                             </span>
                           </div>
-                          {/* Vertical guide line */}
-                          <div className="absolute top-6 w-px bg-gray-100" style={{ height: `${project.phases.length * 70 + 40}px` }} />
+                          {/* Vertical guide line — behind content */}
+                          <div className="absolute top-6 w-px bg-gray-100/50 pointer-events-none" style={{ height: `${project.phases.length * 70 + 40}px`, zIndex: 0 }} />
                         </div>
                       );
                     })}
@@ -895,6 +895,7 @@ export default function AdminProjectDetail() {
                       return (
                         <motion.div
                           key={phase.id}
+                          className="relative z-10"
                           initial={{ opacity: 0, x: -20 }}
                           animate={{ opacity: 1, x: 0 }}
                           transition={{ delay: idx * 0.08, duration: 0.4, ease: "easeOut" }}
