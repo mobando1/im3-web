@@ -63,6 +63,7 @@ const AdminProposals = lazy(() => import("@/pages/admin/proposals-list"));
 const AdminProposalEditor = lazy(() => import("@/pages/admin/proposal-editor"));
 const AdminBlog = lazy(() => import("@/pages/admin/blog"));
 const AdminBlogEditor = lazy(() => import("@/pages/admin/blog-editor"));
+const ProposalView = lazy(() => import("@/pages/proposal"));
 const Blog = lazy(() => import("@/pages/blog"));
 const BlogPost = lazy(() => import("@/pages/blog-post"));
 const Portal = lazy(() => import("@/pages/portal"));
@@ -94,6 +95,7 @@ function Router() {
         <Route path="/booking" component={Booking} />
         <Route path="/confirmed" component={Confirmed} />
         <Route path="/reschedule/:contactId" component={Reschedule} />
+        <Route path="/proposal/:token" component={ProposalView} />
         <Route path="/portal/:token" component={Portal} />
         <Route path="/blog/:slug" component={BlogPost} />
         <Route path="/blog" component={Blog} />
