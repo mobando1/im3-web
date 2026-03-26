@@ -5781,8 +5781,11 @@ ${urls}
     res.redirect(url);
   });
 
-  // OAuth callback — exchange code for token
-  app.get("/api/github/callback", requireAuth, async (req, res) => {
+  // OAuth callback — exchange code for token (no requireAuth — session may vary across redirect)
+  app.get("/api/github/callback", async (req, res) => {
+    if (!req.isAuthenticated || !req.isAuthenticated()) {
+      return res.redirect("/admin/login?github_error=session_lost");
+    }
     const code = req.query.code as string;
     if (!code) return res.redirect("/admin/projects?github_error=no_code");
 
