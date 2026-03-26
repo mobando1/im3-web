@@ -128,6 +128,163 @@ const TAB_ICONS: Record<string, typeof Circle> = {
 
 const tabs = ["Roadmap", "Timeline", "Calendario", "Entregas", "Horas", "Sesiones", "Archivos", "Ideas", "Mensajes", "Config"];
 
+type GithubRepo = {
+  id: number;
+  fullName: string;
+  url: string;
+  description: string | null;
+  isPrivate: boolean;
+  updatedAt: string;
+};
+
+function GitHubRepoSelector({ projectId, currentRepo, aiEnabled, onConnected }: {
+  projectId: string;
+  currentRepo: string | null;
+  aiEnabled: boolean;
+  onConnected: () => void;
+}) {
+  const { toast } = useToast();
+  const [search, setSearch] = useState("");
+
+  const { data: ghStatus } = useQuery<{ configured: boolean; connected: boolean; githubUsername: string | null }>({
+    queryKey: ["/api/admin/github/status"],
+  });
+
+  const { data: repos = [], isLoading: loadingRepos } = useQuery<GithubRepo[]>({
+    queryKey: ["/api/admin/github/repos"],
+    enabled: !!ghStatus?.connected,
+  });
+
+  const connectRepoMut = useMutation({
+    mutationFn: async (repoFullName: string) => {
+      const res = await apiRequest("POST", `/api/admin/projects/${projectId}/connect-repo`, { repoFullName });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Repositorio conectado con webhook automático" });
+      onConnected();
+    },
+    onError: () => {
+      toast({ title: "Error conectando repositorio", variant: "destructive" });
+    },
+  });
+
+  const disconnectMut = useMutation({
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/admin/github/disconnect");
+    },
+    onSuccess: () => {
+      toast({ title: "GitHub desconectado" });
+      onConnected();
+    },
+  });
+
+  // Already connected to a repo
+  if (currentRepo && aiEnabled) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-medium text-emerald-800">Conectado</p>
+            <p className="text-xs text-emerald-600 truncate">{currentRepo}</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={async () => {
+            try {
+              await apiRequest("POST", `/api/admin/projects/${projectId}/analyze-commits`);
+              onConnected();
+              toast({ title: "Commits analizados" });
+            } catch { toast({ title: "Error analizando", variant: "destructive" }); }
+          }}>Analizar commits</Button>
+          <Button variant="outline" size="sm" onClick={async () => {
+            try {
+              await apiRequest("POST", `/api/admin/projects/${projectId}/weekly-summary`);
+              toast({ title: "Resumen semanal generado" });
+            } catch { toast({ title: "Error generando resumen", variant: "destructive" }); }
+          }}>Resumen semanal</Button>
+        </div>
+      </div>
+    );
+  }
+
+  // GitHub OAuth not configured on server
+  if (ghStatus && !ghStatus.configured) {
+    return (
+      <p className="text-xs text-gray-400">
+        GitHub OAuth no está configurado. Agrega GITHUB_CLIENT_ID y GITHUB_CLIENT_SECRET en las variables de entorno.
+      </p>
+    );
+  }
+
+  // Not connected to GitHub yet
+  if (ghStatus && !ghStatus.connected) {
+    return (
+      <div className="space-y-3">
+        <a
+          href="/api/github/authorize"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
+        >
+          <Github className="w-4 h-4" />
+          Conectar con GitHub
+        </a>
+        <p className="text-xs text-gray-400">Autoriza acceso para seleccionar tus repositorios automáticamente.</p>
+      </div>
+    );
+  }
+
+  // Connected to GitHub — show repo selector
+  const filteredRepos = search
+    ? repos.filter(r => r.fullName.toLowerCase().includes(search.toLowerCase()))
+    : repos;
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-500">
+          Conectado como <span className="font-medium text-gray-700">@{ghStatus?.githubUsername}</span>
+        </p>
+        <button onClick={() => disconnectMut.mutate()} className="text-xs text-gray-400 hover:text-red-500 transition-colors">
+          Desconectar
+        </button>
+      </div>
+
+      <Input
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder="Buscar repositorio..."
+        className="h-9 text-sm"
+      />
+
+      <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-50">
+        {loadingRepos ? (
+          <p className="text-xs text-gray-400 text-center py-6">Cargando repositorios...</p>
+        ) : filteredRepos.length === 0 ? (
+          <p className="text-xs text-gray-400 text-center py-6">No se encontraron repositorios</p>
+        ) : (
+          filteredRepos.map(repo => (
+            <button
+              key={repo.id}
+              onClick={() => connectRepoMut.mutate(repo.fullName)}
+              disabled={connectRepoMut.isPending}
+              className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors disabled:opacity-50"
+            >
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">{repo.fullName}</p>
+                {repo.description && <p className="text-xs text-gray-400 truncate">{repo.description}</p>}
+              </div>
+              {repo.isPrivate && (
+                <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded font-medium shrink-0">privado</span>
+              )}
+            </button>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 export default function AdminProjectDetail() {
   const params = useParams<{ id: string }>();
   const [, navigate] = useLocation();
@@ -1582,69 +1739,7 @@ export default function AdminProjectDetail() {
                 )}
               </div>
 
-              <div className="space-y-3">
-                <div className="space-y-1.5">
-                  <Label>Repositorio</Label>
-                  <Input value={editForm.githubRepoUrl || ""} onChange={e => setEditForm(f => ({ ...f, githubRepoUrl: e.target.value }))} placeholder="https://github.com/owner/repo" />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>Webhook URL <span className="text-gray-400 font-normal">(copiar en GitHub)</span></Label>
-                  <div className="flex gap-2">
-                    <Input readOnly value={`${window.location.origin}/api/webhooks/github/${params.id}`} className="text-xs font-mono bg-gray-50" />
-                    <Button variant="outline" size="sm" onClick={() => {
-                      navigator.clipboard.writeText(`${window.location.origin}/api/webhooks/github/${params.id}`);
-                      toast({ title: "URL copiada" });
-                    }}><Copy className="w-3.5 h-3.5" /></Button>
-                  </div>
-                </div>
-                {project.githubWebhookSecret && (
-                  <div className="space-y-1.5">
-                    <Label>Webhook Secret</Label>
-                    <div className="flex gap-2">
-                      <Input readOnly value={project.githubWebhookSecret} className="text-xs font-mono bg-gray-50" />
-                      <Button variant="outline" size="sm" onClick={() => {
-                        navigator.clipboard.writeText(project.githubWebhookSecret!);
-                        toast({ title: "Secret copiado" });
-                      }}><Copy className="w-3.5 h-3.5" /></Button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <details className="text-xs text-gray-500">
-                <summary className="cursor-pointer font-medium hover:text-gray-700">Instrucciones de configuración</summary>
-                <ol className="mt-2 space-y-1 list-decimal list-inside">
-                  <li>Ve a tu repo en GitHub → Settings → Webhooks → Add webhook</li>
-                  <li>Pega la <strong>Webhook URL</strong> de arriba en "Payload URL"</li>
-                  <li>Content type: <code className="bg-gray-100 px-1 rounded">application/json</code></li>
-                  {project.githubWebhookSecret && <li>Pega el <strong>Secret</strong> de arriba</li>}
-                  <li>Events: "Just the push event"</li>
-                  <li>Click "Add webhook"</li>
-                </ol>
-              </details>
-
-              <div className="flex gap-2 pt-2">
-                <Button size="sm" onClick={() => {
-                  updateProjectMut.mutate({ githubRepoUrl: editForm.githubRepoUrl || null, aiTrackingEnabled: true });
-                }}>{project.aiTrackingEnabled ? "Actualizar" : "Activar AI tracking"}</Button>
-                {project.aiTrackingEnabled && (
-                  <>
-                    <Button variant="outline" size="sm" onClick={async () => {
-                      try {
-                        await apiRequest("POST", `/api/admin/projects/${params.id}/analyze-commits`);
-                        invalidate();
-                        toast({ title: "Commits analizados" });
-                      } catch { toast({ title: "Error analizando", variant: "destructive" }); }
-                    }}>Analizar commits</Button>
-                    <Button variant="outline" size="sm" onClick={async () => {
-                      try {
-                        await apiRequest("POST", `/api/admin/projects/${params.id}/weekly-summary`);
-                        toast({ title: "Resumen generado y enviado" });
-                      } catch { toast({ title: "Error generando resumen", variant: "destructive" }); }
-                    }}>Resumen semanal</Button>
-                  </>
-                )}
-              </div>
+              <GitHubRepoSelector projectId={params.id!} currentRepo={(project as any).githubRepoUrl} aiEnabled={project.aiTrackingEnabled} onConnected={invalidate} />
             </div>
 
             {/* Project settings */}

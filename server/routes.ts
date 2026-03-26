@@ -16,6 +16,7 @@ import { isWhatsAppConfigured, calculateWhatsAppSchedule, WHATSAPP_SEQUENCE, sen
 import passport from "passport";
 import { z } from "zod";
 import { analyzeCommitsForProject, generateWeeklySummary, calculateProjectHealth } from "./project-ai";
+import { generateProposal } from "./proposal-ai";
 import crypto from "crypto";
 
 /**
@@ -5605,6 +5606,161 @@ ${urls}
   });
 
   // ─────────────────────────────────────────────────────────────
+  // GitHub OAuth — connect repos automatically
+  // ─────────────────────────────────────────────────────────────
+
+  const GITHUB_CLIENT_ID = process.env.GITHUB_CLIENT_ID || "";
+  const GITHUB_CLIENT_SECRET = process.env.GITHUB_CLIENT_SECRET || "";
+  const GITHUB_CALLBACK_URL = process.env.GITHUB_CALLBACK_URL || "https://www.im3systems.com/api/github/callback";
+
+  // Check if GitHub OAuth is configured
+  app.get("/api/admin/github/status", requireAuth, async (req, res) => {
+    const user = req.user as { id: string; githubAccessToken?: string; githubUsername?: string };
+    res.json({
+      configured: !!(GITHUB_CLIENT_ID && GITHUB_CLIENT_SECRET),
+      connected: !!user.githubAccessToken,
+      githubUsername: user.githubUsername || null,
+    });
+  });
+
+  // Start OAuth flow — redirect to GitHub
+  app.get("/api/github/authorize", requireAuth, (_req, res) => {
+    if (!GITHUB_CLIENT_ID) return res.status(400).json({ message: "GitHub OAuth no configurado" });
+    const state = crypto.randomBytes(16).toString("hex");
+    const scopes = "repo";
+    const url = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(GITHUB_CALLBACK_URL)}&scope=${scopes}&state=${state}`;
+    res.redirect(url);
+  });
+
+  // OAuth callback — exchange code for token
+  app.get("/api/github/callback", requireAuth, async (req, res) => {
+    const code = req.query.code as string;
+    if (!code) return res.redirect("/admin/projects?github_error=no_code");
+
+    try {
+      // Exchange code for access token
+      const tokenRes = await fetch("https://github.com/login/oauth/access_token", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Accept": "application/json" },
+        body: JSON.stringify({
+          client_id: GITHUB_CLIENT_ID,
+          client_secret: GITHUB_CLIENT_SECRET,
+          code,
+          redirect_uri: GITHUB_CALLBACK_URL,
+        }),
+      });
+      const tokenData = await tokenRes.json() as { access_token?: string; error?: string };
+      if (!tokenData.access_token) {
+        return res.redirect("/admin/projects?github_error=token_failed");
+      }
+
+      // Get GitHub username
+      const userRes = await fetch("https://api.github.com/user", {
+        headers: { "Authorization": `Bearer ${tokenData.access_token}`, "User-Agent": "IM3-Systems-CRM" },
+      });
+      const ghUser = await userRes.json() as { login: string };
+
+      // Save token to user
+      const user = req.user as { id: string };
+      await db!.update(users).set({
+        githubAccessToken: tokenData.access_token,
+        githubUsername: ghUser.login,
+      }).where(eq(users.id, user.id));
+
+      res.redirect("/admin/projects?github_connected=true");
+    } catch (err: unknown) {
+      log(`GitHub OAuth error: ${err instanceof Error ? err.message : String(err)}`);
+      res.redirect("/admin/projects?github_error=exception");
+    }
+  });
+
+  // Disconnect GitHub
+  app.post("/api/admin/github/disconnect", requireAuth, async (req, res) => {
+    const user = req.user as { id: string };
+    await db!.update(users).set({ githubAccessToken: null, githubUsername: null }).where(eq(users.id, user.id));
+    res.json({ success: true });
+  });
+
+  // List repos from connected GitHub account
+  app.get("/api/admin/github/repos", requireAuth, async (req, res) => {
+    const user = req.user as { id: string; githubAccessToken?: string };
+    if (!user.githubAccessToken) return res.status(401).json({ message: "GitHub no conectado" });
+
+    try {
+      const page = parseInt(req.query.page as string) || 1;
+      const ghRes = await fetch(`https://api.github.com/user/repos?per_page=30&page=${page}&sort=updated&direction=desc`, {
+        headers: { "Authorization": `Bearer ${user.githubAccessToken}`, "User-Agent": "IM3-Systems-CRM" },
+      });
+      if (!ghRes.ok) return res.status(ghRes.status).json({ message: "GitHub API error" });
+
+      const repos = await ghRes.json() as Array<{ id: number; full_name: string; html_url: string; description: string | null; private: boolean; updated_at: string }>;
+      res.json(repos.map(r => ({
+        id: r.id,
+        fullName: r.full_name,
+        url: r.html_url,
+        description: r.description,
+        isPrivate: r.private,
+        updatedAt: r.updated_at,
+      })));
+    } catch (err: unknown) {
+      res.status(500).json({ message: "Error fetching repos" });
+    }
+  });
+
+  // Connect a repo to a project (auto-create webhook)
+  app.post("/api/admin/projects/:id/connect-repo", requireAuth, async (req, res) => {
+    const projectId = req.params.id as string;
+    const user = req.user as { id: string; githubAccessToken?: string };
+    if (!user.githubAccessToken) return res.status(401).json({ message: "GitHub no conectado" });
+
+    const { repoFullName } = req.body as { repoFullName: string };
+    if (!repoFullName) return res.status(400).json({ message: "repoFullName requerido" });
+
+    try {
+      // Generate webhook secret
+      const webhookSecret = crypto.randomBytes(32).toString("hex");
+      const webhookUrl = `${req.protocol}://${req.get("host")}/api/webhooks/github/${projectId}`;
+
+      // Create webhook on GitHub
+      const ghRes = await fetch(`https://api.github.com/repos/${repoFullName}/hooks`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${user.githubAccessToken}`,
+          "User-Agent": "IM3-Systems-CRM",
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          name: "web",
+          config: {
+            url: webhookUrl,
+            content_type: "json",
+            secret: webhookSecret,
+          },
+          events: ["push"],
+          active: true,
+        }),
+      });
+
+      if (!ghRes.ok) {
+        const errBody = await ghRes.json().catch(() => ({})) as { message?: string };
+        return res.status(ghRes.status).json({ message: `GitHub error: ${(errBody as any).message || ghRes.status}` });
+      }
+
+      // Update project with repo info
+      const [updated] = await db!.update(clientProjects).set({
+        githubRepoUrl: `https://github.com/${repoFullName}`,
+        githubWebhookSecret: webhookSecret,
+        aiTrackingEnabled: true,
+        updatedAt: new Date(),
+      }).where(eq(clientProjects.id, projectId)).returning();
+
+      res.json({ success: true, project: updated });
+    } catch (err: unknown) {
+      res.status(500).json({ message: `Error: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────
   // GitHub Webhook — receives push events
   // ─────────────────────────────────────────────────────────────
 
@@ -6031,6 +6187,30 @@ ${urls}
     } catch (err: any) {
       log(`Error deleting proposal: ${err?.message}`);
       res.status(500).json({ error: "Error eliminando propuesta" });
+    }
+  });
+
+  // Generate/regenerate proposal with AI
+  app.post("/api/admin/proposals/:id/generate", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [proposal] = await db.select().from(proposals).where(eq(proposals.id, req.params.id as string)).limit(1);
+      if (!proposal) return res.status(404).json({ error: "Propuesta no encontrada" });
+
+      const result = await generateProposal(proposal.contactId, proposal.notes || req.body?.notes);
+      if (!result) return res.status(500).json({ error: "Error generando propuesta con IA" });
+
+      const [updated] = await db.update(proposals).set({
+        sections: result.sections,
+        pricing: result.pricing,
+        timelineData: result.timelineData,
+        updatedAt: new Date(),
+      }).where(eq(proposals.id, proposal.id)).returning();
+
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error generating proposal: ${err?.message}`);
+      res.status(500).json({ error: "Error generando propuesta" });
     }
   });
 
