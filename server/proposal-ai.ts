@@ -121,21 +121,22 @@ SOBRE EL ALCANCE:
 Responde SOLO con un JSON válido (sin markdown, sin \`\`\`json) con esta estructura exacta:
 {
   "sections": {
-    "resumen": "<HTML del resumen ejecutivo — 2-3 párrafos>",
-    "problema": "<HTML describiendo los dolores/problemas del cliente>",
-    "solucion": "<HTML describiendo qué vamos a construir y por qué>",
+    "resumen": "<HTML del resumen ejecutivo — 2-3 párrafos impactantes>",
+    "problema": "<HTML describiendo los dolores/problemas del cliente usando SUS palabras del diagnóstico>",
+    "costo_inaccion": "<HTML cuantificando qué pierde el cliente cada mes si NO actúa: horas desperdiciadas, ventas perdidas, ineficiencia. Usa datos reales del diagnóstico para estimar. Ejemplo: 'Si tu equipo pierde 15 horas/semana en procesos manuales a $X/hora, estás perdiendo $Y/mes — $Z/año.'>",
+    "solucion": "<HTML describiendo qué vamos a construir y por qué resuelve cada problema>",
     "alcance": "<HTML resumen general del alcance — las fases a alto nivel>",
-    "tecnologia": "<HTML simplificado del stack técnico>",
-    "inversion": "<HTML explicando el valor de la inversión y por qué es una inversión, no un gasto>",
-    "roi": "<HTML con cálculo de ROI estimado basado en datos reales>",
-    "equipo": "<HTML sobre IM3 Systems — diferenciadores, experiencia>",
-    "siguientes_pasos": "<HTML con próximos pasos después de aceptar>"
+    "tecnologia": "<HTML simplificado del stack técnico — en lenguaje de negocios, no de programador>",
+    "casos_exito": "<HTML con 2-3 proyectos anteriores de IM3: Passport2Fluency (plataforma de idiomas con tutores + IA), sistema CRM personalizado con IA y automatización de emails. Para cada uno: qué se construyó, resultado clave, tecnologías usadas.>",
+    "inversion": "<HTML explicando el valor de la inversión: por qué es una inversión y no un gasto. Conectar con el costo de inacción.>",
+    "roi": "<HTML con cálculo de ROI: en cuántos meses se recupera la inversión basado en ahorro de tiempo, aumento de ventas, o eficiencia ganada>",
+    "equipo": "<HTML sobre IM3 Systems — equipo, experiencia, diferenciadores>",
+    "siguientes_pasos": "<HTML: 1. Aceptar propuesta 2. Reunión de kickoff 3. Inicio del desarrollo. Incluir que el primer entregable visible será en las primeras 2-3 semanas.>"
   },
   "pricing": {
     "total": 0,
     "currency": "USD",
-    "includes": ["Desarrollo completo", "Portal de seguimiento en tiempo real", "Tutor virtual IA post-entrega", "Soporte y acompañamiento", "Manuales y documentación"],
-    "paymentOptions": ["50% inicio + 50% entrega", "3 pagos iguales", "Mensual durante el proyecto"]
+    "includes": ["Desarrollo completo del proyecto", "Portal de seguimiento en tiempo real", "Tutor virtual IA post-entrega", "Soporte y acompañamiento continuo", "Manuales y documentación completa", "Capacitación del equipo"]
   },
   "timelineData": {
     "phases": [

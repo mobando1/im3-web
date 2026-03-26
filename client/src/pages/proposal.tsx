@@ -8,16 +8,19 @@ import { Input } from "@/components/ui/input";
 const SECTION_LABELS: Record<string, string> = {
   resumen: "Resumen Ejecutivo",
   problema: "El Problema",
+  costo_inaccion: "El Costo de No Actuar",
   solucion: "Nuestra Solución",
-  alcance: "Alcance y Fases",
-  tecnologia: "Stack Técnico",
-  inversion: "Inversión",
-  roi: "ROI Estimado",
+  alcance: "Alcance del Proyecto",
+  tecnologia: "Tecnología",
+  casos_exito: "Proyectos Anteriores",
+  inversion: "Tu Inversión",
+  roi: "Retorno de Inversión",
   equipo: "Sobre IM3 Systems",
   siguientes_pasos: "Próximos Pasos",
 };
 
-const SECTION_ORDER = ["resumen", "problema", "solucion", "alcance", "tecnologia", "inversion", "roi", "equipo", "siguientes_pasos"];
+// New order: pain → cost of inaction → solution → scope → timeline → social proof → price → ROI → about → CTA
+const SECTION_ORDER = ["resumen", "problema", "costo_inaccion", "solucion", "alcance", "tecnologia", "casos_exito", "inversion", "roi", "equipo", "siguientes_pasos"];
 
 export default function ProposalView() {
   const { token } = useParams<{ token: string }>();
@@ -204,18 +207,69 @@ export default function ProposalView() {
           );
         })()}
 
-        {/* Pricing section — single price */}
-        {pricing?.total && (
+        {/* Pricing section — single price + priority option + 40/30/30 milestones */}
+        {pricing?.total && (() => {
+          const priorityTotal = Math.round(pricing.total * 1.5);
+          const activeTotal = selectedOption === "priority" ? priorityTotal : pricing.total;
+          const m1 = Math.round(activeTotal * 0.4);
+          const m2 = Math.round(activeTotal * 0.3);
+          const m3 = activeTotal - m1 - m2;
+
+          return (
           <section id="pricing-section" className="bg-white rounded-2xl border border-gray-200 p-6 sm:p-8 shadow-sm">
-            <h2 className="text-xl font-bold text-gray-900 mb-6 pb-3 border-b border-gray-100">Inversión</h2>
-            <div className="text-center py-6">
-              <p className="text-sm text-gray-500 mb-2">Inversión total del proyecto</p>
-              <p className="text-5xl font-bold text-gray-900">
-                ${pricing.total?.toLocaleString()} <span className="text-lg text-gray-400 font-normal">{pricing.currency}</span>
-              </p>
+            <h2 className="text-xl font-bold text-gray-900 mb-6 pb-3 border-b border-gray-100">Tu Inversión</h2>
+
+            {/* 2 timing options */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+              <div
+                onClick={() => setSelectedOption("standard")}
+                className={`rounded-xl border-2 p-5 cursor-pointer transition-all ${selectedOption !== "priority" ? "border-[#2FA4A9] bg-[#2FA4A9]/5 shadow-md" : "border-gray-200 hover:border-gray-300"}`}
+              >
+                <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1">Entrega estándar</p>
+                <p className="text-3xl font-bold text-gray-900">${pricing.total?.toLocaleString()} <span className="text-sm text-gray-400 font-normal">{pricing.currency}</span></p>
+                <p className="text-sm text-gray-500 mt-2">{timeline?.totalWeeks || "6-8"} semanas de desarrollo</p>
+                {selectedOption !== "priority" && <p className="text-xs text-[#2FA4A9] font-medium mt-3">Seleccionado ✓</p>}
+              </div>
+              <div
+                onClick={() => setSelectedOption("priority")}
+                className={`rounded-xl border-2 p-5 cursor-pointer transition-all relative ${selectedOption === "priority" ? "border-amber-500 bg-amber-50 shadow-md" : "border-gray-200 hover:border-gray-300"}`}
+              >
+                <div className="absolute -top-2.5 right-3 bg-amber-500 text-white text-[10px] font-bold px-2.5 py-0.5 rounded-full">PRIORITARIO</div>
+                <p className="text-xs text-gray-500 font-medium uppercase tracking-wider mb-1">Entrega prioritaria</p>
+                <p className="text-3xl font-bold text-gray-900">${priorityTotal.toLocaleString()} <span className="text-sm text-gray-400 font-normal">{pricing.currency}</span></p>
+                <p className="text-sm text-gray-500 mt-2">{Math.max(Math.round((timeline?.totalWeeks || 8) / 2), 2)}-{Math.max(Math.round((timeline?.totalWeeks || 8) / 2) + 1, 3)} semanas · Equipo dedicado</p>
+                {selectedOption === "priority" && <p className="text-xs text-amber-600 font-medium mt-3">Seleccionado ✓</p>}
+              </div>
             </div>
+
+            {/* 40/30/30 payment milestones */}
+            <div className="bg-gray-50 rounded-xl p-5 mb-6">
+              <p className="text-sm font-semibold text-gray-900 mb-4">Hitos de pago (40/30/30)</p>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="bg-white rounded-lg p-4 border border-gray-200 text-center">
+                  <div className="w-8 h-8 rounded-full bg-[#2FA4A9]/10 text-[#2FA4A9] flex items-center justify-center text-sm font-bold mx-auto mb-2">1</div>
+                  <p className="text-xs text-gray-500">Al iniciar</p>
+                  <p className="text-lg font-bold text-gray-900">${m1.toLocaleString()}</p>
+                  <p className="text-[10px] text-gray-400 mt-1">40% — Kickoff + Discovery</p>
+                </div>
+                <div className="bg-white rounded-lg p-4 border border-gray-200 text-center">
+                  <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-sm font-bold mx-auto mb-2">2</div>
+                  <p className="text-xs text-gray-500">Prototipo funcional</p>
+                  <p className="text-lg font-bold text-gray-900">${m2.toLocaleString()}</p>
+                  <p className="text-[10px] text-gray-400 mt-1">30% — Primera versión visible</p>
+                </div>
+                <div className="bg-white rounded-lg p-4 border border-gray-200 text-center">
+                  <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-sm font-bold mx-auto mb-2">3</div>
+                  <p className="text-xs text-gray-500">Entrega final</p>
+                  <p className="text-lg font-bold text-gray-900">${m3.toLocaleString()}</p>
+                  <p className="text-[10px] text-gray-400 mt-1">30% — Proyecto completado</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Includes */}
             {pricing.includes && (
-              <div className="bg-[#2FA4A9]/5 rounded-xl p-5 mt-4">
+              <div className="bg-[#2FA4A9]/5 rounded-xl p-5">
                 <p className="text-sm font-semibold text-gray-900 mb-3">Tu inversión incluye:</p>
                 <ul className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {pricing.includes.map((item: string, i: number) => (
@@ -226,18 +280,11 @@ export default function ProposalView() {
                 </ul>
               </div>
             )}
-            {pricing.paymentOptions && (
-              <div className="mt-6 pt-4 border-t border-gray-100">
-                <p className="text-xs text-gray-500 font-medium mb-2">Opciones de pago disponibles:</p>
-                <div className="flex flex-wrap gap-2">
-                  {pricing.paymentOptions.map((po: string, i: number) => (
-                    <span key={i} className="text-xs bg-gray-100 text-gray-600 px-3 py-1.5 rounded-full">{po}</span>
-                  ))}
-                </div>
-              </div>
-            )}
           </section>
-        )}
+          );
+        })()}
+
+        {/* payment options removed — now using 40/30/30 milestones */}
 
         {/* Timeline */}
         {timeline?.phases && (
