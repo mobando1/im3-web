@@ -6852,9 +6852,26 @@ ${urls}
         participante: "Carlos Méndez",
         email: "carlos@caferoma.co",
         telefono: "+57 310 555 1234",
-        areaPrioridad: "Gestión de inventario y pedidos",
-        objetivos: "Automatizar el proceso de pedidos a proveedores, tener visibilidad en tiempo real del inventario en las 3 sedes, reducir desperdicio de insumos perecederos",
-        herramientas: "Excel para inventario, WhatsApp para pedidos a proveedores, POS básico en cada sede",
+        // Step 2
+        objetivos: ["Automatizar pedidos a proveedores", "Visibilidad de inventario en tiempo real", "Reducir desperdicio de insumos"],
+        resultadoEsperado: "Un sistema que me diga cuándo pedir, cuánto pedir, y que conecte las 3 sedes para ver el inventario en tiempo real. Reducir desperdicio al menos 50%.",
+        // Step 3
+        productos: "Café especial, bebidas, repostería artesanal, almuerzos ejecutivos",
+        volumenMensual: "3000-5000 transacciones/mes entre las 3 sedes",
+        clientePrincipal: "B2C",
+        // Step 4
+        canalesAdquisicion: ["Redes sociales", "Referidos", "Ubicación física"],
+        canalPrincipal: "Ubicación física y Google Maps",
+        // Step 5
+        herramientas: "Excel para inventario, WhatsApp para pedidos a proveedores, POS básico en cada sede, Instagram para marketing",
+        conectadas: "No",
+        // Step 6
+        nivelTech: "Básico — usamos herramientas estándar pero no están conectadas",
+        usaIA: "No",
+        comodidadTech: "Media — dispuesto a aprender si es intuitivo",
+        familiaridad: { automatizacion: "Bajo", crm: "Bajo", ia: "Bajo", integracion: "Bajo", desarrollo: "Ninguno" },
+        // Step 7
+        areaPrioridad: ["Gestión de inventario", "Automatización de pedidos", "Reportes y analytics"],
         presupuesto: "$5,000 - $10,000 USD",
         meetLink: null,
       }).returning();
