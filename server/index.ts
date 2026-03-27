@@ -42,8 +42,8 @@ app.use((req, res, next) => {
     return res.redirect(`https://${CRM_HOSTNAME}${req.path}`);
   }
 
-  // crm.im3systems.com → block public pages (only allow /admin, /api, assets)
-  if (host === CRM_HOSTNAME && !req.path.startsWith("/admin") && !req.path.startsWith("/api") && !req.path.startsWith("/assets") && !req.path.includes(".")) {
+  // crm.im3systems.com → block public pages (only allow /admin, /api, /portal, assets)
+  if (host === CRM_HOSTNAME && !req.path.startsWith("/admin") && !req.path.startsWith("/api") && !req.path.startsWith("/portal") && !req.path.startsWith("/assets") && !req.path.includes(".")) {
     return res.redirect("/admin");
   }
 
