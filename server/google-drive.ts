@@ -526,6 +526,71 @@ export function extractFolderIdFromUrl(url: string): string | null {
 }
 
 /**
+ * Extract file ID from a Google Drive URL.
+ * Supports: /file/d/ID, /document/d/ID, /spreadsheets/d/ID, ?id=ID
+ */
+export function extractFileIdFromUrl(url: string): string | null {
+  const patterns = [
+    /\/file\/d\/([a-zA-Z0-9_-]+)/,
+    /\/document\/d\/([a-zA-Z0-9_-]+)/,
+    /\/spreadsheets\/d\/([a-zA-Z0-9_-]+)/,
+    /\/presentation\/d\/([a-zA-Z0-9_-]+)/,
+    /[?&]id=([a-zA-Z0-9_-]+)/,
+  ];
+  for (const pattern of patterns) {
+    const match = url.match(pattern);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+/**
+ * Read the text content of a Google Drive file.
+ * Supports Google Docs (exported as plain text), Google Sheets (as CSV),
+ * and plain text files. PDFs return metadata only.
+ */
+export async function readGoogleDriveContent(fileUrl: string): Promise<{ content: string; fileId: string; mimeType: string }> {
+  const auth = getAuth();
+  if (!auth) throw new Error("Google auth not configured");
+
+  const fileId = extractFileIdFromUrl(fileUrl);
+  if (!fileId) throw new Error("Could not extract file ID from URL");
+
+  const drive = google.drive({ version: "v3", auth });
+
+  // Get file metadata to determine type
+  const meta = await drive.files.get({ fileId, fields: "mimeType,name" });
+  const mimeType = meta.data.mimeType || "";
+
+  let content = "";
+
+  if (mimeType === "application/vnd.google-apps.document") {
+    // Google Docs → export as plain text
+    const res = await drive.files.export({ fileId, mimeType: "text/plain" }, { responseType: "text" });
+    content = res.data as string;
+  } else if (mimeType === "application/vnd.google-apps.spreadsheet") {
+    // Google Sheets → export as CSV
+    const res = await drive.files.export({ fileId, mimeType: "text/csv" }, { responseType: "text" });
+    content = res.data as string;
+  } else if (mimeType === "application/vnd.google-apps.presentation") {
+    // Google Slides → export as plain text
+    const res = await drive.files.export({ fileId, mimeType: "text/plain" }, { responseType: "text" });
+    content = res.data as string;
+  } else if (mimeType.startsWith("text/")) {
+    // Plain text files → download directly
+    const res = await drive.files.get({ fileId, alt: "media" }, { responseType: "text" });
+    content = res.data as string;
+  } else {
+    // PDFs, images, etc. → can't extract text, return metadata
+    content = `[Archivo: ${meta.data.name}, tipo: ${mimeType} — contenido no extraíble automáticamente]`;
+  }
+
+  log(`[Drive] Read content from ${meta.data.name} (${mimeType}): ${content.length} chars`);
+
+  return { content, fileId, mimeType };
+}
+
+/**
  * Main entry: create folder + sheet + JSON for a diagnostic submission.
  * Returns the Google Drive folder URL and sheet URL.
  */

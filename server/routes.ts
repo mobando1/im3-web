@@ -6,7 +6,7 @@ import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, news
 import { syncGmailEmails, isGmailConfigured } from "./google-gmail";
 import { generateBlogContent, improveBlogContent } from "./blog-ai";
 import { log } from "./index";
-import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive, uploadFileToDrive, createProjectFolder } from "./google-drive";
+import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive, uploadFileToDrive, createProjectFolder, readGoogleDriveContent } from "./google-drive";
 import multer from "multer";
 import { createCalendarEvent, deleteCalendarEvent } from "./google-calendar";
 import { isEmailConfigured, sendEmail } from "./email-sender";
@@ -6790,7 +6790,7 @@ ${urls}
 
   app.post("/api/admin/contacts/:id/files", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
-    const { name, type, url, size } = req.body;
+    const { name, type, url, size, content } = req.body;
     if (!name || !url) return res.status(400).json({ error: "name y url son requeridos" });
 
     try {
@@ -6800,12 +6800,61 @@ ${urls}
         type: type || "documento",
         url,
         size: size || null,
+        content: content || null,
       }).returning();
 
       await logActivity(req.params.id as string, "contact_edited", `Documento agregado: ${name}`, { fileId: created.id, fileType: type });
       res.json(created);
     } catch (err: unknown) {
       res.status(500).json({ error: "Error adding file" });
+    }
+  });
+
+  // Update file content (paste text directly)
+  app.patch("/api/admin/contacts/:id/files/:fileId", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const { content, name, type } = req.body;
+    try {
+      const updates: Record<string, unknown> = {};
+      if (content !== undefined) updates.content = content;
+      if (name) updates.name = name;
+      if (type) updates.type = type;
+
+      const [updated] = await db.update(contactFiles)
+        .set(updates)
+        .where(eq(contactFiles.id, req.params.fileId as string))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Not found" });
+      res.json(updated);
+    } catch (err: unknown) {
+      res.status(500).json({ error: "Error updating file" });
+    }
+  });
+
+  // Sync content from Google Drive
+  app.post("/api/admin/contacts/:id/files/:fileId/sync-drive", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [file] = await db.select().from(contactFiles).where(eq(contactFiles.id, req.params.fileId as string)).limit(1);
+      if (!file) return res.status(404).json({ error: "Not found" });
+
+      if (!file.url.includes("google.com") && !file.url.includes("docs.google")) {
+        return res.status(400).json({ error: "URL no es de Google Drive" });
+      }
+
+      const result = await readGoogleDriveContent(file.url);
+
+      await db.update(contactFiles).set({
+        content: result.content,
+        driveFileId: result.fileId,
+      }).where(eq(contactFiles.id, file.id));
+
+      await logActivity(req.params.id as string, "contact_edited", `Contenido sincronizado desde Drive: ${file.name}`, { fileId: file.id, chars: result.content.length });
+
+      res.json({ success: true, chars: result.content.length, mimeType: result.mimeType });
+    } catch (err: unknown) {
+      log(`Error syncing Drive content: ${(err as Error).message}`);
+      res.status(500).json({ error: `Error sincronizando: ${(err as Error).message}` });
     }
   });
 
@@ -6820,6 +6869,95 @@ ${urls}
       res.json({ success: true });
     } catch (err: unknown) {
       res.status(500).json({ error: "Error deleting file" });
+    }
+  });
+
+  // Upload file to Drive for a contact
+  app.post("/api/admin/contacts/:id/upload", requireAuth, upload.single("file"), async (req, res) => {
+    const contactId = req.params.id as string;
+    if (!req.file) return res.status(400).json({ message: "No se recibió archivo" });
+    if (!db) return res.status(500).json({ message: "DB no disponible" });
+
+    try {
+      // Find Drive folder from diagnostic
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId));
+      if (!contact) return res.status(404).json({ message: "Contacto no encontrado" });
+
+      let folderId: string | null = null;
+
+      // Try to get folder from diagnostic
+      if (contact.diagnosticId) {
+        const [diag] = await db.select({ googleDriveUrl: diagnostics.googleDriveUrl }).from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId));
+        if (diag?.googleDriveUrl) {
+          const { extractFolderIdFromUrl } = await import("./google-drive");
+          folderId = extractFolderIdFromUrl(diag.googleDriveUrl);
+        }
+      }
+
+      // If no folder, create one
+      if (!folderId) {
+        folderId = await createProjectFolder(`${contact.empresa} - ${contact.nombre}`);
+      }
+
+      // Upload to subfolder if specified
+      const subfolder = req.body.subfolder;
+      let targetFolderId = folderId;
+      if (subfolder) {
+        // Create subfolder in the client's folder
+        const { google } = await import("googleapis");
+        const auth = new google.auth.JWT({
+          email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+          key: (process.env.GOOGLE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
+          scopes: ["https://www.googleapis.com/auth/drive"],
+          subject: process.env.GOOGLE_DRIVE_IMPERSONATE || undefined,
+        });
+        const drive = google.drive({ version: "v3", auth });
+
+        // Check if subfolder already exists
+        const existing = await drive.files.list({
+          q: `'${folderId}' in parents and name='${subfolder}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+          fields: "files(id)",
+        });
+
+        if (existing.data.files && existing.data.files.length > 0) {
+          targetFolderId = existing.data.files[0].id!;
+        } else {
+          const folder = await drive.files.create({
+            requestBody: { name: subfolder, mimeType: "application/vnd.google-apps.folder", parents: [folderId] },
+            fields: "id",
+          });
+          targetFolderId = folder.data.id!;
+        }
+      }
+
+      // Upload to Drive
+      const { webViewLink } = await uploadFileToDrive(targetFolderId!, req.file.originalname, req.file.mimetype, req.file.buffer);
+
+      // Detect type
+      const ext = req.file.originalname.split(".").pop()?.toLowerCase() || "";
+      let fileType = req.body.type || "documento";
+      if (fileType === "auto") {
+        if (["pdf", "doc", "docx"].includes(ext)) fileType = "documento";
+        else if (["mp4", "webm", "mov", "mp3", "wav"].includes(ext)) fileType = "grabacion";
+        else if (["png", "jpg", "jpeg", "gif"].includes(ext)) fileType = "imagen";
+        else fileType = "otro";
+      }
+
+      // Save to DB
+      const [file] = await db.insert(contactFiles).values({
+        contactId,
+        name: req.body.name || req.file.originalname,
+        type: fileType,
+        url: webViewLink,
+        size: req.file.size,
+        uploadedBy: "team",
+      }).returning();
+
+      await logActivity(contactId, "contact_edited", `Documento subido a Drive: ${file.name}`);
+
+      res.json(file);
+    } catch (err: unknown) {
+      res.status(500).json({ message: `Error: ${err instanceof Error ? err.message : String(err)}` });
     }
   });
 

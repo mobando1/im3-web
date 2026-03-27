@@ -692,6 +692,8 @@ export const contactFiles = pgTable("contact_files", {
   type: text("type").notNull().default("documento"), // contrato | propuesta | auditoria | documento | imagen | otro
   url: text("url").notNull(),
   size: integer("size"), // bytes
+  content: text("content"), // text content for AI context (pasted or synced from Drive)
+  driveFileId: text("drive_file_id"), // Google Drive file ID for auto-sync
   uploadedBy: text("uploaded_by").default("team"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });

@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "./db";
-import { contacts, diagnostics, sentEmails, contactNotes, activityLog, aiInsightsCache, gmailEmails } from "@shared/schema";
+import { contacts, diagnostics, sentEmails, contactNotes, activityLog, aiInsightsCache, gmailEmails, contactFiles } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { log } from "./index";
 
@@ -59,6 +59,21 @@ async function gatherContactContext(contactId: string): Promise<string> {
     parts.push(`HISTORIAL DE EMAILS GMAIL (${gmailMessages.length}):\n${gmailMessages.map(m =>
       `- [${m.direction === "inbound" ? "RECIBIDO" : "ENVIADO"}] ${m.subject || "Sin asunto"} (${m.gmailDate.toLocaleDateString("es-CO")})\n  ${(m.bodyText || m.snippet || "").substring(0, 300)}`
     ).join("\n")}`);
+  }
+
+  // Contact documents/files with content
+  const docs = await db.select().from(contactFiles).where(eq(contactFiles.contactId, contactId)).limit(10);
+  if (docs.length > 0) {
+    const docsWithContent = docs.filter(d => d.content);
+    const docsWithoutContent = docs.filter(d => !d.content);
+    const docParts: string[] = [];
+    for (const d of docsWithContent) {
+      docParts.push(`- [${d.type}] ${d.name}:\n  ${(d.content || "").substring(0, 500)}`);
+    }
+    for (const d of docsWithoutContent) {
+      docParts.push(`- [${d.type}] ${d.name} (sin contenido extraído)`);
+    }
+    parts.push(`DOCUMENTOS DEL CLIENTE (${docs.length}):\n${docParts.join("\n")}`);
   }
 
   // Activity log

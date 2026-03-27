@@ -172,6 +172,8 @@ type ContactFileItem = {
   type: string;
   url: string;
   size: number | null;
+  content: string | null;
+  driveFileId: string | null;
   uploadedBy: string | null;
   createdAt: string;
 };
@@ -622,23 +624,38 @@ export default function ContactDetailPage() {
     enabled: !!contactId,
   });
   const [showFileForm, setShowFileForm] = useState(false);
+  const [fileMode, setFileMode] = useState<"upload" | "url">("upload");
   const [newFileName, setNewFileName] = useState("");
   const [newFileUrl, setNewFileUrl] = useState("");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [subfolder, setSubfolder] = useState("");
   const [newFileType, setNewFileType] = useState("documento");
+  const [newFileContent, setNewFileContent] = useState("");
 
   const addFileMutation = useMutation({
-    mutationFn: async (data: { name: string; type: string; url: string }) => {
+    mutationFn: async (data: { name: string; type: string; url: string; content?: string }) => {
       await apiRequest("POST", `/api/admin/contacts/${contactId}/files`, data);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/files`] });
-      setNewFileName(""); setNewFileUrl(""); setNewFileType("documento"); setShowFileForm(false);
+      setNewFileName(""); setNewFileUrl(""); setNewFileType("documento"); setNewFileContent(""); setShowFileForm(false);
     },
   });
 
   const deleteFileMutation = useMutation({
     mutationFn: async (fileId: string) => {
       await apiRequest("DELETE", `/api/admin/contacts/${contactId}/files/${fileId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/files`] });
+    },
+  });
+
+  const syncDriveMutation = useMutation({
+    mutationFn: async (fileId: string) => {
+      const res = await apiRequest("POST", `/api/admin/contacts/${contactId}/files/${fileId}/sync-drive`);
+      return res.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/files`] });
@@ -2595,25 +2612,82 @@ export default function ContactDetailPage() {
             <CardContent className="space-y-3">
               {showFileForm && (
                 <div className="p-3 rounded-lg border border-gray-200 bg-gray-50 space-y-2">
-                  <Input placeholder="Nombre del documento *" value={newFileName} onChange={e => setNewFileName(e.target.value)} className="bg-white border-gray-200 text-sm h-9" />
-                  <Input placeholder="URL del documento *" value={newFileUrl} onChange={e => setNewFileUrl(e.target.value)} className="bg-white border-gray-200 text-sm h-9" />
-                  <Select value={newFileType} onValueChange={setNewFileType}>
-                    <SelectTrigger className="bg-white border-gray-200 text-sm h-9"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="documento">Documento</SelectItem>
-                      <SelectItem value="contrato">Contrato</SelectItem>
-                      <SelectItem value="propuesta">Propuesta</SelectItem>
-                      <SelectItem value="auditoria">Auditoria</SelectItem>
-                      <SelectItem value="imagen">Imagen</SelectItem>
-                      <SelectItem value="otro">Otro</SelectItem>
-                    </SelectContent>
-                  </Select>
-                  <div className="flex gap-2">
-                    <Button size="sm" onClick={() => addFileMutation.mutate({ name: newFileName, type: newFileType, url: newFileUrl })} disabled={!newFileName || !newFileUrl || addFileMutation.isPending} className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white text-xs">
-                      {addFileMutation.isPending ? "Guardando..." : "Guardar"}
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={() => setShowFileForm(false)} className="border-gray-200 text-gray-600 text-xs">Cancelar</Button>
+                  {/* Toggle: Subir vs URL */}
+                  <div className="flex gap-1 bg-gray-200 rounded-lg p-0.5">
+                    <button onClick={() => setFileMode("upload")} className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${fileMode === "upload" ? "bg-white shadow-sm text-gray-900" : "text-gray-500"}`}>
+                      Subir archivo
+                    </button>
+                    <button onClick={() => setFileMode("url")} className={`flex-1 text-xs py-1.5 rounded-md font-medium transition-colors ${fileMode === "url" ? "bg-white shadow-sm text-gray-900" : "text-gray-500"}`}>
+                      Pegar URL
+                    </button>
                   </div>
+
+                  {fileMode === "upload" ? (
+                    <>
+                      <input
+                        type="file"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) { setUploadFile(f); setNewFileName(f.name); } }}
+                        className="w-full text-xs text-gray-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-medium file:bg-[#2FA4A9]/10 file:text-[#2FA4A9] hover:file:bg-[#2FA4A9]/20 file:cursor-pointer"
+                      />
+                      {uploadFile && <p className="text-[10px] text-gray-400">{uploadFile.name} — {(uploadFile.size / 1024 / 1024).toFixed(1)} MB</p>}
+                      <Select value={newFileType} onValueChange={setNewFileType}>
+                        <SelectTrigger className="bg-white border-gray-200 text-sm h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="documento">Documento</SelectItem>
+                          <SelectItem value="contrato">Contrato</SelectItem>
+                          <SelectItem value="propuesta">Propuesta</SelectItem>
+                          <SelectItem value="auditoria">Auditoria</SelectItem>
+                          <SelectItem value="imagen">Imagen</SelectItem>
+                          <SelectItem value="grabacion">Grabación</SelectItem>
+                          <SelectItem value="otro">Otro</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Input placeholder="Subcarpeta en Drive (opcional, ej: Reuniones)" value={subfolder} onChange={e => setSubfolder(e.target.value)} className="bg-white border-gray-200 text-sm h-9" />
+                      <div className="flex gap-2">
+                        <Button size="sm" disabled={!uploadFile || uploading} className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white text-xs" onClick={async () => {
+                          if (!uploadFile) return;
+                          setUploading(true);
+                          try {
+                            const formData = new FormData();
+                            formData.append("file", uploadFile);
+                            formData.append("name", newFileName || uploadFile.name);
+                            formData.append("type", newFileType);
+                            if (subfolder) formData.append("subfolder", subfolder);
+                            const res = await fetch(`/api/admin/contacts/${contactId}/upload`, { method: "POST", body: formData, credentials: "include" });
+                            if (!res.ok) throw new Error((await res.json()).message || "Error");
+                            queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/files`] });
+                            setShowFileForm(false); setUploadFile(null); setNewFileName(""); setSubfolder("");
+                          } catch (err: any) { alert(err.message || "Error subiendo archivo"); }
+                          setUploading(false);
+                        }}>
+                          {uploading ? "Subiendo a Drive..." : "Subir a Drive"}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => { setShowFileForm(false); setUploadFile(null); }} className="border-gray-200 text-gray-600 text-xs">Cancelar</Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <Input placeholder="Nombre del documento *" value={newFileName} onChange={e => setNewFileName(e.target.value)} className="bg-white border-gray-200 text-sm h-9" />
+                      <Input placeholder="URL del documento *" value={newFileUrl} onChange={e => setNewFileUrl(e.target.value)} className="bg-white border-gray-200 text-sm h-9" />
+                      <Select value={newFileType} onValueChange={setNewFileType}>
+                        <SelectTrigger className="bg-white border-gray-200 text-sm h-9"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="documento">Documento</SelectItem>
+                          <SelectItem value="contrato">Contrato</SelectItem>
+                          <SelectItem value="propuesta">Propuesta</SelectItem>
+                          <SelectItem value="auditoria">Auditoria</SelectItem>
+                          <SelectItem value="imagen">Imagen</SelectItem>
+                          <SelectItem value="otro">Otro</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={() => addFileMutation.mutate({ name: newFileName, type: newFileType, url: newFileUrl })} disabled={!newFileName || !newFileUrl || addFileMutation.isPending} className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white text-xs">
+                          {addFileMutation.isPending ? "Guardando..." : "Guardar"}
+                        </Button>
+                        <Button variant="outline" size="sm" onClick={() => setShowFileForm(false)} className="border-gray-200 text-gray-600 text-xs">Cancelar</Button>
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
 
@@ -2628,6 +2702,8 @@ export default function ContactDetailPage() {
                   {contactFilesData.map(file => {
                     const typeIcons: Record<string, string> = { contrato: "text-amber-500", propuesta: "text-blue-500", auditoria: "text-purple-500", documento: "text-gray-500", imagen: "text-green-500", otro: "text-gray-400" };
                     const typeLabels: Record<string, string> = { contrato: "Contrato", propuesta: "Propuesta", auditoria: "Auditoria", documento: "Documento", imagen: "Imagen", otro: "Otro" };
+                    const isGoogleDrive = file.url.includes("google.com") || file.url.includes("docs.google");
+                    const hasContent = !!file.content;
                     return (
                       <div key={file.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-gray-50 group hover:bg-gray-100 transition-colors">
                         <File className={`w-4 h-4 shrink-0 ${typeIcons[file.type] || "text-gray-400"}`} />
@@ -2637,9 +2713,21 @@ export default function ContactDetailPage() {
                           </a>
                           <div className="flex items-center gap-2 mt-0.5">
                             <Badge variant="outline" className="text-[9px]">{typeLabels[file.type] || file.type}</Badge>
+                            {hasContent && <Badge variant="outline" className="text-[9px] bg-emerald-50 text-emerald-600 border-emerald-200">AI listo</Badge>}
+                            {!hasContent && <Badge variant="outline" className="text-[9px] bg-gray-50 text-gray-400">Sin contenido</Badge>}
                             <span className="text-[10px] text-gray-400">{new Date(file.createdAt).toLocaleDateString("es-CO")}</span>
                           </div>
                         </div>
+                        {isGoogleDrive && !hasContent && (
+                          <button
+                            onClick={() => syncDriveMutation.mutate(file.id)}
+                            disabled={syncDriveMutation.isPending}
+                            className="text-gray-400 hover:text-[#2FA4A9] p-1 flex items-center gap-1 text-[10px]"
+                            title="Sincronizar contenido desde Google Drive"
+                          >
+                            <RefreshCw className={`w-3.5 h-3.5 ${syncDriveMutation.isPending ? "animate-spin" : ""}`} />
+                          </button>
+                        )}
                         <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-[#2FA4A9] p-1" title="Abrir">
                           <ExternalLink className="w-3.5 h-3.5" />
                         </a>
