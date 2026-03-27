@@ -1648,39 +1648,122 @@ export default function AdminProjectDetail() {
             )}
 
             <Dialog open={showAddFile} onOpenChange={setShowAddFile}>
-              <DialogContent className="sm:max-w-sm">
+              <DialogContent className="sm:max-w-md">
                 <DialogHeader><DialogTitle>Agregar archivo</DialogTitle></DialogHeader>
                 <div className="space-y-3 pt-2">
-                  <div className="space-y-1.5">
-                    <Label>Nombre</Label>
-                    <Input value={fileForm.name} onChange={e => setFileForm(f => ({ ...f, name: e.target.value }))} placeholder="Contrato v1.pdf" />
+                  {/* Toggle: Upload vs URL */}
+                  <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+                    <button
+                      onClick={() => setFileForm(f => ({ ...f, mode: "upload" }))}
+                      className={`flex-1 text-sm py-1.5 rounded-md font-medium transition-colors ${(fileForm as any).mode !== "url" ? "bg-white shadow-sm text-gray-900" : "text-gray-500"}`}
+                    >
+                      Subir archivo
+                    </button>
+                    <button
+                      onClick={() => setFileForm(f => ({ ...f, mode: "url" }))}
+                      className={`flex-1 text-sm py-1.5 rounded-md font-medium transition-colors ${(fileForm as any).mode === "url" ? "bg-white shadow-sm text-gray-900" : "text-gray-500"}`}
+                    >
+                      Pegar URL
+                    </button>
                   </div>
-                  <div className="space-y-1.5">
-                    <Label>Tipo</Label>
-                    <Select value={fileForm.type} onValueChange={v => setFileForm(f => ({ ...f, type: v }))}>
-                      <SelectTrigger><SelectValue /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="document">Documento</SelectItem>
-                        <SelectItem value="contract">Contrato</SelectItem>
-                        <SelectItem value="image">Imagen</SelectItem>
-                        <SelectItem value="design">Diseño</SelectItem>
-                        <SelectItem value="recording">Grabación</SelectItem>
-                        <SelectItem value="transcript">Transcripción</SelectItem>
-                        <SelectItem value="other">Otro</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label>URL del archivo</Label>
-                    <Input value={fileForm.url} onChange={e => setFileForm(f => ({ ...f, url: e.target.value }))} placeholder="https://drive.google.com/..." />
-                  </div>
-                  <Button
-                    className="w-full bg-[#2FA4A9] hover:bg-[#238b8f]"
-                    disabled={!fileForm.name || !fileForm.url}
-                    onClick={() => addFileMut.mutate(fileForm)}
-                  >
-                    Guardar archivo
-                  </Button>
+
+                  {(fileForm as any).mode === "url" ? (
+                    <>
+                      <div className="space-y-1.5">
+                        <Label>Nombre</Label>
+                        <Input value={fileForm.name} onChange={e => setFileForm(f => ({ ...f, name: e.target.value }))} placeholder="Contrato v1.pdf" />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>Tipo</Label>
+                        <Select value={fileForm.type} onValueChange={v => setFileForm(f => ({ ...f, type: v }))}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="document">Documento</SelectItem>
+                            <SelectItem value="contract">Contrato</SelectItem>
+                            <SelectItem value="image">Imagen</SelectItem>
+                            <SelectItem value="design">Diseño</SelectItem>
+                            <SelectItem value="recording">Grabación</SelectItem>
+                            <SelectItem value="transcript">Transcripción</SelectItem>
+                            <SelectItem value="other">Otro</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label>URL del archivo</Label>
+                        <Input value={fileForm.url} onChange={e => setFileForm(f => ({ ...f, url: e.target.value }))} placeholder="https://drive.google.com/..." />
+                      </div>
+                      <Button
+                        className="w-full bg-[#2FA4A9] hover:bg-[#238b8f]"
+                        disabled={!fileForm.name || !fileForm.url}
+                        onClick={() => addFileMut.mutate(fileForm)}
+                      >
+                        Guardar
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="space-y-1.5">
+                        <Label>Archivo</Label>
+                        <input
+                          type="file"
+                          onChange={e => {
+                            const file = e.target.files?.[0];
+                            if (file) setFileForm(f => ({ ...f, name: file.name, _file: file as any }));
+                          }}
+                          className="w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-medium file:bg-[#2FA4A9]/10 file:text-[#2FA4A9] hover:file:bg-[#2FA4A9]/20 file:cursor-pointer"
+                        />
+                      </div>
+                      {(fileForm as any)._file && (
+                        <p className="text-xs text-gray-500">
+                          {((fileForm as any)._file as File).name} — {(((fileForm as any)._file as File).size / 1024 / 1024).toFixed(1)} MB
+                        </p>
+                      )}
+                      <div className="space-y-1.5">
+                        <Label>Tipo</Label>
+                        <Select value={fileForm.type} onValueChange={v => setFileForm(f => ({ ...f, type: v }))}>
+                          <SelectTrigger><SelectValue /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="auto">Detectar automáticamente</SelectItem>
+                            <SelectItem value="document">Documento</SelectItem>
+                            <SelectItem value="contract">Contrato</SelectItem>
+                            <SelectItem value="image">Imagen</SelectItem>
+                            <SelectItem value="design">Diseño</SelectItem>
+                            <SelectItem value="recording">Grabación</SelectItem>
+                            <SelectItem value="transcript">Transcripción</SelectItem>
+                            <SelectItem value="other">Otro</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        className="w-full bg-[#2FA4A9] hover:bg-[#238b8f]"
+                        disabled={!(fileForm as any)._file || addFileMut.isPending}
+                        onClick={async () => {
+                          const file = (fileForm as any)._file as File;
+                          if (!file) return;
+                          const formData = new FormData();
+                          formData.append("file", file);
+                          formData.append("name", fileForm.name || file.name);
+                          formData.append("type", fileForm.type || "auto");
+                          try {
+                            const res = await fetch(`/api/admin/projects/${params.id}/upload`, {
+                              method: "POST",
+                              body: formData,
+                              credentials: "include",
+                            });
+                            if (!res.ok) throw new Error((await res.json()).message || "Error");
+                            toast({ title: "Archivo subido a Drive" });
+                            setShowAddFile(false);
+                            setFileForm({ name: "", type: "document", url: "" });
+                            invalidate();
+                          } catch (err: any) {
+                            toast({ title: err.message || "Error subiendo archivo", variant: "destructive" });
+                          }
+                        }}
+                      >
+                        {addFileMut.isPending ? "Subiendo..." : "Subir a Drive"}
+                      </Button>
+                    </>
+                  )}
                 </div>
               </DialogContent>
             </Dialog>

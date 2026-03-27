@@ -555,3 +555,70 @@ export async function createDiagnosticInDrive(
 
   return { folderUrl, sheetUrl };
 }
+
+/**
+ * Upload any file to Google Drive and return its web link.
+ * Creates folder if needed. Makes file accessible by link.
+ */
+export async function uploadFileToDrive(
+  folderId: string,
+  fileName: string,
+  mimeType: string,
+  buffer: Buffer
+): Promise<{ fileId: string; webViewLink: string }> {
+  const auth = getAuth();
+  if (!auth) throw new Error("Google Drive no configurado");
+
+  const drive = google.drive({ version: "v3", auth });
+
+  const file = await drive.files.create({
+    requestBody: {
+      name: fileName,
+      mimeType,
+      parents: [folderId],
+    },
+    media: {
+      mimeType,
+      body: Readable.from([buffer]),
+    },
+    fields: "id,webViewLink",
+  });
+
+  const fileId = file.data.id!;
+  const webViewLink = file.data.webViewLink || `https://drive.google.com/file/d/${fileId}/view`;
+
+  // Make file accessible by link
+  await drive.permissions.create({
+    fileId,
+    requestBody: {
+      role: "reader",
+      type: "anyone",
+    },
+  }).catch(() => { /* permission may fail if org policy restricts it */ });
+
+  return { fileId, webViewLink };
+}
+
+/**
+ * Create a new folder in Google Drive under the main IM3 folder.
+ */
+export async function createProjectFolder(projectName: string): Promise<string> {
+  const auth = getAuth();
+  if (!auth) throw new Error("Google Drive no configurado");
+
+  const parentFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  if (!parentFolderId) throw new Error("GOOGLE_DRIVE_FOLDER_ID no configurado");
+
+  const drive = google.drive({ version: "v3", auth });
+
+  const folder = await drive.files.create({
+    requestBody: {
+      name: projectName,
+      mimeType: "application/vnd.google-apps.folder",
+      parents: [parentFolderId],
+    },
+    fields: "id",
+  });
+
+  return folder.data.id!;
+}

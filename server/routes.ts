@@ -6,7 +6,8 @@ import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, news
 import { syncGmailEmails, isGmailConfigured } from "./google-gmail";
 import { generateBlogContent, improveBlogContent } from "./blog-ai";
 import { log } from "./index";
-import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive } from "./google-drive";
+import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive, uploadFileToDrive, createProjectFolder } from "./google-drive";
+import multer from "multer";
 import { createCalendarEvent, deleteCalendarEvent } from "./google-calendar";
 import { isEmailConfigured, sendEmail } from "./email-sender";
 import { generateEmailContent, buildMicroReminderEmail, build6hReminderEmail, buildFollowUpConfirmationEmail, buildNoShowEmail, generateDailyNewsDigest, generateContactInsight, generateWhatsAppMessage, generateNewsletterWelcome, generateMiniAudit, classifyWhatsAppIntent, generateWhatsAppAutoReply, buildWhatsAppNotificationEmail, buildProjectNotificationEmail, escapeHtml } from "./email-ai";
@@ -6358,6 +6359,63 @@ ${urls}
 
       const result = await syncDriveFilesToProject(projectId, driveId);
       res.json({ message: `${result.synced} archivos nuevos sincronizados`, ...result });
+    } catch (err: unknown) {
+      res.status(500).json({ message: `Error: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  });
+
+  // Upload file to Drive + save in projectFiles
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB max
+
+  app.post("/api/admin/projects/:id/upload", requireAuth, upload.single("file"), async (req, res) => {
+    const projectId = req.params.id as string;
+    if (!req.file) return res.status(400).json({ message: "No se recibió archivo" });
+    if (!db) return res.status(500).json({ message: "DB no disponible" });
+
+    try {
+      const [project] = await db.select().from(clientProjects).where(eq(clientProjects.id, projectId));
+      if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+
+      // Ensure project has a Drive folder
+      let folderId = project.driveFolderId;
+      if (!folderId) {
+        folderId = await createProjectFolder(project.name);
+        await db.update(clientProjects).set({ driveFolderId: folderId, updatedAt: new Date() }).where(eq(clientProjects.id, projectId));
+      }
+
+      // Upload to Drive
+      const { webViewLink } = await uploadFileToDrive(
+        folderId,
+        req.file.originalname,
+        req.file.mimetype,
+        req.file.buffer
+      );
+
+      // Detect file type
+      const ext = req.file.originalname.split(".").pop()?.toLowerCase() || "";
+      const mime = req.file.mimetype.toLowerCase();
+      let fileType = "other";
+      if (mime.includes("pdf") || ext === "pdf") fileType = "document";
+      else if (mime.includes("video") || ["mp4", "webm", "mov"].includes(ext)) fileType = "recording";
+      else if (mime.includes("audio") || ["mp3", "wav", "m4a"].includes(ext)) fileType = "recording";
+      else if (mime.includes("image") || ["png", "jpg", "jpeg", "gif"].includes(ext)) fileType = "image";
+      else if (["doc", "docx", "xlsx", "pptx"].includes(ext)) fileType = "document";
+
+      // Override type if provided
+      const typeOverride = req.body.type;
+      if (typeOverride && typeOverride !== "auto") fileType = typeOverride;
+
+      // Save to DB
+      const [file] = await db.insert(projectFiles).values({
+        projectId,
+        name: req.body.name || req.file.originalname,
+        type: fileType,
+        url: webViewLink,
+        size: req.file.size,
+        uploadedBy: "team",
+      }).returning();
+
+      res.json(file);
     } catch (err: unknown) {
       res.status(500).json({ message: `Error: ${err instanceof Error ? err.message : String(err)}` });
     }
