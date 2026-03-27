@@ -214,6 +214,13 @@ export default function ProposalEditor() {
           </Button>
         )}
         {hasSections && (
+          <a href={`/proposal/${proposal.accessToken}?pdf=true`} target="_blank" rel="noopener noreferrer">
+            <Button size="sm" variant="outline" className="gap-1.5">
+              <Save className="w-4 h-4" /> Descargar PDF
+            </Button>
+          </a>
+        )}
+        {hasSections && (
           <Button size="sm" variant="outline" className="gap-1.5" onClick={copyLink}>
             <Copy className="w-4 h-4" /> Copiar link
           </Button>

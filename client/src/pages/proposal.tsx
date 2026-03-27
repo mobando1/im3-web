@@ -30,9 +30,18 @@ export default function ProposalView() {
   const [accepted, setAccepted] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
 
+  const isPdfMode = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("pdf") === "true";
+
   const { data: proposal, isLoading, error } = useQuery<any>({
     queryKey: [`/api/proposal/${token}`],
   });
+
+  // Auto-print in PDF mode
+  useEffect(() => {
+    if (isPdfMode && proposal && !isLoading) {
+      setTimeout(() => window.print(), 1000);
+    }
+  }, [isPdfMode, proposal, isLoading]);
 
   // Track views
   useEffect(() => {
@@ -108,7 +117,7 @@ export default function ProposalView() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <header className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-gray-200">
+      <header className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-gray-200 print:static print:bg-white print:border-none">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div>
             <div className="flex items-center gap-3">
@@ -121,12 +130,15 @@ export default function ProposalView() {
               </div>
             </div>
           </div>
-          <div className="flex gap-2">
+          <div className="flex gap-2 print:hidden">
             <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => {
               const el = document.getElementById("pricing-section");
               el?.scrollIntoView({ behavior: "smooth" });
             }}>
               Ver inversión <ChevronDown className="w-3 h-3" />
+            </Button>
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => window.print()}>
+              <Download className="w-3 h-3" /> PDF
             </Button>
           </div>
         </div>
@@ -315,7 +327,7 @@ export default function ProposalView() {
         )}
 
         {/* Accept CTA */}
-        <section className="bg-gradient-to-br from-[#0F172A] to-[#1E293B] rounded-2xl p-8 text-center text-white space-y-4">
+        <section className="bg-gradient-to-br from-[#0F172A] to-[#1E293B] rounded-2xl p-8 text-center text-white space-y-4 print:hidden">
           <h2 className="text-2xl font-bold">¿Listo para empezar?</h2>
           <p className="text-gray-400 max-w-md mx-auto">Acepta la propuesta y agendaremos la reunión de inicio para arrancar tu proyecto.</p>
 
