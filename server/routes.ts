@@ -7044,7 +7044,12 @@ ${urls}
       if (!contact) return res.json([]);
 
       const r = await fetch(`${AUDIT_URL}/api/audits`);
-      const allAudits = await r.json() as Array<{ company: string; [key: string]: unknown }>;
+      const rawResponse = await r.json();
+
+      // Handle both array and object responses from audit service
+      const allAudits: Array<{ company: string; [key: string]: unknown }> = Array.isArray(rawResponse)
+        ? rawResponse
+        : (rawResponse?.audits || rawResponse?.data || []);
 
       // Filter by company name (case-insensitive)
       const contactAudits = allAudits.filter((a: { company: string }) =>
