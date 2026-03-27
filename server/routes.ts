@@ -6755,13 +6755,14 @@ ${urls}
       const [proposal] = await db.select().from(proposals).where(eq(proposals.accessToken, req.params.token as string)).limit(1);
       if (!proposal) return res.status(404).json({ error: "Propuesta no encontrada" });
 
-      // Mark as viewed on first open
-      if (!proposal.viewedAt) {
-        await db.update(proposals).set({ viewedAt: new Date(), status: proposal.status === "sent" ? "viewed" : proposal.status }).where(eq(proposals.id, proposal.id));
+      // Mark as viewed on first open — ONLY if proposal was already sent to client
+      // (skip tracking if admin is previewing before sending)
+      if (!proposal.viewedAt && proposal.status === "sent") {
+        await db.update(proposals).set({ viewedAt: new Date(), status: "viewed" }).where(eq(proposals.id, proposal.id));
         // Notify admin
         const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
-        const [contact] = await db.select({ nombre: contacts.nombre, empresa: contacts.empresa }).from(contacts).where(eq(contacts.id, proposal.contactId)).limit(1);
-        sendEmail(adminEmail, `👀 Propuesta abierta: ${contact?.empresa || proposal.title}`, `<p><strong>${contact?.nombre}</strong> abrió la propuesta "${proposal.title}".</p>`).catch(() => {});
+        const [contact2] = await db.select({ nombre: contacts.nombre, empresa: contacts.empresa }).from(contacts).where(eq(contacts.id, proposal.contactId)).limit(1);
+        sendEmail(adminEmail, `👀 Propuesta abierta: ${contact2?.empresa || proposal.title}`, `<p><strong>${contact2?.nombre}</strong> abrió la propuesta "${proposal.title}".</p>`).catch(() => {});
       }
 
       const [contact] = await db.select({ nombre: contacts.nombre, empresa: contacts.empresa }).from(contacts).where(eq(contacts.id, proposal.contactId)).limit(1);

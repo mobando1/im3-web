@@ -1112,7 +1112,7 @@ export default function ContactDetailPage() {
             <FileText className="w-3.5 h-3.5" /> Diagnostico
           </TabsTrigger>
           <TabsTrigger value="emails" className="gap-1.5 data-[state=active]:bg-white">
-            <Mail className="w-3.5 h-3.5" /> Emails ({totalEmails})
+            <Mail className="w-3.5 h-3.5" /> Emails ({emailTimeline.length || totalEmails})
           </TabsTrigger>
           <TabsTrigger value="actividad" className="gap-1.5 data-[state=active]:bg-white">
             <Activity className="w-3.5 h-3.5" /> Actividad
