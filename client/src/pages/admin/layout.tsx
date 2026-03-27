@@ -13,7 +13,7 @@ const navItems = [
   { label: "Proyectos", path: "/admin/projects", icon: FolderKanban },
   { label: "Auditorías", path: "/admin/auditorias", icon: ClipboardCheck },
   { label: "Propuestas", path: "/admin/proposals", icon: FileSignature },
-  { label: "Sesiones", path: "/admin/sessions", icon: Mic },
+  { label: "Acta", path: "https://acta.im3systems.com", icon: Mic, external: true },
   { label: "Blog", path: "/admin/blog", icon: BookOpen },
   { label: "Tareas", path: "/admin/tasks", icon: CheckSquare, showBadge: true },
   { label: "Calendario", path: "/admin/calendar", icon: CalendarDays },
@@ -117,9 +117,28 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
         <nav className="flex-1 py-4 px-3 space-y-1">
           {navItems.map((item) => {
             const Icon = item.icon;
-            const isActive =
+            const isExternal = (item as any).external;
+            const isActive = !isExternal && (
               location === item.path ||
-              (item.path !== "/admin" && location.startsWith(item.path));
+              (item.path !== "/admin" && location.startsWith(item.path))
+            );
+
+            if (isExternal) {
+              return (
+                <a
+                  key={item.path}
+                  href={item.path}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm font-medium transition-colors text-gray-500 hover:text-gray-900 hover:bg-gray-100"
+                >
+                  <Icon className="h-[18px] w-[18px] shrink-0" />
+                  <span className="flex-1 text-left">{item.label}</span>
+                  <span className="text-[10px] text-gray-300">↗</span>
+                </a>
+              );
+            }
+
             return (
               <button
                 key={item.path}
