@@ -2459,15 +2459,17 @@ export default function ContactDetailPage() {
             // Merge appointments + project sessions into unified timeline
             type UnifiedMeeting = { id: string; type: "appointment" | "session"; title: string; date: string; duration: number | null; status: string; notes: string | null; meetLink: string | null; recordingUrl: string | null; transcription: string | null; summary: string | null; actionItems: string[]; appointmentType?: string };
 
+            const safeAppointments = Array.isArray(contactAppointments) ? contactAppointments : [];
+            const safeSessions = Array.isArray(contactSessions) ? contactSessions : [];
             const meetings: UnifiedMeeting[] = [
-              ...contactAppointments.map(a => ({
+              ...safeAppointments.map(a => ({
                 id: a.id, type: "appointment" as const, title: a.title,
                 date: `${a.date}T${a.time}`, duration: a.duration, status: a.status,
                 notes: a.notes, meetLink: a.meetLink, recordingUrl: null,
                 transcription: null, summary: null, actionItems: [] as string[],
                 appointmentType: a.appointmentType,
               })),
-              ...contactSessions.map(s => ({
+              ...safeSessions.map(s => ({
                 id: s.id, type: "session" as const, title: s.title,
                 date: s.date, duration: s.duration, status: s.status,
                 notes: null, meetLink: null, recordingUrl: s.recordingUrl,

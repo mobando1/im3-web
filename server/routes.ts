@@ -6765,8 +6765,10 @@ ${urls}
 
   app.get("/api/admin/contacts/:id/sessions", requireAuth, async (req, res) => {
     if (!db) return res.json([]);
-    const results = await db.select().from(projectSessions).where(eq(projectSessions.contactId, req.params.id as string)).orderBy(desc(projectSessions.date));
-    res.json(results);
+    try {
+      const results = await db.select().from(projectSessions).where(eq(projectSessions.contactId, req.params.id as string)).orderBy(desc(projectSessions.date));
+      res.json(results);
+    } catch { res.json([]); }
   });
 
   // WhatsApp messages history for a contact
@@ -6778,9 +6780,7 @@ ${urls}
         .orderBy(asc(whatsappMessages.scheduledFor))
         .limit(100);
       res.json(rows);
-    } catch (err: unknown) {
-      res.status(500).json({ error: "Error fetching WhatsApp messages" });
-    }
+    } catch { res.json([]); }
   });
 
   // Appointments/meetings for a contact (all types)
@@ -6791,9 +6791,7 @@ ${urls}
         .where(eq(appointments.contactId, req.params.id as string))
         .orderBy(desc(appointments.createdAt));
       res.json(rows);
-    } catch (err: unknown) {
-      res.status(500).json({ error: "Error fetching appointments" });
-    }
+    } catch { res.json([]); }
   });
 
   // List associated emails for a contact
