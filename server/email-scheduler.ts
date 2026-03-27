@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import { db } from "./db";
-import { sentEmails, emailTemplates, contacts, diagnostics, abandonedLeads, activityLog, notifications, newsletterSubscribers, newsletterSends, blogPosts, blogCategories, appointments, whatsappMessages, clientProjects, projectTasks } from "@shared/schema";
+import { sentEmails, emailTemplates, contacts, diagnostics, abandonedLeads, activityLog, notifications, newsletterSubscribers, newsletterSends, blogPosts, blogCategories, appointments, whatsappMessages, clientProjects, projectTasks, proposals } from "@shared/schema";
 import { eq, and, lte, not, gte, desc, inArray, or, asc } from "drizzle-orm";
 import { generateEmailContent, build6hReminderEmail, buildMicroReminderEmail, generateDailyNewsDigest, generateWhatsAppMessage, generateReengagement, buildProjectNotificationEmail } from "./email-ai";
 import { sendEmail, isEmailConfigured } from "./email-sender";
@@ -58,6 +58,73 @@ async function processEmailQueue() {
             .set({ status: "failed" })
             .where(eq(sentEmails.id, email.id));
           continue;
+        }
+
+        // Proposal follow-up checks — skip if proposal already accepted/rejected
+        if (email.templateId.startsWith("propuesta_")) {
+          const [latestProposal] = await db.select({ status: proposals.status, viewedAt: proposals.viewedAt })
+            .from(proposals)
+            .where(eq(proposals.contactId, email.contactId))
+            .orderBy(desc(proposals.sentAt))
+            .limit(1);
+
+          if (latestProposal) {
+            // Cancel all follow-ups if accepted or rejected
+            if (latestProposal.status === "accepted" || latestProposal.status === "rejected") {
+              log(`Proposal ${latestProposal.status} — cancelling follow-up ${email.templateId}`);
+              await db.update(sentEmails).set({ status: "expired" }).where(eq(sentEmails.id, email.id));
+              continue;
+            }
+            // Skip 3-day reminder if proposal was already viewed
+            if (email.templateId === "propuesta_recordatorio" && latestProposal.viewedAt) {
+              log(`Proposal already viewed — skipping reminder`);
+              await db.update(sentEmails).set({ status: "expired" }).where(eq(sentEmails.id, email.id));
+              continue;
+            }
+          }
+
+          // Proposal follow-ups already have subject and body pre-set, send directly
+          if (email.subject && email.body) {
+            const result = await sendEmail(contact.email, email.subject, email.body);
+            await db.update(sentEmails).set({
+              status: result ? "sent" : "failed",
+              sentAt: new Date(),
+              resendMessageId: result?.messageId || null,
+            }).where(eq(sentEmails.id, email.id));
+            if (result) log(`Proposal follow-up sent: ${email.templateId} → ${contact.email}`);
+            continue;
+          }
+
+          // If no body yet, generate it with AI (for propuesta_recordatorio, propuesta_valor, propuesta_cierre)
+          // These need the proposal URL, so fetch it
+          const [prop] = await db.select({ accessToken: proposals.accessToken, title: proposals.title })
+            .from(proposals).where(eq(proposals.contactId, email.contactId)).orderBy(desc(proposals.sentAt)).limit(1);
+
+          if (prop) {
+            const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+            const proposalUrl = `${baseUrl}/proposal/${prop.accessToken}`;
+            let body = "";
+
+            if (email.templateId === "propuesta_recordatorio") {
+              body = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;"><p>Hola ${contact.nombre.split(" ")[0]},</p><p>Hace unos días te compartimos una propuesta para <strong>${contact.empresa}</strong>. Queríamos saber si tuviste oportunidad de revisarla.</p><p><a href="${proposalUrl}" style="display:inline-block;padding:12px 24px;background:#2FA4A9;color:white;text-decoration:none;border-radius:8px;font-weight:bold;">Ver propuesta →</a></p><p>Si tienes preguntas o necesitas ajustes, responde a este email y lo conversamos.</p><p>Saludos,<br/>Equipo IM3 Systems</p></div>`;
+            } else if (email.templateId === "propuesta_valor") {
+              body = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;"><p>Hola ${contact.nombre.split(" ")[0]},</p><p>Quería compartirte que recientemente implementamos un proyecto similar al que le propusimos a <strong>${contact.empresa}</strong>, con resultados muy positivos en automatización y eficiencia.</p><p>Tu propuesta sigue disponible aquí:</p><p><a href="${proposalUrl}" style="display:inline-block;padding:12px 24px;background:#2FA4A9;color:white;text-decoration:none;border-radius:8px;font-weight:bold;">Revisar propuesta →</a></p><p>¿Te gustaría agendar una llamada de 15 minutos para resolver cualquier duda?</p><p>Saludos,<br/>Equipo IM3 Systems</p></div>`;
+            } else if (email.templateId === "propuesta_cierre") {
+              body = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;"><p>Hola ${contact.nombre.split(" ")[0]},</p><p>Han pasado un par de semanas desde que enviamos la propuesta para <strong>${contact.empresa}</strong>. Entendemos que estos procesos toman tiempo.</p><p>¿Hay algo que podamos ajustar en la propuesta? Estamos abiertos a adaptar el alcance, timeline o inversión según tus necesidades.</p><p><a href="${proposalUrl}" style="display:inline-block;padding:12px 24px;background:#2FA4A9;color:white;text-decoration:none;border-radius:8px;font-weight:bold;">Ver propuesta →</a></p><p>Saludos,<br/>Equipo IM3 Systems</p></div>`;
+            }
+
+            if (body) {
+              await db.update(sentEmails).set({ body }).where(eq(sentEmails.id, email.id));
+              const result = await sendEmail(contact.email, email.subject!, body);
+              await db.update(sentEmails).set({
+                status: result ? "sent" : "failed",
+                sentAt: new Date(),
+                resendMessageId: result?.messageId || null,
+              }).where(eq(sentEmails.id, email.id));
+              if (result) log(`Proposal follow-up sent: ${email.templateId} → ${contact.email}`);
+              continue;
+            }
+          }
         }
 
         // Get template

@@ -619,6 +619,7 @@ export const proposals = pgTable("proposals", {
     totalWeeks: number;
   }>(),
   notes: text("notes"), // internal admin notes
+  aiSourcesReport: json("ai_sources_report").$type<Record<string, string[]>>(), // AI traceability: section → sources
   accessToken: varchar("access_token").default(sql`gen_random_uuid()`).notNull().unique(),
   sentAt: timestamp("sent_at"),
   viewedAt: timestamp("viewed_at"),

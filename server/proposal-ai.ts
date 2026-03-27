@@ -93,6 +93,7 @@ export async function generateProposal(contactId: string, adminNotes?: string): 
   pricing: { total: number; currency: string; includes: string[]; paymentOptions: string[] };
   timelineData: { phases: Array<{ name: string; weeks: number; deliverables: string[] }>; totalWeeks: number };
   alcanceDetallado: Array<{ fase: string; areas: Array<{ nombre: string; tareas: string[] }> }>;
+  sourcesReport: Record<string, string[]>;
 } | null> {
   const anthropic = getClient();
   if (!anthropic) return null;
@@ -102,7 +103,7 @@ export async function generateProposal(contactId: string, adminNotes?: string): 
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
-    max_tokens: 4000,
+    max_tokens: 6000,
     temperature: 0.4,
     system: `Eres un consultor senior de IM3 Systems, una agencia de tecnología especializada en IA, automatización y desarrollo de software para empresas en Latinoamérica.
 
@@ -116,6 +117,7 @@ REGLAS:
 - Escribe en español latinoamericano.
 - Cada sección debe ser HTML listo para renderizar (con tags básicos: p, strong, ul, li, h3).
 - NO uses markdown. Usa HTML.
+- IMPORTANTE: Para cada sección, registra DE DÓNDE sacaste la información en el campo "sourcesReport". Cita la fuente específica: "Diagnóstico: campo X", "Email del DD/MM: asunto Y", "Documento: nombre del doc", "Nota de reunión: contenido", "Gmail: email recibido del DD/MM". Esto es para trazabilidad interna.
 
 SOBRE IM3 SYSTEMS:
 - Agencia de tecnología especializada en IA, automatización y desarrollo de software
@@ -175,7 +177,15 @@ Responde SOLO con un JSON válido (sin markdown, sin \`\`\`json) con esta estruc
         { "nombre": "Área 2", "tareas": ["Tarea 1", "Tarea 2"] }
       ]
     }
-  ]
+  ],
+  "sourcesReport": {
+    "resumen": ["Fuente 1: detalle de dónde se sacó la info", "Fuente 2: ..."],
+    "problema": ["Diagnóstico: campo específico", "Email del DD/MM: asunto del email"],
+    "costo_inaccion": ["Diagnóstico: presupuesto y empleados", "Documento: nombre del archivo"],
+    "solucion": ["..."],
+    "inversion": ["..."],
+    "roi": ["..."]
+  }
 }`
     }],
   });
@@ -192,6 +202,7 @@ Responde SOLO con un JSON válido (sin markdown, sin \`\`\`json) con esta estruc
       pricing: parsed.pricing || { total: 0, currency: "USD", includes: [], paymentOptions: [] },
       timelineData: parsed.timelineData || { phases: [], totalWeeks: 0 },
       alcanceDetallado: parsed.alcanceDetallado || [],
+      sourcesReport: parsed.sourcesReport || {},
     };
   } catch (err) {
     log(`Error parsing proposal AI response: ${err}`);

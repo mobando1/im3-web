@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Copy, ExternalLink, Send, Sparkles, Save, Eye, FolderKanban } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Send, Sparkles, Save, Eye, FolderKanban, FileSearch, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -48,6 +48,7 @@ export default function ProposalEditor() {
   const [editingSection, setEditingSection] = useState<string | null>(null);
   const [editContent, setEditContent] = useState("");
   const [showPreview, setShowPreview] = useState(false);
+  const [showSources, setShowSources] = useState(false);
 
   const { data: proposal, isLoading } = useQuery<any>({
     queryKey: [`/api/admin/proposals/${id}`],
@@ -190,6 +191,11 @@ export default function ProposalEditor() {
             </Button>
           </a>
         )}
+        {hasSections && proposal.aiSourcesReport && Object.keys(proposal.aiSourcesReport).length > 0 && (
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setShowSources(!showSources)}>
+            <FileSearch className="w-4 h-4" /> {showSources ? "Ocultar fuentes" : "Ver fuentes AI"}
+          </Button>
+        )}
         {hasSections && proposal.status === "draft" && (
           <Button
             size="sm"
@@ -235,6 +241,36 @@ export default function ProposalEditor() {
           <Button size="sm" variant="ghost" className="shrink-0 h-7 px-2" onClick={copyLink}>
             <Copy className="w-3.5 h-3.5" />
           </Button>
+        </div>
+      )}
+
+      {/* Sources Report Panel */}
+      {showSources && proposal.aiSourcesReport && (
+        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-amber-800 flex items-center gap-1.5">
+              <FileSearch className="w-4 h-4" /> Reporte de Fuentes AI
+            </h3>
+            <button onClick={() => setShowSources(false)} className="text-amber-400 hover:text-amber-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="text-[11px] text-amber-600">Este reporte muestra de donde el AI extrajo la informacion para cada seccion. Solo visible para admin.</p>
+          <div className="space-y-2">
+            {Object.entries(proposal.aiSourcesReport as Record<string, string[]>).map(([section, sources]) => (
+              <div key={section} className="bg-white rounded-md p-3 border border-amber-100">
+                <p className="text-xs font-medium text-gray-700 mb-1">{SECTION_LABELS[section] || section}</p>
+                <ul className="space-y-0.5">
+                  {(sources || []).map((source: string, i: number) => (
+                    <li key={i} className="text-[11px] text-gray-500 flex items-start gap-1.5">
+                      <span className="text-amber-400 mt-0.5 shrink-0">•</span>
+                      {source}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 

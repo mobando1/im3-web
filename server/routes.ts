@@ -6582,6 +6582,7 @@ ${urls}
         sections: sectionsWithAlcance,
         pricing: result.pricing as unknown as typeof proposals.$inferInsert["pricing"],
         timelineData: result.timelineData,
+        aiSourcesReport: result.sourcesReport,
         updatedAt: new Date(),
       }).where(eq(proposals.id, proposal.id)).returning();
 
@@ -6624,6 +6625,61 @@ ${urls}
       });
 
       await sendEmail(contact.email, `📄 ${proposal.title}`, html).catch((err) => log(`Error sending proposal email: ${err}`));
+
+      // Update contact substatus to proposal_sent
+      await db.update(contacts).set({ substatus: "proposal_sent", lastActivityAt: new Date() }).where(eq(contacts.id, contact.id));
+
+      // Schedule follow-up sequence
+      const now = new Date();
+      const proposalId = proposal.id;
+
+      // +3 days: Reminder if not viewed
+      const reminder3d = new Date(now.getTime() + 3 * 24 * 60 * 60 * 1000);
+      await db.insert(sentEmails).values({
+        contactId: contact.id,
+        templateId: "propuesta_recordatorio",
+        subject: `¿Tuviste chance de revisar la propuesta, ${contact.nombre.split(" ")[0]}?`,
+        status: "pending",
+        scheduledFor: reminder3d,
+      });
+
+      // +7 days: Value-add follow-up
+      const followup7d = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+      await db.insert(sentEmails).values({
+        contactId: contact.id,
+        templateId: "propuesta_valor",
+        subject: `Caso similar al de ${contact.empresa} — resultados reales`,
+        status: "pending",
+        scheduledFor: followup7d,
+      });
+
+      // +14 days: Soft close (creates notification instead of auto-send)
+      const close14d = new Date(now.getTime() + 14 * 24 * 60 * 60 * 1000);
+      await db.insert(sentEmails).values({
+        contactId: contact.id,
+        templateId: "propuesta_cierre",
+        subject: `¿Hay algo que podamos ajustar en la propuesta, ${contact.nombre.split(" ")[0]}?`,
+        status: "pending",
+        scheduledFor: close14d,
+      });
+
+      // +7 days: WhatsApp follow-up (only if email not opened)
+      if (contact.telefono) {
+        const wa7d = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000 + 3 * 60 * 60 * 1000); // +7d +3h
+        await db.insert(whatsappMessages).values({
+          contactId: contact.id,
+          phone: contact.telefono,
+          message: `Hola ${contact.nombre.split(" ")[0]}, te enviamos una propuesta por email hace unos días. ¿Pudiste revisarla? Si prefieres, podemos agendar una llamada rápida para resolverla. 📄`,
+          status: "pending",
+          scheduledFor: wa7d,
+          conditionType: "if_email_not_opened",
+          conditionEmailTemplate: "propuesta_valor",
+        });
+      }
+
+      await logActivity(contact.id, "email_sent", `Propuesta enviada: ${proposal.title} + secuencia de seguimiento programada`, { proposalId });
+
+      log(`Proposal sent to ${contact.email} + 3 follow-ups scheduled`);
 
       res.json({ success: true, proposalUrl });
     } catch (err: any) {
