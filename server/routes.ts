@@ -6804,6 +6804,21 @@ ${urls}
       }).returning();
 
       await logActivity(req.params.id as string, "contact_edited", `Documento agregado: ${name}`, { fileId: created.id, fileType: type });
+
+      // Auto-sync content from Google Drive if URL is from Google and no content was pasted
+      if (!content && (url.includes("google.com") || url.includes("docs.google"))) {
+        readGoogleDriveContent(url).then(async (result) => {
+          if (!db) return;
+          await db.update(contactFiles).set({
+            content: result.content,
+            driveFileId: result.fileId,
+          }).where(eq(contactFiles.id, created.id));
+          log(`[Drive Auto-Sync] Content synced for "${name}": ${result.content.length} chars`);
+        }).catch(err => {
+          log(`[Drive Auto-Sync] Failed for "${name}": ${(err as Error).message}`);
+        });
+      }
+
       res.json(created);
     } catch (err: unknown) {
       res.status(500).json({ error: "Error adding file" });
