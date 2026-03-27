@@ -2003,10 +2003,10 @@ export default function ContactDetailPage() {
                   <button
                     onClick={() => gmailSyncMutation.mutate()}
                     disabled={gmailSyncMutation.isPending}
-                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#2FA4A9] transition-colors"
-                    title="Sincronizar Gmail"
+                    className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-md border border-[#2FA4A9]/30 text-[#2FA4A9] hover:bg-[#2FA4A9]/10 transition-colors font-medium"
                   >
                     <RefreshCw className={`w-3.5 h-3.5 ${gmailSyncMutation.isPending ? "animate-spin" : ""}`} />
+                    {gmailSyncMutation.isPending ? "Sincronizando..." : "Sync Gmail"}
                   </button>
                 </div>
               </div>
