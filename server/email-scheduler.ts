@@ -1135,7 +1135,7 @@ export function startEmailScheduler() {
   if (isGmailConfigured()) {
     cron.schedule("*/15 * * * *", async () => {
       await syncGmailEmails().catch(err => log(`Cron error gmail sync: ${err}`));
-    });
+    }, { timezone: "America/Bogota" });
     log("Gmail sync cron scheduled (every 15 min)");
   }
 
@@ -1149,34 +1149,34 @@ export function startEmailScheduler() {
     await processEmailQueue().catch(err => log(`Cron error queue: ${err}`));
     await processAbandonedEmails().catch(err => log(`Cron error abandoned: ${err}`));
     await processWhatsAppQueue().catch(err => log(`Cron error whatsapp: ${err}`));
-  });
+  }, { timezone: "America/Bogota" });
 
   // Run substatus updates, overdue task checks, and post-meeting recordings every 30 minutes
   cron.schedule("*/30 * * * *", async () => {
     await updateContactSubstatuses().catch(err => log(`Cron error substatus: ${err}`));
     await checkOverdueTasks().catch(err => log(`Cron error overdue: ${err}`));
     await processPostMeetingRecordings().catch(err => log(`Cron error post-meeting: ${err}`));
-  });
+  }, { timezone: "America/Bogota" });
 
   // Daily admin briefing at 7:00 AM Colombia time (12:00 UTC) every day
   cron.schedule("0 12 * * *", async () => {
     await sendAdminDailyBriefing().catch(err => log(`Cron error admin briefing: ${err}`));
-  });
+  }, { timezone: "America/Bogota" });
 
   // Daily GitHub commit analysis at 6:00 AM Colombia time (11:00 UTC)
   cron.schedule("0 11 * * *", async () => {
     await autoAnalyzeProjectCommits().catch(err => log(`Cron error auto-analyze: ${err}`));
-  });
+  }, { timezone: "America/Bogota" });
 
   // Weekly project summaries every Monday at 7:15 AM Colombia time (12:15 UTC)
   cron.schedule("15 12 * * 1", async () => {
     await sendWeeklyProjectSummaries().catch(err => log(`Cron error project summaries: ${err}`));
-  });
+  }, { timezone: "America/Bogota" });
 
   // Weekly newsletter every Monday at 7:30 AM Colombia time (12:30 UTC)
   cron.schedule("30 12 * * 1", async () => {
     await generateAndSendDailyNewsletter().catch(err => log(`Cron error newsletter: ${err}`));
-  });
+  }, { timezone: "America/Bogota" });
 
   // Also run once at startup (after 10 seconds to let DB connect)
   setTimeout(() => {

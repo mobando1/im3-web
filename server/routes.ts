@@ -6470,7 +6470,7 @@ ${urls}
       const sectionsWithAlcance = { ...result.sections, _alcanceDetallado: JSON.stringify(result.alcanceDetallado) };
       const [updated] = await db.update(proposals).set({
         sections: sectionsWithAlcance,
-        pricing: result.pricing,
+        pricing: result.pricing as unknown as typeof proposals.$inferInsert["pricing"],
         timelineData: result.timelineData,
         updatedAt: new Date(),
       }).where(eq(proposals.id, proposal.id)).returning();
@@ -6665,6 +6665,31 @@ ${urls}
   // ───────────────────────────────────────────────────────────────
   // Contact Associated Emails (stakeholders, team members)
   // ───────────────────────────────────────────────────────────────
+
+  // ── Contact cross-links (projects, proposals, sessions) ──
+
+  app.get("/api/admin/contacts/:id/projects", requireAuth, async (req, res) => {
+    if (!db) return res.json([]);
+    const projects = await db.select().from(clientProjects).where(eq(clientProjects.contactId, req.params.id as string)).orderBy(desc(clientProjects.createdAt));
+    const enriched = await Promise.all(projects.map(async (p) => {
+      const tasks = await db!.select({ status: projectTasks.status }).from(projectTasks).where(eq(projectTasks.projectId, p.id));
+      const completed = tasks.filter(t => t.status === "completed").length;
+      return { ...p, progress: tasks.length > 0 ? Math.round((completed / tasks.length) * 100) : 0 };
+    }));
+    res.json(enriched);
+  });
+
+  app.get("/api/admin/contacts/:id/proposals", requireAuth, async (req, res) => {
+    if (!db) return res.json([]);
+    const results = await db.select().from(proposals).where(eq(proposals.contactId, req.params.id as string)).orderBy(desc(proposals.createdAt));
+    res.json(results);
+  });
+
+  app.get("/api/admin/contacts/:id/sessions", requireAuth, async (req, res) => {
+    if (!db) return res.json([]);
+    const results = await db.select().from(projectSessions).where(eq(projectSessions.contactId, req.params.id as string)).orderBy(desc(projectSessions.date));
+    res.json(results);
+  });
 
   // List associated emails for a contact
   app.get("/api/admin/contacts/:id/associated-emails", requireAuth, async (req, res) => {

@@ -430,6 +430,7 @@ Reglas:
         await database.insert(projectTasks).values({
           phaseId: phase.id, projectId: project.id,
           title: `Completar ${phase.name}`, priority: "high", status: "pending", isMilestone: true,
+          dueDate: phase.endDate,
         });
         totalTasks++;
       }

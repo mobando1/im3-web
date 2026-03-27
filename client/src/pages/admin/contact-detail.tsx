@@ -65,6 +65,9 @@ import {
   Inbox,
   Paperclip,
   Filter,
+  FolderKanban,
+  FileSignature,
+  Mic,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -438,6 +441,21 @@ export default function ContactDetailPage() {
 
   const { data: contactDeals = [] } = useQuery<DealItem[]>({
     queryKey: [`/api/admin/deals?contactId=${contactId}`],
+    enabled: !!contactId,
+  });
+
+  const { data: contactProjects = [] } = useQuery<Array<{ id: string; name: string; status: string; progress: number; healthStatus: string }>>({
+    queryKey: [`/api/admin/contacts/${contactId}/projects`],
+    enabled: !!contactId,
+  });
+
+  const { data: contactProposals = [] } = useQuery<Array<{ id: string; title: string; status: string; createdAt: string }>>({
+    queryKey: [`/api/admin/contacts/${contactId}/proposals`],
+    enabled: !!contactId,
+  });
+
+  const { data: contactSessions = [] } = useQuery<Array<{ id: string; title: string; date: string; duration: number | null; summary: string | null }>>({
+    queryKey: [`/api/admin/contacts/${contactId}/sessions`],
     enabled: !!contactId,
   });
 
@@ -1292,6 +1310,91 @@ export default function ContactDetailPage() {
                 </CardContent>
               </Card>
             )}
+          </div>
+
+          {/* Cross-links: Proyecto, Propuesta, Sesiones */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            {/* Proyecto */}
+            <Card className="bg-white border-gray-200 shadow-sm">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <FolderKanban className="w-4 h-4 text-[#2FA4A9]" />
+                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Proyecto</span>
+                </div>
+                {contactProjects.length > 0 ? (
+                  contactProjects.map(p => (
+                    <div key={p.id} className="space-y-1.5">
+                      <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
+                      <div className="flex items-center gap-2">
+                        <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div className="h-full bg-[#2FA4A9] rounded-full" style={{ width: `${p.progress}%` }} />
+                        </div>
+                        <span className="text-[10px] text-gray-500 shrink-0">{p.progress}%</span>
+                      </div>
+                      <Button variant="ghost" size="sm" className="text-[#2FA4A9] hover:text-[#238b8f] p-0 h-auto text-xs" onClick={() => navigate(`/admin/projects/${p.id}`)}>
+                        Ver proyecto <ArrowRight className="w-3 h-3 ml-1" />
+                      </Button>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-xs text-gray-400">Sin proyecto asignado</p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Propuesta */}
+            <Card className="bg-white border-gray-200 shadow-sm">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <FileSignature className="w-4 h-4 text-purple-500" />
+                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Propuesta</span>
+                </div>
+                {contactProposals.length > 0 ? (
+                  contactProposals.map(p => {
+                    const statusColors: Record<string, string> = { draft: "bg-gray-100 text-gray-600", sent: "bg-blue-100 text-blue-700", viewed: "bg-amber-100 text-amber-700", accepted: "bg-emerald-100 text-emerald-700" };
+                    return (
+                      <div key={p.id} className="space-y-1.5">
+                        <p className="text-sm font-medium text-gray-900 truncate">{p.title}</p>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColors[p.status] || "bg-gray-100 text-gray-600"}`}>{p.status}</span>
+                        <Button variant="ghost" size="sm" className="text-purple-600 hover:text-purple-700 p-0 h-auto text-xs block" onClick={() => navigate(`/admin/proposals/${p.id}`)}>
+                          Ver propuesta <ArrowRight className="w-3 h-3 ml-1 inline" />
+                        </Button>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <p className="text-xs text-gray-400">Sin propuesta</p>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Sesiones */}
+            <Card className="bg-white border-gray-200 shadow-sm">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Mic className="w-4 h-4 text-amber-500" />
+                  <span className="text-xs font-medium text-gray-500 uppercase tracking-wider">Sesiones ({contactSessions.length})</span>
+                </div>
+                {contactSessions.length > 0 ? (
+                  <div className="space-y-2">
+                    {contactSessions.slice(0, 3).map(s => (
+                      <div key={s.id} className="flex items-center gap-2">
+                        <div className="w-1.5 h-1.5 bg-amber-400 rounded-full shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-xs text-gray-700 truncate">{s.title}</p>
+                          <p className="text-[10px] text-gray-400">{new Date(s.date).toLocaleDateString("es-CO", { day: "numeric", month: "short" })}{s.duration ? ` · ${s.duration} min` : ""}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {contactSessions.length > 3 && (
+                      <p className="text-[10px] text-gray-400">+{contactSessions.length - 3} más</p>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-gray-400">Sin sesiones</p>
+                )}
+              </CardContent>
+            </Card>
           </div>
 
           {/* Deals / Oportunidades */}

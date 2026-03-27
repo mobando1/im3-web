@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
 import { useParams } from "wouter";
-import { Send, CheckCircle2, Circle, Clock, AlertCircle, ChevronDown, ChevronRight, ExternalLink, X, Zap, ArrowRight, FileText, Mic, Image, ClipboardCheck, FileSignature, FolderOpen, Download } from "lucide-react";
+import { Send, CheckCircle2, Circle, Clock, AlertCircle, ChevronDown, ChevronRight, ExternalLink, X, Zap, ArrowRight, FileText, Mic, Image, ClipboardCheck, FileSignature, FolderOpen, Download, Lightbulb, ThumbsUp, Plus, Diamond, File } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -89,6 +89,31 @@ type Message = {
   createdAt: string;
 };
 
+type PortalSession = {
+  id: string;
+  title: string;
+  date: string;
+  duration: number | null;
+  summary: string | null;
+  actionItems: string[] | null;
+  transcription: string | null;
+  speakers: string[] | null;
+  status: string;
+  createdAt: string;
+};
+
+type PortalIdea = {
+  id: string;
+  projectId: string;
+  title: string;
+  description: string | null;
+  priority: string | null;
+  status: string | null;
+  suggestedBy: string | null;
+  votes: number | null;
+  createdAt: string;
+};
+
 // ── Constants ──
 
 const HEALTH_STYLES: Record<string, { border: string; bg: string; text: string }> = {
@@ -147,7 +172,7 @@ const DELIV_COLORS: Record<string, string> = {
   rejected: "bg-red-100 text-red-700",
 };
 
-const sections = ["Pulso", "Timeline", "Roadmap", "Entregas", "Documentos", "Inversión", "Mensajes"];
+const sections = ["Pulso", "Timeline", "Roadmap", "Entregas", "Documentos", "Sesiones", "Archivos", "Ideas", "Inversión", "Mensajes"];
 
 // ── Helpers ──
 
@@ -236,6 +261,9 @@ export default function Portal() {
   const [reviewRating, setReviewRating] = useState(0);
   const [delivFilter, setDelivFilter] = useState<string>("all");
   const [timelineFilter, setTimelineFilter] = useState<string>("all");
+  const [showIdeaForm, setShowIdeaForm] = useState(false);
+  const [ideaTitle, setIdeaTitle] = useState("");
+  const [ideaDesc, setIdeaDesc] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const base = `/api/portal/${token}`;
@@ -251,6 +279,8 @@ export default function Portal() {
   const { data: files = [] } = useQuery<Array<{ id: string; name: string; type: string; url: string; size: number | null; uploadedBy: string; createdAt: string }>>({
     queryKey: [`${base}/files`], enabled: !!overview,
   });
+  const { data: sessions = [] } = useQuery<PortalSession[]>({ queryKey: [`${base}/sessions`], enabled: !!overview });
+  const { data: ideas = [] } = useQuery<PortalIdea[]>({ queryKey: [`${base}/ideas`], enabled: !!overview });
 
   useEffect(() => {
     if (phases.length > 0) setExpandedPhases(new Set(phases.map(p => p.id)));
@@ -306,6 +336,24 @@ export default function Portal() {
       });
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`${base}/deliverables`] }); setReviewingId(null); setReviewComment(""); setReviewRating(0); },
+  });
+
+  const createIdeaMut = useMutation({
+    mutationFn: async ({ title, description }: { title: string; description: string }) => {
+      await fetch(`${base}/ideas`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, description }),
+      });
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`${base}/ideas`] }); setShowIdeaForm(false); setIdeaTitle(""); setIdeaDesc(""); },
+  });
+
+  const voteIdeaMut = useMutation({
+    mutationFn: async (ideaId: string) => {
+      await fetch(`${base}/ideas/${ideaId}/vote`, { method: "PATCH" });
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`${base}/ideas`] }); },
   });
 
   // Loading & error states
@@ -831,6 +879,303 @@ export default function Portal() {
             </div>
           );
         })()}
+
+        {/* ── SESIONES ── */}
+        {activeSection === "Sesiones" && (
+          <div className="space-y-4">
+            {sessions.length === 0 ? (
+              <div className="text-center py-12">
+                <Mic className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500">No hay sesiones registradas aún.</p>
+                <p className="text-xs text-gray-400 mt-1">Las grabaciones y transcripciones de reuniones aparecerán aquí.</p>
+              </div>
+            ) : (
+              sessions.map(session => (
+                <details key={session.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden group">
+                  <summary className="px-5 py-4 cursor-pointer hover:bg-gray-50 transition-colors list-none">
+                    <div className="flex items-start gap-3">
+                      <div className="w-10 h-10 rounded-lg bg-[#2FA4A9]/10 flex items-center justify-center shrink-0">
+                        <Mic className="w-5 h-5 text-[#2FA4A9]" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium text-gray-900">{session.title}</h3>
+                        <div className="flex items-center gap-3 mt-1 flex-wrap">
+                          <span className="text-xs text-gray-400">
+                            {new Date(session.date).toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" })}
+                          </span>
+                          {session.duration && (
+                            <span className="text-xs text-gray-400">{session.duration} min</span>
+                          )}
+                          {session.speakers && session.speakers.length > 0 && (
+                            <span className="text-xs text-gray-400">{session.speakers.length} participante{session.speakers.length > 1 ? "s" : ""}</span>
+                          )}
+                        </div>
+                        {session.summary && (
+                          <p className="text-sm text-gray-500 mt-2 leading-relaxed line-clamp-2">{session.summary}</p>
+                        )}
+                      </div>
+                      <ChevronDown className="w-4 h-4 text-gray-300 shrink-0 mt-1 group-open:rotate-180 transition-transform" />
+                    </div>
+                  </summary>
+                  <div className="border-t border-gray-100 px-5 py-4 space-y-4">
+                    {/* Action Items */}
+                    {session.actionItems && session.actionItems.length > 0 && (
+                      <div>
+                        <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1.5">
+                          <ClipboardCheck className="w-3.5 h-3.5" />
+                          Action Items
+                        </h4>
+                        <ul className="space-y-1.5">
+                          {session.actionItems.map((item, idx) => (
+                            <li key={idx} className="flex items-start gap-2 text-sm text-gray-700">
+                              <span className="w-1.5 h-1.5 bg-[#2FA4A9] rounded-full shrink-0 mt-1.5" />
+                              {item}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {/* Transcription */}
+                    {session.transcription && (
+                      <div>
+                        <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2 flex items-center gap-1.5">
+                          <FileText className="w-3.5 h-3.5" />
+                          Transcripción
+                        </h4>
+                        <div className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap bg-gray-50 rounded-lg p-4 max-h-80 overflow-y-auto">
+                          {session.transcription}
+                        </div>
+                      </div>
+                    )}
+                    {/* Empty inner state */}
+                    {!session.summary && (!session.actionItems || session.actionItems.length === 0) && !session.transcription && (
+                      <p className="text-sm text-gray-400 text-center py-4">Esta sesión no tiene transcripción ni resumen disponible.</p>
+                    )}
+                  </div>
+                </details>
+              ))
+            )}
+          </div>
+        )}
+
+        {/* ── ARCHIVOS ── */}
+        {activeSection === "Archivos" && (() => {
+          const ARCH_ICONS: Record<string, typeof FileText> = {
+            document: FileText,
+            contract: FileSignature,
+            image: Image,
+            design: Image,
+            recording: Mic,
+            transcript: FileText,
+            other: File,
+          };
+          const ARCH_TYPE_LABELS: Record<string, string> = {
+            document: "Documento",
+            contract: "Contrato",
+            image: "Imagen",
+            design: "Diseño",
+            recording: "Grabación",
+            transcript: "Transcripción",
+            other: "Archivo",
+          };
+          const ARCH_TYPE_COLORS: Record<string, string> = {
+            document: "bg-blue-100 text-blue-700",
+            contract: "bg-purple-100 text-purple-700",
+            image: "bg-pink-100 text-pink-700",
+            design: "bg-indigo-100 text-indigo-700",
+            recording: "bg-amber-100 text-amber-700",
+            transcript: "bg-emerald-100 text-emerald-700",
+            other: "bg-gray-100 text-gray-600",
+          };
+
+          return (
+            <div className="space-y-4">
+              {files.length === 0 ? (
+                <div className="text-center py-12">
+                  <FolderOpen className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-500">No hay archivos disponibles aún.</p>
+                  <p className="text-xs text-gray-400 mt-1">Los archivos del proyecto aparecerán aquí cuando el equipo los comparta.</p>
+                </div>
+              ) : (
+                <>
+                  {/* Type summary badges */}
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {(() => {
+                      const typeCounts: Record<string, number> = {};
+                      for (const f of files) {
+                        const t = f.type || "other";
+                        typeCounts[t] = (typeCounts[t] || 0) + 1;
+                      }
+                      return Object.entries(typeCounts).map(([type, count]) => (
+                        <span key={type} className={`text-xs px-2.5 py-1 rounded-full font-medium ${ARCH_TYPE_COLORS[type] || ARCH_TYPE_COLORS.other}`}>
+                          {ARCH_TYPE_LABELS[type] || type} ({count})
+                        </span>
+                      ));
+                    })()}
+                  </div>
+
+                  {/* File grid */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {files.map(file => {
+                      const Icon = ARCH_ICONS[file.type] || File;
+                      return (
+                        <a
+                          key={file.id}
+                          href={file.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="bg-white rounded-xl border border-gray-200 p-4 flex items-start gap-3 hover:border-[#2FA4A9]/30 hover:shadow-sm transition-all group"
+                        >
+                          <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${ARCH_TYPE_COLORS[file.type] || ARCH_TYPE_COLORS.other}`}>
+                            <Icon className="w-5 h-5" />
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900 truncate group-hover:text-[#2FA4A9] transition-colors">{file.name}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                              {new Date(file.createdAt).toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" })}
+                              {file.size && ` · ${(file.size / 1024 / 1024).toFixed(1)} MB`}
+                            </p>
+                          </div>
+                          <ExternalLink className="w-4 h-4 text-gray-300 group-hover:text-[#2FA4A9] shrink-0 mt-1 transition-colors" />
+                        </a>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+            </div>
+          );
+        })()}
+
+        {/* ── IDEAS ── */}
+        {activeSection === "Ideas" && (
+          <div className="space-y-4">
+            {/* Header with add button */}
+            <div className="flex items-center justify-between">
+              <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Ideas y sugerencias</h2>
+              <Button
+                size="sm"
+                className="bg-[#2FA4A9] hover:bg-[#238b8f] gap-1.5"
+                onClick={() => setShowIdeaForm(!showIdeaForm)}
+              >
+                <Plus className="w-4 h-4" />
+                Sugerir idea
+              </Button>
+            </div>
+
+            {/* New idea form */}
+            {showIdeaForm && (
+              <div className="bg-white rounded-xl border border-[#2FA4A9]/30 p-5 space-y-3">
+                <Input
+                  value={ideaTitle}
+                  onChange={e => setIdeaTitle(e.target.value)}
+                  placeholder="Título de la idea..."
+                  className="text-sm"
+                />
+                <Textarea
+                  value={ideaDesc}
+                  onChange={e => setIdeaDesc(e.target.value)}
+                  placeholder="Describe tu idea o sugerencia..."
+                  rows={3}
+                />
+                <div className="flex gap-2">
+                  <Button
+                    size="sm"
+                    className="bg-[#2FA4A9] hover:bg-[#238b8f]"
+                    disabled={!ideaTitle.trim() || createIdeaMut.isPending}
+                    onClick={() => createIdeaMut.mutate({ title: ideaTitle.trim(), description: ideaDesc.trim() })}
+                  >
+                    {createIdeaMut.isPending ? "Enviando..." : "Enviar idea"}
+                  </Button>
+                  <Button size="sm" variant="ghost" onClick={() => { setShowIdeaForm(false); setIdeaTitle(""); setIdeaDesc(""); }}>
+                    Cancelar
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Ideas list */}
+            {ideas.length === 0 && !showIdeaForm ? (
+              <div className="text-center py-12">
+                <Lightbulb className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-500">No hay ideas registradas aún.</p>
+                <p className="text-xs text-gray-400 mt-1">Sugiere mejoras o funcionalidades para tu proyecto.</p>
+              </div>
+            ) : (
+              ideas.map(idea => {
+                const IDEA_STATUS_COLORS: Record<string, string> = {
+                  suggested: "bg-gray-100 text-gray-600",
+                  considering: "bg-amber-100 text-amber-700",
+                  planned: "bg-blue-100 text-blue-700",
+                  implemented: "bg-emerald-100 text-emerald-700",
+                  dismissed: "bg-red-100 text-red-600",
+                };
+                const IDEA_STATUS_LABELS: Record<string, string> = {
+                  suggested: "Sugerida",
+                  considering: "En consideración",
+                  planned: "Planeada",
+                  implemented: "Implementada",
+                  dismissed: "Descartada",
+                };
+                const IDEA_PRIORITY_COLORS: Record<string, string> = {
+                  low: "text-gray-400",
+                  medium: "text-amber-500",
+                  high: "text-red-500",
+                };
+
+                return (
+                  <div key={idea.id} className="bg-white rounded-xl border border-gray-200 p-5">
+                    <div className="flex items-start gap-3">
+                      <div className={`w-10 h-10 rounded-lg flex items-center justify-center shrink-0 ${
+                        idea.suggestedBy === "client" ? "bg-[#2FA4A9]/10" : "bg-purple-100"
+                      }`}>
+                        {idea.suggestedBy === "client" ? (
+                          <Lightbulb className="w-5 h-5 text-[#2FA4A9]" />
+                        ) : (
+                          <Diamond className="w-5 h-5 text-purple-600" />
+                        )}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h3 className="font-medium text-gray-900">{idea.title}</h3>
+                          {idea.status && (
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${IDEA_STATUS_COLORS[idea.status] || "bg-gray-100 text-gray-600"}`}>
+                              {IDEA_STATUS_LABELS[idea.status] || idea.status}
+                            </span>
+                          )}
+                          {idea.priority && (
+                            <span className={`text-[10px] font-medium ${IDEA_PRIORITY_COLORS[idea.priority] || "text-gray-400"}`}>
+                              {idea.priority === "high" ? "Alta" : idea.priority === "medium" ? "Media" : "Baja"} prioridad
+                            </span>
+                          )}
+                        </div>
+                        {idea.description && (
+                          <p className="text-sm text-gray-500 mt-1 leading-relaxed">{idea.description}</p>
+                        )}
+                        <div className="flex items-center gap-3 mt-2">
+                          <span className="text-xs text-gray-300">
+                            {idea.suggestedBy === "client" ? "Tu sugerencia" : "Sugerencia del equipo"}
+                          </span>
+                          <span className="text-xs text-gray-300">
+                            {new Date(idea.createdAt).toLocaleDateString("es-CO", { day: "numeric", month: "short" })}
+                          </span>
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => voteIdeaMut.mutate(idea.id)}
+                        disabled={voteIdeaMut.isPending}
+                        className="flex flex-col items-center gap-0.5 px-3 py-2 rounded-lg border border-gray-200 hover:border-[#2FA4A9]/30 hover:bg-[#2FA4A9]/5 transition-all shrink-0"
+                      >
+                        <ThumbsUp className="w-4 h-4 text-gray-400" />
+                        <span className="text-xs font-semibold text-gray-600">{idea.votes || 0}</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
 
         {/* ── INVERSIÓN ── */}
         {activeSection === "Inversión" && (
