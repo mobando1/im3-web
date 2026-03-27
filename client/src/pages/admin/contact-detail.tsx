@@ -67,6 +67,8 @@ import {
   Filter,
   FolderKanban,
   FileSignature,
+  MessageSquare,
+  Video,
   Mic,
 } from "lucide-react";
 import { useState } from "react";
@@ -95,6 +97,68 @@ type UnifiedEmailItem = {
   gmailThreadId: string | null;
   hasAttachments: boolean;
   fromEmail: string | null;
+};
+
+type WhatsAppMsg = {
+  id: string;
+  contactId: string;
+  phone: string;
+  message: string;
+  templateName: string | null;
+  mediaUrl: string | null;
+  mediaType: string | null;
+  status: string;
+  scheduledFor: string;
+  sentAt: string | null;
+  deliveredAt: string | null;
+  readAt: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+};
+
+type ProposalItem = {
+  id: string;
+  contactId: string;
+  title: string;
+  status: string;
+  sections: Record<string, string>;
+  pricing: { total?: number; currency?: string; includes?: string[] } | null;
+  timelineData: { phases?: Array<{ name: string; weeks: number; deliverables: string[] }>; totalWeeks?: number } | null;
+  accessToken: string;
+  sentAt: string | null;
+  viewedAt: string | null;
+  acceptedAt: string | null;
+  createdAt: string;
+};
+
+type AppointmentItem = {
+  id: string;
+  contactId: string | null;
+  title: string;
+  date: string;
+  time: string;
+  duration: number;
+  notes: string | null;
+  meetLink: string | null;
+  status: string;
+  completedAt: string | null;
+  appointmentType: string;
+  createdAt: string;
+};
+
+type SessionItem = {
+  id: string;
+  projectId: string;
+  contactId: string | null;
+  title: string;
+  date: string;
+  duration: number | null;
+  recordingUrl: string | null;
+  transcription: string | null;
+  summary: string | null;
+  actionItems: string[];
+  status: string;
+  createdAt: string;
 };
 
 type AssociatedEmail = {
@@ -449,12 +513,12 @@ export default function ContactDetailPage() {
     enabled: !!contactId,
   });
 
-  const { data: contactProposals = [] } = useQuery<Array<{ id: string; title: string; status: string; createdAt: string }>>({
+  const { data: contactProposals = [] } = useQuery<ProposalItem[]>({
     queryKey: [`/api/admin/contacts/${contactId}/proposals`],
     enabled: !!contactId,
   });
 
-  const { data: contactSessions = [] } = useQuery<Array<{ id: string; title: string; date: string; duration: number | null; summary: string | null }>>({
+  const { data: contactSessions = [] } = useQuery<SessionItem[]>({
     queryKey: [`/api/admin/contacts/${contactId}/sessions`],
     enabled: !!contactId,
   });
@@ -507,6 +571,22 @@ export default function ContactDetailPage() {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/associated-emails`] });
     },
   });
+
+  // WhatsApp messages
+  const { data: waMessages = [] } = useQuery<WhatsAppMsg[]>({
+    queryKey: [`/api/admin/contacts/${contactId}/whatsapp-messages`],
+    enabled: !!contactId,
+  });
+  const [waNewMessage, setWaNewMessage] = useState("");
+
+  const [expandedProposal, setExpandedProposal] = useState<string | null>(null);
+
+  // Appointments (unified meetings)
+  const { data: contactAppointments = [] } = useQuery<AppointmentItem[]>({
+    queryKey: [`/api/admin/contacts/${contactId}/appointments`],
+    enabled: !!contactId,
+  });
+  const [expandedSession, setExpandedSession] = useState<string | null>(null);
 
   const statusMutation = useMutation({
     mutationFn: async ({ status, substatus }: { status: string; substatus?: string }) => {
@@ -944,7 +1024,7 @@ export default function ContactDetailPage() {
 
       {/* TABS */}
       <Tabs defaultValue="resumen" className="w-full">
-        <TabsList className="bg-gray-100 border border-gray-200">
+        <TabsList className="bg-gray-100 border border-gray-200 overflow-x-auto flex-nowrap w-full justify-start">
           <TabsTrigger value="resumen" className="gap-1.5 data-[state=active]:bg-white">
             <Building2 className="w-3.5 h-3.5" /> Resumen
           </TabsTrigger>
@@ -959,6 +1039,15 @@ export default function ContactDetailPage() {
           </TabsTrigger>
           <TabsTrigger value="tareas" className="gap-1.5 data-[state=active]:bg-white">
             <CheckSquare className="w-3.5 h-3.5" /> Tareas ({contactTasks.filter(t => t.status === "pending").length})
+          </TabsTrigger>
+          <TabsTrigger value="whatsapp" className="gap-1.5 data-[state=active]:bg-white">
+            <MessageSquare className="w-3.5 h-3.5" /> WhatsApp {waMessages.length > 0 ? `(${waMessages.length})` : ""}
+          </TabsTrigger>
+          <TabsTrigger value="propuestas" className="gap-1.5 data-[state=active]:bg-white">
+            <FileSignature className="w-3.5 h-3.5" /> Propuestas {contactProposals.length > 0 ? `(${contactProposals.length})` : ""}
+          </TabsTrigger>
+          <TabsTrigger value="sesiones" className="gap-1.5 data-[state=active]:bg-white">
+            <Video className="w-3.5 h-3.5" /> Sesiones
           </TabsTrigger>
         </TabsList>
 
@@ -2110,6 +2199,304 @@ export default function ContactDetailPage() {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+        {/* ===== TAB: WHATSAPP ===== */}
+        <TabsContent value="whatsapp" className="space-y-4 mt-4">
+          <Card className="bg-white border-gray-200 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">
+                Conversacion WhatsApp ({waMessages.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {waMessages.length === 0 ? (
+                <p className="text-gray-400 text-sm text-center py-8">No hay mensajes de WhatsApp</p>
+              ) : (
+                <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2">
+                  {waMessages.map(msg => {
+                    const isSent = msg.status === "sent" || msg.status === "delivered" || msg.status === "read";
+                    const isFailed = msg.status === "failed";
+                    const isPending = msg.status === "pending";
+                    return (
+                      <div key={msg.id} className="flex flex-col">
+                        <div className="max-w-[85%] self-end">
+                          <div className={`rounded-2xl rounded-br-sm px-4 py-2.5 ${isFailed ? "bg-red-50 border border-red-200" : "bg-[#dcf8c6]"}`}>
+                            <p className="text-sm text-gray-800 whitespace-pre-wrap">{msg.message}</p>
+                            {msg.mediaUrl && (
+                              <div className="mt-1.5 flex items-center gap-1 text-xs text-gray-500">
+                                <Paperclip className="w-3 h-3" />
+                                <span>{msg.mediaType || "archivo"}</span>
+                              </div>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1.5 justify-end mt-1">
+                            <span className="text-[10px] text-gray-400">
+                              {msg.sentAt ? new Date(msg.sentAt).toLocaleString("es-CO", { hour: "2-digit", minute: "2-digit", day: "numeric", month: "short" }) : isPending ? "Programado" : ""}
+                            </span>
+                            {msg.status === "read" && <Check className="w-3 h-3 text-blue-500" />}
+                            {msg.status === "delivered" && <Check className="w-3 h-3 text-gray-400" />}
+                            {msg.status === "sent" && <Check className="w-3 h-3 text-gray-300" />}
+                            {isPending && <Clock className="w-3 h-3 text-gray-300" />}
+                            {isFailed && <AlertTriangle className="w-3 h-3 text-red-500" />}
+                            {msg.templateName && <Badge variant="outline" className="text-[9px] bg-green-50 text-green-600 border-green-200">{msg.templateName}</Badge>}
+                          </div>
+                          {isFailed && msg.errorMessage && (
+                            <p className="text-[10px] text-red-400 mt-0.5 text-right">{msg.errorMessage}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              {/* Send new message */}
+              {data?.contact?.telefono && (
+                <div className="mt-4 pt-4 border-t border-gray-100">
+                  <div className="flex gap-2">
+                    <textarea
+                      value={waNewMessage}
+                      onChange={e => setWaNewMessage(e.target.value)}
+                      placeholder="Escribe un mensaje..."
+                      rows={2}
+                      className="flex-1 rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 resize-none focus:outline-none focus:ring-2 focus:ring-green-500/20 focus:border-green-500"
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        if (!waNewMessage.trim()) return;
+                        window.open(`https://wa.me/${data.contact.telefono?.replace(/\D/g, "")}?text=${encodeURIComponent(waNewMessage)}`, "_blank");
+                        setWaNewMessage("");
+                      }}
+                      className="bg-green-600 hover:bg-green-700 text-white self-end px-4"
+                    >
+                      <Send className="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <p className="text-[10px] text-gray-300 mt-1">Se abre WhatsApp Web con el mensaje prellenado</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ===== TAB: PROPUESTAS ===== */}
+        <TabsContent value="propuestas" className="space-y-4 mt-4">
+          {contactProposals.length === 0 ? (
+            <Card className="bg-white border-gray-200 shadow-sm">
+              <CardContent className="py-12 text-center">
+                <FileSignature className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-400 text-sm">No hay propuestas para este contacto</p>
+                <Button size="sm" className="mt-3 bg-[#2FA4A9] hover:bg-[#238b8f] text-white text-xs" onClick={() => navigate(`/admin/proposals`)}>
+                  <Plus className="w-3.5 h-3.5 mr-1" /> Crear Propuesta
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            contactProposals.map(prop => {
+              const isExpanded = expandedProposal === prop.id;
+              const statusColors: Record<string, string> = {
+                draft: "bg-gray-50 text-gray-600 border-gray-200",
+                sent: "bg-blue-50 text-blue-600 border-blue-200",
+                viewed: "bg-amber-50 text-amber-600 border-amber-200",
+                accepted: "bg-emerald-50 text-emerald-600 border-emerald-200",
+                rejected: "bg-red-50 text-red-600 border-red-200",
+                expired: "bg-gray-50 text-gray-400 border-gray-200",
+              };
+              const statusLabels: Record<string, string> = {
+                draft: "Borrador", sent: "Enviada", viewed: "Vista", accepted: "Aceptada", rejected: "Rechazada", expired: "Expirada",
+              };
+              return (
+                <Card key={prop.id} className="bg-white border-gray-200 shadow-sm">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <FileSignature className="w-4 h-4 text-[#2FA4A9] shrink-0" />
+                        <CardTitle className="text-sm font-medium text-gray-900 truncate">{prop.title}</CardTitle>
+                        <Badge variant="outline" className={`text-[10px] shrink-0 ${statusColors[prop.status] || ""}`}>
+                          {statusLabels[prop.status] || prop.status}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button onClick={() => setExpandedProposal(isExpanded ? null : prop.id)} className="text-gray-400 hover:text-gray-700 transition-colors p-1">
+                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                        </button>
+                        <button onClick={() => navigate(`/admin/proposals/${prop.id}`)} className="text-gray-400 hover:text-[#2FA4A9] transition-colors p-1" title="Editar propuesta">
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 mt-1.5 text-[11px] text-gray-400">
+                      <span>Creada: {new Date(prop.createdAt).toLocaleDateString("es-CO")}</span>
+                      {prop.sentAt && <span>Enviada: {new Date(prop.sentAt).toLocaleDateString("es-CO")}</span>}
+                      {prop.viewedAt && <span>Vista: {new Date(prop.viewedAt).toLocaleDateString("es-CO")}</span>}
+                      {prop.acceptedAt && <span>Aceptada: {new Date(prop.acceptedAt).toLocaleDateString("es-CO")}</span>}
+                      {prop.pricing?.total && <span className="font-medium text-gray-600">${prop.pricing.total.toLocaleString()} {prop.pricing.currency || "USD"}</span>}
+                    </div>
+                  </CardHeader>
+                  {isExpanded && (
+                    <CardContent className="space-y-4 border-t border-gray-100 pt-4">
+                      {/* Pricing */}
+                      {prop.pricing?.total && (
+                        <div className="p-3 rounded-lg bg-[#2FA4A9]/5 border border-[#2FA4A9]/20">
+                          <p className="text-lg font-bold text-[#2FA4A9]">${prop.pricing.total.toLocaleString()} {prop.pricing.currency || "USD"}</p>
+                          {prop.pricing.includes && prop.pricing.includes.length > 0 && (
+                            <ul className="mt-2 space-y-1">
+                              {prop.pricing.includes.map((item, i) => (
+                                <li key={i} className="text-xs text-gray-600 flex items-center gap-1.5">
+                                  <Check className="w-3 h-3 text-[#2FA4A9] shrink-0" /> {item}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      )}
+                      {/* Timeline */}
+                      {prop.timelineData?.phases && prop.timelineData.phases.length > 0 && (
+                        <div>
+                          <p className="text-xs text-gray-500 font-medium mb-2">Timeline ({prop.timelineData.totalWeeks} semanas)</p>
+                          <div className="space-y-2">
+                            {prop.timelineData.phases.map((phase, i) => (
+                              <div key={i} className="flex items-center gap-3">
+                                <div className="w-6 h-6 rounded-full bg-[#2FA4A9]/10 flex items-center justify-center shrink-0">
+                                  <span className="text-[10px] font-bold text-[#2FA4A9]">{i + 1}</span>
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-xs font-medium text-gray-700">{phase.name}</p>
+                                  <p className="text-[10px] text-gray-400">{phase.weeks} semanas</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {/* Sections preview */}
+                      {prop.sections?.resumen && (
+                        <div>
+                          <p className="text-xs text-gray-500 font-medium mb-1">Resumen Ejecutivo</p>
+                          <div className="text-xs text-gray-600 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: prop.sections.resumen }} />
+                        </div>
+                      )}
+                    </CardContent>
+                  )}
+                </Card>
+              );
+            })
+          )}
+        </TabsContent>
+
+        {/* ===== TAB: SESIONES / REUNIONES ===== */}
+        <TabsContent value="sesiones" className="space-y-4 mt-4">
+          {(() => {
+            // Merge appointments + project sessions into unified timeline
+            type UnifiedMeeting = { id: string; type: "appointment" | "session"; title: string; date: string; duration: number | null; status: string; notes: string | null; meetLink: string | null; recordingUrl: string | null; transcription: string | null; summary: string | null; actionItems: string[]; appointmentType?: string };
+
+            const meetings: UnifiedMeeting[] = [
+              ...contactAppointments.map(a => ({
+                id: a.id, type: "appointment" as const, title: a.title,
+                date: `${a.date}T${a.time}`, duration: a.duration, status: a.status,
+                notes: a.notes, meetLink: a.meetLink, recordingUrl: null,
+                transcription: null, summary: null, actionItems: [] as string[],
+                appointmentType: a.appointmentType,
+              })),
+              ...contactSessions.map(s => ({
+                id: s.id, type: "session" as const, title: s.title,
+                date: s.date, duration: s.duration, status: s.status,
+                notes: null, meetLink: null, recordingUrl: s.recordingUrl,
+                transcription: s.transcription, summary: s.summary,
+                actionItems: s.actionItems || [],
+              })),
+            ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+            if (meetings.length === 0) {
+              return (
+                <Card className="bg-white border-gray-200 shadow-sm">
+                  <CardContent className="py-12 text-center">
+                    <Video className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+                    <p className="text-gray-400 text-sm">No hay reuniones registradas</p>
+                  </CardContent>
+                </Card>
+              );
+            }
+
+            return meetings.map(meeting => {
+              const isExpanded = expandedSession === meeting.id;
+              const meetingStatusColors: Record<string, string> = {
+                scheduled: "bg-blue-50 text-blue-600 border-blue-200",
+                completed: "bg-emerald-50 text-emerald-600 border-emerald-200",
+                no_show: "bg-red-50 text-red-600 border-red-200",
+                cancelled: "bg-gray-50 text-gray-400 border-gray-200",
+                ready: "bg-emerald-50 text-emerald-600 border-emerald-200",
+              };
+              const meetingStatusLabels: Record<string, string> = {
+                scheduled: "Programada", completed: "Completada", no_show: "No asistio", cancelled: "Cancelada", ready: "Lista", processing: "Procesando",
+              };
+              return (
+                <Card key={meeting.id} className="bg-white border-gray-200 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        {meeting.type === "session" ? <Mic className="w-4 h-4 text-purple-500 shrink-0" /> : <Calendar className="w-4 h-4 text-[#2FA4A9] shrink-0" />}
+                        <CardTitle className="text-sm font-medium text-gray-900 truncate">{meeting.title}</CardTitle>
+                        <Badge variant="outline" className={`text-[10px] shrink-0 ${meetingStatusColors[meeting.status] || "bg-gray-50 text-gray-500"}`}>
+                          {meetingStatusLabels[meeting.status] || meeting.status}
+                        </Badge>
+                        {meeting.appointmentType && (
+                          <Badge variant="outline" className="text-[9px] bg-gray-50 text-gray-400">
+                            {meeting.appointmentType === "initial" ? "Inicial" : meeting.appointmentType === "follow_up" ? "Seguimiento" : "Manual"}
+                          </Badge>
+                        )}
+                      </div>
+                      <button onClick={() => setExpandedSession(isExpanded ? null : meeting.id)} className="text-gray-400 hover:text-gray-700 transition-colors p-1">
+                        {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-[11px] text-gray-400">
+                      <span>{new Date(meeting.date).toLocaleDateString("es-CO", { weekday: "short", day: "numeric", month: "short", year: "numeric" })}</span>
+                      {meeting.duration && <span>{meeting.duration} min</span>}
+                      {meeting.meetLink && <a href={meeting.meetLink} target="_blank" rel="noopener noreferrer" className="text-[#2FA4A9] hover:underline flex items-center gap-0.5"><Video className="w-3 h-3" /> Meet</a>}
+                      {meeting.recordingUrl && <a href={meeting.recordingUrl} target="_blank" rel="noopener noreferrer" className="text-purple-500 hover:underline flex items-center gap-0.5"><Video className="w-3 h-3" /> Grabacion</a>}
+                    </div>
+                  </CardHeader>
+                  {isExpanded && (
+                    <CardContent className="space-y-3 border-t border-gray-100 pt-3">
+                      {meeting.notes && (
+                        <div>
+                          <p className="text-xs text-gray-500 font-medium mb-1">Notas</p>
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{meeting.notes}</p>
+                        </div>
+                      )}
+                      {meeting.summary && (
+                        <div>
+                          <p className="text-xs text-gray-500 font-medium mb-1">Resumen</p>
+                          <p className="text-sm text-gray-700 whitespace-pre-wrap">{meeting.summary}</p>
+                        </div>
+                      )}
+                      {meeting.actionItems.length > 0 && (
+                        <div>
+                          <p className="text-xs text-gray-500 font-medium mb-1">Action Items</p>
+                          <ul className="space-y-1">
+                            {meeting.actionItems.map((item, i) => (
+                              <li key={i} className="text-xs text-gray-600 flex items-start gap-1.5">
+                                <Check className="w-3 h-3 text-[#2FA4A9] mt-0.5 shrink-0" /> {item}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                      {meeting.transcription && (
+                        <div>
+                          <p className="text-xs text-gray-500 font-medium mb-1">Transcripcion</p>
+                          <div className="max-h-48 overflow-y-auto rounded-lg bg-gray-50 p-3">
+                            <p className="text-xs text-gray-600 whitespace-pre-wrap">{meeting.transcription}</p>
+                          </div>
+                        </div>
+                      )}
+                    </CardContent>
+                  )}
+                </Card>
+              );
+            });
+          })()}
         </TabsContent>
       </Tabs>
     </div>

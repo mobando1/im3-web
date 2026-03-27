@@ -6691,6 +6691,33 @@ ${urls}
     res.json(results);
   });
 
+  // WhatsApp messages history for a contact
+  app.get("/api/admin/contacts/:id/whatsapp-messages", requireAuth, async (req, res) => {
+    if (!db) return res.json([]);
+    try {
+      const rows = await db.select().from(whatsappMessages)
+        .where(eq(whatsappMessages.contactId, req.params.id as string))
+        .orderBy(asc(whatsappMessages.scheduledFor))
+        .limit(100);
+      res.json(rows);
+    } catch (err: unknown) {
+      res.status(500).json({ error: "Error fetching WhatsApp messages" });
+    }
+  });
+
+  // Appointments/meetings for a contact (all types)
+  app.get("/api/admin/contacts/:id/appointments", requireAuth, async (req, res) => {
+    if (!db) return res.json([]);
+    try {
+      const rows = await db.select().from(appointments)
+        .where(eq(appointments.contactId, req.params.id as string))
+        .orderBy(desc(appointments.createdAt));
+      res.json(rows);
+    } catch (err: unknown) {
+      res.status(500).json({ error: "Error fetching appointments" });
+    }
+  });
+
   // List associated emails for a contact
   app.get("/api/admin/contacts/:id/associated-emails", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
