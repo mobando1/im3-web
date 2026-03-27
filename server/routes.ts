@@ -5821,7 +5821,9 @@ ${urls}
     if (!AUDIT_URL) return res.json([]);
     try {
       const r = await fetch(`${AUDIT_URL}/api/audits`);
-      res.json(await r.json());
+      const data = await r.json();
+      // Ensure we always return an array — audit service may return { audits: [...] } or other shapes
+      res.json(Array.isArray(data) ? data : Array.isArray(data?.audits) ? data.audits : []);
     } catch { res.json([]); }
   });
 
