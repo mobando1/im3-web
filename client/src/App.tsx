@@ -12,9 +12,12 @@ class ErrorBoundary extends Component<
   { children: ReactNode },
   { hasError: boolean }
 > {
-  state = { hasError: false };
-  static getDerivedStateFromError() {
-    return { hasError: true };
+  state = { hasError: false, errorMessage: "" };
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, errorMessage: error?.message || "Unknown error" };
+  }
+  componentDidCatch(error: Error, info: { componentStack?: string | null }) {
+    console.error("[ErrorBoundary]", error?.message, info?.componentStack);
   }
   render() {
     if (this.state.hasError) {
@@ -22,8 +25,9 @@ class ErrorBoundary extends Component<
         <div className="min-h-screen bg-gray-50 flex items-center justify-center">
           <div className="text-center space-y-4">
             <p className="text-gray-600 text-lg">Algo salió mal al cargar la página.</p>
+            <p className="text-gray-400 text-xs max-w-md mx-auto font-mono">{this.state.errorMessage}</p>
             <button
-              onClick={() => window.location.reload()}
+              onClick={() => { this.setState({ hasError: false, errorMessage: "" }); window.location.reload(); }}
               className="px-4 py-2 bg-[#2FA4A9] text-white rounded-lg hover:bg-[#238b8f] transition-colors"
             >
               Reintentar
