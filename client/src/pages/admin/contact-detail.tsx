@@ -1641,7 +1641,7 @@ export default function ContactDetailPage() {
                   </div>
                   <button
                     onClick={() => deleteAssocEmailMutation.mutate(ae.id)}
-                    className="text-gray-300 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                    className="text-gray-300 hover:text-red-500 transition-colors sm:opacity-0 sm:group-hover:opacity-100"
                     title="Eliminar"
                   >
                     <X className="w-3.5 h-3.5" />
@@ -1788,7 +1788,7 @@ export default function ContactDetailPage() {
                                 </Badge>
                               </div>
                               {email.bodyHtml ? (
-                                <iframe srcDoc={email.bodyHtml} sandbox="" className="w-full border-0 bg-white" style={{ minHeight: "200px" }} onLoad={(e) => { const iframe = e.target as HTMLIFrameElement; if (iframe.contentDocument) { iframe.style.height = (iframe.contentDocument.body.scrollHeight + 20) + "px"; } }} />
+                                <iframe srcDoc={email.bodyHtml} sandbox="allow-same-origin" className="w-full border-0 bg-white" style={{ minHeight: "200px" }} onLoad={(e) => { const iframe = e.target as HTMLIFrameElement; if (iframe.contentDocument) { iframe.style.height = (iframe.contentDocument.body.scrollHeight + 20) + "px"; } }} />
                               ) : (
                                 <div className="p-4 text-sm text-gray-700 whitespace-pre-wrap">{email.bodyText}</div>
                               )}
@@ -1842,7 +1842,7 @@ export default function ContactDetailPage() {
                               <p className="text-xs text-gray-400 font-medium">Vista previa del email</p>
                               <Badge variant="outline" className="text-[10px] bg-amber-50 text-amber-600 border-amber-200">Pendiente de envio</Badge>
                             </div>
-                            <iframe srcDoc={email.body} sandbox="" className="w-full border-0 bg-white" style={{ minHeight: "250px" }} onLoad={(e) => { const iframe = e.target as HTMLIFrameElement; if (iframe.contentDocument) { iframe.style.height = (iframe.contentDocument.body.scrollHeight + 20) + "px"; } }} />
+                            <iframe srcDoc={email.body} sandbox="allow-same-origin" className="w-full border-0 bg-white" style={{ minHeight: "250px" }} onLoad={(e) => { const iframe = e.target as HTMLIFrameElement; if (iframe.contentDocument) { iframe.style.height = (iframe.contentDocument.body.scrollHeight + 20) + "px"; } }} />
                           </div>
                         )}
                         {isExpanded && !email.body && !isEditing && (

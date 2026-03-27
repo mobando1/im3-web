@@ -1131,6 +1131,14 @@ async function sendWeeklyProjectSummaries() {
 }
 
 export function startEmailScheduler() {
+  // Gmail sync runs independently of email system configuration
+  if (isGmailConfigured()) {
+    cron.schedule("*/15 * * * *", async () => {
+      await syncGmailEmails().catch(err => log(`Cron error gmail sync: ${err}`));
+    });
+    log("Gmail sync cron scheduled (every 15 min)");
+  }
+
   if (!isEmailConfigured()) {
     log("⚠ Email system not configured (missing ANTHROPIC_API_KEY or RESEND_API_KEY)");
     return;
@@ -1169,14 +1177,6 @@ export function startEmailScheduler() {
   cron.schedule("30 12 * * 1", async () => {
     await generateAndSendDailyNewsletter().catch(err => log(`Cron error newsletter: ${err}`));
   });
-
-  // Gmail sync every 15 minutes
-  if (isGmailConfigured()) {
-    cron.schedule("*/15 * * * *", async () => {
-      await syncGmailEmails().catch(err => log(`Cron error gmail sync: ${err}`));
-    });
-    log("Gmail sync cron scheduled (every 15 min)");
-  }
 
   // Also run once at startup (after 10 seconds to let DB connect)
   setTimeout(() => {

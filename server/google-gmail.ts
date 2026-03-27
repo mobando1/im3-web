@@ -31,6 +31,11 @@ export function isGmailConfigured(): boolean {
 const IMPERSONATED_EMAIL = () => process.env.GOOGLE_DRIVE_IMPERSONATE || "info@im3systems.com";
 const SYNC_LOOKBACK_DAYS = 90;
 const BATCH_SIZE = 50;
+const DELAY_BETWEEN_BATCHES_MS = 1000; // 1s between batches to respect Gmail rate limits
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
 
 /**
  * Parse email address from a "Name <email>" or plain "email" format.
@@ -160,8 +165,8 @@ async function isDuplicateOfSentEmail(
       and(
         eq(sentEmails.contactId, contactId),
         eq(sentEmails.subject, subject),
-        gte(sentEmails.scheduledFor, fiveMinBefore),
-        lte(sentEmails.scheduledFor, fiveMinAfter)
+        gte(sentEmails.sentAt, fiveMinBefore),
+        lte(sentEmails.sentAt, fiveMinAfter)
       )
     )
     .limit(1);
@@ -269,6 +274,48 @@ async function fetchAndStoreMessage(
 }
 
 /**
+ * Re-match orphaned emails (contactId is null) against current contacts.
+ * Runs after each sync to pick up emails that arrived before the contact was created.
+ */
+async function rematchOrphanedEmails(): Promise<number> {
+  if (!db) return 0;
+
+  const { sql } = await import("drizzle-orm");
+  const orphans = await db
+    .select({ id: gmailEmails.id, fromEmail: gmailEmails.fromEmail, toEmails: gmailEmails.toEmails, direction: gmailEmails.direction })
+    .from(gmailEmails)
+    .where(sql`${gmailEmails.contactId} IS NULL`)
+    .limit(200);
+
+  let matched = 0;
+
+  for (const orphan of orphans) {
+    let contactId: string | null = null;
+
+    if (orphan.direction === "outbound") {
+      const tos = (orphan.toEmails as string[]) || [];
+      for (const to of tos) {
+        contactId = await matchEmailToContact(to);
+        if (contactId) break;
+      }
+    } else {
+      contactId = await matchEmailToContact(orphan.fromEmail);
+    }
+
+    if (contactId) {
+      await db.update(gmailEmails).set({ contactId }).where(eq(gmailEmails.id, orphan.id));
+      matched++;
+    }
+  }
+
+  if (matched > 0) {
+    log(`[Gmail Sync] Re-matched ${matched} orphaned emails to contacts`);
+  }
+
+  return matched;
+}
+
+/**
  * Main sync orchestrator. Handles both full and incremental sync.
  */
 export async function syncGmailEmails(): Promise<{ newMessages: number; errors: number }> {
@@ -370,7 +417,7 @@ export async function syncGmailEmails(): Promise<{ newMessages: number; errors: 
         const messages = listRes.data.messages || [];
         pageToken = listRes.data.nextPageToken || undefined;
 
-        // Process in batches
+        // Process in batches with rate limiting
         for (let i = 0; i < messages.length; i += BATCH_SIZE) {
           const batch = messages.slice(i, i + BATCH_SIZE);
           for (const msg of batch) {
@@ -384,6 +431,9 @@ export async function syncGmailEmails(): Promise<{ newMessages: number; errors: 
             }
           }
           totalFetched += batch.length;
+          if (i + BATCH_SIZE < messages.length) {
+            await delay(DELAY_BETWEEN_BATCHES_MS);
+          }
         }
 
         log(`[Gmail Sync] Processed ${totalFetched} messages so far...`);
@@ -413,6 +463,9 @@ export async function syncGmailEmails(): Promise<{ newMessages: number; errors: 
         lastFullSyncAt: now,
       });
     }
+
+    // Re-match orphaned emails to newly created contacts
+    await rematchOrphanedEmails().catch(err => log(`[Gmail Sync] Rematch error: ${(err as Error).message}`));
 
     log(`[Gmail Sync] Done: ${newMessages} new, ${errors} errors`);
   } catch (err: unknown) {
