@@ -168,7 +168,7 @@ export default function ProposalEditor() {
       )}
 
       {/* Action buttons */}
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button
           variant="outline"
           size="sm"
@@ -179,6 +179,17 @@ export default function ProposalEditor() {
           <Sparkles className="w-4 h-4" />
           {generateMut.isPending ? "Generando..." : hasSections ? "Re-generar con IA" : "Generar con IA"}
         </Button>
+        {hasSections && (
+          <a
+            href={`/proposal/${proposal.accessToken}`}
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <Button size="sm" variant="outline" className="gap-1.5">
+              <Eye className="w-4 h-4" /> Ver propuesta web
+            </Button>
+          </a>
+        )}
         {hasSections && proposal.status === "draft" && (
           <Button
             size="sm"
@@ -202,7 +213,23 @@ export default function ProposalEditor() {
             {convertMut.isPending ? "Creando proyecto..." : "Crear proyecto"}
           </Button>
         )}
+        {hasSections && (
+          <Button size="sm" variant="outline" className="gap-1.5" onClick={copyLink}>
+            <Copy className="w-4 h-4" /> Copiar link
+          </Button>
+        )}
       </div>
+
+      {/* Proposal URL display */}
+      {hasSections && (
+        <div className="bg-gray-50 rounded-lg px-4 py-3 flex items-center gap-3">
+          <span className="text-xs text-gray-500 shrink-0">URL de la propuesta:</span>
+          <code className="text-xs text-[#2FA4A9] font-mono flex-1 truncate">{window.location.origin}/proposal/{proposal.accessToken}</code>
+          <Button size="sm" variant="ghost" className="shrink-0 h-7 px-2" onClick={copyLink}>
+            <Copy className="w-3.5 h-3.5" />
+          </Button>
+        </div>
+      )}
 
       {/* Content */}
       {!hasSections && !generateMut.isPending ? (
