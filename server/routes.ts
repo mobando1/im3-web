@@ -1893,6 +1893,57 @@ export async function registerRoutes(
     }
   });
 
+  // Create contact manually (for referrals, direct clients)
+  app.post("/api/admin/contacts", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { nombre, empresa, email, telefono, status, tags, nota } = req.body as {
+        nombre: string; empresa: string; email: string; telefono?: string;
+        status?: string; tags?: string[]; nota?: string;
+      };
+
+      if (!nombre || !empresa || !email) {
+        return res.status(400).json({ message: "Nombre, empresa y email son requeridos" });
+      }
+
+      // Check if email already exists
+      const [existing] = await db.select().from(contacts).where(eq(contacts.email, email));
+      if (existing) {
+        return res.status(409).json({ message: "Ya existe un contacto con ese email", contactId: existing.id });
+      }
+
+      const [contact] = await db.insert(contacts).values({
+        nombre,
+        empresa,
+        email,
+        telefono: telefono || null,
+        status: status || "contacted",
+        tags: tags || [],
+        lastActivityAt: new Date(),
+      }).returning();
+
+      // Create initial note if provided
+      if (nota) {
+        await db.insert(contactNotes).values({
+          contactId: contact.id,
+          content: nota,
+        });
+      }
+
+      // Log activity
+      await db.insert(activityLog).values({
+        contactId: contact.id,
+        type: "contact_created",
+        description: "Contacto creado manualmente (referido/directo)",
+      });
+
+      res.json(contact);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
   // Contact detail
   app.get("/api/admin/contacts/:id", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });

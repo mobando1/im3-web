@@ -32,7 +32,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { List, LayoutGrid, Mail, Filter, Download, X, MessageCircle, Tag, UserX, Trash2 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { List, LayoutGrid, Mail, Filter, Download, X, MessageCircle, Tag, UserX, Trash2, Plus } from "lucide-react";
 
 type Contact = {
   id: string;
@@ -111,6 +115,26 @@ export default function Contacts() {
   const [bulkTag, setBulkTag] = useState("");
   const [bulkStatus, setBulkStatus] = useState("contacted");
   const [deleteTarget, setDeleteTarget] = useState<Contact | null>(null);
+  const { toast } = useToast();
+  const [showNewContact, setShowNewContact] = useState(false);
+  const [newContactForm, setNewContactForm] = useState({ nombre: "", empresa: "", email: "", telefono: "", status: "contacted", nota: "" });
+
+  const createContactMut = useMutation({
+    mutationFn: async (data: Record<string, unknown>) => {
+      const res = await apiRequest("POST", "/api/admin/contacts", data);
+      return res.json();
+    },
+    onSuccess: (contact: { id: string }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/contacts"] });
+      setShowNewContact(false);
+      setNewContactForm({ nombre: "", empresa: "", email: "", telefono: "", status: "contacted", nota: "" });
+      toast({ title: "Contacto creado" });
+      navigate(`/admin/contacts/${contact.id}`);
+    },
+    onError: (err: Error) => {
+      toast({ title: err.message || "Error creando contacto", variant: "destructive" });
+    },
+  });
   const [deleteConfirmName, setDeleteConfirmName] = useState("");
 
   const deleteContactMutation = useMutation({
@@ -206,7 +230,12 @@ export default function Contacts() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-gray-900">Contactos</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-2xl font-bold text-gray-900">Contactos</h2>
+          <Button size="sm" onClick={() => setShowNewContact(true)} className="bg-[#2FA4A9] hover:bg-[#238b8f]">
+            <Plus className="w-4 h-4 mr-1.5" /> Nuevo contacto
+          </Button>
+        </div>
         <div className="flex rounded-lg border border-gray-200 overflow-hidden bg-white shadow-sm">
           <Button
             variant="ghost"
@@ -721,6 +750,67 @@ export default function Contacts() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* New contact dialog */}
+      <Dialog open={showNewContact} onOpenChange={setShowNewContact}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nuevo contacto</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Nombre *</Label>
+                <Input value={newContactForm.nombre} onChange={e => setNewContactForm(f => ({ ...f, nombre: e.target.value }))} placeholder="Carlos Méndez" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Empresa *</Label>
+                <Input value={newContactForm.empresa} onChange={e => setNewContactForm(f => ({ ...f, empresa: e.target.value }))} placeholder="TransCarga S.A." />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label>Email *</Label>
+                <Input type="email" value={newContactForm.email} onChange={e => setNewContactForm(f => ({ ...f, email: e.target.value }))} placeholder="carlos@empresa.com" />
+              </div>
+              <div className="space-y-1.5">
+                <Label>Teléfono</Label>
+                <Input value={newContactForm.telefono} onChange={e => setNewContactForm(f => ({ ...f, telefono: e.target.value }))} placeholder="+57 300 123 4567" />
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Estado</Label>
+              <Select value={newContactForm.status} onValueChange={v => setNewContactForm(f => ({ ...f, status: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="lead">Lead</SelectItem>
+                  <SelectItem value="contacted">Contactado</SelectItem>
+                  <SelectItem value="scheduled">Reunión agendada</SelectItem>
+                  <SelectItem value="converted">Convertido</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Notas iniciales <span className="text-gray-400 font-normal">(cómo llegó, contexto)</span></Label>
+              <Textarea value={newContactForm.nota} onChange={e => setNewContactForm(f => ({ ...f, nota: e.target.value }))} rows={3} placeholder="Referido por Sebastián. Ya tuvimos una llamada exploratoria..." />
+            </div>
+            <Button
+              className="w-full bg-[#2FA4A9] hover:bg-[#238b8f]"
+              disabled={!newContactForm.nombre || !newContactForm.empresa || !newContactForm.email || createContactMut.isPending}
+              onClick={() => createContactMut.mutate({
+                nombre: newContactForm.nombre,
+                empresa: newContactForm.empresa,
+                email: newContactForm.email,
+                telefono: newContactForm.telefono || undefined,
+                status: newContactForm.status,
+                nota: newContactForm.nota || undefined,
+              })}
+            >
+              {createContactMut.isPending ? "Creando..." : "Crear contacto"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -1495,7 +1495,12 @@ export default function ContactDetailPage() {
                     </div>
                   ))
                 ) : (
-                  <p className="text-xs text-gray-400">Sin proyecto asignado</p>
+                  <>
+                    <p className="text-xs text-gray-400 mb-2">Sin proyecto asignado</p>
+                    <Button variant="ghost" size="sm" className="text-[#2FA4A9] hover:text-[#238b8f] p-0 h-auto text-xs" onClick={() => navigate("/admin/projects")}>
+                      <Plus className="w-3 h-3 mr-1" /> Crear proyecto
+                    </Button>
+                  </>
                 )}
               </CardContent>
             </Card>
@@ -1521,7 +1526,12 @@ export default function ContactDetailPage() {
                     );
                   })
                 ) : (
-                  <p className="text-xs text-gray-400">Sin propuesta</p>
+                  <>
+                    <p className="text-xs text-gray-400 mb-2">Sin propuesta</p>
+                    <Button variant="ghost" size="sm" className="text-purple-600 hover:text-purple-700 p-0 h-auto text-xs" onClick={() => navigate("/admin/proposals")}>
+                      <Plus className="w-3 h-3 mr-1" /> Crear propuesta
+                    </Button>
+                  </>
                 )}
               </CardContent>
             </Card>
