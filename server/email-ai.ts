@@ -1,6 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { log } from "./index";
 import type { EmailTemplate, Diagnostic, Contact, SentEmail, ContactNote } from "@shared/schema";
+import { db } from "./db";
+import { contactFiles, contactNotes, gmailEmails } from "@shared/schema";
+import { eq, desc } from "drizzle-orm";
+import { readGoogleDriveContent } from "./google-drive";
 
 let client: Anthropic | null = null;
 
@@ -915,7 +919,58 @@ export async function generateMiniAudit(
   if (!anthropic) throw new Error("ANTHROPIC_API_KEY not configured");
   const isEn = language === "en";
 
-  const context = buildContext(diagnosticData);
+  const contextParts: string[] = [buildContext(diagnosticData)];
+
+  // Gather additional context: documents, notes, Gmail — for richer audit
+  if (db && contactId) {
+    try {
+      // Contact documents with Drive auto-sync
+      const docs = await db.select().from(contactFiles).where(eq(contactFiles.contactId, contactId));
+      if (docs.length > 0) {
+        const docTexts: string[] = [];
+        for (const d of docs) {
+          let content = d.content || "";
+          const isGoogleUrl = d.url && (d.url.includes("google.com") || d.url.includes("docs.google"));
+          if (isGoogleUrl) {
+            try {
+              const result = await readGoogleDriveContent(d.url);
+              if (result.content && result.content.length > 0) {
+                content = result.content;
+                await db.update(contactFiles).set({ content: result.content, driveFileId: result.fileId }).where(eq(contactFiles.id, d.id));
+                log(`[MiniAudit] Drive auto-sync for "${d.name}": ${result.content.length} chars`);
+              }
+            } catch (err) {
+              log(`[MiniAudit] Drive sync failed for "${d.name}": ${(err as Error).message}`);
+            }
+          }
+          if (content) {
+            docTexts.push(`- [${d.type}] ${d.name}:\n  ${content}`);
+          }
+        }
+        if (docTexts.length > 0) {
+          contextParts.push(`DOCUMENTOS DEL CLIENTE (${docTexts.length}):\n${docTexts.join("\n")}`);
+        }
+      }
+
+      // Meeting notes
+      const notes = await db.select().from(contactNotes).where(eq(contactNotes.contactId, contactId)).orderBy(desc(contactNotes.createdAt)).limit(10);
+      if (notes.length > 0) {
+        contextParts.push(`NOTAS DE REUNIONES (${notes.length}):\n${notes.map(n => `- ${n.content}`).join("\n")}`);
+      }
+
+      // Gmail history
+      const gmail = await db.select().from(gmailEmails).where(eq(gmailEmails.contactId, contactId)).orderBy(desc(gmailEmails.gmailDate)).limit(15);
+      if (gmail.length > 0) {
+        contextParts.push(`HISTORIAL GMAIL (${gmail.length}):\n${gmail.map(m =>
+          `- [${m.direction === "inbound" ? "RECIBIDO" : "ENVIADO"}] ${m.subject || "Sin asunto"} (${m.gmailDate.toLocaleDateString("es-CO")})\n  ${m.bodyText || m.snippet || ""}`
+        ).join("\n")}`);
+      }
+    } catch (err) {
+      log(`[MiniAudit] Error gathering extra context: ${(err as Error).message}`);
+    }
+  }
+
+  const context = contextParts.join("\n\n---\n\n");
 
   // 1. Generate subject
   const subjectResponse = await anthropic.messages.create({

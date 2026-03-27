@@ -3,6 +3,7 @@ import { db } from "./db";
 import { contacts, diagnostics, sentEmails, contactNotes, activityLog, aiInsightsCache, gmailEmails, contactFiles } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { log } from "./index";
+import { readGoogleDriveContent } from "./google-drive";
 
 let client: Anthropic | null = null;
 
@@ -57,21 +58,41 @@ async function gatherContactContext(contactId: string): Promise<string> {
   const gmailMessages = await db.select().from(gmailEmails).where(eq(gmailEmails.contactId, contactId)).orderBy(desc(gmailEmails.gmailDate)).limit(15);
   if (gmailMessages.length > 0) {
     parts.push(`HISTORIAL DE EMAILS GMAIL (${gmailMessages.length}):\n${gmailMessages.map(m =>
-      `- [${m.direction === "inbound" ? "RECIBIDO" : "ENVIADO"}] ${m.subject || "Sin asunto"} (${m.gmailDate.toLocaleDateString("es-CO")})\n  ${(m.bodyText || m.snippet || "").substring(0, 300)}`
+      `- [${m.direction === "inbound" ? "RECIBIDO" : "ENVIADO"}] ${m.subject || "Sin asunto"} (${m.gmailDate.toLocaleDateString("es-CO")})\n  ${m.bodyText || m.snippet || ""}`
     ).join("\n")}`);
   }
 
-  // Contact documents/files with content
-  const docs = await db.select().from(contactFiles).where(eq(contactFiles.contactId, contactId)).limit(10);
+  // Contact documents/files — auto-sync from Drive before reading
+  const docs = await db.select().from(contactFiles).where(eq(contactFiles.contactId, contactId));
   if (docs.length > 0) {
-    const docsWithContent = docs.filter(d => d.content);
-    const docsWithoutContent = docs.filter(d => !d.content);
     const docParts: string[] = [];
-    for (const d of docsWithContent) {
-      docParts.push(`- [${d.type}] ${d.name}:\n  ${(d.content || "").substring(0, 500)}`);
-    }
-    for (const d of docsWithoutContent) {
-      docParts.push(`- [${d.type}] ${d.name} (sin contenido extraído)`);
+    for (const d of docs) {
+      let content = d.content || "";
+
+      // Auto-sync from Google Drive if: no content yet, or re-sync to get latest version
+      const isGoogleUrl = d.url && (d.url.includes("google.com") || d.url.includes("docs.google"));
+      if (isGoogleUrl) {
+        try {
+          const result = await readGoogleDriveContent(d.url);
+          if (result.content && result.content.length > 0) {
+            content = result.content;
+            // Update DB with latest content
+            await db.update(contactFiles).set({
+              content: result.content,
+              driveFileId: result.fileId,
+            }).where(eq(contactFiles.id, d.id));
+            log(`[Proposal] Drive auto-sync for "${d.name}": ${result.content.length} chars`);
+          }
+        } catch (err) {
+          log(`[Proposal] Drive sync failed for "${d.name}": ${(err as Error).message}`);
+        }
+      }
+
+      if (content) {
+        docParts.push(`- [${d.type}] ${d.name}:\n  ${content}`);
+      } else {
+        docParts.push(`- [${d.type}] ${d.name} (sin contenido extraíble)`);
+      }
     }
     parts.push(`DOCUMENTOS DEL CLIENTE (${docs.length}):\n${docParts.join("\n")}`);
   }
@@ -103,15 +124,16 @@ export async function generateProposal(contactId: string, adminNotes?: string): 
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
-    max_tokens: 6000,
+    max_tokens: 8000,
     temperature: 0.4,
     system: `Eres un consultor senior de IM3 Systems, una agencia de tecnología especializada en IA, automatización y desarrollo de software para empresas en Latinoamérica.
 
 Genera una propuesta comercial PROFESIONAL, PERSUASIVA y PERSONALIZADA basada en los datos reales del cliente.
 
 REGLAS:
+- ANALIZA TODO el contexto proporcionado: diagnóstico, emails, documentos de Google Drive, notas de reuniones, auditoría, historial de actividad. No omitas ninguna fuente.
 - Tono: profesional, confiado, orientado a resultados. Como un consultor que sabe lo que hace.
-- NO inventes datos que no estén en el contexto. Si no tienes un dato, omítelo.
+- NO inventes datos que no estén en el contexto. Si no tienes un dato, omítelo. Pero SÍ usa TODOS los datos que tienes — cada documento, cada email, cada nota es relevante.
 - Los precios deben ser realistas para el mercado latinoamericano de desarrollo de software.
 - El ROI debe ser calculado con lógica (no inventado).
 - Escribe en español latinoamericano.
