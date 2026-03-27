@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, gmailEmails, gmailSyncState, contactEmails } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, gmailEmails, gmailSyncState, contactEmails, contactFiles } from "@shared/schema";
 import { syncGmailEmails, isGmailConfigured } from "./google-gmail";
 import { generateBlogContent, improveBlogContent } from "./blog-ai";
 import { log } from "./index";
@@ -2034,6 +2034,7 @@ export async function registerRoutes(
       await db.delete(aiInsightsCache).where(eq(aiInsightsCache.contactId, contactId));
       await db.delete(gmailEmails).where(eq(gmailEmails.contactId, contactId));
       await db.delete(contactEmails).where(eq(contactEmails.contactId, contactId));
+      await db.delete(contactFiles).where(eq(contactFiles.contactId, contactId));
 
       // Delete the contact
       await db.delete(contacts).where(eq(contacts.id, contactId));
@@ -6660,6 +6661,83 @@ ${urls}
       });
       res.json({ ok: true });
     } catch { res.json({ ok: true }); }
+  });
+
+  // ───────────────────────────────────────────────────────────────
+  // Contact Files / Documents
+  // ───────────────────────────────────────────────────────────────
+
+  app.get("/api/admin/contacts/:id/files", requireAuth, async (req, res) => {
+    if (!db) return res.json([]);
+    try {
+      const rows = await db.select().from(contactFiles)
+        .where(eq(contactFiles.contactId, req.params.id as string))
+        .orderBy(desc(contactFiles.createdAt));
+      res.json(rows);
+    } catch (err: unknown) {
+      res.status(500).json({ error: "Error fetching files" });
+    }
+  });
+
+  app.post("/api/admin/contacts/:id/files", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const { name, type, url, size } = req.body;
+    if (!name || !url) return res.status(400).json({ error: "name y url son requeridos" });
+
+    try {
+      const [created] = await db.insert(contactFiles).values({
+        contactId: req.params.id as string,
+        name,
+        type: type || "documento",
+        url,
+        size: size || null,
+      }).returning();
+
+      await logActivity(req.params.id as string, "contact_edited", `Documento agregado: ${name}`, { fileId: created.id, fileType: type });
+      res.json(created);
+    } catch (err: unknown) {
+      res.status(500).json({ error: "Error adding file" });
+    }
+  });
+
+  app.delete("/api/admin/contacts/:id/files/:fileId", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [deleted] = await db.delete(contactFiles)
+        .where(eq(contactFiles.id, req.params.fileId as string))
+        .returning();
+      if (!deleted) return res.status(404).json({ error: "Not found" });
+      await logActivity(req.params.id as string, "contact_edited", `Documento eliminado: ${deleted.name}`);
+      res.json({ success: true });
+    } catch (err: unknown) {
+      res.status(500).json({ error: "Error deleting file" });
+    }
+  });
+
+  // Auditorías per contact (proxy to external service, filtered by company name)
+  app.get("/api/admin/contacts/:id/auditorias", requireAuth, async (req, res) => {
+    if (!db) return res.json([]);
+    const AUDIT_URL = process.env.AUDIT_URL || process.env.AUDIT_GENERATOR_URL;
+    if (!AUDIT_URL) return res.json([]);
+
+    try {
+      // Get contact's company name for matching
+      const [contact] = await db.select({ empresa: contacts.empresa }).from(contacts).where(eq(contacts.id, req.params.id as string)).limit(1);
+      if (!contact) return res.json([]);
+
+      const r = await fetch(`${AUDIT_URL}/api/audits`);
+      const allAudits = await r.json() as Array<{ company: string; [key: string]: unknown }>;
+
+      // Filter by company name (case-insensitive)
+      const contactAudits = allAudits.filter((a: { company: string }) =>
+        a.company?.toLowerCase().trim() === contact.empresa?.toLowerCase().trim()
+      );
+
+      res.json(contactAudits);
+    } catch (err: unknown) {
+      log(`Error fetching auditorias for contact: ${(err as Error).message}`);
+      res.json([]);
+    }
   });
 
   // ───────────────────────────────────────────────────────────────

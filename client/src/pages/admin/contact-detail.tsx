@@ -70,6 +70,10 @@ import {
   MessageSquare,
   Video,
   Mic,
+  FolderOpen,
+  ClipboardCheck,
+  Link2,
+  File,
 } from "lucide-react";
 import { useState } from "react";
 
@@ -159,6 +163,30 @@ type SessionItem = {
   actionItems: string[];
   status: string;
   createdAt: string;
+};
+
+type ContactFileItem = {
+  id: string;
+  contactId: string;
+  name: string;
+  type: string;
+  url: string;
+  size: number | null;
+  uploadedBy: string | null;
+  createdAt: string;
+};
+
+type AuditItem = {
+  id: number;
+  report_type: string;
+  company: string;
+  status: string;
+  step: number | null;
+  total_steps: number | null;
+  step_message: string | null;
+  pdf_path: string | null;
+  source: string;
+  created_at: string;
 };
 
 type AssociatedEmail = {
@@ -587,6 +615,41 @@ export default function ContactDetailPage() {
     enabled: !!contactId,
   });
   const [expandedSession, setExpandedSession] = useState<string | null>(null);
+
+  // Contact files/documents
+  const { data: contactFilesData = [] } = useQuery<ContactFileItem[]>({
+    queryKey: [`/api/admin/contacts/${contactId}/files`],
+    enabled: !!contactId,
+  });
+  const [showFileForm, setShowFileForm] = useState(false);
+  const [newFileName, setNewFileName] = useState("");
+  const [newFileUrl, setNewFileUrl] = useState("");
+  const [newFileType, setNewFileType] = useState("documento");
+
+  const addFileMutation = useMutation({
+    mutationFn: async (data: { name: string; type: string; url: string }) => {
+      await apiRequest("POST", `/api/admin/contacts/${contactId}/files`, data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/files`] });
+      setNewFileName(""); setNewFileUrl(""); setNewFileType("documento"); setShowFileForm(false);
+    },
+  });
+
+  const deleteFileMutation = useMutation({
+    mutationFn: async (fileId: string) => {
+      await apiRequest("DELETE", `/api/admin/contacts/${contactId}/files/${fileId}`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/files`] });
+    },
+  });
+
+  // Auditorías per contact
+  const { data: contactAudits = [] } = useQuery<AuditItem[]>({
+    queryKey: [`/api/admin/contacts/${contactId}/auditorias`],
+    enabled: !!contactId,
+  });
 
   const statusMutation = useMutation({
     mutationFn: async ({ status, substatus }: { status: string; substatus?: string }) => {
@@ -1048,6 +1111,12 @@ export default function ContactDetailPage() {
           </TabsTrigger>
           <TabsTrigger value="sesiones" className="gap-1.5 data-[state=active]:bg-white">
             <Video className="w-3.5 h-3.5" /> Sesiones
+          </TabsTrigger>
+          <TabsTrigger value="documentos" className="gap-1.5 data-[state=active]:bg-white">
+            <FolderOpen className="w-3.5 h-3.5" /> Docs {contactFilesData.length > 0 ? `(${contactFilesData.length})` : ""}
+          </TabsTrigger>
+          <TabsTrigger value="auditorias" className="gap-1.5 data-[state=active]:bg-white">
+            <ClipboardCheck className="w-3.5 h-3.5" /> Auditorias {contactAudits.length > 0 ? `(${contactAudits.length})` : ""}
           </TabsTrigger>
         </TabsList>
 
@@ -2497,6 +2566,141 @@ export default function ContactDetailPage() {
               );
             });
           })()}
+        </TabsContent>
+        {/* ===== TAB: DOCUMENTOS ===== */}
+        <TabsContent value="documentos" className="space-y-4 mt-4">
+          <Card className="bg-white border-gray-200 shadow-sm">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-xs text-gray-500 uppercase tracking-wider font-medium">
+                  Documentos ({contactFilesData.length})
+                </CardTitle>
+                <button onClick={() => setShowFileForm(!showFileForm)} className="text-xs text-[#2FA4A9] hover:text-[#238b8f] flex items-center gap-1">
+                  <Plus className="w-3.5 h-3.5" /> Agregar
+                </button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {showFileForm && (
+                <div className="p-3 rounded-lg border border-gray-200 bg-gray-50 space-y-2">
+                  <Input placeholder="Nombre del documento *" value={newFileName} onChange={e => setNewFileName(e.target.value)} className="bg-white border-gray-200 text-sm h-9" />
+                  <Input placeholder="URL del documento *" value={newFileUrl} onChange={e => setNewFileUrl(e.target.value)} className="bg-white border-gray-200 text-sm h-9" />
+                  <Select value={newFileType} onValueChange={setNewFileType}>
+                    <SelectTrigger className="bg-white border-gray-200 text-sm h-9"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="documento">Documento</SelectItem>
+                      <SelectItem value="contrato">Contrato</SelectItem>
+                      <SelectItem value="propuesta">Propuesta</SelectItem>
+                      <SelectItem value="auditoria">Auditoria</SelectItem>
+                      <SelectItem value="imagen">Imagen</SelectItem>
+                      <SelectItem value="otro">Otro</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <div className="flex gap-2">
+                    <Button size="sm" onClick={() => addFileMutation.mutate({ name: newFileName, type: newFileType, url: newFileUrl })} disabled={!newFileName || !newFileUrl || addFileMutation.isPending} className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white text-xs">
+                      {addFileMutation.isPending ? "Guardando..." : "Guardar"}
+                    </Button>
+                    <Button variant="outline" size="sm" onClick={() => setShowFileForm(false)} className="border-gray-200 text-gray-600 text-xs">Cancelar</Button>
+                  </div>
+                </div>
+              )}
+
+              {contactFilesData.length === 0 && !showFileForm ? (
+                <div className="text-center py-8">
+                  <FolderOpen className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+                  <p className="text-gray-400 text-sm">No hay documentos</p>
+                  <p className="text-[11px] text-gray-300 mt-1">Agrega links a Google Drive, contratos, propuestas u otros archivos</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {contactFilesData.map(file => {
+                    const typeIcons: Record<string, string> = { contrato: "text-amber-500", propuesta: "text-blue-500", auditoria: "text-purple-500", documento: "text-gray-500", imagen: "text-green-500", otro: "text-gray-400" };
+                    const typeLabels: Record<string, string> = { contrato: "Contrato", propuesta: "Propuesta", auditoria: "Auditoria", documento: "Documento", imagen: "Imagen", otro: "Otro" };
+                    return (
+                      <div key={file.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-gray-50 group hover:bg-gray-100 transition-colors">
+                        <File className={`w-4 h-4 shrink-0 ${typeIcons[file.type] || "text-gray-400"}`} />
+                        <div className="flex-1 min-w-0">
+                          <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-sm text-gray-800 hover:text-[#2FA4A9] font-medium truncate block">
+                            {file.name}
+                          </a>
+                          <div className="flex items-center gap-2 mt-0.5">
+                            <Badge variant="outline" className="text-[9px]">{typeLabels[file.type] || file.type}</Badge>
+                            <span className="text-[10px] text-gray-400">{new Date(file.createdAt).toLocaleDateString("es-CO")}</span>
+                          </div>
+                        </div>
+                        <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-[#2FA4A9] p-1" title="Abrir">
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                        <button onClick={() => deleteFileMutation.mutate(file.id)} className="text-gray-300 hover:text-red-500 transition-colors sm:opacity-0 sm:group-hover:opacity-100 p-1" title="Eliminar">
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* ===== TAB: AUDITORIAS ===== */}
+        <TabsContent value="auditorias" className="space-y-4 mt-4">
+          {contactAudits.length === 0 ? (
+            <Card className="bg-white border-gray-200 shadow-sm">
+              <CardContent className="py-12 text-center">
+                <ClipboardCheck className="w-8 h-8 text-gray-300 mx-auto mb-3" />
+                <p className="text-gray-400 text-sm">No hay auditorias para {data?.contact?.empresa}</p>
+                <Button size="sm" className="mt-3 bg-[#2FA4A9] hover:bg-[#238b8f] text-white text-xs" onClick={() => navigate("/admin/auditorias")}>
+                  Ver Modulo de Auditorias
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            contactAudits.map(audit => {
+              const statusColors: Record<string, string> = {
+                draft: "bg-gray-100 text-gray-600", queued: "bg-amber-100 text-amber-700",
+                processing: "bg-blue-100 text-blue-700", ready: "bg-emerald-100 text-emerald-700",
+                error: "bg-red-100 text-red-700",
+              };
+              const statusLabels: Record<string, string> = {
+                draft: "Borrador", queued: "En cola", processing: "Generando...", ready: "Listo", error: "Error",
+              };
+              const typeLabels: Record<string, string> = { "pre-audit": "Pre-Auditoria", "full": "Auditoria Completa" };
+
+              return (
+                <Card key={audit.id} className="bg-white border-gray-200 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 flex-1 min-w-0">
+                        <ClipboardCheck className="w-4 h-4 text-purple-500 shrink-0" />
+                        <CardTitle className="text-sm font-medium text-gray-900">{typeLabels[audit.report_type] || audit.report_type}</CardTitle>
+                        <Badge className={`text-[10px] ${statusColors[audit.status] || "bg-gray-100 text-gray-600"}`}>
+                          {statusLabels[audit.status] || audit.status}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        {audit.status === "ready" && audit.pdf_path && (
+                          <a href={`/api/admin/auditorias/${audit.id}/download`} className="text-[#2FA4A9] hover:text-[#238b8f] p-1" title="Descargar PDF">
+                            <ExternalLink className="w-4 h-4" />
+                          </a>
+                        )}
+                        <button onClick={() => navigate(`/admin/auditorias/${audit.id}`)} className="text-gray-400 hover:text-gray-700 p-1" title="Ver detalle">
+                          <Eye className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-3 mt-1 text-[11px] text-gray-400">
+                      <span>{new Date(audit.created_at).toLocaleDateString("es-CO")}</span>
+                      <span className="capitalize">{audit.source}</span>
+                      {audit.status === "processing" && audit.step && audit.total_steps && (
+                        <span>Paso {audit.step}/{audit.total_steps}: {audit.step_message}</span>
+                      )}
+                    </div>
+                  </CardHeader>
+                </Card>
+              );
+            })
+          )}
         </TabsContent>
       </Tabs>
     </div>

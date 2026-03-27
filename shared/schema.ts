@@ -680,3 +680,21 @@ export const gmailSyncState = pgTable("gmail_sync_state", {
 });
 
 export type GmailSyncState = typeof gmailSyncState.$inferSelect;
+
+// ───────────────────────────────────────────────────────────────
+// Contact Files / Documents
+// ───────────────────────────────────────────────────────────────
+
+export const contactFiles = pgTable("contact_files", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  contactId: varchar("contact_id").notNull(),
+  name: text("name").notNull(),
+  type: text("type").notNull().default("documento"), // contrato | propuesta | auditoria | documento | imagen | otro
+  url: text("url").notNull(),
+  size: integer("size"), // bytes
+  uploadedBy: text("uploaded_by").default("team"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ContactFile = typeof contactFiles.$inferSelect;
+export type InsertContactFile = typeof contactFiles.$inferInsert;
