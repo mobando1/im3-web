@@ -355,6 +355,26 @@ export async function runMigrations() {
     await pool.query(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "prep_sent_at" timestamp;`).catch(() => {});
     await pool.query(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "followup_drafted_at" timestamp;`).catch(() => {});
 
+    // Migración 0007 — diagnostic form de 2 fases (Fase 1 obligatoria + Fase 2 opcional)
+    // Añade columnas nuevas y hace nullable los campos legacy que ahora son opcionales.
+    await pool.query(`ALTER TABLE "diagnostics" ADD COLUMN IF NOT EXISTS "industria_otro" text;`).catch(() => {});
+    await pool.query(`ALTER TABLE "diagnostics" ADD COLUMN IF NOT EXISTS "phase2_completed_at" timestamp;`).catch(() => {});
+    await pool.query(`ALTER TABLE "diagnostics" ALTER COLUMN "anos_operacion" DROP NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "diagnostics" ALTER COLUMN "ciudades" DROP NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "diagnostics" ALTER COLUMN "objetivos" DROP NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "diagnostics" ALTER COLUMN "resultado_esperado" DROP NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "diagnostics" ALTER COLUMN "productos" DROP NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "diagnostics" ALTER COLUMN "volumen_mensual" DROP NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "diagnostics" ALTER COLUMN "cliente_principal" DROP NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "diagnostics" ALTER COLUMN "canales_adquisicion" DROP NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "diagnostics" ALTER COLUMN "canal_principal" DROP NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "diagnostics" ALTER COLUMN "herramientas" DROP NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "diagnostics" ALTER COLUMN "conectadas" DROP NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "diagnostics" ALTER COLUMN "nivel_tech" DROP NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "diagnostics" ALTER COLUMN "usa_ia" DROP NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "diagnostics" ALTER COLUMN "comodidad_tech" DROP NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "diagnostics" ALTER COLUMN "familiaridad" DROP NOT NULL;`).catch(() => {});
+
     console.log("✓ Database tables and indexes ensured");
 
     // Ensure admin user exists with correct password
