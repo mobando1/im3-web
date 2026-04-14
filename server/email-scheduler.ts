@@ -8,10 +8,17 @@ import { isWhatsAppConfigured, sendWhatsAppText, sendWhatsAppTemplate } from "./
 import { parseFechaCita } from "./date-utils";
 import { syncGmailEmails, isGmailConfigured } from "./google-gmail";
 import { log } from "./index";
+import { runAgent } from "./agents/runner";
+import { runErrorSupervisor } from "./agents/error-supervisor";
+import { runMeetingPrep } from "./agents/meeting-prep";
+import { runFollowupWriter } from "./agents/followup-writer";
+import { getIndustriaLabel } from "@shared/industrias";
+
+export { syncGmailEmails };
 
 const MAX_RETRIES = 3;
 
-async function processEmailQueue() {
+export async function processEmailQueue() {
   if (!db || !isEmailConfigured()) return;
 
   try {
@@ -308,7 +315,7 @@ async function processEmailQueue() {
   }
 }
 
-async function processAbandonedEmails() {
+export async function processAbandonedEmails() {
   if (!db || !isEmailConfigured()) return;
 
   try {
@@ -374,7 +381,7 @@ async function processAbandonedEmails() {
  * Process pending WhatsApp messages from the queue.
  * Similar to processEmailQueue but for WhatsApp Business API.
  */
-async function processWhatsAppQueue() {
+export async function processWhatsAppQueue() {
   if (!db || !isWhatsAppConfigured()) return;
 
   try {
@@ -514,7 +521,7 @@ async function processWhatsAppQueue() {
  * Auto-update contact substatus based on email engagement patterns.
  * Runs periodically to classify contacts as warm/cold/interested.
  */
-async function updateContactSubstatuses() {
+export async function updateContactSubstatuses() {
   if (!db) return;
 
   try {
@@ -665,7 +672,7 @@ async function updateContactSubstatuses() {
 /**
  * Check for overdue tasks and create notifications.
  */
-async function checkOverdueTasks() {
+export async function checkOverdueTasks() {
   if (!db) return;
 
   try {
@@ -724,7 +731,7 @@ async function checkOverdueTasks() {
 /**
  * Generate daily news digest, publish as blog post, and email to all subscribers.
  */
-async function generateAndSendDailyNewsletter() {
+export async function generateAndSendDailyNewsletter() {
   if (!db) return;
 
   try {
@@ -830,7 +837,7 @@ async function generateAndSendDailyNewsletter() {
  * Post-meeting automation: check for completed meetings, search for
  * recordings/transcripts in Drive, and move them to client folders.
  */
-async function processPostMeetingRecordings() {
+export async function processPostMeetingRecordings() {
   if (!db) return;
 
   try {
@@ -939,7 +946,7 @@ async function processPostMeetingRecordings() {
  * Send admin a daily briefing with today's meetings + client info + Meet links.
  * Runs every morning at 7:00 AM Colombia (12:00 UTC).
  */
-async function sendAdminDailyBriefing() {
+export async function sendAdminDailyBriefing() {
   if (!db || !isEmailConfigured()) return;
 
   try {
@@ -994,7 +1001,7 @@ async function sendAdminDailyBriefing() {
         <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:12px">
           <tr><td style="padding:4px 0;color:#666;width:120px">Email</td><td style="padding:4px 0">${diag.email}</td></tr>
           ${diag.telefono ? `<tr><td style="padding:4px 0;color:#666">Teléfono</td><td style="padding:4px 0">${diag.telefono}</td></tr>` : ""}
-          ${diag.industria ? `<tr><td style="padding:4px 0;color:#666">Industria</td><td style="padding:4px 0">${diag.industria}</td></tr>` : ""}
+          ${diag.industria ? `<tr><td style="padding:4px 0;color:#666">Industria</td><td style="padding:4px 0">${getIndustriaLabel(diag.industria)}${diag.industria === "otro" && diag.industriaOtro ? ` (${diag.industriaOtro})` : ""}</td></tr>` : ""}
           ${diag.empleados ? `<tr><td style="padding:4px 0;color:#666">Empleados</td><td style="padding:4px 0">${diag.empleados}</td></tr>` : ""}
           ${diag.areaPrioridad ? `<tr><td style="padding:4px 0;color:#666">Área prioritaria</td><td style="padding:4px 0">${diag.areaPrioridad}</td></tr>` : ""}
           ${diag.objetivos ? `<tr><td style="padding:4px 0;color:#666">Objetivos</td><td style="padding:4px 0">${diag.objetivos}</td></tr>` : ""}
@@ -1032,7 +1039,7 @@ async function sendAdminDailyBriefing() {
  * Auto-analyze recent GitHub commits for all projects with AI tracking enabled.
  * Fetches last 10 commits from GitHub API and processes any new ones.
  */
-async function autoAnalyzeProjectCommits() {
+export async function autoAnalyzeProjectCommits() {
   if (!db) return;
 
   try {
@@ -1122,7 +1129,7 @@ async function autoAnalyzeProjectCommits() {
  * Send weekly project summary emails to all active project clients.
  * Uses generateWeeklySummary() from project-ai.ts to create AI summaries.
  */
-async function sendWeeklyProjectSummaries() {
+export async function sendWeeklyProjectSummaries() {
   if (!db || !isEmailConfigured()) return;
 
   try {
@@ -1201,7 +1208,7 @@ export function startEmailScheduler() {
   // Gmail sync runs independently of email system configuration
   if (isGmailConfigured()) {
     cron.schedule("*/15 * * * *", async () => {
-      await syncGmailEmails().catch(err => log(`Cron error gmail sync: ${err}`));
+      await runAgent("gmail-sync", syncGmailEmails).catch(err => log(`Cron error gmail sync: ${err}`));
     }, { timezone: "America/Bogota" });
     log("Gmail sync cron scheduled (every 15 min)");
   }
@@ -1213,43 +1220,50 @@ export function startEmailScheduler() {
 
   // Run every 5 minutes for more responsive email/WhatsApp delivery
   cron.schedule("*/15 * * * *", async () => {
-    await processEmailQueue().catch(err => log(`Cron error queue: ${err}`));
-    await processAbandonedEmails().catch(err => log(`Cron error abandoned: ${err}`));
-    await processWhatsAppQueue().catch(err => log(`Cron error whatsapp: ${err}`));
+    await runAgent("email-queue", processEmailQueue).catch(err => log(`Cron error queue: ${err}`));
+    await runAgent("abandoned-followup", processAbandonedEmails).catch(err => log(`Cron error abandoned: ${err}`));
+    await runAgent("whatsapp-queue", processWhatsAppQueue).catch(err => log(`Cron error whatsapp: ${err}`));
   }, { timezone: "America/Bogota" });
 
   // Run substatus updates, overdue task checks, and post-meeting recordings every 30 minutes
   cron.schedule("*/30 * * * *", async () => {
-    await updateContactSubstatuses().catch(err => log(`Cron error substatus: ${err}`));
-    await checkOverdueTasks().catch(err => log(`Cron error overdue: ${err}`));
-    await processPostMeetingRecordings().catch(err => log(`Cron error post-meeting: ${err}`));
+    await runAgent("substatus-updater", updateContactSubstatuses).catch(err => log(`Cron error substatus: ${err}`));
+    await runAgent("overdue-tasks", checkOverdueTasks).catch(err => log(`Cron error overdue: ${err}`));
+    await runAgent("post-meeting-recordings", processPostMeetingRecordings).catch(err => log(`Cron error post-meeting: ${err}`));
+  }, { timezone: "America/Bogota" });
+
+  // Fase 2: agentes IA (supervisor + meeting prep + followup writer) cada 30 min
+  cron.schedule("*/30 * * * *", async () => {
+    await runAgent("error-supervisor", runErrorSupervisor).catch(err => log(`Cron error supervisor: ${err}`));
+    await runAgent("meeting-prep", runMeetingPrep).catch(err => log(`Cron error meeting-prep: ${err}`));
+    await runAgent("followup-writer", runFollowupWriter).catch(err => log(`Cron error followup-writer: ${err}`));
   }, { timezone: "America/Bogota" });
 
   // Daily admin briefing at 7:00 AM Colombia time (12:00 UTC) every day
   cron.schedule("0 12 * * *", async () => {
-    await sendAdminDailyBriefing().catch(err => log(`Cron error admin briefing: ${err}`));
+    await runAgent("admin-briefing", sendAdminDailyBriefing).catch(err => log(`Cron error admin briefing: ${err}`));
   }, { timezone: "America/Bogota" });
 
   // Daily GitHub commit analysis at 6:00 AM Colombia time (11:00 UTC)
   cron.schedule("0 11 * * *", async () => {
-    await autoAnalyzeProjectCommits().catch(err => log(`Cron error auto-analyze: ${err}`));
+    await runAgent("commit-analyzer", autoAnalyzeProjectCommits).catch(err => log(`Cron error auto-analyze: ${err}`));
   }, { timezone: "America/Bogota" });
 
   // Weekly project summaries every Monday at 7:15 AM Colombia time (12:15 UTC)
   cron.schedule("15 12 * * 1", async () => {
-    await sendWeeklyProjectSummaries().catch(err => log(`Cron error project summaries: ${err}`));
+    await runAgent("weekly-summaries", sendWeeklyProjectSummaries).catch(err => log(`Cron error project summaries: ${err}`));
   }, { timezone: "America/Bogota" });
 
   // Weekly newsletter every Monday at 7:30 AM Colombia time (12:30 UTC)
   cron.schedule("30 12 * * 1", async () => {
-    await generateAndSendDailyNewsletter().catch(err => log(`Cron error newsletter: ${err}`));
+    await runAgent("newsletter-digest", generateAndSendDailyNewsletter).catch(err => log(`Cron error newsletter: ${err}`));
   }, { timezone: "America/Bogota" });
 
   // Also run once at startup (after 10 seconds to let DB connect)
   setTimeout(() => {
-    processEmailQueue();
-    processAbandonedEmails();
-    processWhatsAppQueue();
+    runAgent("email-queue", processEmailQueue, { triggeredBy: "startup" }).catch(() => {});
+    runAgent("abandoned-followup", processAbandonedEmails, { triggeredBy: "startup" }).catch(() => {});
+    runAgent("whatsapp-queue", processWhatsAppQueue, { triggeredBy: "startup" }).catch(() => {});
   }, 10_000);
 
   // Catch-up: if today is Monday and newsletter hasn't been sent yet, send it now
@@ -1258,7 +1272,7 @@ export function startEmailScheduler() {
     const now = new Date();
     if (now.getUTCDay() === 1) { // Monday in UTC
       log("Monday catch-up: checking if newsletter was sent today...");
-      await generateAndSendDailyNewsletter().catch(err => log(`Catch-up newsletter error: ${err}`));
+      await runAgent("newsletter-digest", generateAndSendDailyNewsletter, { triggeredBy: "startup" }).catch(err => log(`Catch-up newsletter error: ${err}`));
     }
   }, 15_000);
 

@@ -331,6 +331,30 @@ export async function runMigrations() {
       );
     `).catch(() => {});
 
+    // Agent runs (logs de ejecución de cron jobs, servicios IA, webhooks)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "agent_runs" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "agent_name" text NOT NULL,
+        "status" text NOT NULL,
+        "started_at" timestamp DEFAULT now() NOT NULL,
+        "completed_at" timestamp,
+        "duration_ms" integer,
+        "records_processed" integer DEFAULT 0,
+        "error_message" text,
+        "error_stack" text,
+        "metadata" json,
+        "triggered_by" text DEFAULT 'cron' NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_agent_runs_name_started" ON "agent_runs" ("agent_name", "started_at" DESC);`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_agent_runs_status" ON "agent_runs" ("status");`).catch(() => {});
+
+    // Fase 2 — columnas para agentes IA (error-supervisor, meeting-prep, followup-writer)
+    await pool.query(`ALTER TABLE "agent_runs" ADD COLUMN IF NOT EXISTS "supervisor_analyzed_at" timestamp;`).catch(() => {});
+    await pool.query(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "prep_sent_at" timestamp;`).catch(() => {});
+    await pool.query(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "followup_drafted_at" timestamp;`).catch(() => {});
+
     console.log("✓ Database tables and indexes ensured");
 
     // Ensure admin user exists with correct password

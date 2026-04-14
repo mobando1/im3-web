@@ -1,6 +1,5 @@
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useLocation } from "wouter";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, Send, Loader2 } from "lucide-react";
@@ -10,40 +9,20 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useI18n } from "@/lib/i18n";
 import {
-  step0Schema,
-  step1Schema,
-  step2Schema,
-  step3Schema,
-  step4Schema,
-  step5Schema,
-  step6Schema,
-  step7Schema,
-  stepMeta,
+  phase1Steps,
+  phase2Steps,
+  phase1Meta,
+  phase2Meta,
   type DiagnosticFormData,
 } from "./schema";
 import StepBooking from "./steps/StepBooking";
 import StepGeneral from "./steps/StepGeneral";
-import StepContext from "./steps/StepContext";
-import StepBusiness from "./steps/StepBusiness";
-import StepAcquisition from "./steps/StepAcquisition";
-import StepTools from "./steps/StepTools";
-import StepMaturity from "./steps/StepMaturity";
 import StepPriorities from "./steps/StepPriorities";
-import StepReview from "./steps/StepReview";
+import StepOperation from "./steps/StepOperation";
+import StepStack from "./steps/StepStack";
+import Phase1DonePanel from "./Phase1DonePanel";
 
-const TOTAL_STEPS = 9;
-
-const stepValidators = [
-  step0Schema,
-  step1Schema,
-  step2Schema,
-  step3Schema,
-  step4Schema,
-  step5Schema,
-  step6Schema,
-  step7Schema,
-  null, // review step has no extra validation
-];
+type Phase = "phase1" | "phase1_done" | "phase2";
 
 const ease = [0.25, 0.46, 0.45, 0.94] as [number, number, number, number];
 
@@ -52,14 +31,18 @@ interface DiagnosticFormProps {
 }
 
 export default function DiagnosticForm({ onStepChange }: DiagnosticFormProps) {
+  const [phase, setPhase] = useState<Phase>("phase1");
   const [currentStep, setCurrentStep] = useState(0);
-  const [direction, setDirection] = useState(1); // 1 = forward, -1 = backward
+  const [direction, setDirection] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [editingFromReview, setEditingFromReview] = useState(false);
+  const [diagnosticId, setDiagnosticId] = useState<string | null>(null);
   const [, navigate] = useLocation();
   const { toast } = useToast();
   const { language } = useI18n();
   const formStartTime = useRef(Date.now());
+
+  const stepValidators = phase === "phase2" ? phase2Steps : phase1Steps;
+  const totalSteps = stepValidators.length;
 
   useEffect(() => {
     onStepChange?.(currentStep);
@@ -69,39 +52,24 @@ export default function DiagnosticForm({ onStepChange }: DiagnosticFormProps) {
     defaultValues: {
       fechaCita: "",
       horaCita: "",
-      empresa: "",
-      industria: "",
-      anosOperacion: "",
-      empleados: "",
-      ciudades: "",
-      participante: "",
       email: "",
+      participante: "",
+      empresa: "",
       telefono: "",
-      objetivos: [],
-      resultadoEsperado: "",
-      productos: "",
-      volumenMensual: "",
-      clientePrincipal: "",
-      clientePrincipalOtro: "",
-      canalesAdquisicion: [],
-      canalAdquisicionOtro: "",
-      canalPrincipal: "",
-      herramientas: "",
-      conectadas: "",
-      conectadasDetalle: "",
-      nivelTech: "",
-      usaIA: "",
-      usaIAParaQue: "",
-      comodidadTech: "",
-      familiaridad: {
-        automatizacion: "",
-        crm: "",
-        ia: "",
-        integracion: "",
-        desarrollo: "",
-      },
+      industria: undefined,
+      industriaOtro: "",
+      empleados: "",
       areaPrioridad: [],
       presupuesto: "",
+      objetivos: [],
+      productos: "",
+      volumenMensual: "",
+      canalesAdquisicion: [],
+      herramientas: [],
+      herramientasOtras: "",
+      conectadas: "",
+      madurezTech: "",
+      usaIA: "",
     },
   });
 
@@ -113,63 +81,27 @@ export default function DiagnosticForm({ onStepChange }: DiagnosticFormProps) {
     const result = schema.safeParse(values);
 
     if (!result.success) {
-      // Trigger validation to show error messages
-      const fields = Object.keys(result.error.formErrors.fieldErrors);
-      fields.forEach((field) => {
-        const errors = (result.error.formErrors.fieldErrors as Record<string, string[] | undefined>)[field];
-        if (errors && errors.length > 0) {
-          form.setError(field as keyof DiagnosticFormData, {
+      result.error.issues.forEach((issue) => {
+        if (issue.path.length > 0) {
+          form.setError(issue.path.join(".") as keyof DiagnosticFormData, {
             type: "manual",
-            message: errors[0],
+            message: issue.message,
           });
         }
       });
-
-      // Handle refinement errors (shown at form level)
-      if (result.error.formErrors.formErrors.length > 0) {
-        // Find the path from issues for refinement errors
-        result.error.issues.forEach((issue) => {
-          if (issue.path.length > 0) {
-            form.setError(issue.path.join(".") as keyof DiagnosticFormData, {
-              type: "manual",
-              message: issue.message,
-            });
-          }
-        });
-      }
-
       return false;
     }
     return true;
-  }, [currentStep, form]);
-
-  const goToStep = useCallback((step: number) => {
-    if (currentStep === TOTAL_STEPS - 1) {
-      setEditingFromReview(true);
-    }
-    setDirection(step > currentStep ? 1 : -1);
-    setCurrentStep(step);
-    window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [currentStep]);
+  }, [currentStep, form, stepValidators]);
 
   const handleNext = useCallback(async () => {
     const isValid = await validateCurrentStep();
     if (!isValid) return;
-
     form.clearErrors();
-
-    if (editingFromReview) {
-      setEditingFromReview(false);
-      setDirection(1);
-      setCurrentStep(TOTAL_STEPS - 1); // back to review
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      return;
-    }
-
     setDirection(1);
-    setCurrentStep((prev) => Math.min(prev + 1, TOTAL_STEPS - 1));
+    setCurrentStep((prev) => Math.min(prev + 1, totalSteps - 1));
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, [validateCurrentStep, form, editingFromReview]);
+  }, [validateCurrentStep, form, totalSteps]);
 
   const handlePrev = useCallback(() => {
     form.clearErrors();
@@ -178,82 +110,169 @@ export default function DiagnosticForm({ onStepChange }: DiagnosticFormProps) {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, [form]);
 
-  const handleSubmit = useCallback(async () => {
+  const handlePhase1Submit = useCallback(async () => {
+    const isValid = await validateCurrentStep();
+    if (!isValid) return;
+
     setIsSubmitting(true);
     try {
       const data = form.getValues();
       const formDurationMinutes = Math.round((Date.now() - formStartTime.current) / 60000);
-      await apiRequest("POST", "/api/diagnostic", { ...data, formDurationMinutes, language });
-      navigate("/confirmed");
+      const payload = {
+        fechaCita: data.fechaCita,
+        horaCita: data.horaCita,
+        email: data.email,
+        participante: data.participante,
+        empresa: data.empresa,
+        telefono: data.telefono,
+        industria: data.industria,
+        industriaOtro: data.industriaOtro || undefined,
+        empleados: data.empleados,
+        areaPrioridad: data.areaPrioridad,
+        presupuesto: data.presupuesto,
+        formDurationMinutes,
+        language,
+      };
+
+      const res = await apiRequest("POST", "/api/diagnostic", payload);
+      const result = (await res.json()) as { id: string };
+      setDiagnosticId(result.id);
+      setPhase("phase1_done");
+      window.scrollTo({ top: 0, behavior: "smooth" });
     } catch {
       toast({
-        title: "Error al enviar",
-        description: "No se pudo enviar el formulario. Intente nuevamente.",
+        title: "Error al agendar",
+        description: "No pudimos confirmar tu cita. Intenta de nuevo.",
         variant: "destructive",
       });
     } finally {
       setIsSubmitting(false);
     }
-  }, [form, navigate, toast]);
+  }, [form, validateCurrentStep, language, toast]);
 
-  const progress = ((currentStep + 1) / TOTAL_STEPS) * 100;
-  const isReviewStep = currentStep === TOTAL_STEPS - 1;
+  const handleStartPhase2 = useCallback(() => {
+    setPhase("phase2");
+    setCurrentStep(0);
+    setDirection(1);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  const handleSkipPhase2 = useCallback(() => {
+    navigate("/confirmed");
+  }, [navigate]);
+
+  const handlePhase2Submit = useCallback(async () => {
+    if (!diagnosticId) {
+      navigate("/confirmed");
+      return;
+    }
+    setIsSubmitting(true);
+    try {
+      const data = form.getValues();
+      const payload = {
+        objetivos: data.objetivos,
+        productos: data.productos,
+        volumenMensual: data.volumenMensual,
+        canalesAdquisicion: data.canalesAdquisicion,
+        herramientas: data.herramientas,
+        herramientasOtras: data.herramientasOtras,
+        conectadas: data.conectadas,
+        madurezTech: data.madurezTech,
+        usaIA: data.usaIA,
+      };
+      await apiRequest("PATCH", `/api/diagnostic/${diagnosticId}`, payload);
+      navigate("/confirmed");
+    } catch {
+      toast({
+        title: "No pudimos guardar los detalles",
+        description: "Tu cita está confirmada. Puedes completar esto después.",
+        variant: "destructive",
+      });
+      navigate("/confirmed");
+    } finally {
+      setIsSubmitting(false);
+    }
+  }, [diagnosticId, form, navigate, toast]);
 
   const renderStep = () => {
+    if (phase === "phase2") {
+      switch (currentStep) {
+        case 0: return <StepOperation form={form} />;
+        case 1: return <StepStack form={form} />;
+        default: return null;
+      }
+    }
     switch (currentStep) {
       case 0: return <StepBooking form={form} />;
       case 1: return <StepGeneral form={form} />;
-      case 2: return <StepContext form={form} />;
-      case 3: return <StepBusiness form={form} />;
-      case 4: return <StepAcquisition form={form} />;
-      case 5: return <StepTools form={form} />;
-      case 6: return <StepMaturity form={form} />;
-      case 7: return <StepPriorities form={form} />;
-      case 8: return <StepReview form={form} onGoToStep={goToStep} />;
+      case 2: return <StepPriorities form={form} />;
       default: return null;
     }
   };
 
+  if (phase === "phase1_done") {
+    const values = form.getValues();
+    return (
+      <div className="max-w-4xl mx-auto">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key="phase1_done"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.4, ease }}
+          >
+            <Phase1DonePanel
+              fechaCita={values.fechaCita}
+              horaCita={values.horaCita}
+              industria={values.industria || ""}
+              onStartPhase2={handleStartPhase2}
+              onSkip={handleSkipPhase2}
+            />
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    );
+  }
+
+  const stepMeta = phase === "phase2" ? phase2Meta : phase1Meta;
+  const progress = ((currentStep + 1) / totalSteps) * 100;
+  const isLastStep = currentStep === totalSteps - 1;
+  const phaseLabel = phase === "phase2" ? "Mini-diagnóstico" : "Agendar diagnóstico";
+
   return (
     <div className="max-w-4xl mx-auto">
-      {/* Progress section */}
       <div className="mb-8">
         <div className="flex items-center justify-between mb-3">
           <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-            Diagnóstico empresarial
+            {phaseLabel}
           </span>
           <span className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">
-            {currentStep + 1} / {TOTAL_STEPS}
+            {currentStep + 1} / {totalSteps}
           </span>
         </div>
         <Progress value={progress} className="h-1" />
 
-        {/* Step indicators */}
         <div className="flex gap-1 mt-3 overflow-x-auto pb-1">
           {stepMeta.map((meta, i) => (
-            <button
+            <span
               key={i}
-              type="button"
-              onClick={() => i < currentStep && goToStep(i)}
-              disabled={i > currentStep}
-              className={`text-[9px] font-mono uppercase tracking-wider px-2 py-1 rounded-sm whitespace-nowrap transition-colors ${
+              className={`text-[9px] font-mono uppercase tracking-wider px-2 py-1 rounded-sm whitespace-nowrap ${
                 i === currentStep
                   ? "bg-primary/10 text-primary border border-primary/20"
                   : i < currentStep
-                  ? "text-muted-foreground hover:text-foreground cursor-pointer"
-                  : "text-muted-foreground/40 cursor-not-allowed"
+                  ? "text-muted-foreground"
+                  : "text-muted-foreground/40"
               }`}
             >
               {meta.title}
-            </button>
+            </span>
           ))}
         </div>
       </div>
 
-      {/* Step content with animation */}
       <AnimatePresence mode="wait" custom={direction}>
         <motion.div
-          key={currentStep}
+          key={`${phase}-${currentStep}`}
           custom={direction}
           initial={{ opacity: 0, x: direction * 30 }}
           animate={{ opacity: 1, x: 0 }}
@@ -264,7 +283,6 @@ export default function DiagnosticForm({ onStepChange }: DiagnosticFormProps) {
         </motion.div>
       </AnimatePresence>
 
-      {/* Navigation buttons */}
       <div className="flex items-center justify-between mt-10 pt-6 border-t border-border">
         <Button
           type="button"
@@ -277,32 +295,28 @@ export default function DiagnosticForm({ onStepChange }: DiagnosticFormProps) {
           Anterior
         </Button>
 
-        {isReviewStep ? (
+        {isLastStep ? (
           <Button
             type="button"
-            onClick={handleSubmit}
+            onClick={phase === "phase2" ? handlePhase2Submit : handlePhase1Submit}
             disabled={isSubmitting}
             className="gap-2"
           >
             {isSubmitting ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                Enviando...
+                {phase === "phase2" ? "Guardando..." : "Confirmando..."}
               </>
             ) : (
               <>
                 <Send className="w-4 h-4" />
-                Enviar diagnóstico
+                {phase === "phase2" ? "Enviar y ver confirmado" : "Confirmar cita"}
               </>
             )}
           </Button>
         ) : (
-          <Button
-            type="button"
-            onClick={handleNext}
-            className="gap-2"
-          >
-            {editingFromReview ? "Guardar y volver" : currentStep === TOTAL_STEPS - 2 ? "Revisar respuestas" : "Siguiente"}
+          <Button type="button" onClick={handleNext} className="gap-2">
+            Siguiente
             <ChevronRight className="w-4 h-4" />
           </Button>
         )}

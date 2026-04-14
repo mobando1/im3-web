@@ -4,6 +4,7 @@ import { contacts, diagnostics, sentEmails, contactNotes, activityLog, aiInsight
 import { eq, desc } from "drizzle-orm";
 import { log } from "./index";
 import { readGoogleDriveContent } from "./google-drive";
+import { getIndustriaLabel } from "@shared/industrias";
 
 let client: Anthropic | null = null;
 
@@ -32,7 +33,29 @@ async function gatherContactContext(contactId: string): Promise<string> {
     const [diag] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId)).limit(1);
     if (diag) {
       const diagData = diag as Record<string, unknown>;
-      parts.push(`DIAGNÓSTICO TECNOLÓGICO:\n- Empresa: ${diag.empresa}\n- Industria: ${diag.industria}\n- Años operación: ${diag.anosOperacion}\n- Empleados: ${diag.empleados}\n- Ciudades: ${diag.ciudades}\n- Área prioritaria: ${diag.areaPrioridad}\n- Objetivos: ${diag.objetivos}\n- Herramientas actuales: ${diag.herramientas}\n- Presupuesto: ${diag.presupuesto}\n- Nivel digitalización: ${diagData.nivelDigitalizacion || "N/A"}\n- Procesos manuales: ${diagData.procesosManuales || "N/A"}\n- Frustraciones: ${diagData.frustraciones || "N/A"}\n- Expectativas: ${diagData.expectativas || "N/A"}\n- Timeline deseado: ${diagData.timeline || "N/A"}\n- Decisor: ${diagData.tomadorDecision || "N/A"}`);
+      const industriaLabel = getIndustriaLabel(diag.industria);
+      const industriaExtra = diag.industria === "otro" && diag.industriaOtro ? ` (${diag.industriaOtro})` : "";
+      const diagLines = [
+        `DIAGNÓSTICO TECNOLÓGICO:`,
+        `- Empresa: ${diag.empresa}`,
+        `- Industria: ${industriaLabel}${industriaExtra}`,
+        `- Empleados: ${diag.empleados}`,
+        `- Área prioritaria: ${(diag.areaPrioridad as string[] | null)?.join(", ") || "N/A"}`,
+        `- Presupuesto: ${diag.presupuesto}`,
+      ];
+      if (diag.objetivos) diagLines.push(`- Objetivos: ${(diag.objetivos as string[]).join(", ")}`);
+      if (diag.productos) diagLines.push(`- Productos: ${diag.productos}`);
+      if (diag.volumenMensual) diagLines.push(`- Volumen mensual: ${diag.volumenMensual}`);
+      if (diag.herramientas) diagLines.push(`- Herramientas actuales: ${diag.herramientas}`);
+      if (diag.conectadas) diagLines.push(`- Herramientas conectadas: ${diag.conectadas}`);
+      if (diag.nivelTech) diagLines.push(`- Madurez tech: ${diag.nivelTech}`);
+      if (diag.usaIA) diagLines.push(`- Usa IA: ${diag.usaIA}`);
+      // Campos legacy: si existen en diagData, los incluimos por si hay registros viejos
+      if (diagData.frustraciones) diagLines.push(`- Frustraciones: ${diagData.frustraciones}`);
+      if (diagData.expectativas) diagLines.push(`- Expectativas: ${diagData.expectativas}`);
+      if (diagData.timeline) diagLines.push(`- Timeline deseado: ${diagData.timeline}`);
+      if (diagData.tomadorDecision) diagLines.push(`- Decisor: ${diagData.tomadorDecision}`);
+      parts.push(diagLines.join("\n"));
     }
   }
 

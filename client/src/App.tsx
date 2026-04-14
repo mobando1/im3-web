@@ -69,6 +69,7 @@ const AdminProposals = lazy(() => import("@/pages/admin/proposals-list"));
 const AdminProposalEditor = lazy(() => import("@/pages/admin/proposal-editor"));
 const AdminBlog = lazy(() => import("@/pages/admin/blog"));
 const AdminBlogEditor = lazy(() => import("@/pages/admin/blog-editor"));
+const AdminAgents = lazy(() => import("@/pages/admin/agents"));
 const ProposalView = lazy(() => import("@/pages/proposal"));
 const Blog = lazy(() => import("@/pages/blog"));
 const BlogPost = lazy(() => import("@/pages/blog-post"));
@@ -189,6 +190,11 @@ function Router() {
         <Route path="/admin/templates">
           <ProtectedAdmin>
             <AdminTemplates />
+          </ProtectedAdmin>
+        </Route>
+        <Route path="/admin/agents">
+          <ProtectedAdmin>
+            <AdminAgents />
           </ProtectedAdmin>
         </Route>
         <Route path="/admin/contacts">

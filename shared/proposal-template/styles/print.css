@@ -1,0 +1,88 @@
+@media print {
+  .proposal-template {
+    background: #ffffff !important;
+    color: #0d1626 !important;
+  }
+  .proposal-template::before { display: none !important; }
+  .pt-nav,
+  .pt-scroll-hint,
+  .pt-hero-cta-single,
+  .pt-cta-buttons { display: none !important; }
+
+  .proposal-template.pt-js-loaded .pt-reveal,
+  .proposal-template.pt-js-loaded .pt-reveal.pt-visible {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+
+  .pt-hero,
+  .pt-problem-section,
+  .pt-tech-section,
+  .pt-authority-section,
+  .pt-pricing-section,
+  .pt-cta-section {
+    background: #ffffff !important;
+    border-top: 1px solid #e5e7eb !important;
+    page-break-inside: avoid;
+  }
+  .pt-hero-bg,
+  .pt-hero-line { display: none !important; }
+
+  .proposal-template h1,
+  .proposal-template h2,
+  .proposal-template h3,
+  .proposal-template h4,
+  .pt-hero h1,
+  .pt-hero h1 em,
+  .pt-cta-section h2 em,
+  .pt-summary-text,
+  .pt-problem-card h4,
+  .pt-module-body h3,
+  .pt-phase-title,
+  .pt-roi-hero-title,
+  .pt-authority-card h4,
+  .pt-testimonial-author,
+  .pt-milestone-name {
+    color: #0d1626 !important;
+    -webkit-text-fill-color: #0d1626 !important;
+    background: none !important;
+  }
+
+  .pt-summary-card,
+  .pt-problem-card,
+  .pt-module-card,
+  .pt-roi-card,
+  .pt-roi-comparison,
+  .pt-roi-hero-card,
+  .pt-auth-stat,
+  .pt-authority-card,
+  .pt-testimonial,
+  .pt-pricing-card,
+  .pt-commitment-banner,
+  .pt-scarcity-banner,
+  .pt-tech-pill {
+    background: #f8fafc !important;
+    border-color: #e5e7eb !important;
+    color: #1e293b !important;
+  }
+
+  .pt-cost-counter {
+    color: #b91c1c !important;
+    font-size: 2.4rem !important;
+  }
+  .pt-bar-fill { transition: none !important; }
+  .pt-bar-fill.pt-danger {
+    background: #ef4444 !important;
+    color: #ffffff !important;
+  }
+  .pt-bar-fill.pt-teal {
+    background: #0eb5a8 !important;
+    color: #ffffff !important;
+  }
+
+  .proposal-template section {
+    padding: 2.5rem 0 !important;
+    page-break-inside: avoid;
+  }
+  .pt-hero { min-height: auto !important; padding: 2rem 0 !important; }
+}

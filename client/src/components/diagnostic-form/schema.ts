@@ -1,122 +1,100 @@
 import { z } from "zod";
+import { INDUSTRIA_VALUES } from "@shared/industrias";
+
+// ═══════════════════════════════════════════════════════════════
+// FASE 1 — Obligatoria (booking)
+// ═══════════════════════════════════════════════════════════════
 
 // Step 0 — Email + Agendar Cita
-export const step0Schema = z.object({
+export const phase1Step0Schema = z.object({
   email: z.string().email("Ingrese un email válido"),
   fechaCita: z.string().min(1, "Seleccione una fecha"),
   horaCita: z.string().min(1, "Seleccione un horario"),
 });
 
-// Step 1 — Información General
-export const step1Schema = z.object({
-  empresa: z.string().min(1, "Requerido"),
-  industria: z.string().min(1, "Requerido"),
-  anosOperacion: z.string().min(1, "Requerido"),
-  empleados: z.string().min(1, "Seleccione una opción"),
-  ciudades: z.string().min(1, "Requerido"),
-  participante: z.string().min(1, "Requerido"),
-  telefono: z.string().min(1, "El teléfono es obligatorio"),
-});
+// Step 1 — Tu empresa
+export const phase1Step1Schema = z
+  .object({
+    participante: z.string().min(1, "Requerido"),
+    empresa: z.string().min(1, "Requerido"),
+    telefono: z.string().min(1, "El teléfono es obligatorio"),
+    industria: z.enum(INDUSTRIA_VALUES, { errorMap: () => ({ message: "Seleccione una industria" }) }),
+    industriaOtro: z.string().optional(),
+    empleados: z.string().min(1, "Seleccione una opción"),
+  })
+  .refine(
+    (data) => data.industria !== "otro" || (data.industriaOtro && data.industriaOtro.trim().length > 0),
+    { message: "Especifique cuál", path: ["industriaOtro"] }
+  );
 
-// Step 2 — Contexto de la auditoría
-export const step2Schema = z.object({
-  objetivos: z.array(z.string()).min(1, "Seleccione al menos una opción"),
-  resultadoEsperado: z.string().min(10, "Mínimo 10 caracteres"),
-});
-
-// Step 3 — Modelo de negocio
-export const step3Schema = z.object({
-  productos: z.string().min(10, "Mínimo 10 caracteres"),
-  volumenMensual: z.string().min(1, "Requerido"),
-  clientePrincipal: z.string().min(1, "Seleccione una opción"),
-  clientePrincipalOtro: z.string().optional(),
-}).refine(
-  (data) => data.clientePrincipal !== "Otro" || (data.clientePrincipalOtro && data.clientePrincipalOtro.length > 0),
-  { message: "Especifique cuál", path: ["clientePrincipalOtro"] }
-);
-
-// Step 4 — Adquisición de clientes
-export const step4Schema = z.object({
-  canalesAdquisicion: z.array(z.string()).min(1, "Seleccione al menos una opción"),
-  canalAdquisicionOtro: z.string().optional(),
-  canalPrincipal: z.string().min(1, "Requerido"),
-}).refine(
-  (data) => !data.canalesAdquisicion.includes("Otro") || (data.canalAdquisicionOtro && data.canalAdquisicionOtro.length > 0),
-  { message: "Especifique cuál", path: ["canalAdquisicionOtro"] }
-);
-
-// Step 5 — Sistemas y Herramientas
-export const step5Schema = z.object({
-  herramientas: z.string().min(10, "Mínimo 10 caracteres"),
-  conectadas: z.string().min(1, "Seleccione una opción"),
-  conectadasDetalle: z.string().optional(),
-});
-
-// Step 6 — Madurez tecnológica
-export const step6Schema = z.object({
-  nivelTech: z.string().min(1, "Seleccione una opción"),
-  usaIA: z.string().min(1, "Seleccione una opción"),
-  usaIAParaQue: z.string().optional(),
-  comodidadTech: z.string().min(1, "Seleccione una opción"),
-  familiaridad: z.object({
-    automatizacion: z.string().min(1, "Requerido"),
-    crm: z.string().min(1, "Requerido"),
-    ia: z.string().min(1, "Requerido"),
-    integracion: z.string().min(1, "Requerido"),
-    desarrollo: z.string().min(1, "Requerido"),
-  }),
-}).refine(
-  (data) => data.usaIA !== "Sí, regularmente" || (data.usaIAParaQue && data.usaIAParaQue.length > 0),
-  { message: "Especifique para qué", path: ["usaIAParaQue"] }
-);
-
-// Step 7 — Prioridades e Inversión
-export const step7Schema = z.object({
+// Step 2 — Qué buscas
+export const phase1Step2Schema = z.object({
   areaPrioridad: z.array(z.string()).min(1, "Seleccione al menos una opción"),
   presupuesto: z.string().min(1, "Seleccione una opción"),
 });
 
-// Full form schema
-export const diagnosticFormSchema = z.object({
-  ...step1Schema.shape,
-  ...step2Schema.shape,
-  ...step3Schema._def.schema.shape,
-  ...step4Schema._def.schema.shape,
-  ...step5Schema.shape,
-  ...step6Schema._def.schema.shape,
-  ...step7Schema.shape,
+// ═══════════════════════════════════════════════════════════════
+// FASE 2 — Opcional (profundización post-booking)
+// ═══════════════════════════════════════════════════════════════
+
+// Phase 2 Step 0 — Tu operación (todos opcionales)
+export const phase2Step0Schema = z.object({
+  objetivos: z.array(z.string()).optional().default([]),
+  productos: z.string().optional().default(""),
+  volumenMensual: z.string().optional().default(""),
+  canalesAdquisicion: z.array(z.string()).optional().default([]),
 });
 
-export type DiagnosticFormData = z.infer<typeof step0Schema> &
-  z.infer<typeof step1Schema> &
-  z.infer<typeof step2Schema> &
-  z.infer<typeof step3Schema> &
-  z.infer<typeof step4Schema> &
-  z.infer<typeof step5Schema> &
-  z.infer<typeof step6Schema> &
-  z.infer<typeof step7Schema>;
+// Phase 2 Step 1 — Tu stack y madurez (todos opcionales)
+export const phase2Step1Schema = z.object({
+  herramientas: z.array(z.string()).optional().default([]),
+  herramientasOtras: z.string().optional().default(""),
+  conectadas: z.string().optional().default(""),
+  madurezTech: z.string().optional().default(""),
+  usaIA: z.string().optional().default(""),
+});
 
-// Step schemas array for easy access by index
-export const stepSchemas = [
-  step0Schema,
-  step1Schema,
-  step2Schema,
-  step3Schema,
-  step4Schema,
-  step5Schema,
-  step6Schema,
-  step7Schema,
+// ═══════════════════════════════════════════════════════════════
+// Combined types
+// ═══════════════════════════════════════════════════════════════
+
+export const phase1Schema = z.object({
+  ...phase1Step0Schema.shape,
+  ...phase1Step1Schema._def.schema.shape,
+  ...phase1Step2Schema.shape,
+});
+
+export const phase2Schema = z.object({
+  ...phase2Step0Schema.shape,
+  ...phase2Step1Schema.shape,
+});
+
+export const diagnosticFormSchema = z.object({
+  ...phase1Step0Schema.shape,
+  ...phase1Step1Schema._def.schema.shape,
+  ...phase1Step2Schema.shape,
+  ...phase2Step0Schema.shape,
+  ...phase2Step1Schema.shape,
+});
+
+export type Phase1Data = z.infer<typeof phase1Schema>;
+export type Phase2Data = z.infer<typeof phase2Schema>;
+export type DiagnosticFormData = z.infer<typeof diagnosticFormSchema>;
+
+// ═══════════════════════════════════════════════════════════════
+// Step registry (para validación por paso en el orquestador)
+// ═══════════════════════════════════════════════════════════════
+
+export const phase1Steps = [phase1Step0Schema, phase1Step1Schema, phase1Step2Schema] as const;
+export const phase2Steps = [phase2Step0Schema, phase2Step1Schema] as const;
+
+export const phase1Meta = [
+  { title: "Agendar cita", icon: "CalendarDays" },
+  { title: "Tu empresa", icon: "Building2" },
+  { title: "Qué buscas", icon: "TrendingUp" },
 ] as const;
 
-// Step metadata
-export const stepMeta = [
-  { title: "Agendar Cita", icon: "CalendarDays" },
-  { title: "Información General", icon: "Building2" },
-  { title: "Contexto de la Auditoría", icon: "Target" },
-  { title: "Modelo de Negocio", icon: "Briefcase" },
-  { title: "Adquisición de Clientes", icon: "Users" },
-  { title: "Sistemas y Herramientas", icon: "Wrench" },
-  { title: "Madurez Tecnológica", icon: "Cpu" },
-  { title: "Prioridades e Inversión", icon: "TrendingUp" },
-  { title: "Resumen", icon: "FileCheck" },
+export const phase2Meta = [
+  { title: "Tu operación", icon: "Briefcase" },
+  { title: "Tu stack", icon: "Cpu" },
 ] as const;

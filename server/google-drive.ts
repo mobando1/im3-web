@@ -108,39 +108,43 @@ async function createClientFolder(
 }
 
 interface DiagnosticData {
+  // Fase 1 (obligatorios)
   fechaCita: string;
   horaCita: string;
   empresa: string;
   industria: string;
-  anosOperacion: string;
+  industriaOtro?: string | null;
   empleados: string;
-  ciudades: string;
   participante: string;
-  objetivos: string[];
-  resultadoEsperado: string;
-  productos: string;
-  volumenMensual: string;
-  clientePrincipal: string;
-  clientePrincipalOtro?: string;
-  canalesAdquisicion: string[];
-  canalAdquisicionOtro?: string;
-  canalPrincipal: string;
-  herramientas: string;
-  conectadas: string;
-  conectadasDetalle?: string;
-  nivelTech: string;
-  usaIA: string;
-  usaIAParaQue?: string;
-  comodidadTech: string;
-  familiaridad: {
+  areaPrioridad: string[];
+  presupuesto: string;
+  // Fase 2 (opcionales, pueden ser null/undefined si no se completó)
+  objetivos?: string[] | null;
+  productos?: string | null;
+  volumenMensual?: string | null;
+  canalesAdquisicion?: string[] | null;
+  herramientas?: string | null;
+  conectadas?: string | null;
+  nivelTech?: string | null;
+  usaIA?: string | null;
+  // Campos legacy opcionales (compat con registros viejos)
+  anosOperacion?: string | null;
+  ciudades?: string | null;
+  resultadoEsperado?: string | null;
+  clientePrincipal?: string | null;
+  clientePrincipalOtro?: string | null;
+  canalAdquisicionOtro?: string | null;
+  canalPrincipal?: string | null;
+  conectadasDetalle?: string | null;
+  usaIAParaQue?: string | null;
+  comodidadTech?: string | null;
+  familiaridad?: {
     automatizacion: string;
     crm: string;
     ia: string;
     integracion: string;
     desarrollo: string;
-  };
-  areaPrioridad: string[];
-  presupuesto: string;
+  } | null;
 }
 
 /**
@@ -199,77 +203,68 @@ async function createDiagnosticSheet(
   const notesSheetId = setupRes.data.replies![1].addSheet!.properties!.sheetId!;
   const recsSheetId = setupRes.data.replies![2].addSheet!.properties!.sheetId!;
 
-  // Build diagnostic data rows
+  // Build diagnostic data rows (tolerant to missing Fase 2 / legacy fields)
+  const v = (x: string | null | undefined) => x ?? "—";
+  const arr = (x: string[] | null | undefined) => (Array.isArray(x) && x.length ? x.join(", ") : "—");
+
   const rows: (string | string[])[][] = [
-    // Section: Cita
     ["INFORMACIÓN DE LA CITA", ""],
     ["Fecha de cita", data.fechaCita],
     ["Hora de cita", data.horaCita],
     ["", ""],
 
-    // Section: General
     ["INFORMACIÓN GENERAL", ""],
     ["Empresa", data.empresa],
-    ["Industria", data.industria],
-    ["Años de operación", data.anosOperacion],
+    ["Industria", data.industria + (data.industriaOtro ? ` (${data.industriaOtro})` : "")],
     ["Empleados", data.empleados],
-    ["Ciudades", data.ciudades],
     ["Participante", data.participante],
+    ...(data.anosOperacion ? [["Años de operación", data.anosOperacion]] : []),
+    ...(data.ciudades ? [["Ciudades", data.ciudades]] : []),
     ["", ""],
 
-    // Section: Contexto
-    ["CONTEXTO DE LA AUDITORÍA", ""],
-    ["Objetivos", data.objetivos.join(", ")],
-    ["Resultado esperado", data.resultadoEsperado],
-    ["", ""],
-
-    // Section: Modelo de negocio
-    ["MODELO DE NEGOCIO", ""],
-    ["Productos/Servicios", data.productos],
-    ["Volumen mensual", data.volumenMensual],
-    ["Cliente principal", data.clientePrincipal],
-    ...(data.clientePrincipalOtro
-      ? [["Cliente principal (otro)", data.clientePrincipalOtro]]
-      : []),
-    ["", ""],
-
-    // Section: Adquisición
-    ["ADQUISICIÓN DE CLIENTES", ""],
-    ["Canales de adquisición", data.canalesAdquisicion.join(", ")],
-    ...(data.canalAdquisicionOtro
-      ? [["Canal otro", data.canalAdquisicionOtro]]
-      : []),
-    ["Canal principal", data.canalPrincipal],
-    ["", ""],
-
-    // Section: Herramientas
-    ["SISTEMAS Y HERRAMIENTAS", ""],
-    ["Herramientas actuales", data.herramientas],
-    ["¿Conectadas?", data.conectadas],
-    ...(data.conectadasDetalle
-      ? [["Detalle conexión", data.conectadasDetalle]]
-      : []),
-    ["", ""],
-
-    // Section: Madurez
-    ["MADUREZ TECNOLÓGICA", ""],
-    ["Nivel técnico", data.nivelTech],
-    ["¿Usa IA?", data.usaIA],
-    ...(data.usaIAParaQue
-      ? [["¿Para qué usa IA?", data.usaIAParaQue]]
-      : []),
-    ["Comodidad con tecnología", data.comodidadTech],
-    ["Familiaridad — Automatización", data.familiaridad.automatizacion],
-    ["Familiaridad — CRM", data.familiaridad.crm],
-    ["Familiaridad — IA", data.familiaridad.ia],
-    ["Familiaridad — Integración", data.familiaridad.integracion],
-    ["Familiaridad — Desarrollo", data.familiaridad.desarrollo],
-    ["", ""],
-
-    // Section: Prioridades
     ["PRIORIDADES E INVERSIÓN", ""],
-    ["Áreas prioritarias", data.areaPrioridad.join(", ")],
+    ["Áreas prioritarias", arr(data.areaPrioridad)],
     ["Presupuesto", data.presupuesto],
+    ["", ""],
+
+    ["CONTEXTO / OBJETIVOS", ""],
+    ["Objetivos", arr(data.objetivos)],
+    ...(data.resultadoEsperado ? [["Resultado esperado", data.resultadoEsperado]] : []),
+    ["", ""],
+
+    ["MODELO DE NEGOCIO", ""],
+    ["Productos/Servicios", v(data.productos)],
+    ["Volumen mensual", v(data.volumenMensual)],
+    ...(data.clientePrincipal ? [["Cliente principal", data.clientePrincipal]] : []),
+    ...(data.clientePrincipalOtro ? [["Cliente principal (otro)", data.clientePrincipalOtro]] : []),
+    ["", ""],
+
+    ["ADQUISICIÓN DE CLIENTES", ""],
+    ["Canales de adquisición", arr(data.canalesAdquisicion)],
+    ...(data.canalAdquisicionOtro ? [["Canal otro", data.canalAdquisicionOtro]] : []),
+    ...(data.canalPrincipal ? [["Canal principal", data.canalPrincipal]] : []),
+    ["", ""],
+
+    ["SISTEMAS Y HERRAMIENTAS", ""],
+    ["Herramientas actuales", v(data.herramientas)],
+    ["¿Conectadas?", v(data.conectadas)],
+    ...(data.conectadasDetalle ? [["Detalle conexión", data.conectadasDetalle]] : []),
+    ["", ""],
+
+    ["MADUREZ TECNOLÓGICA", ""],
+    ["Madurez tech", v(data.nivelTech)],
+    ["¿Usa IA?", v(data.usaIA)],
+    ...(data.usaIAParaQue ? [["¿Para qué usa IA?", data.usaIAParaQue]] : []),
+    ...(data.comodidadTech ? [["Comodidad con tecnología", data.comodidadTech]] : []),
+    ...(data.familiaridad
+      ? [
+          ["Familiaridad — Automatización", data.familiaridad.automatizacion],
+          ["Familiaridad — CRM", data.familiaridad.crm],
+          ["Familiaridad — IA", data.familiaridad.ia],
+          ["Familiaridad — Integración", data.familiaridad.integracion],
+          ["Familiaridad — Desarrollo", data.familiaridad.desarrollo],
+        ]
+      : []),
   ];
 
   // Write data to "Diagnóstico" sheet

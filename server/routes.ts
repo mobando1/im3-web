@@ -2,7 +2,9 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, gmailEmails, gmailSyncState, contactEmails, contactFiles } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns } from "@shared/schema";
+import { AGENT_REGISTRY, AGENT_DOMAINS, findAgent } from "./agents/registry";
+import { runAgent } from "./agents/runner";
 import { syncGmailEmails, isGmailConfigured } from "./google-gmail";
 import { generateBlogContent, improveBlogContent } from "./blog-ai";
 import { log } from "./index";
@@ -21,6 +23,7 @@ import { analyzeCommitsForProject, generateWeeklySummary, calculateProjectHealth
 import { syncDriveFilesToProject } from "./drive-file-sync";
 import { generateProposal } from "./proposal-ai";
 import crypto from "crypto";
+import { getIndustriaLabel } from "@shared/industrias";
 
 /**
  * Send a project notification email to the linked client contact.
@@ -247,44 +250,33 @@ export async function registerRoutes(
     }
   }
 
-  // Zod schema for diagnostic form validation
+  // Zod schema for diagnostic form — Fase 1 obligatoria (booking)
   const diagnosticSchema = z.object({
     fechaCita: z.string().min(1),
     horaCita: z.string().min(1),
-    empresa: z.string().min(1),
-    industria: z.string().min(1),
-    anosOperacion: z.string().min(1),
-    empleados: z.string().min(1),
-    ciudades: z.string().min(1),
-    participante: z.string().min(1),
     email: z.string().email(),
-    telefono: z.string().nullish().transform(v => v ?? undefined),
-    objetivos: z.array(z.string()).min(1),
-    resultadoEsperado: z.string().min(1),
-    productos: z.string().min(1),
-    volumenMensual: z.string().min(1),
-    clientePrincipal: z.string().min(1),
-    clientePrincipalOtro: z.string().nullish().transform(v => v ?? undefined),
-    canalesAdquisicion: z.array(z.string()).min(1),
-    canalAdquisicionOtro: z.string().nullish().transform(v => v ?? undefined),
-    canalPrincipal: z.string().min(1),
-    herramientas: z.string().min(1),
-    conectadas: z.string().min(1),
-    conectadasDetalle: z.string().nullish().transform(v => v ?? undefined),
-    nivelTech: z.string().min(1),
-    usaIA: z.string().min(1),
-    usaIAParaQue: z.string().nullish().transform(v => v ?? undefined),
-    comodidadTech: z.string().min(1),
-    familiaridad: z.object({
-      automatizacion: z.string(),
-      crm: z.string(),
-      ia: z.string(),
-      integracion: z.string(),
-      desarrollo: z.string(),
-    }),
+    participante: z.string().min(1),
+    empresa: z.string().min(1),
+    telefono: z.string().min(1),
+    industria: z.string().min(1),
+    industriaOtro: z.string().nullish().transform(v => v ?? undefined),
+    empleados: z.string().min(1),
     areaPrioridad: z.array(z.string()).min(1),
     presupuesto: z.string().min(1),
     formDurationMinutes: z.number().optional(),
+  });
+
+  // Zod schema for Fase 2 (PATCH, todos opcionales)
+  const phase2PatchSchema = z.object({
+    objetivos: z.array(z.string()).optional(),
+    productos: z.string().optional(),
+    volumenMensual: z.string().optional(),
+    canalesAdquisicion: z.array(z.string()).optional(),
+    herramientas: z.array(z.string()).optional(),
+    herramientasOtras: z.string().optional(),
+    conectadas: z.string().optional(),
+    madurezTech: z.string().optional(),
+    usaIA: z.string().optional(),
   });
 
   // Newsletter subscription email validation
@@ -342,29 +334,11 @@ export async function registerRoutes(
           horaCita: data.horaCita,
           empresa: data.empresa,
           industria: data.industria,
-          anosOperacion: data.anosOperacion,
+          industriaOtro: data.industriaOtro || null,
           empleados: data.empleados,
-          ciudades: data.ciudades,
           participante: data.participante,
           email: data.email,
           telefono: data.telefono || null,
-          objetivos: data.objetivos,
-          resultadoEsperado: data.resultadoEsperado,
-          productos: data.productos,
-          volumenMensual: data.volumenMensual,
-          clientePrincipal: data.clientePrincipal,
-          clientePrincipalOtro: data.clientePrincipalOtro || null,
-          canalesAdquisicion: data.canalesAdquisicion,
-          canalAdquisicionOtro: data.canalAdquisicionOtro || null,
-          canalPrincipal: data.canalPrincipal,
-          herramientas: data.herramientas,
-          conectadas: data.conectadas,
-          conectadasDetalle: data.conectadasDetalle || null,
-          nivelTech: data.nivelTech,
-          usaIA: data.usaIA,
-          usaIAParaQue: data.usaIAParaQue || null,
-          comodidadTech: data.comodidadTech,
-          familiaridad: data.familiaridad,
           areaPrioridad: data.areaPrioridad,
           presupuesto: data.presupuesto,
           formDurationMinutes: data.formDurationMinutes || null,
@@ -405,7 +379,8 @@ export async function registerRoutes(
         body: JSON.stringify({
           empresa: data.empresa,
           participante: data.participante,
-          industria: data.industria,
+          industria: getIndustriaLabel(data.industria) + (data.industria === "otro" && data.industriaOtro ? ` (${data.industriaOtro})` : ""),
+          industriaCode: data.industria,
           empleados: data.empleados,
           fechaCita: data.fechaCita,
           horaCita: data.horaCita,
@@ -507,7 +482,7 @@ export async function registerRoutes(
                     <table style="width:100%;border-collapse:collapse;font-size:14px">
                       <tr><td style="padding:6px 0;color:#666;width:120px">Email</td><td style="padding:6px 0">${data.email}</td></tr>
                       ${data.telefono ? `<tr><td style="padding:6px 0;color:#666">Teléfono</td><td style="padding:6px 0">${data.telefono}</td></tr>` : ""}
-                      <tr><td style="padding:6px 0;color:#666">Industria</td><td style="padding:6px 0">${data.industria || "—"}</td></tr>
+                      <tr><td style="padding:6px 0;color:#666">Industria</td><td style="padding:6px 0">${getIndustriaLabel(data.industria, "—")}${data.industria === "otro" && data.industriaOtro ? ` (${data.industriaOtro})` : ""}</td></tr>
                       <tr><td style="padding:6px 0;color:#666">Cita</td><td style="padding:6px 0">${data.fechaCita || "—"} ${data.horaCita || ""}</td></tr>
                     </table>
                     <div style="margin-top:20px">
@@ -815,6 +790,72 @@ export async function registerRoutes(
     }
 
     res.json({ success: true, id: insertedId });
+  });
+
+  // Fase 2 — completar mini-diagnóstico (campos opcionales post-booking)
+  app.patch("/api/diagnostic/:id", async (req, res) => {
+    if (!db) {
+      res.status(503).json({ message: "Base de datos no disponible" });
+      return;
+    }
+
+    const parsed = phase2PatchSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Datos inválidos", details: parsed.error.flatten().fieldErrors });
+      return;
+    }
+
+    const diagnosticId = req.params.id;
+    const p = parsed.data;
+
+    try {
+      // Fusionar herramientas + herramientasOtras en un string para el campo text legacy "herramientas"
+      const herramientasFinal = [
+        ...(p.herramientas ?? []),
+        ...(p.herramientasOtras ? [p.herramientasOtras] : []),
+      ].join(", ") || null;
+
+      const [updated] = await db
+        .update(diagnostics)
+        .set({
+          objetivos: p.objetivos ?? null,
+          productos: p.productos || null,
+          volumenMensual: p.volumenMensual || null,
+          canalesAdquisicion: p.canalesAdquisicion ?? null,
+          herramientas: herramientasFinal,
+          conectadas: p.conectadas || null,
+          nivelTech: p.madurezTech || null,
+          usaIA: p.usaIA || null,
+          phase2CompletedAt: new Date(),
+        })
+        .where(eq(diagnostics.id, diagnosticId))
+        .returning();
+
+      if (!updated) {
+        res.status(404).json({ message: "Diagnóstico no encontrado" });
+        return;
+      }
+
+      // Recalcular lead score con la nueva info
+      try {
+        const [contact] = await db.select().from(contacts).where(eq(contacts.diagnosticId, diagnosticId)).limit(1);
+        if (contact) {
+          const emailsSummary = { sent: 0, opened: 0, clicked: 0 };
+          const newScore = calculateLeadScore(contact, updated, emailsSummary);
+          if (newScore !== contact.leadScore) {
+            await db.update(contacts).set({ leadScore: newScore }).where(eq(contacts.id, contact.id));
+            logActivity(contact.id, "score_changed", `Lead score actualizado tras Fase 2: ${newScore}`, { oldScore: contact.leadScore, newScore });
+          }
+        }
+      } catch (err) {
+        log(`Error recalculando lead score tras Fase 2: ${err}`);
+      }
+
+      res.json({ success: true });
+    } catch (err) {
+      log(`Error en PATCH /api/diagnostic/:id: ${err}`);
+      res.status(500).json({ message: "Error al guardar" });
+    }
   });
 
   // Resend webhook for tracking (opens, clicks, bounces)
@@ -7355,6 +7396,124 @@ ${urls}
     } catch (err: any) {
       res.status(500).json({ error: err?.message });
     }
+  });
+
+  // ═══════════════════════════════════════════════════════════════
+  // Dashboard de Agentes — visualizar y operar los servicios
+  // ═══════════════════════════════════════════════════════════════
+
+  app.get("/api/admin/agents", requireAuth, async (_req, res) => {
+    if (!db) return res.status(503).json({ error: "Database not configured" });
+    try {
+      const recent = await db
+        .select()
+        .from(agentRuns)
+        .orderBy(desc(agentRuns.startedAt))
+        .limit(500);
+
+      const byAgent = new Map<string, typeof recent>();
+      for (const run of recent) {
+        const arr = byAgent.get(run.agentName) ?? [];
+        arr.push(run);
+        byAgent.set(run.agentName, arr);
+      }
+
+      const agents = AGENT_REGISTRY.map((def) => {
+        const runs = byAgent.get(def.name) ?? [];
+        const lastRun = runs[0] ?? null;
+        const last10 = runs.slice(0, 10);
+        const errorCount = last10.filter((r) => r.status === "error").length;
+        const successCount = last10.filter((r) => r.status === "success").length;
+
+        let health: "healthy" | "warning" | "error" | "idle" = "idle";
+        if (lastRun) {
+          if (lastRun.status === "error") {
+            health = def.criticality === "critical" ? "error" : "warning";
+          } else if (errorCount >= 3) {
+            health = "warning";
+          } else {
+            health = "healthy";
+          }
+        }
+
+        return {
+          ...def,
+          runnable: undefined,
+          hasRunnable: typeof def.runnable === "function",
+          health,
+          lastRun: lastRun
+            ? {
+                id: lastRun.id,
+                status: lastRun.status,
+                startedAt: lastRun.startedAt,
+                completedAt: lastRun.completedAt,
+                durationMs: lastRun.durationMs,
+                recordsProcessed: lastRun.recordsProcessed,
+                errorMessage: lastRun.errorMessage,
+                triggeredBy: lastRun.triggeredBy,
+              }
+            : null,
+          stats: {
+            last10Success: successCount,
+            last10Error: errorCount,
+            last10Total: last10.length,
+          },
+        };
+      });
+
+      const summary = {
+        total: agents.length,
+        healthy: agents.filter((a) => a.health === "healthy").length,
+        warning: agents.filter((a) => a.health === "warning").length,
+        error: agents.filter((a) => a.health === "error").length,
+        idle: agents.filter((a) => a.health === "idle").length,
+      };
+
+      res.json({ agents, domains: AGENT_DOMAINS, summary });
+    } catch (err: any) {
+      log(`Error fetching agents: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.get("/api/admin/agents/:name/runs", requireAuth, async (req, res) => {
+    if (!db) return res.status(503).json({ error: "Database not configured" });
+    const name = String(req.params.name);
+    const def = findAgent(name);
+    if (!def) return res.status(404).json({ error: "Agent not found" });
+
+    try {
+      const limit = Math.min(parseInt(String(req.query.limit ?? "50"), 10) || 50, 200);
+      const runs = await db
+        .select()
+        .from(agentRuns)
+        .where(eq(agentRuns.agentName, name))
+        .orderBy(desc(agentRuns.startedAt))
+        .limit(limit);
+
+      res.json({
+        agent: { ...def, runnable: undefined, hasRunnable: typeof def.runnable === "function" },
+        runs,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.post("/api/admin/agents/:name/run", requireAuth, async (req, res) => {
+    const name = String(req.params.name);
+    const def = findAgent(name);
+    if (!def) return res.status(404).json({ error: "Agent not found" });
+    if (typeof def.runnable !== "function") {
+      return res.status(400).json({ error: "Este agente no soporta ejecución manual" });
+    }
+
+    // Fire and return immediately — el agente puede tardar. El dashboard refresca cada 30s.
+    runAgent(name, def.runnable, { triggeredBy: "manual" }).catch((err) =>
+      log(`Manual agent ${name} failed: ${err?.message}`)
+    );
+
+    res.json({ message: `Agente ${def.displayName} disparado`, name });
   });
 
   return httpServer;

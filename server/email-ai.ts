@@ -5,6 +5,8 @@ import { db } from "./db";
 import { contactFiles, contactNotes, gmailEmails } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { readGoogleDriveContent } from "./google-drive";
+import { getIndustriaLabel } from "@shared/industrias";
+import { getCasesForIndustry, hasIndustrySpecificCases } from "./industry-use-cases";
 
 let client: Anthropic | null = null;
 
@@ -82,7 +84,11 @@ function buildContext(data: Partial<Diagnostic> | null): string {
 
   const lines: string[] = ["DATOS DEL CLIENTE:"];
   if (data.empresa) lines.push(`- Empresa: ${data.empresa}`);
-  if (data.industria) lines.push(`- Industria: ${data.industria}`);
+  if (data.industria) {
+    const label = getIndustriaLabel(data.industria);
+    const detail = data.industria === "otro" && data.industriaOtro ? ` (${data.industriaOtro})` : "";
+    lines.push(`- Industria: ${label}${detail}`);
+  }
   if (data.anosOperacion) lines.push(`- Años de operación: ${data.anosOperacion}`);
   if (data.empleados) lines.push(`- Empleados: ${data.empleados}`);
   if (data.ciudades) lines.push(`- Ciudades: ${data.ciudades}`);
@@ -800,7 +806,7 @@ function buildMiniAuditEmail(
   const isEn = language === "en";
   const nombre = diagnosticData.participante || "there";
   const empresa = diagnosticData.empresa || (isEn ? "your company" : "tu empresa");
-  const industria = diagnosticData.industria || (isEn ? "your sector" : "tu sector");
+  const industria = getIndustriaLabel(diagnosticData.industria, isEn ? "your sector" : "tu sector");
   const fechaCita = diagnosticData.fechaCita || "";
   const horaCita = diagnosticData.horaCita || "";
   const meetLink = (diagnosticData as any)._meetLink || (diagnosticData as any).meetLink || "";
@@ -970,6 +976,18 @@ export async function generateMiniAudit(
     }
   }
 
+  // Casos de uso específicos para la industria del cliente — seed para el prompt
+  const industryCases = getCasesForIndustry(diagnosticData.industria, 3);
+  const hasSpecificCases = hasIndustrySpecificCases(diagnosticData.industria);
+  if (industryCases.length > 0) {
+    contextParts.push(
+      `CASOS DE REFERENCIA PARA ESTA INDUSTRIA (úsalos como punto de partida, adaptando el lenguaje a esta empresa específica):\n` +
+      industryCases.map((c, i) =>
+        `${i + 1}. ${c.titulo}\n   Problema: ${c.problema}\n   Solución: ${c.solucion}\n   Impacto: ${c.impacto}\n   Herramientas: ${c.herramientas.join(", ")}`
+      ).join("\n\n")
+    );
+  }
+
   const context = contextParts.join("\n\n---\n\n");
 
   // 1. Generate subject
@@ -983,8 +1001,8 @@ export async function generateMiniAudit(
     messages: [{
       role: "user",
       content: isEn
-        ? `Subject for initial observations on the diagnostic of ${diagnosticData.empresa} (${diagnosticData.industria}). Consultative tone, not salesy. Style: "Initial observations on ${diagnosticData.empresa}" or "Areas worth reviewing — ${diagnosticData.empresa}"`
-        : `Subject para primeras observaciones del diagnostico de ${diagnosticData.empresa} (${diagnosticData.industria}). Tono consultivo, no vendedor. Estilo: "Primeras observaciones sobre ${diagnosticData.empresa}" o "Areas que vale la pena revisar — ${diagnosticData.empresa}"`,
+        ? `Subject for initial observations on the diagnostic of ${diagnosticData.empresa} (${getIndustriaLabel(diagnosticData.industria)}). Consultative tone, not salesy. Style: "Initial observations on ${diagnosticData.empresa}" or "Areas worth reviewing — ${diagnosticData.empresa}"`
+        : `Subject para primeras observaciones del diagnostico de ${diagnosticData.empresa} (${getIndustriaLabel(diagnosticData.industria)}). Tono consultivo, no vendedor. Estilo: "Primeras observaciones sobre ${diagnosticData.empresa}" o "Areas que vale la pena revisar — ${diagnosticData.empresa}"`,
     }],
   });
 
@@ -1052,16 +1070,30 @@ Reglas:
     insights = JSON.parse(cleaned);
     if (!Array.isArray(insights) || insights.length < 3) throw new Error("Invalid insights");
   } catch {
-    insights = isEn ? [
-      { title: "Repetitive processes", description: `We noticed that in ${diagnosticData.industria || "your operation"} there are tasks that are probably being done manually and could be simplified. Worth reviewing which ones have the most impact.`, stat: "McKinsey: 45% of work activities are automatable" },
-      { title: "Disconnected tools", description: `It seems ${diagnosticData.empresa || "the company"} uses several tools that don't communicate with each other. Connecting them could reduce duplicate work, though it would need to be evaluated case by case.`, stat: "Forrester: integrated companies reduce 30% of admin time" },
-      { title: "Untapped data", description: `In ${diagnosticData.industria || "your industry"} it's common to have valuable data that isn't being used for decision-making. This is an area that could be worth exploring.`, stat: "Gartner: 75% of companies will adopt operational AI by 2026" },
-    ] : [
-      { title: "Procesos que se repiten", description: `Notamos que en ${diagnosticData.industria || "tu operacion"} hay tareas que probablemente se estan haciendo de forma manual y podrian simplificarse. Vale la pena revisar cuales tienen mas impacto.`, stat: "McKinsey: 45% de actividades laborales son automatizables" },
-      { title: "Herramientas desconectadas", description: `Parece que ${diagnosticData.empresa || "la empresa"} usa varias herramientas que no se comunican entre si. Conectarlas podria reducir trabajo duplicado, aunque habria que ver caso por caso.`, stat: "Forrester: empresas integradas reducen 30% el tiempo administrativo" },
-      { title: "Datos sin aprovechar", description: `En ${diagnosticData.industria || "tu industria"} es comun tener datos valiosos que no se estan usando para tomar decisiones. Es un area que podria valer la pena explorar.`, stat: "Gartner: 75% de empresas adoptaran IA operativa para 2026" },
-    ];
+    // Fallback: usa el banco de casos por industria si disponible
+    const industriaLabel = getIndustriaLabel(diagnosticData.industria, isEn ? "your industry" : "tu industria");
+    if (industryCases.length >= 3) {
+      insights = industryCases.slice(0, 3).map((c) => ({
+        title: c.titulo,
+        description: isEn
+          ? `In ${industriaLabel}, ${c.problema} ${c.solucion}`
+          : `En ${industriaLabel}, ${c.problema} ${c.solucion}`,
+        stat: c.impacto,
+      }));
+    } else {
+      insights = isEn ? [
+        { title: "Repetitive processes", description: `We noticed that in ${industriaLabel} there are tasks that are probably being done manually and could be simplified. Worth reviewing which ones have the most impact.`, stat: "McKinsey: 45% of work activities are automatable" },
+        { title: "Disconnected tools", description: `It seems ${diagnosticData.empresa || "the company"} uses several tools that don't communicate with each other. Connecting them could reduce duplicate work, though it would need to be evaluated case by case.`, stat: "Forrester: integrated companies reduce 30% of admin time" },
+        { title: "Untapped data", description: `In ${industriaLabel} it's common to have valuable data that isn't being used for decision-making. This is an area that could be worth exploring.`, stat: "Gartner: 75% of companies will adopt operational AI by 2026" },
+      ] : [
+        { title: "Procesos que se repiten", description: `Notamos que en ${industriaLabel} hay tareas que probablemente se estan haciendo de forma manual y podrian simplificarse. Vale la pena revisar cuales tienen mas impacto.`, stat: "McKinsey: 45% de actividades laborales son automatizables" },
+        { title: "Herramientas desconectadas", description: `Parece que ${diagnosticData.empresa || "la empresa"} usa varias herramientas que no se comunican entre si. Conectarlas podria reducir trabajo duplicado, aunque habria que ver caso por caso.`, stat: "Forrester: empresas integradas reducen 30% el tiempo administrativo" },
+        { title: "Datos sin aprovechar", description: `En ${industriaLabel} es comun tener datos valiosos que no se estan usando para tomar decisiones. Es un area que podria valer la pena explorar.`, stat: "Gartner: 75% de empresas adoptaran IA operativa para 2026" },
+      ];
+    }
   }
+
+  void hasSpecificCases;
 
   // 3. Build premium HTML email
   const body = buildMiniAuditEmail(insights, diagnosticData, contactId, language);
@@ -1099,8 +1131,8 @@ export async function generateReengagement(
     messages: [{
       role: "user",
       content: language === "en"
-        ? `Generate a re-engagement subject for a cold lead in ${diagnosticData?.industria || "business"} sector. DO NOT mention "audit", "diagnostic", "appointment" or "IM3". Focus on a surprising industry fact. Examples: "What 73% of ${diagnosticData?.industria || "companies"} don't know", "Is your team losing X hours per week on this?"`
-        : `Genera un subject de re-engagement para un lead frío del sector ${diagnosticData?.industria || "empresas"}. NO mencionar "auditoría", "diagnóstico", "cita" ni "IM3". Enfócate en un dato sorprendente de su industria. Ejemplos: "Lo que el 73% de empresas de [industria] no saben", "¿Tu equipo pierde X horas por semana en esto?"`,
+        ? `Generate a re-engagement subject for a cold lead in ${getIndustriaLabel(diagnosticData?.industria, "business")} sector. DO NOT mention "audit", "diagnostic", "appointment" or "IM3". Focus on a surprising industry fact. Examples: "What 73% of ${getIndustriaLabel(diagnosticData?.industria, "companies")} don't know", "Is your team losing X hours per week on this?"`
+        : `Genera un subject de re-engagement para un lead frío del sector ${getIndustriaLabel(diagnosticData?.industria, "empresas")}. NO mencionar "auditoría", "diagnóstico", "cita" ni "IM3". Enfócate en un dato sorprendente de su industria. Ejemplos: "Lo que el 73% de empresas de [industria] no saben", "¿Tu equipo pierde X horas por semana en esto?"`,
     }],
   });
 
@@ -1119,7 +1151,7 @@ export async function generateReengagement(
         ? `Generate a RE-ENGAGEMENT email for a cold lead (hasn't opened previous emails).
 
 STRATEGY: Break the pattern. DO NOT mention audit or diagnostic. Instead:
-1. Open with a surprising fact or short story about their industry (${diagnosticData?.industria || "business"})
+1. Open with a surprising fact or short story about their industry (${getIndustriaLabel(diagnosticData?.industria, "business")})
 2. Connect that fact with a pain they probably have
 3. Offer value without asking for anything: a concrete tip they can apply TODAY
 4. Soft CTA: "If you'd like to see how to apply this at ${contact.empresa}, reply to this email"
@@ -1132,7 +1164,7 @@ Generate in PURE HTML with inline styles. Return ONLY the direct HTML. MINIMALIS
         : `Genera un email de RE-ENGAGEMENT para un lead frío (no ha abierto emails anteriores).
 
 ESTRATEGIA: Romper el patrón. NO mencionar auditoría ni diagnóstico. En su lugar:
-1. Abrir con un dato sorprendente o historia corta sobre su industria (${diagnosticData?.industria || "empresas"})
+1. Abrir con un dato sorprendente o historia corta sobre su industria (${getIndustriaLabel(diagnosticData?.industria, "empresas")})
 2. Conectar ese dato con un dolor que probablemente tienen
 3. Ofrecer valor sin pedir nada: un tip concreto que puedan aplicar HOY
 4. CTA suave: "Si quieres ver cómo aplicar esto en ${contact.empresa}, responde a este email"

@@ -60,8 +60,8 @@ export default function StepPriorities({ form }: StepProps) {
           <TrendingUp className="w-5 h-5" />
         </div>
         <div>
-          <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Paso 8 de 9</p>
-          <h2 className="text-lg font-medium text-foreground">Prioridades e Inversión</h2>
+          <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Paso 3 de 3</p>
+          <h2 className="text-lg font-medium text-foreground">Qué buscas</h2>
         </div>
       </div>
 

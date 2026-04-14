@@ -3,6 +3,14 @@ import { Building2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { INDUSTRIAS, type IndustriaValue } from "@shared/industrias";
 import type { DiagnosticFormData } from "../schema";
 
 interface StepProps {
@@ -14,6 +22,7 @@ const empleadosOptions = ["1-10", "11-25", "26-50", "51-100", "100+"];
 export default function StepGeneral({ form }: StepProps) {
   const { register, setValue, watch, formState: { errors } } = form;
   const empleados = watch("empleados");
+  const industria = watch("industria");
 
   return (
     <div className="space-y-6">
@@ -22,12 +31,23 @@ export default function StepGeneral({ form }: StepProps) {
           <Building2 className="w-5 h-5" />
         </div>
         <div>
-          <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Paso 2 de 9</p>
-          <h2 className="text-lg font-medium text-foreground">Información General</h2>
+          <p className="text-[10px] font-mono uppercase tracking-widest text-muted-foreground">Paso 2 de 3</p>
+          <h2 className="text-lg font-medium text-foreground">Tu empresa</h2>
         </div>
       </div>
 
-      {/* Q1 — Nombre de la empresa */}
+      <div className="space-y-2">
+        <Label htmlFor="participante" className="text-sm font-medium">
+          Nombre y cargo
+        </Label>
+        <Input
+          id="participante"
+          placeholder="Ej: Juan Pérez, CEO"
+          {...register("participante")}
+        />
+        {errors.participante && <p className="text-xs text-destructive">{errors.participante.message}</p>}
+      </div>
+
       <div className="space-y-2">
         <Label htmlFor="empresa" className="text-sm font-medium">
           Nombre de la empresa
@@ -40,39 +60,59 @@ export default function StepGeneral({ form }: StepProps) {
         {errors.empresa && <p className="text-xs text-destructive">{errors.empresa.message}</p>}
       </div>
 
-      {/* Q2 — Industria / Sector */}
       <div className="space-y-2">
-        <Label htmlFor="industria" className="text-sm font-medium">
-          Industria / Sector
+        <Label htmlFor="telefono" className="text-sm font-medium">
+          Teléfono / WhatsApp
         </Label>
         <Input
-          id="industria"
-          placeholder="Ej: Tecnología, Salud, Retail..."
-          {...register("industria")}
+          id="telefono"
+          type="tel"
+          placeholder="Ej: +57 300 123 4567"
+          {...register("telefono")}
         />
+        {errors.telefono && <p className="text-xs text-destructive">{errors.telefono.message}</p>}
+      </div>
+
+      <div className="space-y-2">
+        <Label htmlFor="industria" className="text-sm font-medium">
+          Industria
+        </Label>
+        <Select
+          value={industria || ""}
+          onValueChange={(val) => setValue("industria", val as IndustriaValue, { shouldValidate: true })}
+        >
+          <SelectTrigger id="industria" className="w-full">
+            <SelectValue placeholder="Selecciona tu industria" />
+          </SelectTrigger>
+          <SelectContent>
+            {INDUSTRIAS.map((opt) => (
+              <SelectItem key={opt.value} value={opt.value}>
+                {opt.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {errors.industria && <p className="text-xs text-destructive">{errors.industria.message}</p>}
       </div>
 
-      {/* Q3 — Años de operación */}
-      <div className="space-y-2">
-        <Label htmlFor="anosOperacion" className="text-sm font-medium">
-          Años de operación
-        </Label>
-        <Input
-          id="anosOperacion"
-          type="number"
-          min="0"
-          placeholder="Ej: 5"
-          {...register("anosOperacion")}
-        />
-        {errors.anosOperacion && <p className="text-xs text-destructive">{errors.anosOperacion.message}</p>}
-      </div>
+      {industria === "otro" && (
+        <div className="space-y-2">
+          <Label htmlFor="industriaOtro" className="text-sm font-medium">
+            ¿Cuál industria?
+          </Label>
+          <Input
+            id="industriaOtro"
+            placeholder="Describe tu industria"
+            {...register("industriaOtro")}
+          />
+          {errors.industriaOtro && <p className="text-xs text-destructive">{errors.industriaOtro.message}</p>}
+        </div>
+      )}
 
-      {/* Q4 — Número de empleados */}
       <div className="space-y-3">
         <Label className="text-sm font-medium">Número de empleados</Label>
         <RadioGroup
-          value={empleados}
+          value={empleados || ""}
           onValueChange={(val) => setValue("empleados", val, { shouldValidate: true })}
           className="grid grid-cols-2 sm:grid-cols-3 gap-2"
         >
@@ -91,46 +131,6 @@ export default function StepGeneral({ form }: StepProps) {
           ))}
         </RadioGroup>
         {errors.empleados && <p className="text-xs text-destructive">{errors.empleados.message}</p>}
-      </div>
-
-      {/* Q5 — Ciudades o países */}
-      <div className="space-y-2">
-        <Label htmlFor="ciudades" className="text-sm font-medium">
-          Ciudades o países donde opera
-        </Label>
-        <Input
-          id="ciudades"
-          placeholder="Ej: Colombia, México, Estados Unidos"
-          {...register("ciudades")}
-        />
-        {errors.ciudades && <p className="text-xs text-destructive">{errors.ciudades.message}</p>}
-      </div>
-
-      {/* Q6 — Participante */}
-      <div className="space-y-2">
-        <Label htmlFor="participante" className="text-sm font-medium">
-          Nombre y cargo de quien participará en la auditoría
-        </Label>
-        <Input
-          id="participante"
-          placeholder="Ej: Juan Pérez, CEO"
-          {...register("participante")}
-        />
-        {errors.participante && <p className="text-xs text-destructive">{errors.participante.message}</p>}
-      </div>
-
-      {/* Q7 — Teléfono */}
-      <div className="space-y-2">
-        <Label htmlFor="telefono" className="text-sm font-medium">
-          Teléfono / WhatsApp
-        </Label>
-        <Input
-          id="telefono"
-          type="tel"
-          placeholder="Ej: +57 300 123 4567"
-          {...register("telefono")}
-        />
-        {errors.telefono && <p className="text-xs text-destructive">{errors.telefono.message}</p>}
       </div>
     </div>
   );

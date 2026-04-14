@@ -19,53 +19,56 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
-// Diagnostic form submissions
+// Diagnostic form submissions — "Commit progresivo" (Fase 1 obligatoria + Fase 2 opcional)
 export const diagnostics = pgTable("diagnostics", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  // Step 0 — Cita
+  // ── FASE 1 (obligatoria) ──
+  // Booking
   fechaCita: text("fecha_cita").notNull(),
   horaCita: text("hora_cita").notNull(),
-  // Step 1 — Información General
+  // Empresa
   empresa: text("empresa").notNull(),
-  industria: text("industria").notNull(),
-  anosOperacion: text("anos_operacion").notNull(),
+  industria: text("industria").notNull(), // IndustriaValue enum; "otro" habilita industriaOtro
+  industriaOtro: text("industria_otro"),
   empleados: text("empleados").notNull(),
-  ciudades: text("ciudades").notNull(),
   participante: text("participante").notNull(),
   email: text("email").notNull(),
   telefono: text("telefono"),
-  // Step 2 — Contexto
-  objetivos: json("objetivos").$type<string[]>().notNull(),
-  resultadoEsperado: text("resultado_esperado").notNull(),
-  // Step 3 — Modelo de negocio
-  productos: text("productos").notNull(),
-  volumenMensual: text("volumen_mensual").notNull(),
-  clientePrincipal: text("cliente_principal").notNull(),
+  // Prioridades
+  areaPrioridad: json("area_prioridad").$type<string[]>().notNull(),
+  presupuesto: text("presupuesto").notNull(),
+
+  // ── FASE 2 (opcional, completable post-booking vía PATCH) ──
+  objetivos: json("objetivos").$type<string[]>(),
+  productos: text("productos"),
+  volumenMensual: text("volumen_mensual"),
+  canalesAdquisicion: json("canales_adquisicion").$type<string[]>(),
+  herramientas: text("herramientas"),
+  conectadas: text("conectadas"),
+  nivelTech: text("nivel_tech"), // Mantenido por compatibilidad; usar valores de MADUREZ_TECH
+  usaIA: text("usa_ia"),
+  phase2CompletedAt: timestamp("phase2_completed_at"),
+
+  // ── Columnas legacy (ya no se escriben desde el nuevo form; pendiente drop en migración separada) ──
+  anosOperacion: text("anos_operacion"),
+  ciudades: text("ciudades"),
+  resultadoEsperado: text("resultado_esperado"),
+  clientePrincipal: text("cliente_principal"),
   clientePrincipalOtro: text("cliente_principal_otro"),
-  // Step 4 — Adquisición
-  canalesAdquisicion: json("canales_adquisicion").$type<string[]>().notNull(),
   canalAdquisicionOtro: text("canal_adquisicion_otro"),
-  canalPrincipal: text("canal_principal").notNull(),
-  // Step 5 — Herramientas
-  herramientas: text("herramientas").notNull(),
-  conectadas: text("conectadas").notNull(),
+  canalPrincipal: text("canal_principal"),
   conectadasDetalle: text("conectadas_detalle"),
-  // Step 6 — Madurez tecnológica
-  nivelTech: text("nivel_tech").notNull(),
-  usaIA: text("usa_ia").notNull(),
   usaIAParaQue: text("usa_ia_para_que"),
-  comodidadTech: text("comodidad_tech").notNull(),
+  comodidadTech: text("comodidad_tech"),
   familiaridad: json("familiaridad").$type<{
     automatizacion: string;
     crm: string;
     ia: string;
     integracion: string;
     desarrollo: string;
-  }>().notNull(),
-  // Step 7 — Prioridades
-  areaPrioridad: json("area_prioridad").$type<string[]>().notNull(),
-  presupuesto: text("presupuesto").notNull(),
-  // Metadata
+  }>(),
+
+  // ── Metadata ──
   createdAt: timestamp("created_at").defaultNow().notNull(),
   sentToGhl: boolean("sent_to_ghl").default(false).notNull(),
   googleDriveUrl: text("google_drive_url"),
@@ -284,6 +287,8 @@ export const appointments = pgTable("appointments", {
   transcriptUrl: text("transcript_url"),
   appointmentType: text("appointment_type").default("manual"), // initial | follow_up | manual
   parentAppointmentId: varchar("parent_appointment_id"),
+  prepSentAt: timestamp("prep_sent_at"),
+  followupDraftedAt: timestamp("followup_drafted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -701,3 +706,25 @@ export const contactFiles = pgTable("contact_files", {
 
 export type ContactFile = typeof contactFiles.$inferSelect;
 export type InsertContactFile = typeof contactFiles.$inferInsert;
+
+// ───────────────────────────────────────────────────────────────
+// Agent Runs — ejecución de cron jobs, servicios IA, webhooks
+// ───────────────────────────────────────────────────────────────
+
+export const agentRuns = pgTable("agent_runs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  agentName: text("agent_name").notNull(),
+  status: text("status").notNull(), // running | success | error
+  startedAt: timestamp("started_at").defaultNow().notNull(),
+  completedAt: timestamp("completed_at"),
+  durationMs: integer("duration_ms"),
+  recordsProcessed: integer("records_processed").default(0),
+  errorMessage: text("error_message"),
+  errorStack: text("error_stack"),
+  metadata: json("metadata").$type<Record<string, unknown>>(),
+  triggeredBy: text("triggered_by").default("cron").notNull(), // cron | manual | webhook | startup
+  supervisorAnalyzedAt: timestamp("supervisor_analyzed_at"),
+});
+
+export type AgentRun = typeof agentRuns.$inferSelect;
+export type InsertAgentRun = typeof agentRuns.$inferInsert;

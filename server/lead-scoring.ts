@@ -41,9 +41,9 @@ export function calculateLeadScore(
       score += 10;
     }
 
-    // Tech level
+    // Tech level (acepta valores legacy "Avanzado"/"Intermedio" y nuevos "tech_first"/"avanzado"/"intermedio"/"basico")
     const techLevel = (diagnostic.nivelTech || "").toLowerCase();
-    if (techLevel.includes("alto") || techLevel.includes("avanzado")) {
+    if (techLevel.includes("tech_first") || techLevel.includes("alto") || techLevel.includes("avanzado")) {
       score += 10;
     } else if (techLevel.includes("medio") || techLevel.includes("intermedio")) {
       score += 5;
