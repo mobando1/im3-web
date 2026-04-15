@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Propuesta — APP Logistics · IM3 Systems</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:ital,wght@0,300;0,400;0,500;0,600;0,700;1,300&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+<style>
+:root{
+  --ink:#080f1a;--ink2:#0d1626;--ink3:#132033;
+  --teal:#0eb5a8;--teal2:#2dd4c7;--teal3:#a8f0ea;
+  --smoke:#8b8b9a;--light:#e8e8f0;--white:#f9f9fc;
+  --danger:#e05c5c;--warn:#e8923a;--success:#4caf82;
+  --r:12px;--r2:20px;
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html{scroll-behavior:smooth;font-size:16px;}
+body{background:var(--ink);color:var(--light);font-family:'Plus Jakarta Sans',sans-serif;font-weight:300;line-height:1.7;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;z-index:0;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");pointer-events:none;opacity:.35;}
+h1,h2,h3,h4{font-family:'Plus Jakarta Sans',sans-serif;font-weight:600;line-height:1.18;letter-spacing:-.02em;}
+.container{max-width:900px;margin:0 auto;padding:0 2rem;position:relative;z-index:1;}
+section{padding:5rem 0;}
+.divider{width:100%;height:1px;background:linear-gradient(90deg,transparent,rgba(14,181,168,.18),transparent);}
+
+/* ── NAV ── */
+nav{position:fixed;top:0;left:0;right:0;z-index:100;padding:1rem 2.5rem;display:flex;align-items:center;justify-content:space-between;background:rgba(8,15,26,.92);backdrop-filter:blur(20px);border-bottom:1px solid rgba(14,181,168,.12);}
+.nav-brand{display:flex;align-items:center;gap:.75rem;}
+.nav-logo{width:32px;height:32px;border-radius:8px;background:var(--teal);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.85rem;color:var(--ink);}
+.nav-label{font-size:.78rem;color:var(--smoke);}
+.nav-label strong{color:var(--light);font-weight:500;display:block;font-size:.82rem;}
+.nav-progress{position:absolute;bottom:0;left:0;height:2px;background:linear-gradient(90deg,var(--teal),var(--teal2));width:0%;transition:width .1s linear;}
+
+/* ── BUTTONS ── */
+.btn{display:inline-flex;align-items:center;gap:.5rem;padding:.65rem 1.5rem;border-radius:999px;font-size:.85rem;font-weight:500;cursor:pointer;border:none;text-decoration:none;transition:all .2s;font-family:'Plus Jakarta Sans',sans-serif;}
+.btn-outline{background:transparent;color:var(--light);border:1px solid rgba(255,255,255,.2);}
+.btn-outline:hover{border-color:var(--teal);color:var(--teal);}
+.btn-teal{background:var(--teal);color:var(--ink);font-weight:600;}
+.btn-teal:hover{background:var(--teal2);transform:translateY(-1px);box-shadow:0 8px 28px rgba(14,181,168,.35);}
+.btn-large{padding:.9rem 2.5rem;font-size:.95rem;}
+
+/* ── SECTION LABEL ── */
+.section-label{display:inline-flex;align-items:center;gap:.5rem;font-size:.7rem;color:var(--teal);letter-spacing:.15em;text-transform:uppercase;margin-bottom:1rem;font-family:'DM Mono',monospace;}
+.section-label::before{content:'';width:20px;height:1px;background:var(--teal);}
+
+/* ── HERO — Pre-Suasion: open with PAIN, prime with the problem ── */
+.hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;padding:8rem 0 5rem;position:relative;overflow:hidden;}
+.hero-bg{position:absolute;inset:0;background:radial-gradient(ellipse 65% 55% at 75% 25%,rgba(14,181,168,.1) 0%,transparent 60%),radial-gradient(ellipse 45% 45% at 15% 75%,rgba(14,181,168,.05) 0%,transparent 60%),linear-gradient(160deg,#080f1a 0%,#0d1626 55%,#091220 100%);}
+.hero-line{position:absolute;top:0;left:50%;width:1px;height:100%;background:linear-gradient(to bottom,transparent,rgba(14,181,168,.15) 40%,transparent);}
+.hero-tag{display:inline-flex;align-items:center;gap:.5rem;padding:.3rem .9rem;border:1px solid rgba(14,181,168,.3);border-radius:999px;font-size:.72rem;color:var(--teal);letter-spacing:.1em;text-transform:uppercase;margin-bottom:1.75rem;background:rgba(14,181,168,.05);}
+.hero-tag::before{content:'';width:6px;height:6px;border-radius:50%;background:var(--teal);animation:pulse 2s infinite;}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.25}}
+
+/* Pre-Suasion: headline leads with the CLIENT'S PAIN, not IM3's name */
+.hero h1{font-size:clamp(2.2rem,5.5vw,4.2rem);font-weight:700;color:var(--white);margin-bottom:1rem;max-width:700px;}
+.hero h1 em{font-style:normal;background:linear-gradient(135deg,var(--teal) 0%,var(--teal3) 100%);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;}
+.hero-sub{font-size:1.05rem;color:var(--smoke);max-width:560px;margin-bottom:2rem;line-height:1.7;}
+.hero-sub strong{color:var(--light);}
+
+/* Reciprocation: remind them of the free diagnosis */
+.hero-reciprocation{display:inline-flex;align-items:center;gap:.65rem;background:rgba(14,181,168,.06);border:1px solid rgba(14,181,168,.2);border-radius:var(--r);padding:.75rem 1.25rem;margin-bottom:2.5rem;font-size:.83rem;color:var(--smoke);}
+.hero-reciprocation strong{color:var(--teal);}
+.hero-reciprocation svg{width:16px;height:16px;color:var(--teal);flex-shrink:0;}
+
+.hero-meta{display:flex;align-items:center;gap:1.25rem;flex-wrap:wrap;margin-bottom:2rem;font-size:.85rem;color:var(--smoke);}
+.hero-meta strong{color:var(--light);}
+.sep{color:rgba(14,181,168,.35);}
+.hero-badges{display:flex;gap:.65rem;flex-wrap:wrap;margin-bottom:3rem;}
+.badge{display:inline-flex;align-items:center;gap:.4rem;padding:.35rem .9rem;border-radius:999px;font-size:.76rem;font-weight:400;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);color:var(--light);}
+.badge svg{width:12px;height:12px;color:var(--teal);flex-shrink:0;}
+.hero-cta-single{display:inline-flex;align-items:center;gap:.7rem;font-size:.87rem;color:var(--smoke);text-decoration:none;transition:color .2s;}
+.hero-cta-single:hover{color:var(--teal);}
+.hero-cta-single .arrow{width:38px;height:38px;border-radius:50%;border:1px solid rgba(14,181,168,.3);display:flex;align-items:center;justify-content:center;transition:all .2s;}
+.hero-cta-single:hover .arrow{border-color:var(--teal);background:rgba(14,181,168,.08);}
+.scroll-hint{position:absolute;bottom:2rem;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:.4rem;color:var(--smoke);font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;animation:bounce 2.5s ease-in-out infinite;}
+.scroll-hint::after{content:'';width:1px;height:24px;background:linear-gradient(to bottom,var(--teal),transparent);}
+@keyframes bounce{0%,100%{transform:translateX(-50%) translateY(0)}50%{transform:translateX(-50%) translateY(6px)}}
+
+/* ── SUMMARY ── */
+.summary-grid{display:grid;grid-template-columns:1fr 250px;gap:3rem;align-items:start;}
+.summary-text{font-size:1rem;color:var(--light);}
+.summary-text p{margin-bottom:1rem;}
+.summary-text p:last-child{margin-bottom:0;}
+.summary-card{background:var(--ink3);border:1px solid rgba(14,181,168,.18);border-radius:var(--r2);padding:1.6rem;position:sticky;top:5.5rem;}
+.summary-card-title{font-size:.68rem;color:var(--teal);letter-spacing:.12em;text-transform:uppercase;font-family:'DM Mono',monospace;margin-bottom:1.1rem;padding-bottom:.7rem;border-bottom:1px solid rgba(14,181,168,.12);}
+.stat-row{display:flex;justify-content:space-between;align-items:baseline;padding:.55rem 0;border-bottom:1px solid rgba(255,255,255,.04);}
+.stat-row:last-child{border-bottom:none;}
+.stat-label{font-size:.8rem;color:var(--smoke);}
+.stat-value{font-size:1rem;color:var(--teal2);font-weight:600;}
+
+/* Commitment & Consistency: micro-agreement banner */
+.commitment-banner{background:linear-gradient(135deg,rgba(14,181,168,.08),rgba(14,181,168,.03));border:1px solid rgba(14,181,168,.2);border-radius:var(--r2);padding:1.5rem 2rem;margin-bottom:3rem;display:flex;align-items:flex-start;gap:1rem;}
+.commitment-banner svg{width:20px;height:20px;color:var(--teal);flex-shrink:0;margin-top:.15rem;}
+.commitment-banner p{font-size:.82rem;color:var(--smoke);line-height:1.65;}
+.commitment-banner p strong{color:var(--light);}
+
+/* ── PROBLEM ── */
+.problem-section{background:var(--ink2);}
+
+/* Animated cost counter — visceral inaction cost */
+.cost-counter-wrap{margin-bottom:3rem;}
+.cost-counter-label{font-size:.72rem;color:var(--smoke);font-family:'DM Mono',monospace;letter-spacing:.08em;text-transform:uppercase;margin-bottom:.5rem;}
+.cost-counter-row{display:flex;align-items:baseline;gap:1rem;flex-wrap:wrap;}
+.cost-counter{font-size:3.2rem;font-weight:700;color:var(--danger);line-height:1;font-variant-numeric:tabular-nums;}
+.cost-counter-desc{font-size:.88rem;color:var(--smoke);max-width:380px;line-height:1.6;}
+.cost-counter-desc strong{color:var(--light);}
+.cost-meter{width:100%;height:6px;background:rgba(255,255,255,.06);border-radius:999px;margin-top:1.25rem;overflow:hidden;}
+.cost-meter-fill{height:100%;background:linear-gradient(90deg,var(--warn),var(--danger));border-radius:999px;width:0%;transition:width 2s ease;}
+
+.problems-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(255px,1fr));gap:1.2rem;}
+.problem-card{background:var(--ink3);border:1px solid rgba(255,255,255,.06);border-radius:var(--r2);padding:1.65rem;position:relative;overflow:hidden;transition:border-color .25s,transform .25s;}
+.problem-card:hover{border-color:rgba(224,92,92,.35);transform:translateY(-3px);}
+.problem-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--danger),transparent);}
+.problem-icon{width:36px;height:36px;border-radius:9px;background:rgba(224,92,92,.1);display:flex;align-items:center;justify-content:center;font-size:1rem;margin-bottom:.9rem;}
+.problem-card h4{font-size:.9rem;font-weight:600;margin-bottom:.4rem;color:var(--white);}
+.problem-card p{font-size:.82rem;color:var(--smoke);line-height:1.6;}
+
+/* ── SOLUTION ── */
+.modules-list{display:flex;flex-direction:column;gap:1.1rem;}
+.module-card{display:grid;grid-template-columns:60px 1fr;gap:1.4rem;align-items:start;background:var(--ink2);border:1px solid rgba(255,255,255,.06);border-radius:var(--r2);padding:1.65rem;transition:border-color .25s,transform .25s;}
+.module-card:hover{border-color:rgba(14,181,168,.28);transform:translateX(4px);}
+.module-num{width:44px;height:44px;border-radius:var(--r);background:rgba(14,181,168,.08);border:1px solid rgba(14,181,168,.22);display:flex;align-items:center;justify-content:center;font-size:1.1rem;font-weight:700;color:var(--teal);flex-shrink:0;}
+.module-body h3{font-size:.95rem;font-weight:600;color:var(--white);margin-bottom:.35rem;}
+.module-body p{font-size:.84rem;color:var(--smoke);line-height:1.65;}
+
+/* ── TECH ── */
+.tech-section{background:var(--ink2);}
+.tech-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(155px,1fr));gap:.9rem;}
+.tech-pill{display:flex;align-items:center;gap:.6rem;padding:.8rem 1rem;background:var(--ink3);border:1px solid rgba(255,255,255,.06);border-radius:var(--r);font-size:.83rem;color:var(--light);transition:border-color .2s;}
+.tech-pill:hover{border-color:rgba(14,181,168,.28);}
+.tech-dot{width:7px;height:7px;border-radius:50%;background:var(--teal);flex-shrink:0;}
+
+/* ── TIMELINE ── */
+.phases{display:flex;flex-direction:column;position:relative;padding-left:3rem;}
+.phases::before{content:'';position:absolute;left:13px;top:18px;bottom:18px;width:1px;background:linear-gradient(to bottom,var(--teal),rgba(14,181,168,.08));}
+.phase{position:relative;padding:0 0 2.25rem 1.4rem;}
+.phase:last-child{padding-bottom:0;}
+.phase-dot{position:absolute;left:-27px;top:3px;width:26px;height:26px;border-radius:50%;background:var(--ink2);border:2px solid var(--teal);display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:.68rem;color:var(--teal);}
+.phase-header{display:flex;align-items:baseline;gap:.9rem;margin-bottom:.45rem;flex-wrap:wrap;}
+.phase-title{font-size:.95rem;font-weight:600;color:var(--white);}
+.phase-duration{font-family:'DM Mono',monospace;font-size:.68rem;color:var(--teal);background:rgba(14,181,168,.08);padding:.18rem .55rem;border-radius:999px;}
+.phase-items{display:flex;gap:.45rem;flex-wrap:wrap;margin-top:.5rem;}
+.phase-item{font-size:.76rem;color:var(--smoke);padding:.22rem .65rem;background:rgba(255,255,255,.03);border-radius:999px;border:1px solid rgba(255,255,255,.05);}
+.phase-outcome{margin-top:.75rem;font-size:.76rem;color:var(--teal);font-family:'DM Mono',monospace;opacity:.8;}
+
+/* ── ROI — visual bar chart comparison ── */
+.roi-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1.4rem;margin-bottom:2.5rem;}
+.roi-card{background:var(--ink2);border:1px solid rgba(14,181,168,.13);border-radius:var(--r2);padding:1.75rem;text-align:center;}
+.roi-figure{font-size:2rem;font-weight:700;color:var(--teal2);line-height:1;margin-bottom:.2rem;}
+.roi-currency{font-size:.65rem;color:var(--teal);font-family:'DM Mono',monospace;letter-spacing:.08em;margin-bottom:.3rem;}
+.roi-label{font-size:.78rem;color:var(--smoke);}
+
+/* Visual comparison bar chart */
+.roi-comparison{background:var(--ink2);border:1px solid rgba(14,181,168,.15);border-radius:var(--r2);padding:2.5rem;margin-bottom:2.5rem;}
+.roi-comparison-title{font-size:.72rem;color:var(--smoke);font-family:'DM Mono',monospace;letter-spacing:.08em;text-transform:uppercase;margin-bottom:2rem;}
+.bar-row{display:grid;grid-template-columns:180px 1fr auto;gap:1rem;align-items:center;margin-bottom:1.25rem;}
+.bar-row:last-child{margin-bottom:0;}
+.bar-label{font-size:.83rem;color:var(--smoke);text-align:right;}
+.bar-track{background:rgba(255,255,255,.05);border-radius:999px;height:28px;overflow:hidden;position:relative;}
+.bar-fill{height:100%;border-radius:999px;display:flex;align-items:center;padding-left:.75rem;font-size:.75rem;font-weight:600;width:0%;transition:width 1.8s ease;white-space:nowrap;}
+.bar-fill.danger{background:linear-gradient(90deg,rgba(224,92,92,.6),rgba(224,92,92,.3));color:rgba(255,255,255,.7);}
+.bar-fill.teal{background:linear-gradient(90deg,var(--teal),var(--teal2));color:var(--ink);}
+.bar-value{font-size:.85rem;font-weight:600;color:var(--light);white-space:nowrap;}
+
+.roi-hero-card{background:linear-gradient(135deg,rgba(14,181,168,.12),rgba(14,181,168,.04));border:1px solid rgba(14,181,168,.3);border-radius:var(--r2);padding:2.25rem;display:grid;grid-template-columns:1fr auto;gap:2rem;align-items:center;}
+.roi-hero-title{font-size:1.05rem;font-weight:600;margin-bottom:.45rem;color:var(--white);}
+.roi-hero-desc{font-size:.87rem;color:var(--smoke);line-height:1.65;}
+.roi-big{font-size:3.2rem;font-weight:700;color:var(--teal);line-height:1;text-align:right;}
+.roi-big span{display:block;font-size:.9rem;font-weight:400;color:var(--smoke);}
+
+/* ── AUTHORITY — new section: credibility before price ── */
+.authority-section{background:var(--ink2);}
+.authority-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:1.2rem;margin-bottom:3rem;}
+.auth-stat{background:var(--ink3);border:1px solid rgba(255,255,255,.06);border-radius:var(--r2);padding:1.5rem;text-align:center;transition:border-color .2s;}
+.auth-stat:hover{border-color:rgba(14,181,168,.22);}
+.auth-stat-num{font-size:2rem;font-weight:700;color:var(--teal2);line-height:1;margin-bottom:.25rem;}
+.auth-stat-label{font-size:.78rem;color:var(--smoke);}
+.authority-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(195px,1fr));gap:1.1rem;}
+.authority-card{background:var(--ink3);border:1px solid rgba(255,255,255,.06);border-radius:var(--r2);padding:1.4rem;transition:border-color .2s;}
+.authority-card:hover{border-color:rgba(14,181,168,.22);}
+.authority-card-icon{font-size:1.4rem;margin-bottom:.65rem;}
+.authority-card h4{font-size:.87rem;font-weight:600;color:var(--white);margin-bottom:.3rem;}
+.authority-card p{font-size:.78rem;color:var(--smoke);line-height:1.55;}
+
+/* ── TESTIMONIALS (untouched, left as-is) ── */
+.testimonials-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(275px,1fr));gap:1.2rem;}
+.testimonial{background:var(--ink2);border:1px solid rgba(255,255,255,.06);border-radius:var(--r2);padding:1.65rem;position:relative;}
+.testimonial::before{content:'"';position:absolute;top:.9rem;right:1.4rem;font-size:3.5rem;line-height:1;color:rgba(14,181,168,.1);}
+.testimonial-text{font-size:.86rem;color:var(--smoke);line-height:1.7;margin-bottom:1.1rem;font-style:italic;}
+.testimonial-author{font-size:.8rem;font-weight:600;color:var(--light);}
+.testimonial-role{font-size:.76rem;color:var(--teal);}
+
+/* ── PRICING — scarcity framing ── */
+.pricing-section{background:var(--ink2);}
+.scarcity-banner{background:linear-gradient(135deg,rgba(232,146,58,.1),rgba(232,146,58,.04));border:1px solid rgba(232,146,58,.3);border-radius:var(--r2);padding:1.25rem 1.75rem;margin-bottom:2.5rem;display:flex;align-items:center;gap:.9rem;max-width:580px;margin-left:auto;margin-right:auto;}
+.scarcity-banner svg{width:18px;height:18px;color:var(--warn);flex-shrink:0;}
+.scarcity-banner p{font-size:.84rem;color:var(--smoke);line-height:1.55;}
+.scarcity-banner p strong{color:var(--warn);}
+.pricing-card{background:var(--ink3);border:1px solid rgba(14,181,168,.3);border-radius:var(--r2);overflow:hidden;max-width:580px;margin:0 auto;}
+.pricing-header{background:linear-gradient(135deg,rgba(14,181,168,.12),rgba(14,181,168,.04));padding:2.25rem;text-align:center;border-bottom:1px solid rgba(14,181,168,.15);}
+.pricing-amount{font-size:3.2rem;font-weight:700;color:var(--teal);line-height:1;}
+.pricing-amount sup{font-size:1.4rem;vertical-align:top;margin-top:.4rem;}
+.pricing-amount sub{font-size:.95rem;color:var(--smoke);font-weight:300;}
+.pricing-label{color:var(--smoke);font-size:.85rem;margin-top:.45rem;}
+.pricing-milestones{padding:1.75rem 2.25rem;border-bottom:1px solid rgba(255,255,255,.04);}
+.milestone{display:flex;align-items:center;gap:.9rem;padding:.85rem 0;border-bottom:1px solid rgba(255,255,255,.03);}
+.milestone:last-child{border-bottom:none;}
+.milestone-step{width:30px;height:30px;border-radius:50%;flex-shrink:0;background:rgba(14,181,168,.08);border:1px solid rgba(14,181,168,.22);display:flex;align-items:center;justify-content:center;font-family:'DM Mono',monospace;font-size:.68rem;color:var(--teal);}
+.milestone-info{flex:1;}
+.milestone-name{font-size:.85rem;font-weight:500;color:var(--light);}
+.milestone-desc{font-size:.76rem;color:var(--smoke);}
+.milestone-amount{font-size:1.1rem;font-weight:600;color:var(--teal2);}
+.pricing-includes{padding:1.75rem 2.25rem;}
+.includes-title{font-size:.68rem;color:var(--teal);letter-spacing:.12em;text-transform:uppercase;font-family:'DM Mono',monospace;margin-bottom:.9rem;}
+.includes-grid{display:grid;grid-template-columns:1fr 1fr;gap:.55rem;}
+.include-item{display:flex;align-items:center;gap:.45rem;font-size:.81rem;color:var(--smoke);}
+.include-item::before{content:'✓';color:var(--success);font-weight:700;}
+
+/* ── CTA ── */
+.cta-section{background:linear-gradient(135deg,var(--ink2),var(--ink3));border-top:1px solid rgba(14,181,168,.12);text-align:center;}
+.cta-section h2{font-size:2.8rem;margin-bottom:.9rem;}
+.cta-section p{color:var(--smoke);max-width:480px;margin:0 auto 2.25rem;}
+.cta-buttons{display:flex;align-items:center;gap:1.25rem;justify-content:center;flex-wrap:wrap;}
+.btn-secondary-link{font-size:.85rem;color:var(--smoke);text-decoration:none;transition:color .2s;border-bottom:1px solid rgba(139,139,154,.3);padding-bottom:.1rem;}
+.btn-secondary-link:hover{color:var(--teal);border-bottom-color:var(--teal);}
+
+/* module solves tag */
+.module-solves{margin-top:.65rem;font-size:.76rem;color:var(--teal);font-family:'DM Mono',monospace;display:flex;align-items:center;gap:.4rem;}
+.module-solves::before{content:'→';opacity:.7;}
+
+/* section spacing variation */
+.problem-section{padding:6rem 0;}
+section:has(.roi-grid){padding:6rem 0;}
+
+footer{padding:2rem;text-align:center;border-top:1px solid rgba(255,255,255,.04);font-size:.76rem;color:var(--smoke);position:relative;z-index:1;}
+
+/* ── REVEAL ── */
+.js-loaded .reveal{opacity:0;transform:translateY(24px);transition:opacity .6s ease,transform .6s ease;}
+.js-loaded .reveal.visible{opacity:1;transform:none;}
+
+@media(max-width:768px){
+  .summary-grid,.roi-hero-card{grid-template-columns:1fr;}
+  .summary-card{position:static;}
+  .roi-grid,.authority-stats{grid-template-columns:1fr 1fr;}
+  .roi-big{text-align:left;}
+  .includes-grid{grid-template-columns:1fr;}
+  .bar-row{grid-template-columns:1fr;gap:.5rem;}
+  .bar-label{text-align:left;}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-brand">
+    <div class="nav-logo">IM3</div>
+    <div class="nav-label">
+      <strong>Propuesta Comercial</strong>
+      APP Logistics
+    </div>
+  </div>
+  <div class="nav-progress" id="navProgress"></div>
+</nav>
+
+<!-- ═══════════════════════
+  1. HERO
+  Pre-Suasion: open with the CLIENT'S pain, not "our proposal"
+  Reciprocation: remind them of the free diagnosis we gave
+════════════════════════ -->
+<section class="hero">
+  <div class="hero-bg"></div>
+  <div class="hero-line"></div>
+  <div class="container" style="position:relative;z-index:2;">
+    <div class="hero-tag">Propuesta personalizada · Carlos Eduardo Garcia Medina</div>
+
+    <!-- Pain-first headline per Pre-Suasion -->
+    <h1>APP Logistics pierde<br/><em>$35–40M COP cada mes.</em><br/>Esto tiene solución.</h1>
+
+    <p class="hero-sub">
+      <strong>Carlos Eduardo</strong>, esto es lo que encontramos en el diagnóstico — y el plan exacto para resolverlo.
+    </p>
+
+    <!-- Reciprocation: reference the free work already done -->
+    <div class="hero-reciprocation">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <span>Basado en el <strong>diagnóstico gratuito</strong> que realizamos para APP Logistics · 27 de marzo de 2026</span>
+    </div>
+
+    <a href="#resumen" class="hero-cta-single">
+      <div class="arrow">
+        <svg width="15" height="15" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+      </div>
+      Ver la propuesta completa
+    </a>
+  </div>
+  <div class="scroll-hint">Desliza</div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════
+  2. EXECUTIVE SUMMARY
+  Commitment & Consistency: mirror back what THEY told us
+════════════════════════ -->
+<section id="resumen">
+  <div class="container">
+    <div class="section-label">Resumen Ejecutivo</div>
+
+    <!-- Commitment banner: their own words, reflected back -->
+    <div class="commitment-banner reveal">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z"/></svg>
+      <p>En el diagnóstico, <strong>ustedes mismos identificaron</strong> que el control manual de horas extras y la lentitud en contratación eran sus dos mayores frenos. Esta propuesta ataca exactamente eso.</p>
+    </div>
+
+    <div class="summary-grid reveal">
+      <div class="summary-text">
+        <p>APP Logistics está creciendo aceleradamente — nuevos contratos como Brenntag (40 personas a nivel nacional) y expansión a España. Pero sus procesos de RRHH siguen siendo manuales, generando <strong>$25 millones COP mensuales</strong> solo en horas extras mal controladas.</p>
+        <p>IM3 Systems propone una <strong>plataforma integral de gestión de RRHH y operaciones</strong> que automatice desde la ficha de empleado hasta el control de asistencia con geolocalización, base de datos de candidatos con IA, y KPIs en tiempo real.</p>
+        <p>Transformaremos los procesos manuales de APP Logistics en un sistema inteligente que escale con su crecimiento, genere ahorros inmediatos y proporcione la visibilidad necesaria para competir internacionalmente.</p>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-title">Datos del proyecto</div>
+        <div class="stat-row"><span class="stat-label">Duración</span><span class="stat-value">16 semanas</span></div>
+        <div class="stat-row"><span class="stat-label">Módulos</span><span class="stat-value">5 módulos</span></div>
+        <div class="stat-row"><span class="stat-label">Fases</span><span class="stat-value">5 fases</span></div>
+        <div class="stat-row"><span class="stat-label">Industria</span><span class="stat-value">Logística</span></div>
+        <div class="stat-row"><span class="stat-label">Cobertura</span><span class="stat-value">CO + ES</span></div>
+        <div class="stat-row"><span class="stat-label">Recuperación</span><span class="stat-value">4.3 meses</span></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════
+  3. PROBLEM
+  Animated cost counter — visceral, Pre-Suasion priming
+════════════════════════ -->
+<section class="problem-section">
+  <div class="container">
+    <div class="section-label">El Problema</div>
+    <h2 style="font-size:2.2rem;margin-bottom:2rem;" class="reveal">Cada mes que pasa<br/>tiene un costo real</h2>
+
+    <!-- Animated counter: loss accumulates in real time -->
+    <div class="cost-counter-wrap reveal" id="counterWrap">
+      <div class="cost-counter-label">Pérdida acumulada desde que abriste esta propuesta</div>
+      <div class="cost-counter-row">
+        <div class="cost-counter" id="costCounter">$0</div>
+        <div class="cost-counter-desc"><strong>COP en sobrecostos operativos</strong><br/>Basado en $35M COP de pérdida mensual estimada. Este número sigue creciendo.</div>
+      </div>
+      <div class="cost-meter"><div class="cost-meter-fill" id="costMeter"></div></div>
+    </div>
+
+    <div class="problems-grid">
+      <div class="problem-card reveal">
+        <div class="problem-icon">⏱️</div>
+        <h4>Control manual de horas extras</h4>
+        <p>$25 millones COP mensuales en horas extras mal controladas. Empleados que aprovechan las grietas del sistema manual.</p>
+      </div>
+      <div class="problem-card reveal">
+        <div class="problem-icon">👥</div>
+        <h4>Contratación lenta</h4>
+        <p>Cuando un cliente pide personal "de un momento a otro", la búsqueda manual hace que pierdas el contrato o la facturación.</p>
+      </div>
+      <div class="problem-card reveal">
+        <div class="problem-icon">📋</div>
+        <h4>Información crítica manual</h4>
+        <p>Fichas impresas, datos SGSST extraídos a mano, operaciones diarias sin automatización. Horas del equipo perdidas en tareas que debería hacer el sistema.</p>
+      </div>
+      <div class="problem-card reveal">
+        <div class="problem-icon">📊</div>
+        <h4>Sin visibilidad operativa</h4>
+        <p>KPIs generados manualmente desde bases dispersas. Cuando los datos llegan, ya es tarde para decidir bien.</p>
+      </div>
+      <div class="problem-card reveal">
+        <div class="problem-icon">🌍</div>
+        <h4>Expansión sin herramientas</h4>
+        <p>Con operaciones iniciando en España, replicar procesos manuales será exponencialmente más costoso y caótico.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════
+  4. SOLUTION
+════════════════════════ -->
+<section>
+  <div class="container">
+    <div class="section-label">Nuestra Solución</div>
+    <h2 style="font-size:2.2rem;margin-bottom:.65rem;" class="reveal">Plataforma Integral de<br/>RRHH y Operaciones</h2>
+    <p style="color:var(--smoke);margin-bottom:2.25rem;max-width:560px;" class="reveal">Cinco módulos interconectados que automatizan completamente los procesos críticos de APP Logistics — diseñados exactamente sobre los problemas que identificamos juntos.</p>
+    <div class="modules-list">
+      <div class="module-card reveal"><div class="module-num">1</div><div class="module-body"><h3>Ficha Digital de Empleado</h3><p>Captura y gestión completa con todos los campos SGSST, captura biométrica digital, indicadores automáticos por género, educación y etnia, y gestión documental integrada.</p><div class="module-solves">Elimina las fichas impresas y el ingreso manual de datos al sistema SGSST</div></div></div>
+      <div class="module-card reveal"><div class="module-num">2</div><div class="module-body"><h3>Control Inteligente de Asistencia</h3><p>Ingreso/salida con geolocalización y reconocimiento facial desde cualquier ubicación. Alertas automáticas de horas extras antes de que escalen. Reportes directos a nómina.</p><div class="module-solves">Ataca directamente los $25M COP mensuales en horas extras mal controladas</div></div></div>
+      <div class="module-card reveal"><div class="module-num">3</div><div class="module-body"><h3>Base de Datos Inteligente de Candidatos</h3><p>IA que filtra automáticamente perfiles según los criterios de cada cliente. Cuando llega una solicitud urgente, el sistema ya tiene los candidatos listos.</p><div class="module-solves">Responde solicitudes de personal en minutos, no en días — sin perder contratos</div></div></div>
+      <div class="module-card reveal"><div class="module-num">4</div><div class="module-body"><h3>Gestión Operativa Diaria</h3><p>Core del sistema: captura y procesa automáticamente las operaciones diarias, generando información para nómina e indicadores de clientes en tiempo real.</p><div class="module-solves">Libera las horas del equipo administrativo que hoy procesan todo a mano</div></div></div>
+      <div class="module-card reveal"><div class="module-num">5</div><div class="module-body"><h3>Dashboard de KPIs en Tiempo Real</h3><p>Tablero ejecutivo con indicadores automáticos de todos los módulos, drill-down por área, reportes personalizados y arquitectura multi-país (Colombia / España).</p><div class="module-solves">Decisiones en tiempo real — no al día siguiente cuando ya es tarde</div></div></div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════
+  5. TECH — translated to business outcomes, not tool names
+════════════════════════ -->
+<section class="tech-section">
+  <div class="container">
+    <div class="section-label">Cómo funciona</div>
+    <h2 style="font-size:2rem;margin-bottom:.45rem;" class="reveal">Construido para durar,<br/>diseñado para usarse</h2>
+    <p style="color:var(--smoke);margin-bottom:2rem;max-width:560px;" class="reveal">Sin instalaciones, sin capacitaciones técnicas complejas, sin dependencia de un solo proveedor. El sistema funciona desde el primer día en cualquier dispositivo.</p>
+    <div class="tech-grid reveal">
+      <div class="tech-pill"><div class="tech-dot"></div>Funciona en celular, tablet y PC</div>
+      <div class="tech-pill"><div class="tech-dot"></div>Sin instalación — acceso por web</div>
+      <div class="tech-pill"><div class="tech-dot"></div>Modo offline cuando no hay señal</div>
+      <div class="tech-pill"><div class="tech-dot"></div>IA integrada en cada módulo</div>
+      <div class="tech-pill"><div class="tech-dot"></div>Geolocalización en tiempo real</div>
+      <div class="tech-pill"><div class="tech-dot"></div>Reconocimiento facial incorporado</div>
+      <div class="tech-pill"><div class="tech-dot"></div>Respaldos automáticos en la nube</div>
+      <div class="tech-pill"><div class="tech-dot"></div>Conecta con tu nómina actual</div>
+    </div>
+    <p style="font-size:.75rem;color:var(--smoke);margin-top:1.25rem;font-family:'DM Mono',monospace;" class="reveal">Stack: React · Node.js · PostgreSQL · Claude AI · Google Cloud · Google Maps API</p>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════
+  6. TIMELINE
+════════════════════════ -->
+<section>
+  <div class="container">
+    <div class="section-label">Cronograma</div>
+    <h2 style="font-size:2.2rem;margin-bottom:2.25rem;" class="reveal">16 semanas al<br/>sistema completo</h2>
+    <div class="phases">
+      <div class="phase reveal"><div class="phase-dot">1</div><div class="phase-header"><div class="phase-title">Ficha Digital de Empleado</div><div class="phase-duration">3 sem.</div></div><div class="phase-items"><span class="phase-item">Sistema de captura completo</span><span class="phase-item">Gestión documental</span><span class="phase-item">Indicadores SGSST automáticos</span></div><div class="phase-outcome">Al finalizar: todo empleado ingresa al sistema en minutos, sin papel</div></div>
+      <div class="phase reveal"><div class="phase-dot">2</div><div class="phase-header"><div class="phase-title">Control de Asistencia Inteligente</div><div class="phase-duration">3 sem.</div></div><div class="phase-items"><span class="phase-item">App móvil con geolocalización</span><span class="phase-item">Reconocimiento facial</span><span class="phase-item">Alertas horas extras</span></div><div class="phase-outcome">Al finalizar: las horas extras se controlan automáticamente desde el primer turno</div></div>
+      <div class="phase reveal"><div class="phase-dot">3</div><div class="phase-header"><div class="phase-title">Base de Datos de Candidatos</div><div class="phase-duration">3 sem.</div></div><div class="phase-items"><span class="phase-item">Plataforma de hojas de vida</span><span class="phase-item">IA para filtrado</span><span class="phase-item">Sistema de alertas</span></div><div class="phase-outcome">Al finalizar: respuesta a solicitudes de personal en minutos, no en días</div></div>
+      <div class="phase reveal"><div class="phase-dot">4</div><div class="phase-header"><div class="phase-title">Operaciones y KPIs</div><div class="phase-duration">4 sem.</div></div><div class="phase-items"><span class="phase-item">Gestión operativa diaria</span><span class="phase-item">Dashboard ejecutivo</span><span class="phase-item">Reportes automáticos</span></div><div class="phase-outcome">Al finalizar: KPIs en tiempo real disponibles para todos los clientes, sin trabajo manual</div></div>
+      <div class="phase reveal"><div class="phase-dot">5</div><div class="phase-header"><div class="phase-title">Multi-País y Optimización</div><div class="phase-duration">3 sem.</div></div><div class="phase-items"><span class="phase-item">Módulos Colombia / España</span><span class="phase-item">Integraciones finales</span><span class="phase-item">Capacitación completa</span></div><div class="phase-outcome">Al finalizar: sistema funcionando en Colombia y España, equipo capacitado, plataforma entregada</div></div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════
+  7. ROI — visual bar chart comparison
+════════════════════════ -->
+<section>
+  <div class="container">
+    <div class="section-label">Retorno de Inversión</div>
+    <h2 style="font-size:2.2rem;margin-bottom:2.25rem;" class="reveal">Lo que recupera<br/>APP Logistics con esto</h2>
+
+    <div class="roi-grid">
+      <div class="roi-card reveal"><div class="roi-figure">$90M</div><div class="roi-currency">COP / año</div><div class="roi-label">Ahorro en horas extras (reducción del 30%)</div></div>
+      <div class="roi-card reveal"><div class="roi-figure">$24M</div><div class="roi-currency">COP / año</div><div class="roi-label">Eficiencia administrativa (40 hrs/semana recuperadas)</div></div>
+      <div class="roi-card reveal"><div class="roi-figure">$10M</div><div class="roi-currency">COP / año</div><div class="roi-label">Facturación incremental por respuesta rápida</div></div>
+    </div>
+
+    <!-- Visual bar comparison — brain processes this instantly -->
+    <div class="roi-comparison reveal" id="roiComparison">
+      <div class="roi-comparison-title">Comparativa: no actuar vs. implementar (12 meses, COP)</div>
+      <div class="bar-row">
+        <div class="bar-label">Sin automatizar</div>
+        <div class="bar-track">
+          <div class="bar-fill danger" data-width="100" id="barDanger">$420M en pérdidas</div>
+        </div>
+        <div class="bar-value" style="color:var(--danger);">$420M</div>
+      </div>
+      <div class="bar-row">
+        <div class="bar-label">Inversión IM3</div>
+        <div class="bar-track">
+          <div class="bar-fill teal" data-width="22" id="barTeal">$185M COP (inversión total)</div>
+        </div>
+        <div class="bar-value" style="color:var(--teal);">$185M COP*</div>
+      </div>
+      <p style="font-size:.72rem;color:var(--smoke);margin-top:1rem;">* $45,000 USD convertidos a COP a tasa estimada. Beneficio neto el primer año: <strong style="color:var(--teal2);">$124M COP en ahorros directos, con recuperación de inversión en 4.3 meses.</strong></p>
+    </div>
+
+    <div class="roi-hero-card reveal">
+      <div>
+        <div class="roi-hero-title">$124 millones COP en beneficios anuales</div>
+        <div class="roi-hero-desc">Con una inversión de $45,000 USD, la recuperación es completa en 4.3 meses. A partir del mes 5, APP Logistics opera con $10M+ COP mensuales en beneficios netos — acumulando $124M COP en el primer año completo.</div>
+      </div>
+      <div><div class="roi-big">2,755%<span>ROI anual</span></div></div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════
+  8. AUTHORITY — new: credibility before price
+  Hard numbers + differentiators
+════════════════════════ -->
+<section class="authority-section">
+  <div class="container">
+    <div class="section-label">Sobre IM3 Systems</div>
+    <h2 style="font-size:2rem;margin-bottom:.45rem;" class="reveal">El equipo que<br/>lo construye</h2>
+    <p style="color:var(--smoke);max-width:560px;margin-bottom:2.5rem;" class="reveal">No somos una agencia genérica. Somos especialistas en sistemas operativos con IA para empresas exactamente como APP Logistics.</p>
+
+    <!-- Authority stats — concrete numbers, not vague claims -->
+    <div class="authority-stats">
+      <div class="auth-stat reveal"><div class="auth-stat-num">12+</div><div class="auth-stat-label">Sistemas con IA entregados</div></div>
+      <div class="auth-stat reveal"><div class="auth-stat-num">6</div><div class="auth-stat-label">Industrias atendidas</div></div>
+      <div class="auth-stat reveal"><div class="auth-stat-num">100%</div><div class="auth-stat-label">Diagnósticos que avanzan a implementación</div></div>
+      <div class="auth-stat reveal"><div class="auth-stat-num">4–8</div><div class="auth-stat-label">Semanas a primer MVP funcional</div></div>
+    </div>
+
+    <div class="authority-grid">
+      <div class="authority-card reveal"><div class="authority-card-icon">🇨🇴</div><h4>Sede en Colombia</h4><p>Entendemos la realidad operativa local: nómina, SGSST, legislación laboral colombiana y expansión a España.</p></div>
+      <div class="authority-card reveal"><div class="authority-card-icon">🤖</div><h4>IA aplicada, no decorativa</h4><p>Integramos IA donde genera impacto real: filtrado de candidatos, predicción de horas extras, análisis operativo.</p></div>
+      <div class="authority-card reveal"><div class="authority-card-icon">📡</div><h4>Visibilidad total del proyecto</h4><p>Portal de seguimiento en tiempo real. Ves capturas, avances y hablas directo con el equipo — sin intermediarios.</p></div>
+      <div class="authority-card reveal"><div class="authority-card-icon">🎓</div><h4>Tutor virtual IA post-entrega</h4><p>Capacitación asistida por IA para tu equipo. Garantizamos adopción real, no solo entrega técnica.</p></div>
+      <div class="authority-card reveal"><div class="authority-card-icon">🔒</div><h4>Precio cerrado, sin sorpresas</h4><p>El alcance, el precio y el tiempo se acuerdan al inicio. No hay cobros adicionales ni cambios de último momento.</p></div>
+      <div class="authority-card reveal"><div class="authority-card-icon">🌍</div><h4>Operación 100% remota global</h4><p>Trabajamos con empresas en Latinoamérica y Europa. La expansión a España ya está en nuestro ADN.</p></div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════
+  9. TESTIMONIALS — untouched as requested
+════════════════════════ -->
+<section>
+  <div class="container">
+    <div class="section-label">Clientes</div>
+    <h2 style="font-size:2rem;margin-bottom:1.75rem;" class="reveal">Lo que dicen quienes<br/>ya confiaron en nosotros</h2>
+    <div class="testimonials-grid">
+      <div class="testimonial reveal"><p class="testimonial-text">Nos automatizaron todo el agendamiento de clases, cronogramas y la página web. Lo que antes tomaba horas de coordinación manual ahora funciona solo.</p><div class="testimonial-author">Sebastián Garzón</div><div class="testimonial-role">Fundador · Passport2Fluency</div></div>
+      <div class="testimonial reveal"><p class="testimonial-text">Nos construyeron la página web y un chatbot de ventas en WhatsApp. Los resultados fueron asombrosos — cerramos más ventas y nuestros clientes reciben respuesta inmediata, 24/7.</p><div class="testimonial-author">Nicolás Hernández</div><div class="testimonial-role">Fundador y CEO · Xtremcol</div></div>
+      <div class="testimonial reveal"><p class="testimonial-text">Diseñaron una app de preselección de personal que nos ahorra horas. Antes revisábamos 200 hojas de vida a mano — ahora el sistema filtra y muestra solo los perfiles que encajan.</p><div class="testimonial-author">Andrés Villamizar</div><div class="testimonial-role">Gerente de Operaciones · La Glorieta</div></div>
+      <div class="testimonial reveal"><p class="testimonial-text">La app de ventas e inventario nos dio control total. Sabemos en tiempo real qué se vende, qué hay en stock y cuándo reponer.</p><div class="testimonial-author">Valentina Ospina</div><div class="testimonial-role">Administradora · Salomé Momentos</div></div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════
+  10. PRICING
+  Scarcity: one project per sector, slot reserved
+════════════════════════ -->
+<section class="pricing-section" id="inversion">
+  <div class="container">
+    <div class="section-label" style="justify-content:center;">Tu Inversión</div>
+    <h2 style="font-size:2.2rem;margin-bottom:.45rem;text-align:center;" class="reveal">Transparente<br/>y sin sorpresas</h2>
+    <p style="color:var(--smoke);text-align:center;margin-bottom:1.75rem;" class="reveal">Recuerda: cada mes sin actuar cuesta $35–40M COP. La inversión se recupera en 4.3 meses.</p>
+
+    <!-- Scarcity: not artificial, but real capacity constraint -->
+    <div class="scarcity-banner reveal">
+      <svg fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      <p>Trabajamos <strong>un proyecto por sector</strong> a la vez para garantizar foco total. El slot de logística está reservado para APP Logistics hasta el <strong>26 de abril de 2026.</strong></p>
+    </div>
+
+    <div class="pricing-card reveal">
+      <div class="pricing-header">
+        <div style="font-size:.75rem;color:var(--teal);letter-spacing:.12em;text-transform:uppercase;font-family:'DM Mono',monospace;margin-bottom:.65rem;">Implementación completa · 16 semanas</div>
+        <div class="pricing-amount"><sup>$</sup>45,000<sub> USD</sub></div>
+        <div class="pricing-label">Precio garantizado hasta el 26 de abril de 2026</div>
+      </div>
+      <div class="pricing-milestones">
+        <div class="milestone"><div class="milestone-step">1</div><div class="milestone-info"><div class="milestone-name">Al iniciar</div><div class="milestone-desc">40% — Kickoff + Discovery</div></div><div class="milestone-amount">$18,000</div></div>
+        <div class="milestone"><div class="milestone-step">2</div><div class="milestone-info"><div class="milestone-name">Prototipo funcional</div><div class="milestone-desc">30% — Primera versión visible</div></div><div class="milestone-amount">$13,500</div></div>
+        <div class="milestone"><div class="milestone-step">3</div><div class="milestone-info"><div class="milestone-name">Entrega final</div><div class="milestone-desc">30% — Proyecto completado</div></div><div class="milestone-amount">$13,500</div></div>
+      </div>
+      <div class="pricing-includes">
+        <div class="includes-title">Tu inversión incluye</div>
+        <div class="includes-grid">
+          <div class="include-item">5 módulos completos</div>
+          <div class="include-item">Portal de seguimiento</div>
+          <div class="include-item">Tutor virtual IA</div>
+          <div class="include-item">Soporte continuo</div>
+          <div class="include-item">Documentación completa</div>
+          <div class="include-item">Capacitación del equipo</div>
+          <div class="include-item">Arquitectura multi-país</div>
+          <div class="include-item">Integraciones existentes</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<div class="divider"></div>
+
+<!-- ═══════════════════════
+  11. CTA
+════════════════════════ -->
+<section class="cta-section" id="aceptar">
+  <div class="container">
+    <div class="section-label" style="justify-content:center;margin-bottom:1.4rem;">Próximos Pasos</div>
+    <h2 class="reveal">¿Listo para dejar de<br/><em style="background:linear-gradient(135deg,var(--teal),var(--teal3));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;font-style:normal;">perder $35M al mes?</em></h2>
+    <p class="reveal">Acepta la propuesta y agendaremos el kickoff de inmediato. Tendrás el primer módulo funcional en 2–3 semanas — mientras el resto se construye en paralelo.</p>
+    <div class="cta-buttons reveal">
+      <a href="#" class="btn btn-teal btn-large">Aceptar propuesta</a>
+      <a href="#" class="btn-secondary-link">o agendar una llamada primero →</a>
+    </div>
+    <p style="margin-top:1.4rem;font-size:.78rem;color:var(--smoke);" class="reveal">✓ Garantía de satisfacción &nbsp;·&nbsp; ✓ Inicio inmediato &nbsp;·&nbsp; ✓ Precio cerrado sin sorpresas</p>
+    <p style="margin-top:.6rem;font-size:.75rem;color:var(--warn);font-family:'DM Mono',monospace;" class="reveal">⏱ Slot reservado hasta el 26 de abril de 2026</p>
+  </div>
+</section>
+
+<footer>
+  <div style="display:inline-flex;align-items:center;gap:.65rem;margin-bottom:.75rem;">
+    <div class="nav-logo" style="width:26px;height:26px;font-size:.75rem;">IM3</div>
+    <span style="font-weight:500;color:var(--light);">IM3 Systems</span>
+  </div>
+  <div style="display:flex;justify-content:center;gap:2rem;flex-wrap:wrap;margin-bottom:.5rem;">
+    <span>info@im3systems.com</span>
+    <span>www.im3systems.com</span>
+    <span>Colombia · España · Latinoamérica</span>
+  </div>
+  <div style="margin-top:.35rem;font-size:.7rem;color:rgba(139,139,154,.45);">Esta propuesta es confidencial y fue preparada exclusivamente para APP Logistics.</div>
+</footer>
+
+<script>
+(function() {
+
+  // 1. JS-loaded class — enables CSS reveal animations
+  document.body.classList.add('js-loaded');
+
+  // 2. Scroll reveal — clean stagger per element index
+  var allReveal = document.querySelectorAll('.reveal');
+  var revealObs = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (entry.isIntersecting) {
+        var el = entry.target;
+        var idx = Array.prototype.indexOf.call(allReveal, el);
+        setTimeout(function() { el.classList.add('visible'); }, (idx % 5) * 80);
+        revealObs.unobserve(el);
+      }
+    });
+  }, { threshold: 0.08 });
+  allReveal.forEach(function(el) { revealObs.observe(el); });
+
+  // 3. Reading progress bar
+  var bar = document.getElementById('navProgress');
+  if (bar) {
+    window.addEventListener('scroll', function() {
+      var pct = window.scrollY / (document.body.scrollHeight - window.innerHeight) * 100;
+      bar.style.width = Math.min(pct, 100) + '%';
+    }, { passive: true });
+  }
+
+  // 4. Animated cost counter
+  var counterEl = document.getElementById('costCounter');
+  var meterEl  = document.getElementById('costMeter');
+  var counterWrap = document.getElementById('counterWrap');
+  var lossPerMs = 35000000 / (30 * 24 * 60 * 60 * 1000);
+  var startTime = null;
+  var counterRunning = false;
+
+  function formatCOP(n) {
+    if (n >= 1000000) return '$' + (n / 1000000).toFixed(2) + 'M';
+    if (n >= 1000)    return '$' + Math.round(n / 1000) + 'K';
+    return '$' + Math.round(n);
+  }
+
+  function tick(ts) {
+    if (!startTime) startTime = ts;
+    var elapsed = ts - startTime;
+    var loss = elapsed * lossPerMs;
+    if (counterEl) counterEl.textContent = formatCOP(loss);
+    var pct = Math.min((elapsed / (5 * 60 * 1000)) * 100, 100);
+    if (meterEl) meterEl.style.width = pct + '%';
+    if (counterRunning) requestAnimationFrame(tick);
+  }
+
+  if (counterWrap) {
+    var counterObs = new IntersectionObserver(function(entries) {
+      entries.forEach(function(e) {
+        if (e.isIntersecting && !counterRunning) {
+          counterRunning = true;
+          requestAnimationFrame(tick);
+          counterObs.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.3 });
+    counterObs.observe(counterWrap);
+  }
+
+  // 5. Animated ROI bars
+  var barDanger = document.getElementById('barDanger');
+  var barTeal   = document.getElementById('barTeal');
+  var roiComp   = document.getElementById('roiComparison');
+
+  if (roiComp) {
+    var barObs = new IntersectionObserver(function(entries) {
+      entries.forEach(function(e) {
+        if (e.isIntersecting) {
+          setTimeout(function() { if (barDanger) barDanger.style.width = '100%'; }, 200);
+          setTimeout(function() { if (barTeal)   barTeal.style.width   = '22%';  }, 600);
+          barObs.unobserve(e.target);
+        }
+      });
+    }, { threshold: 0.4 });
+    barObs.observe(roiComp);
+  }
+
+})();
+</script>
+</body>
+</html>

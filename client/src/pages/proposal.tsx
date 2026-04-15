@@ -1,6 +1,8 @@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "wouter";
+import { ProposalTemplate } from "@shared/proposal-template";
+import type { ProposalData } from "@shared/proposal-template/types";
 import {
   CheckCircle2, Download, Calendar, ChevronDown, ChevronRight,
   AlertTriangle, Quote, ArrowDown, TrendingUp, Shield, Clock, Zap,
@@ -449,7 +451,25 @@ export default function ProposalView() {
     );
   }
 
-  const sections = proposal.sections || {};
+  // ── Nuevo formato ProposalData (con template premium) ──
+  // Detecta formato por presencia de `sections.meta` y `sections.hero`.
+  // Propuestas viejas no tienen estas keys → cae al render legacy de abajo.
+  const rawSections = proposal.sections || {};
+  const isNewFormat = rawSections.meta && rawSections.hero && rawSections.summary;
+  if (isNewFormat && !isPdfMode) {
+    return (
+      <ProposalTemplate
+        data={rawSections as ProposalData}
+        interactive
+        onAccept={() => setShowAccept(true)}
+        onFallback={() => {
+          // Scroll al CTA existente sin cerrar
+        }}
+      />
+    );
+  }
+
+  const sections = rawSections;
   const pricing = proposal.pricing;
   const timeline = proposal.timelineData;
 

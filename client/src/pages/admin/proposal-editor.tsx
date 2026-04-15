@@ -10,7 +10,26 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
-const SECTION_LABELS: Record<string, string> = {
+// Nuevo schema ProposalData (shared/proposal-template/types.ts)
+const SECTION_LABELS_NEW: Record<string, string> = {
+  meta: "Metadatos",
+  hero: "Hero (Portada)",
+  summary: "Resumen Ejecutivo",
+  problem: "El Problema",
+  solution: "Nuestra Solución",
+  tech: "Cómo Funciona",
+  timeline: "Cronograma",
+  roi: "Retorno de Inversión",
+  authority: "Sobre IM3 Systems",
+  testimonials: "Testimonios",
+  pricing: "Inversión",
+  cta: "Próximos Pasos",
+};
+
+const SECTION_ORDER_NEW = ["meta", "hero", "summary", "problem", "solution", "tech", "timeline", "roi", "authority", "testimonials", "pricing", "cta"];
+
+// Legacy schema (propuestas viejas)
+const SECTION_LABELS_LEGACY: Record<string, string> = {
   resumen: "Resumen Ejecutivo",
   problema: "El Problema",
   solucion: "Nuestra Solución",
@@ -22,7 +41,7 @@ const SECTION_LABELS: Record<string, string> = {
   siguientes_pasos: "Próximos Pasos",
 };
 
-const SECTION_ORDER = ["resumen", "problema", "solucion", "alcance", "tecnologia", "inversion", "roi", "equipo", "siguientes_pasos"];
+const SECTION_ORDER_LEGACY = ["resumen", "problema", "solucion", "alcance", "tecnologia", "inversion", "roi", "equipo", "siguientes_pasos"];
 
 const STATUS_LABELS: Record<string, string> = {
   draft: "Borrador",
@@ -86,14 +105,19 @@ export default function ProposalEditor() {
     },
   });
 
-  // Regenerate section with AI instruction
+  // Regenerate section with AI instruction (returns structured section for new schema, or string for legacy)
   const aiModifyMut = useMutation({
     mutationFn: async ({ sectionKey, instruction }: { sectionKey: string; instruction: string }) => {
       const res = await apiRequest("POST", `/api/admin/proposals/${id}/sections/${sectionKey}/regenerate`, { instruction });
-      return res.json() as Promise<{ content: string; sectionKey: string }>;
+      return res.json() as Promise<{ section?: unknown; content?: string; sectionKey: string }>;
     },
     onSuccess: (data) => {
-      setAiNewContent(data.content);
+      // Nuevo schema devuelve `section` (objeto), legacy devuelve `content` (string)
+      if (data.section !== undefined) {
+        setAiNewContent(JSON.stringify(data.section, null, 2));
+      } else if (typeof data.content === "string") {
+        setAiNewContent(data.content);
+      }
     },
     onError: (err: any) => {
       toast({ title: "Error", description: err?.message || "No se pudo regenerar", variant: "destructive" });
@@ -164,15 +188,43 @@ export default function ProposalEditor() {
     return <div className="text-center py-20 text-gray-400">Cargando propuesta...</div>;
   }
 
-  const sections = proposal.sections || {};
+  const sections: Record<string, any> = proposal.sections || {};
   const pricing = proposal.pricing;
   const hasSections = Object.keys(sections).length > 0;
 
+  // Detecta si la propuesta usa el nuevo schema ProposalData o el legacy (strings HTML)
+  const isNewFormat = Boolean(sections.meta && sections.hero && sections.summary);
+  const SECTION_LABELS = isNewFormat ? SECTION_LABELS_NEW : SECTION_LABELS_LEGACY;
+  const SECTION_ORDER = isNewFormat ? SECTION_ORDER_NEW : SECTION_ORDER_LEGACY;
+
+  // Si activeSection no pertenece al formato actual, saltar a la primera sección válida
+  useEffect(() => {
+    if (hasSections && !SECTION_ORDER.includes(activeSection)) {
+      setActiveSection(SECTION_ORDER[0]);
+    }
+  }, [isNewFormat, hasSections]);
+
   const saveSection = () => {
     if (!editingSection) return;
-    const updated = { ...sections, [editingSection]: editContent };
+    let value: unknown = editContent;
+    if (isNewFormat) {
+      try {
+        value = JSON.parse(editContent);
+      } catch (err: any) {
+        toast({ title: "JSON inválido", description: err?.message || "Revisa la estructura", variant: "destructive" });
+        return;
+      }
+    }
+    const updated = { ...sections, [editingSection]: value };
     updateMut.mutate({ sections: updated });
     setEditingSection(null);
+  };
+
+  const getSectionDisplayContent = (key: string): string => {
+    const val = sections[key];
+    if (val === undefined || val === null) return "";
+    if (isNewFormat) return JSON.stringify(val, null, 2);
+    return typeof val === "string" ? val : JSON.stringify(val, null, 2);
   };
 
   const copyLink = () => {
@@ -420,7 +472,7 @@ export default function ProposalEditor() {
                       >
                         <Wand2 className="w-3.5 h-3.5" /> Modificar con IA
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => { setEditingSection(activeSection); setEditContent(sections[activeSection] || ""); }}>
+                      <Button size="sm" variant="outline" onClick={() => { setEditingSection(activeSection); setEditContent(getSectionDisplayContent(activeSection)); }}>
                         Editar
                       </Button>
                     </div>
@@ -428,18 +480,31 @@ export default function ProposalEditor() {
                 </div>
 
                 {editingSection === activeSection ? (
-                  <Textarea
-                    value={editContent}
-                    onChange={e => setEditContent(e.target.value)}
-                    rows={15}
-                    className="font-mono text-sm"
-                    placeholder="HTML de la sección..."
-                  />
-                ) : sections[activeSection] ? (
-                  <div
-                    className="prose prose-sm max-w-none text-gray-700"
-                    dangerouslySetInnerHTML={{ __html: sections[activeSection] }}
-                  />
+                  <>
+                    <Textarea
+                      value={editContent}
+                      onChange={e => setEditContent(e.target.value)}
+                      rows={20}
+                      className="font-mono text-xs"
+                      placeholder={isNewFormat ? "JSON de la sección (respeta los tipos: strings, numbers, arrays)…" : "HTML de la sección…"}
+                    />
+                    {isNewFormat && (
+                      <p className="text-xs text-amber-600 mt-1">
+                        ⓘ Editando JSON estructurado. Mantén los mismos campos y tipos. Si rompes el formato, el save fallará.
+                      </p>
+                    )}
+                  </>
+                ) : sections[activeSection] !== undefined && sections[activeSection] !== null ? (
+                  isNewFormat ? (
+                    <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs font-mono text-gray-700 overflow-x-auto max-h-96 overflow-y-auto">
+                      {JSON.stringify(sections[activeSection], null, 2)}
+                    </pre>
+                  ) : (
+                    <div
+                      className="prose prose-sm max-w-none text-gray-700"
+                      dangerouslySetInnerHTML={{ __html: String(sections[activeSection]) }}
+                    />
+                  )
                 ) : (
                   <p className="text-gray-400 text-sm">Esta sección aún no tiene contenido.</p>
                 )}
@@ -472,10 +537,16 @@ export default function ProposalEditor() {
             {/* Contenido actual (read-only) */}
             <div>
               <Label className="text-xs text-gray-500 mb-1 block">Contenido actual</Label>
-              <div
-                className="prose prose-sm max-w-none text-gray-700 bg-gray-50 rounded-lg p-3 max-h-40 overflow-y-auto border border-gray-200"
-                dangerouslySetInnerHTML={{ __html: (aiModifySection && sections[aiModifySection]) || "<p class='text-gray-400'>(vacío)</p>" }}
-              />
+              {isNewFormat ? (
+                <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs font-mono text-gray-700 max-h-40 overflow-y-auto">
+                  {aiModifySection ? JSON.stringify(sections[aiModifySection], null, 2) : "(vacío)"}
+                </pre>
+              ) : (
+                <div
+                  className="prose prose-sm max-w-none text-gray-700 bg-gray-50 rounded-lg p-3 max-h-40 overflow-y-auto border border-gray-200"
+                  dangerouslySetInnerHTML={{ __html: (aiModifySection && sections[aiModifySection]) || "<p class='text-gray-400'>(vacío)</p>" }}
+                />
+              )}
             </div>
 
             {/* Instrucción */}
@@ -508,10 +579,16 @@ export default function ProposalEditor() {
                 <Label className="text-xs text-purple-700 font-semibold mb-1 block flex items-center gap-1">
                   <Sparkles className="w-3 h-3" /> Nueva versión (ya guardada — click Aceptar para confirmar)
                 </Label>
-                <div
-                  className="prose prose-sm max-w-none text-gray-900 bg-purple-50 border-2 border-purple-200 rounded-lg p-4 max-h-96 overflow-y-auto"
-                  dangerouslySetInnerHTML={{ __html: aiNewContent }}
-                />
+                {isNewFormat ? (
+                  <pre className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4 text-xs font-mono text-gray-900 max-h-96 overflow-y-auto">
+                    {aiNewContent}
+                  </pre>
+                ) : (
+                  <div
+                    className="prose prose-sm max-w-none text-gray-900 bg-purple-50 border-2 border-purple-200 rounded-lg p-4 max-h-96 overflow-y-auto"
+                    dangerouslySetInnerHTML={{ __html: aiNewContent }}
+                  />
+                )}
               </div>
             )}
           </div>

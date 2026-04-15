@@ -6610,7 +6610,7 @@ ${urls}
     }
   });
 
-  // Generate/regenerate proposal with AI
+  // Generate/regenerate proposal with AI (new ProposalData schema)
   app.post("/api/admin/proposals/:id/generate", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
@@ -6620,12 +6620,11 @@ ${urls}
       const result = await generateProposal(proposal.contactId, proposal.notes || req.body?.notes);
       if (!result) return res.status(500).json({ error: "Error generando propuesta con IA" });
 
-      const sectionsWithAlcance = { ...result.sections, _alcanceDetallado: JSON.stringify(result.alcanceDetallado) };
+      // Nuevo formato: toda la ProposalData va dentro de `sections` (campo JSON libre)
+      // El frontend detecta si `sections.meta` existe → usa ProposalTemplate, si no → legacy render
       const [updated] = await db.update(proposals).set({
-        sections: sectionsWithAlcance,
-        pricing: result.pricing as unknown as typeof proposals.$inferInsert["pricing"],
-        timelineData: result.timelineData,
-        aiSourcesReport: result.sourcesReport,
+        sections: result.proposalData as unknown as typeof proposals.$inferInsert["sections"],
+        aiSourcesReport: result.sourcesReport as unknown as typeof proposals.$inferInsert["aiSourcesReport"],
         updatedAt: new Date(),
       }).where(eq(proposals.id, proposal.id)).returning();
 
@@ -6660,7 +6659,7 @@ ${urls}
       if ("error" in result) {
         return res.status(500).json({ error: result.error });
       }
-      res.json({ content: result.content, sectionKey });
+      res.json({ section: result.section, sectionKey: result.sectionKey });
     } catch (err: any) {
       log(`Error regenerating section: ${err?.message}`);
       res.status(500).json({ error: err?.message || "Error regenerando sección" });

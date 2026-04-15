@@ -5,6 +5,7 @@ import { eq, desc } from "drizzle-orm";
 import { log } from "./index";
 import { readGoogleDriveContent } from "./google-drive";
 import { getIndustriaLabel } from "@shared/industrias";
+import { proposalDataSchema, type ProposalData, type ProposalSectionKey, type ProposalSourcesReport } from "@shared/proposal-template/types";
 
 let client: Anthropic | null = null;
 
@@ -130,14 +131,12 @@ async function gatherContactContext(contactId: string): Promise<string> {
 }
 
 /**
- * Generate all proposal sections using Claude AI.
+ * Generate a complete ProposalData object matching shared/proposal-template/types.ts.
+ * Uses Claude Sonnet 4 with a strict schema-matching prompt.
  */
 export async function generateProposal(contactId: string, adminNotes?: string): Promise<{
-  sections: Record<string, string>;
-  pricing: { total: number; currency: string; includes: string[]; paymentOptions: string[] };
-  timelineData: { phases: Array<{ name: string; weeks: number; deliverables: string[] }>; totalWeeks: number };
-  alcanceDetallado: Array<{ fase: string; areas: Array<{ nombre: string; tareas: string[] }> }>;
-  sourcesReport: Record<string, string[]>;
+  proposalData: ProposalData;
+  sourcesReport: ProposalSourcesReport;
 } | null> {
   const anthropic = getClient();
   if (!anthropic) return null;
@@ -145,93 +144,199 @@ export async function generateProposal(contactId: string, adminNotes?: string): 
   const context = await gatherContactContext(contactId);
   if (!context) return null;
 
+  // Resolve dates for meta
+  const today = new Date();
+  const validUntil = new Date(today.getTime() + 30 * 24 * 60 * 60 * 1000); // +30 días
+  const todayStr = today.toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
+  const validUntilStr = validUntil.toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
+
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 8000,
-    temperature: 0.4,
-    system: `Eres un consultor senior de IM3 Systems, una agencia de tecnología especializada en IA, automatización y desarrollo de software para empresas en Latinoamérica.
+    temperature: 0.35,
+    system: `Eres un consultor senior de IM3 Systems, agencia de tecnología especializada en IA, automatización y desarrollo de software para empresas en Latinoamérica.
 
-Genera una propuesta comercial PROFESIONAL, PERSUASIVA y PERSONALIZADA basada en los datos reales del cliente.
+Tu tarea: generar una propuesta comercial ESTRUCTURADA que se va a renderizar en un template React premium (secciones Hero, Summary, Problem, Solution, Tech, Timeline, ROI, Authority, Testimonials, Pricing, CTA).
 
-REGLAS:
-- ANALIZA TODO el contexto proporcionado: diagnóstico, emails, documentos de Google Drive, notas de reuniones, auditoría, historial de actividad. No omitas ninguna fuente.
-- Tono: profesional, confiado, orientado a resultados. Como un consultor que sabe lo que hace.
-- NO inventes datos que no estén en el contexto. Si no tienes un dato, omítelo. Pero SÍ usa TODOS los datos que tienes — cada documento, cada email, cada nota es relevante.
-- Los precios deben ser realistas para el mercado latinoamericano de desarrollo de software.
-- El ROI debe ser calculado con lógica (no inventado).
-- Escribe en español latinoamericano.
-- Cada sección debe ser HTML listo para renderizar (con tags básicos: p, strong, ul, li, h3).
-- NO uses markdown. Usa HTML.
-- IMPORTANTE: Para cada sección, registra DE DÓNDE sacaste la información en el campo "sourcesReport". Cita la fuente específica: "Diagnóstico: campo X", "Email del DD/MM: asunto Y", "Documento: nombre del doc", "Nota de reunión: contenido", "Gmail: email recibido del DD/MM". Esto es para trazabilidad interna.
+REGLAS CRÍTICAS:
+- ANALIZA TODO el contexto: diagnóstico, emails, documentos, notas, auditoría, actividad. Cada fuente es relevante.
+- Tono: profesional, confiado, orientado a resultados. Como consultor que sabe cerrar deals.
+- NO inventes datos clave del cliente (nombres, cifras específicas) que no estén en el contexto. Si no hay dato, omítelo o usa rangos plausibles.
+- Los precios en formato "$X.XXX USD" o equivalente en pesos colombianos.
+- Los montos monetarios que muestras al cliente usan formato visual ("$12.500.000 COP" o "$3.500 USD"), NO números crudos.
+- monthlyLossCOP es un NÚMERO entero (ej: 12500000) — el template lo anima en pantalla.
+- Escribe en español latinoamericano (Colombia).
+- Usa tags HTML simples SOLO si el schema lo permite. La mayoría de campos son strings planos — NO metas HTML en ellos.
 
-SOBRE IM3 SYSTEMS:
-- Agencia de tecnología especializada en IA, automatización y desarrollo de software
-- Sede en Colombia, operación en toda Latinoamérica
-- Stack: React, Node.js, PostgreSQL, Claude AI, Stripe, Google Cloud
-- Diferenciadores: IA integrada en cada proyecto, portal de seguimiento en tiempo real, tutor virtual post-entrega
-- Proyectos anteriores: plataformas SaaS, apps móviles, automatización de procesos, CRMs personalizados`,
+SOBRE IM3 SYSTEMS (usa esto donde el schema lo pida):
+- Agencia LATAM de IA + automatización + desarrollo
+- Sede Colombia, operación LATAM + España
+- Stack: React, Node.js, PostgreSQL, Claude AI, integraciones Google Workspace, Stripe
+- Diferenciadores clave:
+  * IA integrada en cada entregable (no es "agregado")
+  * Portal de seguimiento en tiempo real (github commits → resúmenes para el cliente)
+  * Tutor virtual post-entrega que entrena al equipo del cliente
+  * Acompañamiento sin tiempo límite mientras el cliente crece
+- Casos recientes: Passport2Fluency (plataforma idiomas + IA), CRM con IA y automatización email+WhatsApp, Auditorías automatizadas con IA.
+
+ESTRUCTURA EXACTA QUE DEBES DEVOLVER (JSON estricto, sin markdown wrapper, sin comentarios, sin texto antes ni después):
+
+{
+  "proposalData": {
+    "meta": {
+      "clientName": "<nombre de la empresa>",
+      "contactName": "<nombre del contacto principal>",
+      "proposalDate": "${todayStr}",
+      "validUntil": "${validUntilStr}",
+      "industry": "<industria del cliente según el diagnóstico>"
+    },
+    "hero": {
+      "painHeadline": "<1 oración impactante sobre el dolor principal del cliente, usando SUS palabras cuando sea posible. Ej: 'Estás perdiendo ventas cada semana por falta de seguimiento'>",
+      "painAmount": "<cifra grande y dramática. Ej: '$12.5M COP/mes perdidos' o '480 horas/año desperdiciadas'>",
+      "subtitle": "<2 líneas. Transición del dolor a la promesa: 'Te mostramos exactamente cómo recuperarlo en los próximos X meses.'>",
+      "diagnosisRef": "<1 línea que valida que leímos su diagnóstico. Ej: 'Basado en el diagnóstico tecnológico que completaste el DD/MM'>"
+    },
+    "summary": {
+      "commitmentQuote": "<quote fuerte de 1-2 líneas. Ej: 'No vendemos software. Vendemos tiempo, escala y control.' Debe sonar a IM3, no genérico>",
+      "paragraphs": [
+        "<Párrafo 1: contexto del cliente (2-3 líneas, personalizado)>",
+        "<Párrafo 2: qué vamos a lograr juntos (2-3 líneas)>",
+        "<Párrafo 3 (opcional): por qué ahora es el momento>"
+      ],
+      "stats": [
+        { "label": "Tiempo de desarrollo", "value": "<ej: 12 semanas>" },
+        { "label": "Ahorro estimado/mes", "value": "<ej: $8M COP>" },
+        { "label": "ROI proyectado", "value": "<ej: 320% año 1>" }
+      ]
+    },
+    "problem": {
+      "intro": "<Intro de 2-3 líneas: 'Identificamos estos puntos críticos que están frenando a <empresa>:'>",
+      "monthlyLossCOP": <NÚMERO ENTERO en COP, estimación del costo mensual de no actuar. Ej: 12500000 NO: "12.500.000">,
+      "counterDescription": "<Leyenda de ese número: 'Por mes en ineficiencia y oportunidades perdidas.'>",
+      "problemCards": [
+        { "icon": "<emoji, ej: ⏰>", "title": "<título corto del problema>", "description": "<1-2 líneas describiendo el impacto concreto en SU negocio>" },
+        { "icon": "<emoji>", "title": "...", "description": "..." },
+        { "icon": "<emoji>", "title": "...", "description": "..." }
+      ]
+    },
+    "solution": {
+      "heading": "<ej: 'Tu plataforma integrada de crecimiento'>",
+      "intro": "<2-3 líneas explicando la filosofía de la solución>",
+      "modules": [
+        { "number": 1, "title": "<nombre del módulo>", "description": "<qué hace>", "solves": "<qué problema de los anteriores resuelve específicamente>" },
+        { "number": 2, "title": "...", "description": "...", "solves": "..." },
+        { "number": 3, "title": "...", "description": "...", "solves": "..." }
+      ]
+    },
+    "tech": {
+      "heading": "<ej: 'Tecnología de punta, lista para escalar'>",
+      "intro": "<2-3 líneas. Explica el stack EN LENGUAJE DE NEGOCIO, no de programador.>",
+      "features": [
+        "<4-6 features concretas, ej: 'Automatización de emails con IA que se adapta a cada cliente', 'Dashboard en tiempo real con métricas que importan'>"
+      ],
+      "stack": "<lista corta de tecnologías: 'React · Node.js · PostgreSQL · Claude AI · Google Workspace'>"
+    },
+    "timeline": {
+      "heading": "<ej: 'Tu implementación en 3 fases'>",
+      "phases": [
+        { "number": 1, "title": "<nombre de la fase>", "durationWeeks": <entero>, "items": ["<tarea>", "<tarea>", "<tarea>"], "outcome": "<qué tienen al terminar esta fase>" },
+        { "number": 2, "title": "...", "durationWeeks": 0, "items": ["..."], "outcome": "..." },
+        { "number": 3, "title": "...", "durationWeeks": 0, "items": ["..."], "outcome": "..." }
+      ]
+    },
+    "roi": {
+      "heading": "<ej: 'Retorno de inversión proyectado'>",
+      "recoveries": [
+        { "amount": "<ej: $15M>", "currency": "COP", "label": "<ej: Ahorro anual en horas>" },
+        { "amount": "...", "currency": "COP", "label": "..." },
+        { "amount": "...", "currency": "COP", "label": "..." }
+      ],
+      "comparison": {
+        "withoutLabel": "Sin IM3",
+        "withoutAmount": "<monto anual de pérdidas actuales en formato $>",
+        "withoutWeight": 100,
+        "investmentLabel": "Con IM3",
+        "investmentAmount": "<monto de la inversión en formato $>",
+        "investmentWeight": <número 0-100 proporcional al monto vs el withoutAmount>,
+        "caption": "<1 línea conectando inversión vs costo de no actuar>"
+      },
+      "heroTitle": "<ej: 'Se paga en 4 meses'>",
+      "heroDescription": "<2-3 líneas explicando la matemática del payback>",
+      "roiPercent": "<ej: '340%'>",
+      "paybackMonths": "<ej: '4 meses'>"
+    },
+    "authority": {
+      "heading": "<ej: 'Por qué IM3'>",
+      "intro": "<2 líneas>",
+      "stats": [
+        { "num": "<ej: 15+>", "label": "Proyectos entregados" },
+        { "num": "<ej: 100%>", "label": "Con IA integrada" },
+        { "num": "<ej: 3>", "label": "Países de operación" },
+        { "num": "<ej: 24/7>", "label": "Portal de seguimiento" }
+      ],
+      "differentiators": [
+        { "icon": "<emoji>", "title": "<diferenciador>", "description": "<2 líneas explicándolo>" },
+        { "icon": "<emoji>", "title": "...", "description": "..." },
+        { "icon": "<emoji>", "title": "...", "description": "..." }
+      ]
+    },
+    "testimonials": [
+      { "text": "<quote relevante de un cliente ficticio pero plausible, máx 2 líneas>", "author": "<nombre>", "role": "<cargo, empresa>" },
+      { "text": "...", "author": "...", "role": "..." }
+    ],
+    "pricing": {
+      "label": "<ej: 'Tu inversión'>",
+      "amount": "<ej: '12.500'>",
+      "amountPrefix": "$",
+      "amountSuffix": "USD",
+      "priceFootnote": "<ej: 'Pago único. Sin mensualidades ocultas.'>",
+      "scarcityMessage": "<1 línea de urgencia honesta, ej: 'Disponibilidad limitada: solo tomamos 3 proyectos nuevos este trimestre.'>",
+      "milestones": [
+        { "step": 1, "name": "Al firmar", "desc": "<qué se entrega>", "amount": "<ej: $3.750 USD (30%)>" },
+        { "step": 2, "name": "Mitad del proyecto", "desc": "<...>", "amount": "<ej: $5.000 USD (40%)>" },
+        { "step": 3, "name": "Entrega final", "desc": "<...>", "amount": "<ej: $3.750 USD (30%)>" }
+      ],
+      "includes": [
+        "<8-10 bullets de qué incluye la inversión>"
+      ]
+    },
+    "cta": {
+      "heading": "<ej: '¿Listo para recuperar tu tiempo?'>",
+      "painHighlight": "<ej: 'Cada mes sin esto son $X COP que no vuelven.'>",
+      "description": "<2-3 líneas cerrando, invitando a actuar hoy>",
+      "acceptLabel": "Aceptar propuesta",
+      "fallbackCtaLabel": "Hablemos 15 min",
+      "deadlineMessage": "<ej: 'Esta propuesta es válida hasta el ${validUntilStr}'>",
+      "guarantees": [
+        "<ej: 'Si no entregamos en tiempo, devolvemos 20% del valor'>",
+        "<...>"
+      ]
+    }
+  },
+  "sourcesReport": {
+    "hero": ["Diagnóstico: campo X", "Email del DD/MM: asunto Y"],
+    "problem": ["Diagnóstico: presupuesto, empleados, herramientas", "Documento: nombre"],
+    "solution": ["..."],
+    "timeline": ["..."],
+    "roi": ["..."],
+    "pricing": ["..."]
+  }
+}`,
     messages: [{
       role: "user",
-      content: `Genera una propuesta comercial completa para este cliente.
+      content: `Genera la propuesta comercial estructurada para este cliente.
 
 ${adminNotes ? `INSTRUCCIONES ADICIONALES DEL ADMIN:\n${adminNotes}\n\n` : ""}
 
 CONTEXTO DEL CLIENTE:
 ${context}
 
-SOBRE EL PRICING:
-- Un SOLO precio fijo. IM3 ofrece servicio premium completo — NO hay versión light.
-- El precio incluye SIEMPRE: desarrollo completo, acompañamiento, tutor virtual IA post-entrega, portal de seguimiento, soporte post-implementación.
-- Precio realista para Latinoamérica basado en la complejidad del proyecto.
-
-SOBRE EL ALCANCE:
-- Genera el alcance con PROFUNDIDAD: cada fase tiene sub-áreas, y cada sub-área tiene tareas específicas.
-- Esto permite que el cliente haga drill-down para ver el detalle sin sentirse abrumado.
-
-Responde SOLO con un JSON válido (sin markdown, sin \`\`\`json) con esta estructura exacta:
-{
-  "sections": {
-    "resumen": "<HTML del resumen ejecutivo — 2-3 párrafos impactantes>",
-    "problema": "<HTML describiendo los dolores/problemas del cliente usando SUS palabras del diagnóstico>",
-    "costo_inaccion": "<HTML cuantificando qué pierde el cliente cada mes si NO actúa: horas desperdiciadas, ventas perdidas, ineficiencia. Usa datos reales del diagnóstico para estimar. Ejemplo: 'Si tu equipo pierde 15 horas/semana en procesos manuales a $X/hora, estás perdiendo $Y/mes — $Z/año.'>",
-    "solucion": "<HTML describiendo qué vamos a construir y por qué resuelve cada problema>",
-    "alcance": "<HTML resumen general del alcance — las fases a alto nivel>",
-    "tecnologia": "<HTML simplificado del stack técnico — en lenguaje de negocios, no de programador>",
-    "casos_exito": "<HTML con 2-3 proyectos anteriores de IM3: Passport2Fluency (plataforma de idiomas con tutores + IA), sistema CRM personalizado con IA y automatización de emails. Para cada uno: qué se construyó, resultado clave, tecnologías usadas.>",
-    "inversion": "<HTML explicando el valor de la inversión: por qué es una inversión y no un gasto. Conectar con el costo de inacción.>",
-    "roi": "<HTML con cálculo de ROI: en cuántos meses se recupera la inversión basado en ahorro de tiempo, aumento de ventas, o eficiencia ganada>",
-    "equipo": "<HTML sobre IM3 Systems — equipo, experiencia, diferenciadores>",
-    "siguientes_pasos": "<HTML: 1. Aceptar propuesta 2. Reunión de kickoff 3. Inicio del desarrollo. Incluir que el primer entregable visible será en las primeras 2-3 semanas.>"
-  },
-  "pricing": {
-    "total": 0,
-    "currency": "USD",
-    "includes": ["Desarrollo completo del proyecto", "Portal de seguimiento en tiempo real", "Tutor virtual IA post-entrega", "Soporte y acompañamiento continuo", "Manuales y documentación completa", "Capacitación del equipo"]
-  },
-  "timelineData": {
-    "phases": [
-      { "name": "Fase 1: ...", "weeks": 0, "deliverables": ["..."] }
-    ],
-    "totalWeeks": 0
-  },
-  "alcanceDetallado": [
-    {
-      "fase": "Fase 1: Nombre",
-      "areas": [
-        { "nombre": "Área 1", "tareas": ["Tarea específica 1", "Tarea específica 2"] },
-        { "nombre": "Área 2", "tareas": ["Tarea 1", "Tarea 2"] }
-      ]
-    }
-  ],
-  "sourcesReport": {
-    "resumen": ["Fuente 1: detalle de dónde se sacó la info", "Fuente 2: ..."],
-    "problema": ["Diagnóstico: campo específico", "Email del DD/MM: asunto del email"],
-    "costo_inaccion": ["Diagnóstico: presupuesto y empleados", "Documento: nombre del archivo"],
-    "solucion": ["..."],
-    "inversion": ["..."],
-    "roi": ["..."]
-  }
-}`
+Recuerda:
+- Devuelve SOLO el JSON con las claves "proposalData" y "sourcesReport"
+- Sin markdown, sin \`\`\`, sin texto fuera del JSON
+- monthlyLossCOP es un NÚMERO entero sin formato
+- Los campos "amount" de pricing y ROI son STRINGS con formato visual (ej: "12.500")
+- Rellena TODOS los campos requeridos — no uses null ni omitas claves`
     }],
   });
 
@@ -239,15 +344,24 @@ Responde SOLO con un JSON válido (sin markdown, sin \`\`\`json) con esta estruc
   if (!text) return null;
 
   try {
-    // Clean JSON (remove possible markdown wrappers)
     const cleaned = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
     const parsed = JSON.parse(cleaned);
+
+    if (!parsed.proposalData) {
+      log(`Proposal AI response missing proposalData key`);
+      return null;
+    }
+
+    // Validar con Zod — si falla, log pero no rechaces (mejor un parcial que nada)
+    const validation = proposalDataSchema.safeParse(parsed.proposalData);
+    if (!validation.success) {
+      log(`Proposal AI validation failed: ${JSON.stringify(validation.error.issues.slice(0, 5))}`);
+      // Aún así devolvemos lo que tenemos — el admin puede editar manualmente lo incompleto
+    }
+
     return {
-      sections: parsed.sections || {},
-      pricing: parsed.pricing || { total: 0, currency: "USD", includes: [], paymentOptions: [] },
-      timelineData: parsed.timelineData || { phases: [], totalWeeks: 0 },
-      alcanceDetallado: parsed.alcanceDetallado || [],
-      sourcesReport: parsed.sourcesReport || {},
+      proposalData: (validation.success ? validation.data : parsed.proposalData) as ProposalData,
+      sourcesReport: (parsed.sourcesReport || {}) as ProposalSourcesReport,
     };
   } catch (err) {
     log(`Error parsing proposal AI response: ${err}`);
@@ -256,48 +370,54 @@ Responde SOLO con un JSON válido (sin markdown, sin \`\`\`json) con esta estruc
 }
 
 /**
- * Regenerate ONE section of a proposal with a natural-language instruction from the admin.
- * Much faster than full regeneration (~3-5s vs 10-20s) because it only rewrites one section
- * and uses a tighter context window.
+ * Regenerate ONE section of a ProposalData with a natural-language instruction.
+ * Works with the new schema (hero, summary, problem, solution, tech, timeline, roi,
+ * authority, testimonials, pricing, cta). Returns a structured section object
+ * that matches the corresponding sub-schema of ProposalData.
  */
 export async function regenerateProposalSection(
   proposalId: string,
   sectionKey: string,
   instruction: string
-): Promise<{ content: string } | { error: string }> {
+): Promise<{ section: unknown; sectionKey: string } | { error: string }> {
   if (!db) return { error: "DB not configured" };
   const anthropic = getClient();
   if (!anthropic) return { error: "ANTHROPIC_API_KEY not set" };
 
-  // Lazy import to avoid circular dependency
+  const validKeys: ProposalSectionKey[] = [
+    "meta", "hero", "summary", "problem", "solution", "tech",
+    "timeline", "roi", "authority", "testimonials", "pricing", "cta"
+  ];
+  if (!validKeys.includes(sectionKey as ProposalSectionKey)) {
+    return { error: `Sección inválida. Debe ser una de: ${validKeys.join(", ")}` };
+  }
+
   const { proposals } = await import("@shared/schema");
 
   const [proposal] = await db.select().from(proposals).where(eq(proposals.id, proposalId)).limit(1);
   if (!proposal) return { error: "Propuesta no encontrada" };
 
-  const currentSections = (proposal.sections as Record<string, string>) || {};
-  const currentContent = currentSections[sectionKey] || "";
+  const currentData = (proposal.sections as Partial<ProposalData> | null) || {};
+  const currentSection = (currentData as Record<string, unknown>)[sectionKey];
 
-  // Resumen compacto de otras secciones para mantener coherencia (truncadas a 500 chars cada una)
-  const otherSections: Record<string, string> = {};
-  for (const [key, value] of Object.entries(currentSections)) {
-    if (key === sectionKey || key.startsWith("_")) continue;
-    otherSections[key] = String(value).substring(0, 500);
+  // Resumen de otras secciones (JSON truncado) para coherencia
+  const otherSections: Record<string, unknown> = {};
+  for (const key of validKeys) {
+    if (key === sectionKey) continue;
+    const val = (currentData as Record<string, unknown>)[key];
+    if (val !== undefined) otherSections[key] = val;
   }
+  const otherSummary = JSON.stringify(otherSections).substring(0, 3000);
 
-  // Contexto básico del contacto (sin Drive sync pesado)
+  // Contact brief para personalización
   const [contact] = await db.select().from(contacts).where(eq(contacts.id, proposal.contactId)).limit(1);
   let contactBrief = "";
   if (contact) {
-    contactBrief = `CLIENTE: ${contact.nombre} — ${contact.empresa} (${contact.email})`;
+    contactBrief = `CLIENTE: ${contact.nombre} — ${contact.empresa}`;
     if (contact.diagnosticId) {
       const [diag] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId)).limit(1);
       if (diag) {
-        const industriaLabel = getIndustriaLabel(diag.industria);
-        contactBrief += `\nIndustria: ${industriaLabel}`;
-        contactBrief += `\nEmpleados: ${diag.empleados}`;
-        contactBrief += `\nÁrea prioridad: ${(diag.areaPrioridad as string[] | null)?.join(", ") || "N/A"}`;
-        contactBrief += `\nPresupuesto: ${diag.presupuesto}`;
+        contactBrief += ` · ${getIndustriaLabel(diag.industria)} · ${diag.empleados} empleados · Presupuesto ${diag.presupuesto}`;
       }
     }
   }
@@ -307,45 +427,58 @@ export async function regenerateProposalSection(
       model: "claude-sonnet-4-20250514",
       max_tokens: 2000,
       temperature: 0.4,
-      system: `Eres un consultor senior de IM3 Systems editando una sección específica de una propuesta comercial.
-Tu tarea: reescribir la sección indicada aplicando la instrucción del admin, sin alterar las demás.
-- Escribe en español latinoamericano.
-- Devuelve SOLO el HTML de la sección (sin markdown, sin \`\`\`, sin JSON, sin prefacios).
-- Usa tags HTML básicos: p, strong, ul, li, h3, br.
-- Mantén coherencia con las otras secciones (no contradices info clave).
-- No inventes datos del cliente que no estén en el contexto.`,
+      system: `Eres un consultor senior de IM3 Systems reescribiendo UNA sección estructurada de una propuesta comercial.
+
+Tu tarea: devolver la sección "${sectionKey}" en JSON, con EXACTAMENTE los mismos campos que tiene actualmente, aplicando la instrucción del admin.
+
+REGLAS:
+- Devuelve SOLO el objeto JSON de esta sección (sin wrapper \`\`\`, sin markdown, sin explicaciones, sin texto antes o después).
+- Mantén EXACTAMENTE la misma forma (keys, tipos de datos) que la versión actual.
+- NO cambies tipos: si un campo es número, que siga siendo número. Si es array, array. Etc.
+- Mantén coherencia con las otras secciones.
+- Español latinoamericano.
+- No inventes datos del cliente que contradigan el contexto.`,
       messages: [{
         role: "user",
-        content: `${contactBrief ? contactBrief + "\n\n" : ""}SECCIÓN A REESCRIBIR (key="${sectionKey}"):
-${currentContent || "(sin contenido previo — es una versión nueva)"}
+        content: `${contactBrief}
 
-OTRAS SECCIONES DE LA PROPUESTA (solo contexto, NO las modifiques):
-${Object.entries(otherSections).map(([k, v]) => `[${k}]: ${v}`).join("\n\n")}
+SECCIÓN A REESCRIBIR (key="${sectionKey}"):
+${JSON.stringify(currentSection, null, 2)}
+
+OTRAS SECCIONES (solo referencia, NO modificar):
+${otherSummary}
 
 INSTRUCCIÓN DEL ADMIN:
 ${instruction}
 
-Reescribe SOLO la sección "${sectionKey}" aplicando la instrucción. Devuelve el HTML puro.`
+Devuelve el JSON del objeto "${sectionKey}" aplicando la instrucción. Mismos campos, misma forma.`
       }]
     });
 
     const text = response.content?.[0]?.type === "text" ? response.content[0].text.trim() : "";
     if (!text) return { error: "Respuesta vacía de Claude" };
 
-    // Quitar cualquier wrapper de markdown si se coló
     const cleaned = text
-      .replace(/^```html\s*/i, "")
+      .replace(/^```json\s*/i, "")
       .replace(/^```\s*/i, "")
       .replace(/\s*```$/i, "")
       .trim();
 
-    // Persistir
-    const newSections = { ...currentSections, [sectionKey]: cleaned };
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(cleaned);
+    } catch (err) {
+      log(`[regenerateProposalSection] JSON parse failed: ${err}. Raw: ${cleaned.substring(0, 200)}`);
+      return { error: "Claude devolvió JSON inválido" };
+    }
+
+    // Persistir en DB
+    const newData = { ...currentData, [sectionKey]: parsed };
     await db.update(proposals)
-      .set({ sections: newSections, updatedAt: new Date() })
+      .set({ sections: newData as Record<string, unknown>, updatedAt: new Date() })
       .where(eq(proposals.id, proposalId));
 
-    return { content: cleaned };
+    return { section: parsed, sectionKey };
   } catch (err: any) {
     log(`Error regenerating section ${sectionKey}: ${err?.message || err}`);
     return { error: err?.message || "Error regenerando sección" };

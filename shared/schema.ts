@@ -613,7 +613,10 @@ export const proposals = pgTable("proposals", {
   contactId: varchar("contact_id").notNull(),
   title: text("title").notNull(),
   status: text("status").notNull().default("draft"), // draft | sent | viewed | accepted | rejected | expired
-  sections: json("sections").$type<Record<string, string>>().default({}),
+  // sections puede ser:
+  //  - Legacy: Record<string, string> (HTML strings)
+  //  - Nuevo: ProposalData completo (ver shared/proposal-template/types.ts)
+  sections: json("sections").$type<Record<string, unknown>>().default({}),
   pricing: json("pricing").$type<{
     options: Array<{ name: string; price: number; features: string[]; recommended: boolean }>;
     currency: string;
