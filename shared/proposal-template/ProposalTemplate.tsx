@@ -12,6 +12,7 @@ import { ROI } from "./sections/ROI";
 import { Authority } from "./sections/Authority";
 import { Testimonials } from "./sections/Testimonials";
 import { Pricing } from "./sections/Pricing";
+import { Hardware } from "./sections/Hardware";
 import { OperationalCosts } from "./sections/OperationalCosts";
 import { CTA } from "./sections/CTA";
 
@@ -70,6 +71,12 @@ export function ProposalTemplate({
       <Testimonials items={data.testimonials} />
       <div className="pt-divider" />
       <Pricing data={data.pricing} />
+      {data.hardware && data.hardware.items && data.hardware.items.length > 0 && (
+        <>
+          <div className="pt-divider" />
+          <Hardware data={data.hardware} />
+        </>
+      )}
       {data.operationalCosts && (
         <>
           <div className="pt-divider" />

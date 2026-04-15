@@ -150,6 +150,26 @@ export const ctaSchema = z.object({
   guarantees: z.array(z.string()),
 });
 
+// Hardware físico requerido para que el proyecto funcione (OPCIONAL — solo si aplica)
+export const hardwareItemSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  quantity: z.number().int().positive(),
+  unitPriceUSD: z.string(),
+  totalPriceUSD: z.string(),
+  notes: z.string().optional(),
+  paidBy: z.enum(["cliente-compra", "im3-incluye", "im3-asesora"]).default("cliente-compra"),
+});
+
+export const hardwareSchema = z.object({
+  heading: z.string(),
+  intro: z.string(),
+  items: z.array(hardwareItemSchema).min(1),
+  subtotalUSD: z.string(),
+  recommendationNote: z.string().optional(),
+  disclaimer: z.string(),
+});
+
 // Operational costs (gastos mensuales recurrentes que el cliente paga aparte del desarrollo)
 export const operationalCostItemSchema = z.object({
   service: z.string(),
@@ -186,6 +206,7 @@ export const proposalDataSchema = z.object({
   authority: authoritySchema,
   testimonials: z.array(testimonialSchema).min(1),
   pricing: pricingSchema,
+  hardware: hardwareSchema.optional(), // solo si aplica
   operationalCosts: operationalCostsSchema,
   cta: ctaSchema,
 });
@@ -203,6 +224,8 @@ export type AuthorityData = z.infer<typeof authoritySchema>;
 export type TestimonialData = z.infer<typeof testimonialSchema>;
 export type PricingData = z.infer<typeof pricingSchema>;
 export type CTAData = z.infer<typeof ctaSchema>;
+export type HardwareData = z.infer<typeof hardwareSchema>;
+export type HardwareItem = z.infer<typeof hardwareItemSchema>;
 export type OperationalCostsData = z.infer<typeof operationalCostsSchema>;
 export type OperationalCostItem = z.infer<typeof operationalCostItemSchema>;
 export type OperationalCostCategory = z.infer<typeof operationalCostCategorySchema>;

@@ -1157,6 +1157,199 @@
   .pt-opcosts-totals { flex-direction: column; gap: 1rem; }
 }
 
+/* ─── Hardware Section ──────────────────────────────────── */
+.pt-hardware-section {
+  padding: 5rem 0;
+  background: var(--pt-ink2);
+}
+
+.pt-hardware-heading {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 2.2rem;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--pt-white);
+  margin: 0.5rem 0 1rem;
+}
+
+.pt-hardware-intro {
+  color: var(--pt-smoke);
+  max-width: 620px;
+  font-size: 1rem;
+  line-height: 1.55;
+  margin-bottom: 2.5rem;
+}
+
+.pt-hardware-table {
+  background: var(--pt-ink3);
+  border: 1px solid rgba(14, 181, 168, 0.15);
+  border-radius: 14px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+
+.pt-hardware-table-head {
+  display: grid;
+  grid-template-columns: 1fr 70px 110px 120px;
+  gap: 1rem;
+  padding: 1rem 1.5rem;
+  background: rgba(14, 181, 168, 0.06);
+  border-bottom: 1px solid rgba(14, 181, 168, 0.15);
+  font-family: 'DM Mono', monospace;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--pt-teal);
+  font-weight: 500;
+}
+
+.pt-hardware-row {
+  display: grid;
+  grid-template-columns: 1fr 70px 110px 120px;
+  gap: 1rem;
+  padding: 1.25rem 1.5rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  align-items: start;
+}
+
+.pt-hardware-row:last-of-type {
+  border-bottom: none;
+}
+
+.pt-hardware-item-cell {
+  min-width: 0;
+}
+
+.pt-hardware-item-name {
+  font-size: 0.95rem;
+  color: var(--pt-white);
+  font-weight: 500;
+  margin-bottom: 0.35rem;
+  line-height: 1.3;
+}
+
+.pt-hardware-item-desc {
+  font-size: 0.82rem;
+  color: var(--pt-smoke);
+  line-height: 1.5;
+  margin-bottom: 0.35rem;
+}
+
+.pt-hardware-item-notes {
+  font-size: 0.75rem;
+  color: rgba(255, 255, 255, 0.45);
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.pt-hardware-col-qty,
+.pt-hardware-col-unit,
+.pt-hardware-col-total {
+  text-align: right;
+  font-family: 'DM Mono', monospace;
+  font-size: 0.88rem;
+  color: var(--pt-light);
+  padding-top: 0.15rem;
+}
+
+.pt-hardware-qty-value {
+  display: inline-block;
+  background: rgba(14, 181, 168, 0.12);
+  color: var(--pt-teal);
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-weight: 500;
+}
+
+.pt-hardware-col-total {
+  color: var(--pt-teal);
+  font-weight: 500;
+}
+
+.pt-hardware-subtotal {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 1.25rem 1.5rem;
+  background: rgba(14, 181, 168, 0.08);
+  border-top: 2px solid rgba(14, 181, 168, 0.2);
+}
+
+.pt-hardware-subtotal-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.75rem;
+  color: var(--pt-teal);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-weight: 500;
+}
+
+.pt-hardware-subtotal-value {
+  font-family: 'Plus Jakarta Sans', sans-serif;
+  font-size: 1.4rem;
+  color: var(--pt-white);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.pt-hardware-recommendation {
+  background: linear-gradient(135deg, rgba(14, 181, 168, 0.08), rgba(14, 181, 168, 0.03));
+  border: 1px solid rgba(14, 181, 168, 0.2);
+  border-radius: 12px;
+  padding: 1.25rem 1.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.pt-hardware-rec-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  color: var(--pt-teal);
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+
+.pt-hardware-recommendation p {
+  font-size: 0.9rem;
+  color: var(--pt-light);
+  line-height: 1.55;
+  margin: 0;
+}
+
+.pt-hardware-disclaimer {
+  font-size: 0.78rem;
+  color: var(--pt-smoke);
+  font-style: italic;
+  margin: 0;
+  text-align: center;
+  line-height: 1.5;
+  padding: 0.5rem 0;
+}
+
+/* Mobile responsive hardware */
+@media (max-width: 720px) {
+  .pt-hardware-table-head {
+    display: none;
+  }
+  .pt-hardware-row {
+    grid-template-columns: 1fr;
+    gap: 0.5rem;
+    padding: 1.25rem 1rem;
+  }
+  .pt-hardware-col-qty,
+  .pt-hardware-col-unit,
+  .pt-hardware-col-total {
+    text-align: left;
+    display: flex;
+    justify-content: space-between;
+  }
+  .pt-hardware-col-qty::before { content: "Cantidad:"; color: var(--pt-smoke); font-family: 'DM Mono', monospace; font-size: 0.7rem; }
+  .pt-hardware-col-unit::before { content: "Unitario:"; color: var(--pt-smoke); font-family: 'DM Mono', monospace; font-size: 0.7rem; }
+  .pt-hardware-col-total::before { content: "Total:"; color: var(--pt-smoke); font-family: 'DM Mono', monospace; font-size: 0.7rem; }
+}
+
 /* ─── Operational Costs Section ─────────────────────────── */
 .pt-opcosts-section {
   padding: 5rem 0;

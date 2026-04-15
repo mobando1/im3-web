@@ -9,9 +9,10 @@ import { proposalDataSchema, type ProposalData, type ProposalSectionKey, type Pr
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-// Load voice guide and cost reference once at module load time (not per call)
+// Load voice guide, cost reference and hardware catalog once at module load time (not per call)
 let VOICE_GUIDE = "";
 let COST_REFERENCE = "";
+let HARDWARE_CATALOG = "";
 try {
   VOICE_GUIDE = readFileSync(resolve(process.cwd(), "shared/proposal-voice-guide.md"), "utf-8");
 } catch (err) {
@@ -21,6 +22,11 @@ try {
   COST_REFERENCE = readFileSync(resolve(process.cwd(), "shared/proposal-cost-reference.md"), "utf-8");
 } catch (err) {
   log(`[proposal-ai] could not load cost reference: ${err}`);
+}
+try {
+  HARDWARE_CATALOG = readFileSync(resolve(process.cwd(), "shared/proposal-hardware-catalog.md"), "utf-8");
+} catch (err) {
+  log(`[proposal-ai] could not load hardware catalog: ${err}`);
 }
 
 let client: Anthropic | null = null;
@@ -187,6 +193,12 @@ COST REFERENCE — úsalo para calcular la sección operationalCosts:
 ${COST_REFERENCE}
 
 ═══════════════════════════════════════════════════════════════
+HARDWARE CATALOG — úsalo para decidir si incluir la sección hardware:
+═══════════════════════════════════════════════════════════════
+
+${HARDWARE_CATALOG}
+
+═══════════════════════════════════════════════════════════════
 INSTRUCCIONES DE GENERACIÓN:
 ═══════════════════════════════════════════════════════════════
 
@@ -332,6 +344,7 @@ ESTRUCTURA EXACTA QUE DEBES DEVOLVER (JSON estricto, sin markdown wrapper, sin c
         "<8-10 bullets de qué incluye la inversión>"
       ]
     },
+    "hardware": "<OPCIONAL. Si ALGÚN módulo de solution.modules requiere equipo físico según el HARDWARE CATALOG, incluir este objeto. Si la solución es puramente SaaS/web/app (no requiere hardware físico), OMITIR esta key completamente o usar null. Formato cuando aplica: { heading: 'Equipos físicos requeridos', intro: '2-3 líneas honestas sobre por qué son necesarios y cómo se compran', items: [{ name, description, quantity (número entero), unitPriceUSD (string ej: '$120 USD'), totalPriceUSD (string ej: '$240 USD'), notes (string opcional con marcas recomendadas), paidBy: 'cliente-compra' }], subtotalUSD: string (suma de totalPriceUSD), recommendationNote: 'Cómo IM3 apoya la compra', disclaimer: 'IM3 no agrega margen aquí — pasa-costos literal' }>",
     "operationalCosts": {
       "heading": "<ej: 'Costos operativos mensuales'>",
       "intro": "<2-3 líneas explicando que estos son los gastos recurrentes que paga el cliente directamente a cada proveedor después del lanzamiento. Mencionar transparencia y que IM3 no agrega margen>",
@@ -560,7 +573,7 @@ export async function regenerateProposalSection(
 
   const validKeys: ProposalSectionKey[] = [
     "meta", "hero", "summary", "problem", "solution", "tech",
-    "timeline", "roi", "authority", "testimonials", "pricing", "operationalCosts", "cta"
+    "timeline", "roi", "authority", "testimonials", "pricing", "hardware", "operationalCosts", "cta"
   ];
   if (!validKeys.includes(sectionKey as ProposalSectionKey)) {
     return { error: `Sección inválida. Debe ser una de: ${validKeys.join(", ")}` };
