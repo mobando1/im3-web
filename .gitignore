@@ -20,3 +20,6 @@ attached_assets/
 # Node
 node_modules/
 dist/
+
+# PDFs generados desde markdown (docs/*.md es la fuente de verdad)
+docs/*.pdf
