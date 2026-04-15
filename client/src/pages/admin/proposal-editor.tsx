@@ -184,25 +184,31 @@ export default function ProposalEditor() {
     }
   }, [proposal?.id]);
 
+  // Pre-compute formato/labels (safe durante loading — fallback a legacy vacío)
+  const sectionsForHooks: Record<string, any> = proposal?.sections || {};
+  const isNewFormat = Boolean(sectionsForHooks.meta && sectionsForHooks.hero && sectionsForHooks.summary);
+  const hasSectionsForHooks = Object.keys(sectionsForHooks).length > 0;
+  const sectionOrderForHooks = isNewFormat ? SECTION_ORDER_NEW : SECTION_ORDER_LEGACY;
+
+  // Si activeSection no pertenece al formato actual, saltar a la primera sección válida.
+  // DEBE estar antes del early return para respetar las reglas de hooks.
+  useEffect(() => {
+    if (hasSectionsForHooks && !sectionOrderForHooks.includes(activeSection)) {
+      setActiveSection(sectionOrderForHooks[0]);
+    }
+  }, [isNewFormat, hasSectionsForHooks]);
+
   if (isLoading || !proposal) {
     return <div className="text-center py-20 text-gray-400">Cargando propuesta...</div>;
   }
 
   const sections: Record<string, any> = proposal.sections || {};
   const pricing = proposal.pricing;
-  const hasSections = Object.keys(sections).length > 0;
+  const hasSections = hasSectionsForHooks;
 
-  // Detecta si la propuesta usa el nuevo schema ProposalData o el legacy (strings HTML)
-  const isNewFormat = Boolean(sections.meta && sections.hero && sections.summary);
+  // Labels y orden según formato detectado
   const SECTION_LABELS = isNewFormat ? SECTION_LABELS_NEW : SECTION_LABELS_LEGACY;
-  const SECTION_ORDER = isNewFormat ? SECTION_ORDER_NEW : SECTION_ORDER_LEGACY;
-
-  // Si activeSection no pertenece al formato actual, saltar a la primera sección válida
-  useEffect(() => {
-    if (hasSections && !SECTION_ORDER.includes(activeSection)) {
-      setActiveSection(SECTION_ORDER[0]);
-    }
-  }, [isNewFormat, hasSections]);
+  const SECTION_ORDER = sectionOrderForHooks;
 
   const saveSection = () => {
     if (!editingSection) return;
