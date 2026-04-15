@@ -435,6 +435,17 @@ Recuerda:
       }
     }
 
+    // Quality Gate 2: validar coherencia matemática cross-section (problem/roi/pricing)
+    try {
+      const crossRepaired = await validateCrossSectionMath(anthropic, proposalData);
+      if (crossRepaired) {
+        if (crossRepaired.roi) proposalData.roi = crossRepaired.roi;
+        if (crossRepaired.pricing) proposalData.pricing = crossRepaired.pricing;
+      }
+    } catch (err) {
+      log(`[quality-gate] cross-section math validation failed (non-blocking): ${err}`);
+    }
+
     return {
       proposalData,
       sourcesReport: (parsed.sourcesReport || {}) as ProposalSourcesReport,
@@ -645,5 +656,91 @@ Devuelve el JSON del objeto "${sectionKey}" aplicando la instrucción. Mismos ca
   } catch (err: any) {
     log(`Error regenerating section ${sectionKey}: ${err?.message || err}`);
     return { error: err?.message || "Error regenerando sección" };
+  }
+}
+
+/**
+ * Quality Gate 2: valida coherencia matemática cruzada entre problem, roi y pricing.
+ * Si el problema dice "pierdes $35M/mes", las recoveries del ROI deberían cubrir al menos
+ * 60% del dolor anual. Los milestones de pricing deben sumar el pricing.amount.
+ * Usa Haiku (rápido, barato) — solo corrige números, no contenido.
+ */
+async function validateCrossSectionMath(
+  anthropic: Anthropic,
+  proposalData: ProposalData
+): Promise<{ roi?: ProposalData["roi"]; pricing?: ProposalData["pricing"] } | null> {
+  const monthlyLossCOP = proposalData.problem?.monthlyLossCOP || 0;
+  const annualLossCOP = monthlyLossCOP * 12;
+
+  const response = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 2500,
+    temperature: 0.1,
+    system: `Eres un auditor financiero. Verificas coherencia matemática entre 3 secciones de una propuesta:
+
+1. COHERENCIA PROBLEM ↔ ROI:
+   - problem.monthlyLossCOP = dolor mensual en COP (número)
+   - Dolor anual = monthlyLossCOP × 12
+   - La suma de roi.recoveries (en pesos) debería ser ≥ 60% del dolor anual
+   - Si la suma da menos, AJUSTAR recoveries al alza para que cubra el dolor
+   - Los amount de recoveries son strings con formato visual: "$15M", "$90M COP", etc.
+
+2. COHERENCIA PRICING:
+   - pricing.amount es el total (ej: "12.500") con pricing.amountPrefix "$" y amountSuffix "USD"
+   - Los pricing.milestones deben sumar aproximadamente el pricing.amount
+   - Cada milestone.amount es string tipo "$3.750 USD (30%)"
+   - Los porcentajes de todos los milestones deben sumar 100%
+
+3. COHERENCIA ROI ↔ PRICING:
+   - roi.paybackMonths ≈ pricing.amount en USD / (recuperación mensual en USD)
+   - Para calcular recuperación mensual en USD: suma recoveries totales en COP, dividir /12, convertir COP→USD a ~4000 COP/USD
+   - Si paybackMonths dice "3 meses" pero la matemática da 15 meses, CORREGIR
+
+RESPUESTA:
+- Si TODO está correcto: {"status": "ok"}
+- Si hay incoherencias: {"status": "repaired", "roi": {...objeto roi corregido completo...}, "pricing": {...objeto pricing corregido completo...}, "changes": ["lista de qué cambió"]}
+
+Solo devuelve los objetos que cambiaste. Si solo cambia roi, no incluyas pricing.`,
+    messages: [{
+      role: "user",
+      content: `DATOS DE LA PROPUESTA:
+
+problem.monthlyLossCOP: ${monthlyLossCOP}
+Dolor anual (calculado): ${annualLossCOP} COP = $${Math.round(annualLossCOP / 4000)} USD aprox
+
+roi actual:
+${JSON.stringify(proposalData.roi, null, 2)}
+
+pricing actual:
+${JSON.stringify(proposalData.pricing, null, 2)}
+
+Audita y responde con JSON estricto (sin markdown).`
+    }]
+  });
+
+  const text = response.content?.[0]?.type === "text" ? response.content[0].text.trim() : "";
+  if (!text) return null;
+
+  try {
+    const cleaned = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+    const parsed = JSON.parse(cleaned);
+
+    if (parsed.status === "ok") {
+      log(`[quality-gate-math] cross-section math OK`);
+      return null;
+    }
+
+    if (parsed.status === "repaired") {
+      log(`[quality-gate-math] REPAIRED: ${JSON.stringify(parsed.changes)}`);
+      return {
+        roi: parsed.roi || undefined,
+        pricing: parsed.pricing || undefined,
+      };
+    }
+
+    return null;
+  } catch (err) {
+    log(`[quality-gate-math] could not parse response: ${err}`);
+    return null;
   }
 }
