@@ -139,6 +139,14 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
     criticality: "normal",
   },
   {
+    name: "proposal-section-regen",
+    displayName: "Reescritor de Sección de Propuesta",
+    domain: "ai",
+    description: "Reescribe una sección de propuesta con instrucción del admin (~3-5s)",
+    trigger: "manual",
+    criticality: "normal",
+  },
+  {
     name: "project-ai-analyzer",
     displayName: "Analizador de Proyectos",
     domain: "ai",

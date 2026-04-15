@@ -2,12 +2,13 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Copy, ExternalLink, Send, Sparkles, Save, Eye, FolderKanban, FileSearch, X } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Send, Sparkles, Save, Eye, FolderKanban, FileSearch, X, Wand2, Check, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 const SECTION_LABELS: Record<string, string> = {
   resumen: "Resumen Ejecutivo",
@@ -49,6 +50,11 @@ export default function ProposalEditor() {
   const [editContent, setEditContent] = useState("");
   const [showPreview, setShowPreview] = useState(false);
   const [showSources, setShowSources] = useState(false);
+  // AI modify modal state
+  const [aiModifyOpen, setAiModifyOpen] = useState(false);
+  const [aiModifySection, setAiModifySection] = useState<string | null>(null);
+  const [aiInstruction, setAiInstruction] = useState("");
+  const [aiNewContent, setAiNewContent] = useState<string | null>(null);
 
   const { data: proposal, isLoading } = useQuery<any>({
     queryKey: [`/api/admin/proposals/${id}`],
@@ -79,6 +85,47 @@ export default function ProposalEditor() {
       toast({ title: "Propuesta actualizada" });
     },
   });
+
+  // Regenerate section with AI instruction
+  const aiModifyMut = useMutation({
+    mutationFn: async ({ sectionKey, instruction }: { sectionKey: string; instruction: string }) => {
+      const res = await apiRequest("POST", `/api/admin/proposals/${id}/sections/${sectionKey}/regenerate`, { instruction });
+      return res.json() as Promise<{ content: string; sectionKey: string }>;
+    },
+    onSuccess: (data) => {
+      setAiNewContent(data.content);
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err?.message || "No se pudo regenerar", variant: "destructive" });
+    },
+  });
+
+  const openAiModify = (sectionKey: string) => {
+    setAiModifySection(sectionKey);
+    setAiInstruction("");
+    setAiNewContent(null);
+    setAiModifyOpen(true);
+  };
+
+  const submitAiModify = () => {
+    if (!aiModifySection || !aiInstruction.trim()) return;
+    aiModifyMut.mutate({ sectionKey: aiModifySection, instruction: aiInstruction.trim() });
+  };
+
+  const acceptAiResult = () => {
+    if (!aiModifySection || aiNewContent === null) return;
+    // La API ya persistió en DB, solo refrescamos
+    invalidate();
+    toast({ title: "Sección actualizada con IA" });
+    setAiModifyOpen(false);
+    setAiNewContent(null);
+    setAiInstruction("");
+  };
+
+  const tryAgain = () => {
+    setAiNewContent(null);
+    // Mantener instrucción para editarla o cambiarla
+  };
 
   // Send to client
   const sendMut = useMutation({
@@ -364,9 +411,19 @@ export default function ProposalEditor() {
                       <Button size="sm" variant="ghost" onClick={() => setEditingSection(null)}>Cancelar</Button>
                     </div>
                   ) : (
-                    <Button size="sm" variant="outline" onClick={() => { setEditingSection(activeSection); setEditContent(sections[activeSection] || ""); }}>
-                      Editar
-                    </Button>
+                    <div className="flex gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="gap-1.5 border-purple-200 text-purple-700 hover:bg-purple-50"
+                        onClick={() => openAiModify(activeSection)}
+                      >
+                        <Wand2 className="w-3.5 h-3.5" /> Modificar con IA
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => { setEditingSection(activeSection); setEditContent(sections[activeSection] || ""); }}>
+                        Editar
+                      </Button>
+                    </div>
                   )}
                 </div>
 
@@ -391,6 +448,102 @@ export default function ProposalEditor() {
           </div>
         </div>
       )}
+
+      {/* AI Modify Dialog */}
+      <Dialog open={aiModifyOpen} onOpenChange={(open) => {
+        if (!open) {
+          setAiModifyOpen(false);
+          setAiNewContent(null);
+          setAiInstruction("");
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wand2 className="w-5 h-5 text-purple-600" />
+              Modificar con IA: {aiModifySection ? SECTION_LABELS[aiModifySection] : ""}
+            </DialogTitle>
+            <DialogDescription>
+              Dile a Claude qué quieres cambiar. Reescribe solo esta sección en ~5 segundos manteniendo coherencia con el resto.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            {/* Contenido actual (read-only) */}
+            <div>
+              <Label className="text-xs text-gray-500 mb-1 block">Contenido actual</Label>
+              <div
+                className="prose prose-sm max-w-none text-gray-700 bg-gray-50 rounded-lg p-3 max-h-40 overflow-y-auto border border-gray-200"
+                dangerouslySetInnerHTML={{ __html: (aiModifySection && sections[aiModifySection]) || "<p class='text-gray-400'>(vacío)</p>" }}
+              />
+            </div>
+
+            {/* Instrucción */}
+            <div>
+              <Label htmlFor="ai-instruction" className="text-sm font-medium">
+                ¿Qué quieres cambiar?
+              </Label>
+              <Textarea
+                id="ai-instruction"
+                value={aiInstruction}
+                onChange={e => setAiInstruction(e.target.value)}
+                rows={4}
+                disabled={aiModifyMut.isPending || !!aiNewContent}
+                placeholder="Ejemplos:&#10;- Hazlo más corto, 3 párrafos máximo&#10;- Tono más informal, cercano&#10;- Agrega que ofrecemos 30% de descuento por pago anual&#10;- Enfócalo más en el retorno de inversión&#10;- Cambia el ejemplo del tráfico por uno de retail"
+                className="mt-1.5 text-sm"
+              />
+            </div>
+
+            {/* Loading state */}
+            {aiModifyMut.isPending && (
+              <div className="flex items-center gap-3 bg-purple-50 border border-purple-200 rounded-lg p-3">
+                <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                <p className="text-sm text-purple-700">Reescribiendo con Claude… ~5 segundos</p>
+              </div>
+            )}
+
+            {/* Nueva versión */}
+            {aiNewContent !== null && !aiModifyMut.isPending && (
+              <div>
+                <Label className="text-xs text-purple-700 font-semibold mb-1 block flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" /> Nueva versión (ya guardada — click Aceptar para confirmar)
+                </Label>
+                <div
+                  className="prose prose-sm max-w-none text-gray-900 bg-purple-50 border-2 border-purple-200 rounded-lg p-4 max-h-96 overflow-y-auto"
+                  dangerouslySetInnerHTML={{ __html: aiNewContent }}
+                />
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2 flex-wrap">
+            {aiNewContent === null ? (
+              <>
+                <Button variant="ghost" onClick={() => setAiModifyOpen(false)}>
+                  Cancelar
+                </Button>
+                <Button
+                  onClick={submitAiModify}
+                  disabled={!aiInstruction.trim() || aiModifyMut.isPending}
+                  className="bg-purple-600 hover:bg-purple-700 gap-1.5"
+                >
+                  <Wand2 className="w-4 h-4" />
+                  {aiModifyMut.isPending ? "Generando…" : "Generar nueva versión"}
+                </Button>
+              </>
+            ) : (
+              <>
+                <Button variant="ghost" onClick={tryAgain} className="gap-1.5">
+                  <RotateCcw className="w-4 h-4" /> Intentar otra vez
+                </Button>
+                <Button onClick={acceptAiResult} className="bg-emerald-600 hover:bg-emerald-700 gap-1.5">
+                  <Check className="w-4 h-4" /> Aceptar
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

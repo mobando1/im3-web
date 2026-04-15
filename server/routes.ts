@@ -21,7 +21,7 @@ import passport from "passport";
 import { z } from "zod";
 import { analyzeCommitsForProject, generateWeeklySummary, calculateProjectHealth, generateProjectFromProposal } from "./project-ai";
 import { syncDriveFilesToProject } from "./drive-file-sync";
-import { generateProposal } from "./proposal-ai";
+import { generateProposal, regenerateProposalSection } from "./proposal-ai";
 import crypto from "crypto";
 import { getIndustriaLabel } from "@shared/industrias";
 
@@ -6633,6 +6633,37 @@ ${urls}
     } catch (err: any) {
       log(`Error generating proposal: ${err?.message}`);
       res.status(500).json({ error: "Error generando propuesta" });
+    }
+  });
+
+  // Regenerate ONE section with an admin instruction (much faster than full regen)
+  app.post("/api/admin/proposals/:id/sections/:sectionKey/regenerate", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const proposalId = String(req.params.id);
+    const sectionKey = String(req.params.sectionKey);
+    const instruction = String(req.body?.instruction ?? "").trim();
+
+    if (!instruction) {
+      return res.status(400).json({ error: "La instrucción no puede estar vacía" });
+    }
+    if (instruction.length > 2000) {
+      return res.status(400).json({ error: "Instrucción demasiado larga (máx 2000 caracteres)" });
+    }
+
+    try {
+      const result = await runAgent(
+        "proposal-section-regen",
+        () => regenerateProposalSection(proposalId, sectionKey, instruction),
+        { triggeredBy: "manual" }
+      );
+
+      if ("error" in result) {
+        return res.status(500).json({ error: result.error });
+      }
+      res.json({ content: result.content, sectionKey });
+    } catch (err: any) {
+      log(`Error regenerating section: ${err?.message}`);
+      res.status(500).json({ error: err?.message || "Error regenerando sección" });
     }
   });
 

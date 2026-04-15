@@ -254,3 +254,100 @@ Responde SOLO con un JSON válido (sin markdown, sin \`\`\`json) con esta estruc
     return null;
   }
 }
+
+/**
+ * Regenerate ONE section of a proposal with a natural-language instruction from the admin.
+ * Much faster than full regeneration (~3-5s vs 10-20s) because it only rewrites one section
+ * and uses a tighter context window.
+ */
+export async function regenerateProposalSection(
+  proposalId: string,
+  sectionKey: string,
+  instruction: string
+): Promise<{ content: string } | { error: string }> {
+  if (!db) return { error: "DB not configured" };
+  const anthropic = getClient();
+  if (!anthropic) return { error: "ANTHROPIC_API_KEY not set" };
+
+  // Lazy import to avoid circular dependency
+  const { proposals } = await import("@shared/schema");
+
+  const [proposal] = await db.select().from(proposals).where(eq(proposals.id, proposalId)).limit(1);
+  if (!proposal) return { error: "Propuesta no encontrada" };
+
+  const currentSections = (proposal.sections as Record<string, string>) || {};
+  const currentContent = currentSections[sectionKey] || "";
+
+  // Resumen compacto de otras secciones para mantener coherencia (truncadas a 500 chars cada una)
+  const otherSections: Record<string, string> = {};
+  for (const [key, value] of Object.entries(currentSections)) {
+    if (key === sectionKey || key.startsWith("_")) continue;
+    otherSections[key] = String(value).substring(0, 500);
+  }
+
+  // Contexto básico del contacto (sin Drive sync pesado)
+  const [contact] = await db.select().from(contacts).where(eq(contacts.id, proposal.contactId)).limit(1);
+  let contactBrief = "";
+  if (contact) {
+    contactBrief = `CLIENTE: ${contact.nombre} — ${contact.empresa} (${contact.email})`;
+    if (contact.diagnosticId) {
+      const [diag] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId)).limit(1);
+      if (diag) {
+        const industriaLabel = getIndustriaLabel(diag.industria);
+        contactBrief += `\nIndustria: ${industriaLabel}`;
+        contactBrief += `\nEmpleados: ${diag.empleados}`;
+        contactBrief += `\nÁrea prioridad: ${(diag.areaPrioridad as string[] | null)?.join(", ") || "N/A"}`;
+        contactBrief += `\nPresupuesto: ${diag.presupuesto}`;
+      }
+    }
+  }
+
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 2000,
+      temperature: 0.4,
+      system: `Eres un consultor senior de IM3 Systems editando una sección específica de una propuesta comercial.
+Tu tarea: reescribir la sección indicada aplicando la instrucción del admin, sin alterar las demás.
+- Escribe en español latinoamericano.
+- Devuelve SOLO el HTML de la sección (sin markdown, sin \`\`\`, sin JSON, sin prefacios).
+- Usa tags HTML básicos: p, strong, ul, li, h3, br.
+- Mantén coherencia con las otras secciones (no contradices info clave).
+- No inventes datos del cliente que no estén en el contexto.`,
+      messages: [{
+        role: "user",
+        content: `${contactBrief ? contactBrief + "\n\n" : ""}SECCIÓN A REESCRIBIR (key="${sectionKey}"):
+${currentContent || "(sin contenido previo — es una versión nueva)"}
+
+OTRAS SECCIONES DE LA PROPUESTA (solo contexto, NO las modifiques):
+${Object.entries(otherSections).map(([k, v]) => `[${k}]: ${v}`).join("\n\n")}
+
+INSTRUCCIÓN DEL ADMIN:
+${instruction}
+
+Reescribe SOLO la sección "${sectionKey}" aplicando la instrucción. Devuelve el HTML puro.`
+      }]
+    });
+
+    const text = response.content?.[0]?.type === "text" ? response.content[0].text.trim() : "";
+    if (!text) return { error: "Respuesta vacía de Claude" };
+
+    // Quitar cualquier wrapper de markdown si se coló
+    const cleaned = text
+      .replace(/^```html\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/\s*```$/i, "")
+      .trim();
+
+    // Persistir
+    const newSections = { ...currentSections, [sectionKey]: cleaned };
+    await db.update(proposals)
+      .set({ sections: newSections, updatedAt: new Date() })
+      .where(eq(proposals.id, proposalId));
+
+    return { content: cleaned };
+  } catch (err: any) {
+    log(`Error regenerating section ${sectionKey}: ${err?.message || err}`);
+    return { error: err?.message || "Error regenerando sección" };
+  }
+}
