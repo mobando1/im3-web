@@ -421,12 +421,113 @@ Recuerda:
       // Aún así devolvemos lo que tenemos — el admin puede editar manualmente lo incompleto
     }
 
+    const proposalData = (validation.success ? validation.data : parsed.proposalData) as ProposalData;
+
+    // Quality Gate: validar y reparar operationalCosts con Claude Haiku (rápido, barato)
+    if (proposalData.operationalCosts) {
+      try {
+        const repaired = await validateAndRepairOperationalCosts(anthropic, proposalData);
+        if (repaired) {
+          proposalData.operationalCosts = repaired;
+        }
+      } catch (err) {
+        log(`[quality-gate] costs validation failed (non-blocking): ${err}`);
+      }
+    }
+
     return {
-      proposalData: (validation.success ? validation.data : parsed.proposalData) as ProposalData,
+      proposalData,
       sourcesReport: (parsed.sourcesReport || {}) as ProposalSourcesReport,
     };
   } catch (err) {
     log(`Error parsing proposal AI response: ${err}`);
+    return null;
+  }
+}
+
+/**
+ * Quality Gate para operationalCosts.
+ * Usa Claude Haiku (más barato, más rápido) para revisar la sección de costos.
+ * Verifica coherencia matemática, plausibilidad, y consistencia con la solución.
+ * Si encuentra errores, devuelve una versión corregida. Si está todo bien, devuelve null.
+ */
+async function validateAndRepairOperationalCosts(
+  anthropic: Anthropic,
+  proposalData: ProposalData
+): Promise<ProposalData["operationalCosts"] | null> {
+  const current = proposalData.operationalCosts;
+  const solutionModules = proposalData.solution?.modules?.map(m => m.title).join(", ") || "(sin módulos)";
+
+  const response = await anthropic.messages.create({
+    model: "claude-haiku-4-5-20251001",
+    max_tokens: 2000,
+    temperature: 0.1,
+    system: `Eres un auditor de costos operativos. Tu tarea: revisar la sección operationalCosts de una propuesta comercial y verificar:
+
+1. COHERENCIA MATEMÁTICA:
+   - monthlyRangeLow y monthlyRangeHigh deben ser strings con formato "$XX USD/mes" o similar
+   - La suma de los mínimos de los items de todas las categorías debe aproximarse a monthlyRangeLow
+   - La suma de los máximos × 1.2 (buffer conservador) debe aproximarse a monthlyRangeHigh
+   - annualEstimate debe ser aproximadamente (promedio mensual × 12) redondeado a los $100
+
+2. PLAUSIBILIDAD:
+   - No cifras imposibles ($1000/mes para proyecto pequeño)
+   - No cifras ridículamente bajas ($5/mes total)
+   - Servicios mencionados deben ser reales: Railway, Resend, Anthropic Claude, WhatsApp Business, Stripe, Supabase, Google Workspace, etc.
+
+3. CONSISTENCIA CON LA SOLUCIÓN:
+   - Si la solución NO incluye módulo de WhatsApp, NO debe haber WhatsApp en costos
+   - Si la solución SÍ usa IA generativa, debe haber Claude API en costos
+   - Si la solución incluye emails, debe haber Resend en costos
+
+4. CONSERVADOR:
+   - monthlyRangeHigh debe tener buffer del +20% sobre suma real de máximos
+   - Si dudas, subir el rango (mejor pasarnos que quedarnos cortos)
+
+5. FORMATO:
+   - paidBy debe ser uno de: "cliente-directo", "im3-managed", "hibrido"
+   - disclaimer debe existir y ser corto
+   - managedServicesUpsell debe existir y tener un monto concreto ("Por $X USD/mes...")
+
+Responde SOLO con JSON, sin markdown. Dos opciones de respuesta:
+
+Si TODO está correcto:
+{"status": "ok"}
+
+Si hay errores o mejoras que aplicar, devuelve la versión CORREGIDA completa:
+{"status": "repaired", "operationalCosts": { ...objeto completo con las correcciones... }, "changes": ["lista corta de qué cambió"]}`,
+    messages: [{
+      role: "user",
+      content: `MÓDULOS DE LA SOLUCIÓN (para validar consistencia):
+${solutionModules}
+
+operationalCosts ACTUAL:
+${JSON.stringify(current, null, 2)}
+
+Audita y responde con JSON estricto.`
+    }]
+  });
+
+  const text = response.content?.[0]?.type === "text" ? response.content[0].text.trim() : "";
+  if (!text) return null;
+
+  try {
+    const cleaned = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+    const parsed = JSON.parse(cleaned);
+
+    if (parsed.status === "ok") {
+      log(`[quality-gate] operationalCosts OK — no repairs needed`);
+      return null;
+    }
+
+    if (parsed.status === "repaired" && parsed.operationalCosts) {
+      log(`[quality-gate] operationalCosts REPAIRED — changes: ${JSON.stringify(parsed.changes)}`);
+      return parsed.operationalCosts;
+    }
+
+    return null;
+  } catch (err) {
+    log(`[quality-gate] could not parse auditor response: ${err}`);
     return null;
   }
 }

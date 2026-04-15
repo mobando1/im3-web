@@ -44,6 +44,58 @@ const SECTION_LABELS_LEGACY: Record<string, string> = {
 
 const SECTION_ORDER_LEGACY = ["resumen", "problema", "solucion", "alcance", "tecnologia", "inversion", "roi", "equipo", "siguientes_pasos"];
 
+/** Render amigable de cualquier sub-estructura (string, number, array, object). Recursivo. */
+function FriendlyView({ data, depth = 0 }: { data: unknown; depth?: number }) {
+  if (data === null || data === undefined) {
+    return <span className="text-gray-400 italic text-sm">(vacío)</span>;
+  }
+  if (typeof data === "string") {
+    return <span className="text-gray-800 text-sm whitespace-pre-wrap">{data || <em className="text-gray-400">(sin texto)</em>}</span>;
+  }
+  if (typeof data === "number" || typeof data === "boolean") {
+    return <span className="font-mono text-sm text-emerald-700">{String(data)}</span>;
+  }
+  if (Array.isArray(data)) {
+    if (data.length === 0) return <span className="text-gray-400 italic text-sm">(lista vacía)</span>;
+    const allSimple = data.every((it) => typeof it === "string" || typeof it === "number");
+    if (allSimple) {
+      return (
+        <ul className="list-disc pl-5 space-y-1">
+          {data.map((it, idx) => (
+            <li key={idx} className="text-gray-800 text-sm">{String(it)}</li>
+          ))}
+        </ul>
+      );
+    }
+    return (
+      <div className="space-y-3">
+        {data.map((item, idx) => (
+          <div key={idx} className="border-l-2 border-gray-200 pl-3">
+            <div className="text-xs font-medium text-gray-400 mb-1">#{idx + 1}</div>
+            <FriendlyView data={item} depth={depth + 1} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (typeof data === "object") {
+    const entries = Object.entries(data as Record<string, unknown>);
+    return (
+      <div className={`space-y-2.5 ${depth > 0 ? "" : ""}`}>
+        {entries.map(([key, value]) => (
+          <div key={key} className="grid grid-cols-[140px_1fr] gap-3 items-start">
+            <div className="text-xs font-mono uppercase tracking-wide text-gray-500 pt-0.5">{key}</div>
+            <div className="min-w-0">
+              <FriendlyView data={value} depth={depth + 1} />
+            </div>
+          </div>
+        ))}
+      </div>
+    );
+  }
+  return <span className="text-gray-500 text-sm">{String(data)}</span>;
+}
+
 const STATUS_LABELS: Record<string, string> = {
   draft: "Borrador",
   sent: "Enviada",
@@ -75,6 +127,7 @@ export default function ProposalEditor() {
   const [aiModifySection, setAiModifySection] = useState<string | null>(null);
   const [aiInstruction, setAiInstruction] = useState("");
   const [aiNewContent, setAiNewContent] = useState<string | null>(null);
+  const [aiNewRaw, setAiNewRaw] = useState<unknown>(null); // objeto crudo (para update optimista del cache)
 
   const { data: proposal, isLoading } = useQuery<any>({
     queryKey: [`/api/admin/proposals/${id}`],
@@ -116,8 +169,10 @@ export default function ProposalEditor() {
       // Nuevo schema devuelve `section` (objeto), legacy devuelve `content` (string)
       if (data.section !== undefined) {
         setAiNewContent(JSON.stringify(data.section, null, 2));
+        setAiNewRaw(data.section);
       } else if (typeof data.content === "string") {
         setAiNewContent(data.content);
+        setAiNewRaw(data.content);
       }
     },
     onError: (err: any) => {
@@ -129,6 +184,7 @@ export default function ProposalEditor() {
     setAiModifySection(sectionKey);
     setAiInstruction("");
     setAiNewContent(null);
+    setAiNewRaw(null);
     setAiModifyOpen(true);
   };
 
@@ -137,18 +193,30 @@ export default function ProposalEditor() {
     aiModifyMut.mutate({ sectionKey: aiModifySection, instruction: aiInstruction.trim() });
   };
 
-  const acceptAiResult = () => {
+  const acceptAiResult = async () => {
     if (!aiModifySection || aiNewContent === null) return;
-    // La API ya persistió en DB, solo refrescamos
-    invalidate();
+
+    // Optimistic update del cache para que el UI refleje inmediatamente
+    queryClient.setQueryData([`/api/admin/proposals/${id}`], (old: any) => {
+      if (!old) return old;
+      const newSections = { ...(old.sections || {}), [aiModifySection]: aiNewRaw };
+      return { ...old, sections: newSections };
+    });
+
+    // Forzar refetch para confirmar contra DB
+    await queryClient.invalidateQueries({ queryKey: [`/api/admin/proposals/${id}`] });
+    await queryClient.refetchQueries({ queryKey: [`/api/admin/proposals/${id}`], type: "active" });
+
     toast({ title: "Sección actualizada con IA" });
     setAiModifyOpen(false);
     setAiNewContent(null);
+    setAiNewRaw(null);
     setAiInstruction("");
   };
 
   const tryAgain = () => {
     setAiNewContent(null);
+    setAiNewRaw(null);
     // Mantener instrucción para editarla o cambiarla
   };
 
@@ -503,9 +571,9 @@ export default function ProposalEditor() {
                   </>
                 ) : sections[activeSection] !== undefined && sections[activeSection] !== null ? (
                   isNewFormat ? (
-                    <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs font-mono text-gray-700 overflow-x-auto max-h-96 overflow-y-auto">
-                      {JSON.stringify(sections[activeSection], null, 2)}
-                    </pre>
+                    <div className="bg-gray-50/50 border border-gray-200 rounded-lg p-5">
+                      <FriendlyView data={sections[activeSection]} />
+                    </div>
                   ) : (
                     <div
                       className="prose prose-sm max-w-none text-gray-700"
@@ -545,9 +613,9 @@ export default function ProposalEditor() {
             <div>
               <Label className="text-xs text-gray-500 mb-1 block">Contenido actual</Label>
               {isNewFormat ? (
-                <pre className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-xs font-mono text-gray-700 max-h-40 overflow-y-auto">
-                  {aiModifySection ? JSON.stringify(sections[aiModifySection], null, 2) : "(vacío)"}
-                </pre>
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto">
+                  <FriendlyView data={aiModifySection ? sections[aiModifySection] : null} />
+                </div>
               ) : (
                 <div
                   className="prose prose-sm max-w-none text-gray-700 bg-gray-50 rounded-lg p-3 max-h-40 overflow-y-auto border border-gray-200"
@@ -586,10 +654,10 @@ export default function ProposalEditor() {
                 <Label className="text-xs text-purple-700 font-semibold mb-1 block flex items-center gap-1">
                   <Sparkles className="w-3 h-3" /> Nueva versión (ya guardada — click Aceptar para confirmar)
                 </Label>
-                {isNewFormat ? (
-                  <pre className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4 text-xs font-mono text-gray-900 max-h-96 overflow-y-auto">
-                    {aiNewContent}
-                  </pre>
+                {isNewFormat && aiNewRaw !== null ? (
+                  <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4 max-h-96 overflow-y-auto">
+                    <FriendlyView data={aiNewRaw} />
+                  </div>
                 ) : (
                   <div
                     className="prose prose-sm max-w-none text-gray-900 bg-purple-50 border-2 border-purple-200 rounded-lg p-4 max-h-96 overflow-y-auto"

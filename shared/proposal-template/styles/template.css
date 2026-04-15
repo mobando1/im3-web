@@ -373,7 +373,7 @@
 
 /* PROBLEM */
 .pt-problem-section { background: var(--pt-ink2); padding: 6rem 0 !important; }
-.pt-problem-heading { font-size: 2.2rem; margin-bottom: 2rem; }
+.pt-problem-heading { font-size: 2.2rem; margin-bottom: 1rem; line-height: 1.15; }
 
 .pt-cost-counter-wrap { margin-bottom: 3rem; }
 .pt-cost-counter-label {
@@ -473,7 +473,8 @@
 /* SOLUTION */
 .pt-solution-heading {
   font-size: 2.2rem;
-  margin-bottom: 0.65rem;
+  margin-bottom: 1rem;
+  line-height: 1.15;
 }
 .pt-section-intro {
   color: var(--pt-smoke);
@@ -538,7 +539,7 @@
 
 /* TECH */
 .pt-tech-section { background: var(--pt-ink2); }
-.pt-tech-heading { font-size: 2rem; margin-bottom: 0.45rem; }
+.pt-tech-heading { font-size: 2rem; margin-bottom: 1rem; line-height: 1.15; }
 .pt-tech-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
@@ -575,6 +576,7 @@
 .pt-timeline-heading {
   font-size: 2.2rem;
   margin-bottom: 2.25rem;
+  line-height: 1.15;
 }
 .pt-phases {
   display: flex;
@@ -792,7 +794,7 @@
 
 /* AUTHORITY */
 .pt-authority-section { background: var(--pt-ink2); }
-.pt-authority-heading { font-size: 2rem; margin-bottom: 0.45rem; }
+.pt-authority-heading { font-size: 2rem; margin-bottom: 1rem; line-height: 1.15; }
 .pt-authority-stats {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -892,7 +894,8 @@
 .pt-pricing-section { background: var(--pt-ink2); }
 .pt-pricing-heading {
   font-size: 2.2rem;
-  margin-bottom: 0.45rem;
+  margin-bottom: 1rem;
+  line-height: 1.15;
   text-align: center;
 }
 .pt-pricing-intro {

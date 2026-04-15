@@ -145,14 +145,30 @@ Determinar el tier en base al diagnóstico del cliente:
 
 ## Principios para Claude al generar esta sección
 
-1. **Usar el tier correcto** según el diagnóstico del cliente (empleados + presupuesto)
-2. **Ser específico con cifras** ("$25-40 USD/mes") — rangos que reflejen realidad, no "varía según uso"
-3. **Explicar brevemente cada item** en el `note` — por qué tiene ese costo, cuándo escala
-4. **Calcular `monthlyRangeLow` sumando los mínimos** y `monthlyRangeHigh` sumando los máximos de TODOS los items
-5. **Calcular `annualEstimate`** multiplicando el promedio mensual × 12
-6. **Default `paidBy`**: `"cliente-directo"` — más honesto, el cliente ve que no hay margen oculto
-7. **SIEMPRE incluir `managedServicesUpsell`** — abre puerta al revenue recurrente
-8. **`disclaimer`**: corta frase de transparencia. No usar legalese
+### REGLA DE ORO: CONSERVADOR > OPTIMISTA
+
+El cliente debe sentir que pagó **menos** de lo esperado, **nunca más**. Por eso:
+
+1. **Buffer de +20% en el techo**. Después de sumar los máximos de cada item, multiplica por 1.2 y redondea hacia arriba al múltiplo de $5 más cercano. Ejemplo: suma real $158/mes → reportar como $190/mes.
+2. **Redondeo al alza en rangos**. Si un servicio cuesta $37-48/mes real, reportar como "$40-50 USD/mes". Nunca redondear hacia abajo.
+3. **Si hay duda entre dos tiers** (ej: el cliente cae en borde entre tier S y M), usar el tier **superior**. Preferimos sobreestimar costos a subestimar.
+
+### REGLAS DE SELECCIÓN DE SERVICIOS
+
+4. **Solo incluir servicios que la solución realmente va a usar**. Revisa `solution.modules` — si no hay módulo de WhatsApp, no incluyas WhatsApp. Si la solución no usa IA generativa, no incluyas Claude API (pero casi todas la usan).
+5. **Usar el tier correcto** según el diagnóstico del cliente (empleados + presupuesto + volumen)
+6. **Máximo 2-3 items por categoría, máximo 4 categorías**. Más items = percepción de que el sistema es caro de operar.
+
+### REGLAS DE FORMATO
+
+7. **Ser específico con cifras** ("$25-40 USD/mes") — rangos que reflejen realidad + buffer, no "varía según uso"
+8. **Explicar brevemente cada item** en el `note` — por qué tiene ese costo, cuándo escala. Lenguaje de negocio, no técnico.
+9. **Calcular `monthlyRangeLow`** sumando los mínimos de TODOS los items
+10. **Calcular `monthlyRangeHigh`** como `(suma de máximos) × 1.2` redondeado al alza
+11. **Calcular `annualEstimate`** como `((monthlyRangeLow + monthlyRangeHigh) / 2) × 12`, redondeado a los $100 más cercanos
+12. **Default `paidBy`**: `"cliente-directo"` — más honesto, el cliente ve que no hay margen oculto
+13. **SIEMPRE incluir `managedServicesUpsell`** — abre puerta al revenue recurrente. Formato: "Por $X USD/mes adicionales administramos todo (hosting, APIs, actualizaciones, soporte). X típicamente = monthlyRangeHigh × 2 redondeado a centena."
+14. **`disclaimer`**: corta frase de transparencia. "Estos costos los pagas directamente a cada proveedor. IM3 no agrega margen aquí."
 
 ## Lo que NO hagas
 
@@ -161,3 +177,6 @@ Determinar el tier en base al diagnóstico del cliente:
 - ❌ Marcar márgenes aquí (pasa-costos literal)
 - ❌ Usar tecnicismos en el `note` ("throughput de 100 rps") — usar lenguaje de negocio
 - ❌ Sobrecargar con 15 items — máximo 2-3 items por categoría, 3 categorías
+- ❌ **Subestimar**. Si dudas entre dos cifras, siempre la más alta
+- ❌ Incluir servicios que NO se usan en el proyecto (ej: WhatsApp si no hay módulo WA)
+- ❌ Omitir el buffer del +20% en el techo

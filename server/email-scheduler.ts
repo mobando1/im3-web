@@ -12,6 +12,7 @@ import { runAgent } from "./agents/runner";
 import { runErrorSupervisor } from "./agents/error-supervisor";
 import { runMeetingPrep } from "./agents/meeting-prep";
 import { runFollowupWriter } from "./agents/followup-writer";
+import { runCostReferenceFreshness } from "./agents/cost-reference-freshness";
 import { getIndustriaLabel } from "@shared/industrias";
 
 export { syncGmailEmails };
@@ -1257,6 +1258,11 @@ export function startEmailScheduler() {
   // Weekly newsletter every Monday at 7:30 AM Colombia time (12:30 UTC)
   cron.schedule("30 12 * * 1", async () => {
     await runAgent("newsletter-digest", generateAndSendDailyNewsletter).catch(err => log(`Cron error newsletter: ${err}`));
+  }, { timezone: "America/Bogota" });
+
+  // Monthly cost reference freshness check (día 1 de cada mes, 9 AM COT = 14:00 UTC)
+  cron.schedule("0 14 1 * *", async () => {
+    await runAgent("cost-reference-freshness", runCostReferenceFreshness).catch(err => log(`Cron error cost freshness: ${err}`));
   }, { timezone: "America/Bogota" });
 
   // Also run once at startup (after 10 seconds to let DB connect)

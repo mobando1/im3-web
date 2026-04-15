@@ -112,8 +112,28 @@ Cierra con la pregunta del dolor. No "¿Empezamos?"
 ### `cta.guarantees`
 Garantías concretas, no genéricas. Ejemplos:
 - "Si no entregamos en tiempo, 20% del valor de la inversión es devuelto"
-- "30 días de soporte incluidos sin letra chica"
+- "Los primeros 3 meses post-entrega son nuestros — ajustamos y optimizamos sin costo adicional"
 - "El código y los datos son tuyos desde el día 1"
+
+### `cta.description` — Partnership teaser (IMPORTANTE)
+
+Incluir SIEMPRE al final del `cta.description` una referencia sutil al partnership post-entrega, sin precio ni formato específico. Rationale (de Alan Weiss "Value-Based Fees" + Blair Enns "Pricing Creativity"): la propuesta inicial debe tener UN CTA dominante. Mencionar el retainer con precio parte la decisión del cliente. Pero omitirlo completamente causa sorpresa en mes 3 = bait-and-switch.
+
+**Formato del teaser** (usar uno o adaptar al tono del cliente):
+
+- "Después de los 3 meses post-entrega, si decides que nos quedemos como tu equipo de tecnología e IA, el modelo lo diseñamos contigo según lo que necesites — pero nunca te vendemos nada antes de ver resultados juntos."
+
+- "Terminados los 3 meses de acompañamiento, muchos clientes nos piden quedarnos como su equipo de tecnología de planta. Si ese es tu caso, lo conversamos cuando veas los números reales — no antes."
+
+- "Los 3 meses post-entrega vienen incluidos. Después, si quieres que sigamos siendo tu partner tecnológico, el modelo (fee fijo, bolsa de horas, o fractional CTO) lo diseñamos contigo cuando entendamos tu realidad operativa."
+
+**Reglas del teaser**:
+- ❌ NUNCA poner precio concreto ("$X/mes")
+- ❌ NUNCA poner "a partir de $X"
+- ❌ NUNCA decir "contacta para un quote" — suena a sales pitch
+- ✅ Siempre framing de "cuando veas resultados / cuando entendamos tu realidad"
+- ✅ Tono Blair Enns: autoridad tranquila, no suplicante
+- ✅ Máximo 2 oraciones dentro del `cta.description`, no como bullet separado
 
 ---
 

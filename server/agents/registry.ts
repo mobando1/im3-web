@@ -14,6 +14,7 @@ import {
 import { runErrorSupervisor } from "./error-supervisor";
 import { runMeetingPrep } from "./meeting-prep";
 import { runFollowupWriter } from "./followup-writer";
+import { runCostReferenceFreshness } from "./cost-reference-freshness";
 
 export type AgentDomain =
   | "communication"
@@ -145,6 +146,17 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
     description: "Reescribe una sección de propuesta con instrucción del admin (~3-5s)",
     trigger: "manual",
     criticality: "normal",
+  },
+  {
+    name: "cost-reference-freshness",
+    displayName: "Verificador de Frescura de Precios",
+    domain: "analysis",
+    description: "Alerta si shared/proposal-cost-reference.md tiene >180 días sin actualizarse",
+    trigger: "cron",
+    schedule: "0 14 1 * *",
+    scheduleHuman: "día 1 de cada mes, 9 AM COT",
+    criticality: "low",
+    runnable: runCostReferenceFreshness,
   },
   {
     name: "project-ai-analyzer",
