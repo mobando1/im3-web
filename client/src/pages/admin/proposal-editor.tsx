@@ -44,6 +44,52 @@ const SECTION_LABELS_LEGACY: Record<string, string> = {
 
 const SECTION_ORDER_LEGACY = ["resumen", "problema", "solucion", "alcance", "tecnologia", "inversion", "roi", "equipo", "siguientes_pasos"];
 
+// Fases del progreso de generación (timing aproximado basado en mediciones reales)
+const GENERATION_PHASES = [
+  { from: 0, to: 3, emoji: "📊", text: "Analizando todo el contexto del cliente — diagnóstico, emails, documentos, reuniones…" },
+  { from: 3, to: 8, emoji: "✍️", text: "Escribiendo hero y resumen ejecutivo con tono IM3…" },
+  { from: 8, to: 14, emoji: "🎯", text: "Construyendo problema, solución y módulos personalizados…" },
+  { from: 14, to: 19, emoji: "💰", text: "Calculando ROI, pricing y costos operativos…" },
+  { from: 19, to: 24, emoji: "🛡️", text: "Quality Gate: validando matemática y coherencia…" },
+  { from: 24, to: 999, emoji: "✨", text: "Finalizando propuesta…" },
+];
+
+function GenerationProgress() {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const start = Date.now();
+    const interval = setInterval(() => setElapsed(Math.floor((Date.now() - start) / 1000)), 300);
+    return () => clearInterval(interval);
+  }, []);
+
+  const phase = GENERATION_PHASES.find(p => elapsed >= p.from && elapsed < p.to) || GENERATION_PHASES[GENERATION_PHASES.length - 1];
+  const progressPercent = Math.min(95, (elapsed / 24) * 100);
+
+  return (
+    <div className="bg-gradient-to-br from-purple-50 to-blue-50 border border-purple-200 rounded-lg p-5 space-y-3">
+      <div className="flex items-center gap-3">
+        <div className="w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full animate-spin shrink-0" />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-lg">{phase.emoji}</span>
+            <span className="text-sm font-semibold text-purple-900">{phase.text}</span>
+          </div>
+          <div className="text-[11px] text-purple-600 mt-0.5 font-mono">{elapsed}s transcurridos</div>
+        </div>
+      </div>
+      <div className="w-full h-1.5 bg-purple-100 rounded-full overflow-hidden">
+        <div
+          className="h-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-300"
+          style={{ width: `${progressPercent}%` }}
+        />
+      </div>
+      <p className="text-[11px] text-purple-700/70 text-center">
+        Claude Sonnet 4 + 2 quality gates con Haiku. No cierres esta ventana — te aviso cuando esté listo.
+      </p>
+    </div>
+  );
+}
+
 /** Render amigable de cualquier sub-estructura (string, number, array, object). Recursivo. */
 function FriendlyView({ data, depth = 0 }: { data: unknown; depth?: number }) {
   if (data === null || data === undefined) {
@@ -131,6 +177,19 @@ export default function ProposalEditor() {
 
   const { data: proposal, isLoading } = useQuery<any>({
     queryKey: [`/api/admin/proposals/${id}`],
+  });
+
+  const { data: engagement } = useQuery<{
+    totalViews: number;
+    firstOpenedAt: string | null;
+    lastOpenedAt: string | null;
+    uniqueDevices: number;
+    uniqueIps: number;
+    totalTimeSeconds: number;
+    sections: Array<{ section: string; views: number; timeSpent: number }>;
+  }>({
+    queryKey: [`/api/admin/proposals/${id}/engagement`],
+    refetchInterval: 30_000,
   });
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: [`/api/admin/proposals/${id}`] });
@@ -418,6 +477,75 @@ export default function ProposalEditor() {
         </div>
       )}
 
+      {/* Engagement tracking */}
+      {hasSections && engagement && (
+        <div className="bg-white border border-gray-200 rounded-lg p-4">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-semibold text-gray-600 uppercase tracking-wider flex items-center gap-1.5">
+              📊 Engagement del cliente
+            </h3>
+            {engagement.totalViews > 0 && (
+              <span className="text-[10px] text-gray-400">Auto-refresh cada 30s</span>
+            )}
+          </div>
+
+          {engagement.totalViews === 0 ? (
+            <p className="text-sm text-gray-400 italic">El cliente aún no ha abierto la propuesta.</p>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
+                <div>
+                  <div className="text-[10px] text-gray-400 uppercase tracking-wide">Primera apertura</div>
+                  <div className="text-sm font-semibold text-gray-900">
+                    {engagement.firstOpenedAt ? new Date(engagement.firstOpenedAt).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" }) : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-gray-400 uppercase tracking-wide">Última actividad</div>
+                  <div className="text-sm font-semibold text-gray-900">
+                    {engagement.lastOpenedAt ? new Date(engagement.lastOpenedAt).toLocaleString("es-CO", { dateStyle: "short", timeStyle: "short" }) : "—"}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-gray-400 uppercase tracking-wide">Tiempo total</div>
+                  <div className="text-sm font-semibold text-gray-900">
+                    {engagement.totalTimeSeconds < 60
+                      ? `${engagement.totalTimeSeconds}s`
+                      : `${Math.floor(engagement.totalTimeSeconds / 60)}m ${engagement.totalTimeSeconds % 60}s`}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-[10px] text-gray-400 uppercase tracking-wide">Dispositivos</div>
+                  <div className="text-sm font-semibold text-gray-900">
+                    {engagement.uniqueDevices}{engagement.uniqueIps > engagement.uniqueDevices ? ` · ${engagement.uniqueIps} IPs` : ""}
+                  </div>
+                </div>
+              </div>
+
+              {engagement.sections.length > 0 && (
+                <div className="border-t border-gray-100 pt-3">
+                  <div className="text-[10px] text-gray-400 uppercase tracking-wide mb-1.5">Tiempo por sección</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {engagement.sections.slice(0, 6).map((s) => (
+                      <span
+                        key={s.section}
+                        className={`text-xs px-2 py-1 rounded-full ${
+                          ["inversion", "pricing", "costos-operativos", "operationalCosts"].includes(s.section)
+                            ? "bg-red-50 text-red-700 font-semibold"
+                            : "bg-gray-100 text-gray-700"
+                        }`}
+                      >
+                        {s.section} · {s.timeSpent < 60 ? `${s.timeSpent}s` : `${Math.floor(s.timeSpent / 60)}m`}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+        </div>
+      )}
+
       {/* Sources Report Panel */}
       {showSources && proposal.aiSourcesReport && (
         <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 space-y-3">
@@ -456,10 +584,8 @@ export default function ProposalEditor() {
           <p className="text-xs text-gray-400">Haz click en "Generar con IA" para crear el contenido automáticamente.</p>
         </div>
       ) : generateMut.isPending ? (
-        <div className="text-center py-16 space-y-3">
-          <div className="w-10 h-10 border-3 border-[#2FA4A9] border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-gray-500 font-medium">Generando propuesta con IA...</p>
-          <p className="text-xs text-gray-400">Esto puede tomar 15-30 segundos</p>
+        <div className="py-8">
+          <GenerationProgress />
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
@@ -640,11 +766,14 @@ export default function ProposalEditor() {
               />
             </div>
 
-            {/* Loading state */}
+            {/* Loading state con progreso */}
             {aiModifyMut.isPending && (
               <div className="flex items-center gap-3 bg-purple-50 border border-purple-200 rounded-lg p-3">
                 <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-                <p className="text-sm text-purple-700">Reescribiendo con Claude… ~5 segundos</p>
+                <div className="flex-1">
+                  <p className="text-sm text-purple-700 font-medium">Reescribiendo con Claude…</p>
+                  <p className="text-[11px] text-purple-600">Manteniendo coherencia con las otras secciones · ~3-5s</p>
+                </div>
               </div>
             )}
 

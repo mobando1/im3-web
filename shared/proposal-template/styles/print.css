@@ -1,53 +1,76 @@
 @media print {
+  @page {
+    size: A4;
+    margin: 12mm 14mm;
+  }
+
+  html, body {
+    background: #ffffff !important;
+    color: #0d1626 !important;
+    font-size: 10pt !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
   .proposal-template {
     background: #ffffff !important;
     color: #0d1626 !important;
+    font-size: 10pt !important;
   }
   .proposal-template::before { display: none !important; }
+
+  /* Ocultar elementos interactivos y decorativos */
   .pt-nav,
   .pt-scroll-hint,
   .pt-hero-cta-single,
-  .pt-cta-buttons { display: none !important; }
+  .pt-hero-reciprocation,
+  .pt-cta-buttons,
+  .pt-nav-progress,
+  .pt-divider,
+  .pt-cost-meter,
+  [class*="animate"] {
+    display: none !important;
+  }
 
-  .proposal-template.pt-js-loaded .pt-reveal,
-  .proposal-template.pt-js-loaded .pt-reveal.pt-visible {
+  /* Reveals siempre visibles en print */
+  .proposal-template .pt-reveal,
+  .proposal-template .pt-reveal.pt-visible {
     opacity: 1 !important;
     transform: none !important;
   }
 
+  /* Fondos oscuros → blanco */
   .pt-hero,
   .pt-problem-section,
   .pt-tech-section,
   .pt-authority-section,
   .pt-pricing-section,
-  .pt-cta-section {
+  .pt-cta-section,
+  .pt-opcosts-section {
     background: #ffffff !important;
-    border-top: 1px solid #e5e7eb !important;
-    page-break-inside: avoid;
+    border-top: 1px solid #d1d5db !important;
   }
   .pt-hero-bg,
   .pt-hero-line { display: none !important; }
 
+  /* Todos los textos en oscuro (sin gradientes) */
   .proposal-template h1,
   .proposal-template h2,
   .proposal-template h3,
   .proposal-template h4,
-  .pt-hero h1,
+  .proposal-template p,
+  .proposal-template span,
+  .proposal-template div,
   .pt-hero h1 em,
-  .pt-cta-section h2 em,
-  .pt-summary-text,
-  .pt-problem-card h4,
-  .pt-module-body h3,
-  .pt-phase-title,
-  .pt-roi-hero-title,
-  .pt-authority-card h4,
-  .pt-testimonial-author,
-  .pt-milestone-name {
+  .pt-cta-section h2 em {
     color: #0d1626 !important;
     -webkit-text-fill-color: #0d1626 !important;
     background: none !important;
+    background-clip: initial !important;
+    -webkit-background-clip: initial !important;
   }
 
+  /* Cards con fondo claro para contrast */
   .pt-summary-card,
   .pt-problem-card,
   .pt-module-card,
@@ -60,29 +83,130 @@
   .pt-pricing-card,
   .pt-commitment-banner,
   .pt-scarcity-banner,
-  .pt-tech-pill {
+  .pt-tech-pill,
+  .pt-opcosts-category,
+  .pt-opcosts-upsell {
     background: #f8fafc !important;
-    border-color: #e5e7eb !important;
+    border: 1px solid #d1d5db !important;
     color: #1e293b !important;
+    box-shadow: none !important;
   }
 
+  /* Totals en operational costs: mantener fondo oscuro para jerarquía visual */
+  .pt-opcosts-totals {
+    background: #1e293b !important;
+    color: #ffffff !important;
+    border: none !important;
+  }
+  .pt-opcosts-total-value {
+    color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
+  }
+  .pt-opcosts-total-label {
+    color: rgba(255,255,255,0.7) !important;
+  }
+
+  /* Counter del costo acumulado — color rojo fuerte para impacto */
   .pt-cost-counter {
     color: #b91c1c !important;
-    font-size: 2.4rem !important;
+    -webkit-text-fill-color: #b91c1c !important;
+    font-size: 2rem !important;
   }
+
+  /* Barras del ROI comparison — mantener colores */
   .pt-bar-fill { transition: none !important; }
   .pt-bar-fill.pt-danger {
     background: #ef4444 !important;
     color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
   }
   .pt-bar-fill.pt-teal {
     background: #0eb5a8 !important;
     color: #ffffff !important;
+    -webkit-text-fill-color: #ffffff !important;
   }
 
+  /* Teal accents (section labels, links, phase dots) */
+  .pt-section-label,
+  .pt-phase-duration,
+  .pt-phase-outcome,
+  .pt-module-solves,
+  .pt-opcosts-item-cost,
+  .pt-opcosts-category-name,
+  .pt-opcosts-upsell-label {
+    color: #0d8a80 !important;
+    -webkit-text-fill-color: #0d8a80 !important;
+  }
+  .pt-phase-dot {
+    background: #0d8a80 !important;
+    color: #ffffff !important;
+  }
+
+  /* Spacing reducido pero respirable */
   .proposal-template section {
-    padding: 2.5rem 0 !important;
+    padding: 1.5rem 0 !important;
     page-break-inside: avoid;
   }
-  .pt-hero { min-height: auto !important; padding: 2rem 0 !important; }
+  .pt-hero {
+    min-height: auto !important;
+    padding: 0.5rem 0 2rem !important;
+    page-break-after: always;
+  }
+
+  /* Cada sección grande empieza en nueva página si el navegador decide partir */
+  .pt-problem-section,
+  .pt-solution-section,
+  .pt-timeline-section,
+  .pt-pricing-section,
+  .pt-opcosts-section,
+  .pt-cta-section {
+    page-break-inside: auto;
+  }
+
+  /* Cards individuales NO deben cortarse entre páginas */
+  .pt-problem-card,
+  .pt-module-card,
+  .pt-roi-card,
+  .pt-auth-stat,
+  .pt-authority-card,
+  .pt-testimonial,
+  .pt-phase,
+  .pt-opcosts-category,
+  .pt-milestone {
+    page-break-inside: avoid;
+    break-inside: avoid;
+  }
+
+  /* Headlines NO se pueden separar de su párrafo siguiente */
+  .proposal-template h1,
+  .proposal-template h2,
+  .proposal-template h3,
+  .proposal-template h4 {
+    page-break-after: avoid;
+    break-after: avoid;
+  }
+
+  /* Tipografía ajustada para print */
+  .pt-hero h1 { font-size: 24pt !important; }
+  .proposal-template h2 { font-size: 18pt !important; }
+  .proposal-template h3 { font-size: 13pt !important; }
+  .proposal-template h4 { font-size: 11pt !important; }
+
+  /* Footer compacto */
+  .pt-footer {
+    background: #f8fafc !important;
+    color: #1e293b !important;
+    border-top: 1px solid #d1d5db !important;
+    padding: 1rem 1.5rem !important;
+    page-break-inside: avoid;
+  }
+
+  /* Links visibles en print pero sin decoración agresiva */
+  a { color: #0d8a80 !important; text-decoration: none !important; }
+
+  /* Remover sombras y efectos */
+  .proposal-template * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+  }
 }

@@ -6885,21 +6885,183 @@ ${urls}
     }
   });
 
-  // Track view analytics (public)
+  // Track view analytics (public) + alertas de alto-intent al admin
   app.post("/api/proposal/:token/track", async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
-      const [proposal] = await db.select({ id: proposals.id }).from(proposals).where(eq(proposals.accessToken, req.params.token as string)).limit(1);
+      const [proposal] = await db.select().from(proposals).where(eq(proposals.accessToken, req.params.token as string)).limit(1);
       if (!proposal) return res.status(404).json({ error: "Not found" });
+
+      const section = req.body.section || null;
+      const ip = req.ip || null;
+
+      // Verificar si es primera vez que se abre ESTA propuesta (pre-insert count)
+      const [prevCount] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(proposalViews)
+        .where(eq(proposalViews.proposalId, proposal.id));
+      const isFirstOpen = (prevCount?.count ?? 0) === 0;
+
+      // Verificar si es primera vez que llega a la sección de alta intención (pricing/operationalCosts/inversion)
+      const HIGH_INTENT_SECTIONS = ["inversion", "pricing", "costos-operativos", "operationalCosts", "cta", "aceptar"];
+      let isHighIntentFirstTime = false;
+      if (section && HIGH_INTENT_SECTIONS.includes(section)) {
+        const [intentPrev] = await db
+          .select({ count: sql<number>`count(*)::int` })
+          .from(proposalViews)
+          .where(and(
+            eq(proposalViews.proposalId, proposal.id),
+            eq(proposalViews.section, section)
+          ));
+        isHighIntentFirstTime = (intentPrev?.count ?? 0) === 0;
+      }
+
+      // Insertar el view
       await db.insert(proposalViews).values({
         proposalId: proposal.id,
-        section: req.body.section || null,
+        section,
         timeSpent: req.body.timeSpent || null,
         device: req.body.device || null,
-        ip: req.ip || null,
+        ip,
       });
+
+      // Actualizar viewedAt si es primera vez
+      if (isFirstOpen && !proposal.viewedAt) {
+        await db.update(proposals).set({ viewedAt: new Date() }).where(eq(proposals.id, proposal.id));
+      }
+
+      // Alertas al admin (non-blocking)
+      if (isFirstOpen || isHighIntentFirstTime) {
+        const [contact] = await db.select().from(contacts).where(eq(contacts.id, proposal.contactId)).limit(1);
+        const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
+        const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+        const contactName = contact?.nombre || "Cliente";
+        const empresa = contact?.empresa || "Empresa";
+
+        try {
+          if (isFirstOpen) {
+            await db.insert(notifications).values({
+              type: "proposal_opened",
+              title: `👀 ${contactName} abrió la propuesta`,
+              description: `${empresa} acaba de abrir la propuesta por primera vez`,
+              contactId: proposal.contactId,
+            }).catch(() => {});
+
+            if (isEmailConfigured()) {
+              sendEmail(
+                adminEmail,
+                `👀 ${contactName} (${empresa}) abrió la propuesta`,
+                `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+                  <div style="background:#2FA4A9;padding:20px 28px;border-radius:8px 8px 0 0">
+                    <h1 style="color:#fff;font-size:18px;margin:0">👀 Propuesta abierta</h1>
+                  </div>
+                  <div style="padding:24px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+                    <p style="margin:0 0 16px;font-size:14px">
+                      <strong>${contactName}</strong> de <strong>${empresa}</strong> acaba de abrir la propuesta
+                      <strong>${proposal.title}</strong> por primera vez.
+                    </p>
+                    <p style="color:#64748B;font-size:13px;margin:0 0 20px">
+                      ${section ? `Viendo sección: <strong>${section}</strong>` : "Recién llegó"} · ${req.body.device || "dispositivo desconocido"}
+                    </p>
+                    <a href="${baseUrl}/admin/proposals/${proposal.id}" style="display:inline-block;background:#2FA4A9;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-size:13px;font-weight:600">Ver engagement →</a>
+                  </div>
+                </div>`
+              ).catch(() => {});
+            }
+          } else if (isHighIntentFirstTime) {
+            await db.insert(notifications).values({
+              type: "proposal_high_intent",
+              title: `🔥 ${contactName} llegó a la sección "${section}"`,
+              description: `${empresa} está revisando el precio/costos — señal de alto interés. ¡Haz follow-up ahora!`,
+              contactId: proposal.contactId,
+            }).catch(() => {});
+
+            if (isEmailConfigured()) {
+              sendEmail(
+                adminEmail,
+                `🔥 HIGH INTENT: ${contactName} está viendo la sección "${section}"`,
+                `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+                  <div style="background:#DC2626;padding:20px 28px;border-radius:8px 8px 0 0">
+                    <h1 style="color:#fff;font-size:18px;margin:0">🔥 Señal de alto interés</h1>
+                  </div>
+                  <div style="padding:24px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+                    <p style="margin:0 0 16px;font-size:14px">
+                      <strong>${contactName}</strong> de <strong>${empresa}</strong> está revisando la sección
+                      <strong>${section}</strong> de la propuesta <strong>${proposal.title}</strong>.
+                    </p>
+                    <p style="color:#B91C1C;font-size:14px;font-weight:600;margin:0 0 20px">
+                      Este es el momento para mandar un WhatsApp o llamarle — el interés está en pico.
+                    </p>
+                    ${contact?.telefono ? `<p style="font-size:13px;margin:0 0 16px"><strong>📱 Teléfono:</strong> ${contact.telefono}</p>` : ""}
+                    <p style="font-size:13px;margin:0 0 16px"><strong>📧 Email:</strong> ${contact?.email || "—"}</p>
+                    <a href="${baseUrl}/admin/contacts/${proposal.contactId}" style="display:inline-block;background:#DC2626;color:#fff;padding:10px 18px;border-radius:6px;text-decoration:none;font-size:13px;font-weight:600">Ver contacto →</a>
+                  </div>
+                </div>`
+              ).catch(() => {});
+            }
+          }
+        } catch (alertErr) {
+          log(`[proposal-track] alert failed (non-blocking): ${alertErr}`);
+        }
+      }
+
       res.json({ ok: true });
     } catch { res.json({ ok: true }); }
+  });
+
+  // Admin: engagement metrics for a proposal
+  app.get("/api/admin/proposals/:id/engagement", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const proposalId = req.params.id as string;
+      const views = await db
+        .select()
+        .from(proposalViews)
+        .where(eq(proposalViews.proposalId, proposalId))
+        .orderBy(desc(proposalViews.createdAt));
+
+      if (views.length === 0) {
+        return res.json({
+          totalViews: 0,
+          firstOpenedAt: null,
+          lastOpenedAt: null,
+          uniqueDevices: 0,
+          uniqueIps: 0,
+          totalTimeSeconds: 0,
+          sections: [],
+        });
+      }
+
+      const uniqueIps = new Set(views.map(v => v.ip).filter(Boolean)).size;
+      const uniqueDevices = new Set(views.map(v => v.device).filter(Boolean)).size;
+      const totalTimeSeconds = views.reduce((acc, v) => acc + (v.timeSpent || 0), 0);
+
+      // Section breakdown
+      const sectionMap = new Map<string, { views: number; timeSpent: number }>();
+      for (const v of views) {
+        if (!v.section) continue;
+        const prev = sectionMap.get(v.section) || { views: 0, timeSpent: 0 };
+        prev.views++;
+        prev.timeSpent += v.timeSpent || 0;
+        sectionMap.set(v.section, prev);
+      }
+      const sections = Array.from(sectionMap.entries())
+        .map(([section, data]) => ({ section, ...data }))
+        .sort((a, b) => b.timeSpent - a.timeSpent);
+
+      res.json({
+        totalViews: views.length,
+        firstOpenedAt: views[views.length - 1].createdAt,
+        lastOpenedAt: views[0].createdAt,
+        uniqueDevices,
+        uniqueIps,
+        totalTimeSeconds,
+        sections,
+      });
+    } catch (err: any) {
+      log(`Error getting proposal engagement: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
   });
 
   // ───────────────────────────────────────────────────────────────
