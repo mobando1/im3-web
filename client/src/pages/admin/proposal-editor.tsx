@@ -23,10 +23,11 @@ const SECTION_LABELS_NEW: Record<string, string> = {
   authority: "Sobre IM3 Systems",
   testimonials: "Testimonios",
   pricing: "Inversión",
+  operationalCosts: "Costos Operativos",
   cta: "Próximos Pasos",
 };
 
-const SECTION_ORDER_NEW = ["meta", "hero", "summary", "problem", "solution", "tech", "timeline", "roi", "authority", "testimonials", "pricing", "cta"];
+const SECTION_ORDER_NEW = ["meta", "hero", "summary", "problem", "solution", "tech", "timeline", "roi", "authority", "testimonials", "pricing", "operationalCosts", "cta"];
 
 // Legacy schema (propuestas viejas)
 const SECTION_LABELS_LEGACY: Record<string, string> = {

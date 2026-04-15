@@ -6,6 +6,22 @@ import { log } from "./index";
 import { readGoogleDriveContent } from "./google-drive";
 import { getIndustriaLabel } from "@shared/industrias";
 import { proposalDataSchema, type ProposalData, type ProposalSectionKey, type ProposalSourcesReport } from "@shared/proposal-template/types";
+import { readFileSync } from "fs";
+import { resolve } from "path";
+
+// Load voice guide and cost reference once at module load time (not per call)
+let VOICE_GUIDE = "";
+let COST_REFERENCE = "";
+try {
+  VOICE_GUIDE = readFileSync(resolve(process.cwd(), "shared/proposal-voice-guide.md"), "utf-8");
+} catch (err) {
+  log(`[proposal-ai] could not load voice guide: ${err}`);
+}
+try {
+  COST_REFERENCE = readFileSync(resolve(process.cwd(), "shared/proposal-cost-reference.md"), "utf-8");
+} catch (err) {
+  log(`[proposal-ai] could not load cost reference: ${err}`);
+}
 
 let client: Anthropic | null = null;
 
@@ -152,11 +168,27 @@ export async function generateProposal(contactId: string, adminNotes?: string): 
 
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
-    max_tokens: 8000,
+    max_tokens: 10000,
     temperature: 0.35,
     system: `Eres un consultor senior de IM3 Systems, agencia de tecnología especializada en IA, automatización y desarrollo de software para empresas en Latinoamérica.
 
-Tu tarea: generar una propuesta comercial ESTRUCTURADA que se va a renderizar en un template React premium (secciones Hero, Summary, Problem, Solution, Tech, Timeline, ROI, Authority, Testimonials, Pricing, CTA).
+Tu tarea: generar una propuesta comercial ESTRUCTURADA que se va a renderizar en un template React premium (secciones Hero, Summary, Problem, Solution, Tech, Timeline, ROI, Authority, Testimonials, Pricing, OperationalCosts, CTA).
+
+═══════════════════════════════════════════════════════════════
+VOICE GUIDE — aplica TODAS estas reglas al escribir cada sección:
+═══════════════════════════════════════════════════════════════
+
+${VOICE_GUIDE}
+
+═══════════════════════════════════════════════════════════════
+COST REFERENCE — úsalo para calcular la sección operationalCosts:
+═══════════════════════════════════════════════════════════════
+
+${COST_REFERENCE}
+
+═══════════════════════════════════════════════════════════════
+INSTRUCCIONES DE GENERACIÓN:
+═══════════════════════════════════════════════════════════════
 
 REGLAS CRÍTICAS:
 - ANALIZA TODO el contexto: diagnóstico, emails, documentos, notas, auditoría, actividad. Cada fuente es relevante.
@@ -300,6 +332,36 @@ ESTRUCTURA EXACTA QUE DEBES DEVOLVER (JSON estricto, sin markdown wrapper, sin c
         "<8-10 bullets de qué incluye la inversión>"
       ]
     },
+    "operationalCosts": {
+      "heading": "<ej: 'Costos operativos mensuales'>",
+      "intro": "<2-3 líneas explicando que estos son los gastos recurrentes que paga el cliente directamente a cada proveedor después del lanzamiento. Mencionar transparencia y que IM3 no agrega margen>",
+      "categories": [
+        {
+          "name": "Infraestructura",
+          "items": [
+            { "service": "<ej: Railway (hosting + base de datos)>", "cost": "<ej: $25-40 USD/mes>", "note": "<explicación breve, ej: 'Escala con usuarios activos'>" }
+          ]
+        },
+        {
+          "name": "Comunicación",
+          "items": [
+            { "service": "<ej: Resend (envío de emails)>", "cost": "<ej: $0-20 USD/mes>", "note": "<ej: 'Gratis hasta 3.000 emails/mes'>" }
+          ]
+        },
+        {
+          "name": "IA y automatización",
+          "items": [
+            { "service": "<ej: Anthropic Claude>", "cost": "<ej: $30-100 USD/mes>", "note": "<ej: 'Uso estimado según volumen proyectado'>" }
+          ]
+        }
+      ],
+      "monthlyRangeLow": "<suma mínima en formato '$XX USD/mes'>",
+      "monthlyRangeHigh": "<suma máxima en formato '$XXX USD/mes'>",
+      "annualEstimate": "<ej: '$1.500 USD/año aprox'>",
+      "paidBy": "cliente-directo",
+      "managedServicesUpsell": "<Oferta opcional de managed services, ej: '¿Prefieres no preocuparte por esto? Por $150 USD/mes adicionales administramos todo (hosting, APIs, actualizaciones, soporte 24/7).'>",
+      "disclaimer": "<ej: 'Estos costos los pagas directamente a cada proveedor. IM3 no agrega margen aquí.'>"
+    },
     "cta": {
       "heading": "<ej: '¿Listo para recuperar tu tiempo?'>",
       "painHighlight": "<ej: 'Cada mes sin esto son $X COP que no vuelven.'>",
@@ -386,7 +448,7 @@ export async function regenerateProposalSection(
 
   const validKeys: ProposalSectionKey[] = [
     "meta", "hero", "summary", "problem", "solution", "tech",
-    "timeline", "roi", "authority", "testimonials", "pricing", "cta"
+    "timeline", "roi", "authority", "testimonials", "pricing", "operationalCosts", "cta"
   ];
   if (!validKeys.includes(sectionKey as ProposalSectionKey)) {
     return { error: `Sección inválida. Debe ser una de: ${validKeys.join(", ")}` };

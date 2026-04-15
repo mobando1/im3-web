@@ -12,6 +12,7 @@ import { ROI } from "./sections/ROI";
 import { Authority } from "./sections/Authority";
 import { Testimonials } from "./sections/Testimonials";
 import { Pricing } from "./sections/Pricing";
+import { OperationalCosts } from "./sections/OperationalCosts";
 import { CTA } from "./sections/CTA";
 
 import "./styles/tokens.css";
@@ -69,6 +70,12 @@ export function ProposalTemplate({
       <Testimonials items={data.testimonials} />
       <div className="pt-divider" />
       <Pricing data={data.pricing} />
+      {data.operationalCosts && (
+        <>
+          <div className="pt-divider" />
+          <OperationalCosts data={data.operationalCosts} />
+        </>
+      )}
       <div className="pt-divider" />
       <CTA data={data.cta} onAccept={onAccept} onFallback={onFallback} />
 

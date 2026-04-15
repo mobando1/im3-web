@@ -150,6 +150,30 @@ export const ctaSchema = z.object({
   guarantees: z.array(z.string()),
 });
 
+// Operational costs (gastos mensuales recurrentes que el cliente paga aparte del desarrollo)
+export const operationalCostItemSchema = z.object({
+  service: z.string(),
+  cost: z.string(),
+  note: z.string().optional(),
+});
+
+export const operationalCostCategorySchema = z.object({
+  name: z.string(),
+  items: z.array(operationalCostItemSchema).min(1),
+});
+
+export const operationalCostsSchema = z.object({
+  heading: z.string(),
+  intro: z.string(),
+  categories: z.array(operationalCostCategorySchema).min(1),
+  monthlyRangeLow: z.string(),
+  monthlyRangeHigh: z.string(),
+  annualEstimate: z.string(),
+  paidBy: z.enum(["cliente-directo", "im3-managed", "hibrido"]),
+  managedServicesUpsell: z.string().optional(),
+  disclaimer: z.string(),
+});
+
 export const proposalDataSchema = z.object({
   meta: proposalMetaSchema,
   hero: heroSchema,
@@ -162,6 +186,7 @@ export const proposalDataSchema = z.object({
   authority: authoritySchema,
   testimonials: z.array(testimonialSchema).min(1),
   pricing: pricingSchema,
+  operationalCosts: operationalCostsSchema,
   cta: ctaSchema,
 });
 
@@ -178,6 +203,9 @@ export type AuthorityData = z.infer<typeof authoritySchema>;
 export type TestimonialData = z.infer<typeof testimonialSchema>;
 export type PricingData = z.infer<typeof pricingSchema>;
 export type CTAData = z.infer<typeof ctaSchema>;
+export type OperationalCostsData = z.infer<typeof operationalCostsSchema>;
+export type OperationalCostItem = z.infer<typeof operationalCostItemSchema>;
+export type OperationalCostCategory = z.infer<typeof operationalCostCategorySchema>;
 export type ProposalSectionKey = keyof ProposalData;
 
 export type ProposalSourcesReport = Partial<Record<ProposalSectionKey, string[]>>;
