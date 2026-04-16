@@ -147,13 +147,22 @@ Incluir SIEMPRE al final del `cta.description` una referencia sutil al partnersh
 
 ## Lo que NUNCA hagas
 
-- ❌ Inventar nombres de clientes previos que no existen (para testimonios sí son ficticios pero plausibles; para casos de éxito no)
+- ❌ **Inventar testimonios, quotes o nombres de clientes** — REGLA INFLEXIBLE. Usa SOLO los testimonios del archivo `proposal-case-studies.md`. Si ese archivo está vacío o no tiene un caso relevante a la industria del prospect, OMITE completamente la sección `testimonials` (no incluyas esa key en el JSON, o dévuelvela como array vacío). Testimonios inventados = riesgo reputacional catastrófico.
+- ❌ **Inventar casos de éxito o stats de authority específicos** (ej: "100% de conversión", "15 proyectos entregados") si no están respaldados por datos reales. Prefiere claims más vagos pero honestos.
 - ❌ Prometer ROI con decimales falsos de precisión ("retorno del 347.82%")
 - ❌ Usar "nosotros" corporativo lejano ("nuestra empresa puede ofrecer...")
 - ❌ Listar features sin conectarlas al dolor del cliente
 - ❌ Abrir secciones con "En esta sección vamos a..."
 - ❌ Cerrar con "Quedamos atentos a sus comentarios" — eso es un email, no una propuesta
 - ❌ Usar HTML dentro de los campos de texto del schema (el template lo renderiza)
+
+## Sección testimonials: regla especial
+
+La sección `testimonials` es OPCIONAL. Solo inclúyela si:
+1. El archivo `proposal-case-studies.md` (separado del voice guide) contiene casos REALES
+2. Hay al menos 1 caso relevante a la industria/tamaño del prospect
+
+Si NO se cumplen ambas condiciones → OMITIR la sección completamente. Es preferible una propuesta sin testimonios a una con testimonios falsos.
 
 ## Principios de Cialdini aplicados (resumen)
 

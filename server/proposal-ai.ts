@@ -9,10 +9,11 @@ import { proposalDataSchema, type ProposalData, type ProposalSectionKey, type Pr
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-// Load voice guide, cost reference and hardware catalog once at module load time (not per call)
+// Load voice guide, cost reference, hardware catalog and case studies once at module load
 let VOICE_GUIDE = "";
 let COST_REFERENCE = "";
 let HARDWARE_CATALOG = "";
+let CASE_STUDIES = "";
 try {
   VOICE_GUIDE = readFileSync(resolve(process.cwd(), "shared/proposal-voice-guide.md"), "utf-8");
 } catch (err) {
@@ -27,6 +28,11 @@ try {
   HARDWARE_CATALOG = readFileSync(resolve(process.cwd(), "shared/proposal-hardware-catalog.md"), "utf-8");
 } catch (err) {
   log(`[proposal-ai] could not load hardware catalog: ${err}`);
+}
+try {
+  CASE_STUDIES = readFileSync(resolve(process.cwd(), "shared/proposal-case-studies.md"), "utf-8");
+} catch (err) {
+  log(`[proposal-ai] could not load case studies: ${err}`);
 }
 
 let client: Anthropic | null = null;
@@ -199,6 +205,12 @@ HARDWARE CATALOG — úsalo para decidir si incluir la sección hardware:
 ${HARDWARE_CATALOG}
 
 ═══════════════════════════════════════════════════════════════
+CASE STUDIES — ÚNICA fuente autorizada de testimonios:
+═══════════════════════════════════════════════════════════════
+
+${CASE_STUDIES}
+
+═══════════════════════════════════════════════════════════════
 INSTRUCCIONES DE GENERACIÓN:
 ═══════════════════════════════════════════════════════════════
 
@@ -255,8 +267,9 @@ ESTRUCTURA EXACTA QUE DEBES DEVOLVER (JSON estricto, sin markdown wrapper, sin c
     },
     "problem": {
       "intro": "<Intro de 2-3 líneas: 'Identificamos estos puntos críticos que están frenando a <empresa>:'>",
-      "monthlyLossCOP": <NÚMERO ENTERO en COP, estimación del costo mensual de no actuar. Ej: 12500000 NO: "12.500.000">,
-      "counterDescription": "<Leyenda de ese número: 'Por mes en ineficiencia y oportunidades perdidas.'>",
+      "monthlyLossCOP": <NÚMERO ENTERO en COP, estimación conservadora y defendible. Ej: 12500000 NO: "12.500.000". BASAR EL NÚMERO en datos reales del diagnóstico (empleados × tarifa promedio × horas perdidas, o ventas perdidas × volumen, o similar).>,
+      "counterDescription": "<Leyenda del número: 'Por mes en ineficiencia y oportunidades perdidas.' — corta>",
+      "calculationBreakdown": "<OBLIGATORIO. Explica EXPLÍCITAMENTE cómo llegaste a ese número, usando datos reales del diagnóstico. Ejemplo: 'Basado en tu diagnóstico: 45 empleados que registran manualmente horas extras. Si 15% tiene sobrepago detectable (investigaciones del sector arrojan 10-20%), a $4.5M COP/mes/empleado promedio, son ~$30M COP/mes. Tomamos el extremo conservador: $25M.' — El cliente debe poder AUDITAR el cálculo. Si no puedes justificarlo, baja el número.>",
       "problemCards": [
         { "icon": "<emoji, ej: ⏰>", "title": "<título corto del problema>", "description": "<1-2 líneas describiendo el impacto concreto en SU negocio>" },
         { "icon": "<emoji>", "title": "...", "description": "..." },
@@ -324,10 +337,7 @@ ESTRUCTURA EXACTA QUE DEBES DEVOLVER (JSON estricto, sin markdown wrapper, sin c
         { "icon": "<emoji>", "title": "...", "description": "..." }
       ]
     },
-    "testimonials": [
-      { "text": "<quote relevante de un cliente ficticio pero plausible, máx 2 líneas>", "author": "<nombre>", "role": "<cargo, empresa>" },
-      { "text": "...", "author": "...", "role": "..." }
-    ],
+    "testimonials": "<OPCIONAL. SOLO incluir si el archivo CASE STUDIES arriba contiene casos reales relevantes. Si está vacío o sin caso relevante a la industria del prospect → OMITIR esta key completamente (no incluirla en el JSON) o devolver []. NUNCA inventar testimonios. Formato cuando hay casos reales: [{ text: 'quote literal del archivo', author: 'nombre literal', role: 'cargo, empresa literal' }]>",
     "pricing": {
       "label": "<ej: 'Tu inversión'>",
       "amount": "<ej: '12.500'>",
@@ -344,7 +354,7 @@ ESTRUCTURA EXACTA QUE DEBES DEVOLVER (JSON estricto, sin markdown wrapper, sin c
         "<8-10 bullets de qué incluye la inversión>"
       ]
     },
-    "hardware": "<OPCIONAL. Si ALGÚN módulo de solution.modules requiere equipo físico según el HARDWARE CATALOG, incluir este objeto. Si la solución es puramente SaaS/web/app (no requiere hardware físico), OMITIR esta key completamente o usar null. Formato cuando aplica: { heading: 'Equipos físicos requeridos', intro: '2-3 líneas honestas sobre por qué son necesarios y cómo se compran', items: [{ name, description, quantity (número entero), unitPriceUSD (string ej: '$120 USD'), totalPriceUSD (string ej: '$240 USD'), notes (string opcional con marcas recomendadas), paidBy: 'cliente-compra' }], subtotalUSD: string (suma de totalPriceUSD), recommendationNote: 'Cómo IM3 apoya la compra', disclaimer: 'IM3 no agrega margen aquí — pasa-costos literal' }>",
+    "hardware": "<OPCIONAL pero IMPORTANTE si la solución lo requiere. Si ALGÚN módulo de solution.modules requiere equipo físico según el HARDWARE CATALOG, incluir este objeto con MÁXIMA ESPECIFICIDAD. Si la solución es puramente SaaS/web/app (no requiere hardware físico), OMITIR esta key completamente. REGLAS: (1) Cada item debe tener MARCA Y MODELO específicos del catálogo (ej: 'Huellero ZKTeco K40 USB', NO 'huellero genérico'); (2) La CANTIDAD debe basarse en datos del diagnóstico (# sedes, # empleados, # puntos de venta) — explicítalo en notes; (3) Precios DEL CATÁLOGO, no inventados; (4) NO olvides items críticos (si hay control de asistencia biométrico siempre hay huelleros); (5) NO inventes items que no estén en el catálogo. Formato: { heading: 'Equipos físicos requeridos', intro: '2-3 líneas honestas sobre por qué son necesarios', items: [{ name: 'MARCA + MODELO específico', description: 'para qué sirve y cómo se usa en TU negocio', quantity: número entero, unitPriceUSD: '$120 USD', totalPriceUSD: '$240 USD', notes: 'Por qué esta cantidad — ej: 1 por cada una de tus 2 sedes + 1 spare', paidBy: 'cliente-compra' }], subtotalUSD: string, recommendationNote: 'Te pasamos el link de compra en Colombia + configuración sin costo', disclaimer: 'IM3 no agrega margen — precio que paga el cliente directo al proveedor' }>",
     "operationalCosts": {
       "heading": "<ej: 'Costos operativos mensuales'>",
       "intro": "<2-3 líneas explicando que estos son los gastos recurrentes que paga el cliente directamente a cada proveedor después del lanzamiento. Mencionar transparencia y que IM3 no agrega margen>",
@@ -480,55 +490,63 @@ async function validateAndRepairOperationalCosts(
   proposalData: ProposalData
 ): Promise<ProposalData["operationalCosts"] | null> {
   const current = proposalData.operationalCosts;
-  const solutionModules = proposalData.solution?.modules?.map(m => m.title).join(", ") || "(sin módulos)";
+  // Dar contexto completo de los módulos (title + description + solves) para detectar ghosts
+  const solutionModules = proposalData.solution?.modules
+    ?.map(m => `- ${m.title}: ${m.description} (resuelve: ${m.solves})`)
+    .join("\n") || "(sin módulos)";
 
   const response = await anthropic.messages.create({
     model: "claude-haiku-4-5-20251001",
     max_tokens: 2000,
     temperature: 0.1,
-    system: `Eres un auditor de costos operativos. Tu tarea: revisar la sección operationalCosts de una propuesta comercial y verificar:
+    system: `Eres un auditor de costos operativos ESTRICTO. Tu tarea principal: REMOVER servicios que la solución NO usa (WhatsApp ghost, storage ghost, etc.) y verificar coherencia.
 
-1. COHERENCIA MATEMÁTICA:
-   - monthlyRangeLow y monthlyRangeHigh deben ser strings con formato "$XX USD/mes" o similar
-   - La suma de los mínimos de los items de todas las categorías debe aproximarse a monthlyRangeLow
-   - La suma de los máximos × 1.2 (buffer conservador) debe aproximarse a monthlyRangeHigh
-   - annualEstimate debe ser aproximadamente (promedio mensual × 12) redondeado a los $100
+1. REGLA #1 — SERVICIOS GHOST (la más importante):
+   Revisa los módulos de la solución arriba. Luego revisa cada item de operationalCosts:
+   - Si un servicio está listado pero NINGÚN módulo lo usa → REMOVER el item
+   - WhatsApp Cloud API solo si algún módulo menciona: "WhatsApp", "mensajería", "chat con clientes", "notificaciones a celular del cliente"
+   - Supabase Storage solo si algún módulo menciona: "archivos", "audio", "video", "imágenes de productos"
+   - Stripe/MercadoPago solo si algún módulo menciona: "pagos", "cobros", "suscripciones", "e-commerce"
+   - Google Workspace solo si el cliente lo va a usar para el proyecto específico
+   - Twilio SMS solo si mencionan SMS explícitamente
+   - Si no estás 100% seguro que se use → REMOVER. Mejor una sección más corta que con ghosts.
 
-2. PLAUSIBILIDAD:
+2. COHERENCIA MATEMÁTICA:
+   - monthlyRangeLow y monthlyRangeHigh deben ser strings con formato "$XX USD/mes"
+   - Suma de mínimos ≈ monthlyRangeLow
+   - Suma de máximos × 1.2 (buffer) ≈ monthlyRangeHigh
+   - annualEstimate ≈ (promedio mensual × 12) redondeado a $100
+
+3. PLAUSIBILIDAD:
    - No cifras imposibles ($1000/mes para proyecto pequeño)
    - No cifras ridículamente bajas ($5/mes total)
-   - Servicios mencionados deben ser reales: Railway, Resend, Anthropic Claude, WhatsApp Business, Stripe, Supabase, Google Workspace, etc.
-
-3. CONSISTENCIA CON LA SOLUCIÓN:
-   - Si la solución NO incluye módulo de WhatsApp, NO debe haber WhatsApp en costos
-   - Si la solución SÍ usa IA generativa, debe haber Claude API en costos
-   - Si la solución incluye emails, debe haber Resend en costos
+   - Servicios deben ser reales: Railway, Resend, Anthropic Claude, WhatsApp Cloud API, Stripe, Supabase, Google Workspace
 
 4. CONSERVADOR:
-   - monthlyRangeHigh debe tener buffer del +20% sobre suma real de máximos
-   - Si dudas, subir el rango (mejor pasarnos que quedarnos cortos)
+   - monthlyRangeHigh con buffer del +20% sobre suma real
+   - Si dudas, subir el rango
 
 5. FORMATO:
-   - paidBy debe ser uno de: "cliente-directo", "im3-managed", "hibrido"
-   - disclaimer debe existir y ser corto
-   - managedServicesUpsell debe existir y tener un monto concreto ("Por $X USD/mes...")
+   - paidBy: "cliente-directo" | "im3-managed" | "hibrido"
+   - disclaimer debe existir
+   - managedServicesUpsell debe tener monto concreto
 
-Responde SOLO con JSON, sin markdown. Dos opciones de respuesta:
+Responde SOLO con JSON, sin markdown:
 
 Si TODO está correcto:
 {"status": "ok"}
 
-Si hay errores o mejoras que aplicar, devuelve la versión CORREGIDA completa:
-{"status": "repaired", "operationalCosts": { ...objeto completo con las correcciones... }, "changes": ["lista corta de qué cambió"]}`,
+Si hay errores o servicios ghost (lo más común):
+{"status": "repaired", "operationalCosts": { ...objeto completo SIN los ghosts... }, "changes": ["Removido WhatsApp (no hay módulo de mensajería)", "Ajustado rango mensual a $65-120 tras remover ghost"]}`,
     messages: [{
       role: "user",
-      content: `MÓDULOS DE LA SOLUCIÓN (para validar consistencia):
+      content: `MÓDULOS DE LA SOLUCIÓN (cada uno con título, descripción y qué resuelve):
 ${solutionModules}
 
 operationalCosts ACTUAL:
 ${JSON.stringify(current, null, 2)}
 
-Audita y responde con JSON estricto.`
+Audita estrictamente. Remueve cualquier servicio que no esté claramente soportado por los módulos. Responde con JSON estricto.`
     }]
   });
 

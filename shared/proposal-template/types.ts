@@ -36,6 +36,8 @@ export const problemSchema = z.object({
   intro: z.string(),
   monthlyLossCOP: z.number().nonnegative(),
   counterDescription: z.string(),
+  // Cómo se calculó el monthlyLossCOP — si está vacío Claude debe explicarlo en counterDescription
+  calculationBreakdown: z.string().optional(),
   problemCards: z.array(problemCardSchema).min(1),
 });
 
@@ -204,7 +206,7 @@ export const proposalDataSchema = z.object({
   timeline: timelineSchema,
   roi: roiSchema,
   authority: authoritySchema,
-  testimonials: z.array(testimonialSchema).min(1),
+  testimonials: z.array(testimonialSchema).optional(), // Omitir si no hay testimonios reales
   pricing: pricingSchema,
   hardware: hardwareSchema.optional(), // solo si aplica
   operationalCosts: operationalCostsSchema,

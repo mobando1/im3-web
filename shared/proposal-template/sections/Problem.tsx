@@ -40,6 +40,12 @@ export function Problem({ data, interactive }: Props) {
           <div className="pt-cost-meter">
             <div className="pt-cost-meter-fill" ref={meterRef} />
           </div>
+          {data.calculationBreakdown && (
+            <div className="pt-cost-breakdown">
+              <div className="pt-cost-breakdown-label">Cómo calculamos esto</div>
+              <p dangerouslySetInnerHTML={{ __html: data.calculationBreakdown }} />
+            </div>
+          )}
         </div>
 
         <div className="pt-problems-grid">

@@ -67,8 +67,12 @@ export function ProposalTemplate({
       <ROI data={data.roi} interactive={interactive} />
       <div className="pt-divider" />
       <Authority data={data.authority} />
-      <div className="pt-divider" />
-      <Testimonials items={data.testimonials} />
+      {data.testimonials && data.testimonials.length > 0 && (
+        <>
+          <div className="pt-divider" />
+          <Testimonials items={data.testimonials} />
+        </>
+      )}
       <div className="pt-divider" />
       <Pricing data={data.pricing} />
       {data.hardware && data.hardware.items && data.hardware.items.length > 0 && (

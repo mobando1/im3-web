@@ -420,6 +420,29 @@
   transition: width 2s ease;
 }
 
+.pt-cost-breakdown {
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-left: 3px solid var(--pt-teal);
+  border-radius: 8px;
+}
+.pt-cost-breakdown-label {
+  font-family: 'DM Mono', monospace;
+  font-size: 0.68rem;
+  letter-spacing: 0.12em;
+  color: var(--pt-teal);
+  text-transform: uppercase;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+}
+.pt-cost-breakdown p {
+  font-size: 0.85rem;
+  color: var(--pt-smoke);
+  line-height: 1.6;
+  margin: 0;
+}
+
 .pt-problems-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(255px, 1fr));
