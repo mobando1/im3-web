@@ -341,15 +341,15 @@ ESTRUCTURA EXACTA QUE DEBES DEVOLVER (JSON estricto, sin markdown wrapper, sin c
     },
     "pricing": {
       "label": "<ej: 'Tu inversión'>",
-      "amount": "<ej: '12.500'>",
+      "amount": "<MONTO NUMÉRICO con separador de miles según moneda local. Si cliente es COLOMBIANO (la mayoría): usar COP con separador por puntos → '26.000.000'. Si cliente USA/global: USD con separador americano → '12,500'. NO inventar — basar en complejidad del proyecto + presupuesto del diagnóstico.>",
       "amountPrefix": "$",
-      "amountSuffix": "USD",
+      "amountSuffix": "<Moneda local: 'COP' para Colombia, 'MXN' para México, 'USD' para USA/global. Detectar por meta.industry, diagnostic.ciudades o contexto del cliente.>",
       "priceFootnote": "<ej: 'Pago único. Sin mensualidades ocultas.'>",
-      "scarcityMessage": "<1 línea de urgencia honesta, ej: 'Disponibilidad limitada: solo tomamos 3 proyectos nuevos este trimestre.'>",
+      "scarcityMessage": "<1 línea de urgencia honesta, ej: 'Tomamos un proyecto por sector por trimestre — slot reservado para [EMPRESA] hasta [FECHA].'>",
       "milestones": [
-        { "step": 1, "name": "Al firmar", "desc": "<qué se entrega>", "amount": "<ej: $3.750 USD (30%)>" },
-        { "step": 2, "name": "Mitad del proyecto", "desc": "<...>", "amount": "<ej: $5.000 USD (40%)>" },
-        { "step": 3, "name": "Entrega final", "desc": "<...>", "amount": "<ej: $3.750 USD (30%)>" }
+        { "step": 1, "name": "Al firmar", "desc": "<qué se entrega>", "amount": "<En MISMA moneda que amount. Ej COP: '$7.800.000 COP (30%)'. Ej USD: '$3,750 USD (30%)'>" },
+        { "step": 2, "name": "Mitad del proyecto", "desc": "<...>", "amount": "<monto 40%>" },
+        { "step": 3, "name": "Entrega final", "desc": "<...>", "amount": "<monto 30%>" }
       ],
       "includes": [
         "<8-10 bullets de qué incluye la inversión>"

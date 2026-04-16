@@ -137,13 +137,72 @@ Incluir SIEMPRE al final del `cta.description` una referencia sutil al partnersh
 
 ---
 
-## Patrones de cifras
+## Patrones de cifras y MONEDA
 
-- **COP en millones**: "$25 millones COP" o "$25M COP" (ambas válidas; preferir "$25M COP" en cards/headlines)
-- **USD**: "$12,500 USD" (siempre con separador de millar estilo americano)
+### Regla de moneda (CRÍTICA)
+
+**Usa la moneda del PAÍS del cliente**. NO siempre USD.
+
+- Cliente **colombiano** (la mayoría) → **COP** (pesos colombianos)
+- Cliente mexicano → **MXN** (pesos mexicanos)
+- Cliente argentino → **ARS**
+- Cliente USA / global / SaaS internacional → **USD**
+- En duda → revisar `meta.industry` o `diagnostic.ciudades` — si dice Colombia, Bogotá, Medellín, Cali → COP
+
+Esto aplica a `pricing.amount`, `pricing.milestones[].amount`, `roi.recoveries[].amount`, `roi.comparison.withoutAmount` y `roi.comparison.investmentAmount`.
+
+EXCEPCIONES que SIEMPRE van en USD:
+- `operationalCosts` (Railway, Claude, Resend cobran en USD)
+- `hardware` items (los proveedores tech cotizan en USD)
+- Excepto si el hardware se consigue localmente en Colombia, poner rango en COP y mencionar equivalencia USD en `notes`
+
+### Formato por moneda
+
+**COP (pesos colombianos)**:
+- Millones: "$25M COP" o "$25.000.000 COP" o "$25 millones COP"
+- En headings/hero: preferir "$25M COP" (más corto, impactante)
+- En pricing.amount: usar formato con separador de miles. Ej: `amount: "26.000.000"`, `amountSuffix: "COP"`
+- En milestones: "$7.800.000 COP (30%)" (con separador de miles por puntos, estilo LATAM)
+
+**USD**:
+- Siempre con separador de millar estilo americano: "$12,500 USD"
+- En pricing.amount: `amount: "12.500"`, `amountSuffix: "USD"`
+
+### Ejemplos concretos de pricing correcto
+
+**Cliente colombiano (la mayoría)**:
+```json
+"pricing": {
+  "label": "Tu inversión",
+  "amount": "26.000.000",
+  "amountPrefix": "$",
+  "amountSuffix": "COP",
+  "priceFootnote": "Pago único. Sin mensualidades ocultas.",
+  "milestones": [
+    { "step": 1, "name": "Al firmar", "amount": "$7.800.000 COP (30%)" },
+    { "step": 2, "name": "Mitad del proyecto", "amount": "$10.400.000 COP (40%)" },
+    { "step": 3, "name": "Entrega final", "amount": "$7.800.000 COP (30%)" }
+  ]
+}
+```
+
+**Cliente USA/global**:
+```json
+"pricing": {
+  "amount": "12.500",
+  "amountPrefix": "$",
+  "amountSuffix": "USD",
+  "milestones": [
+    { "step": 1, "name": "Al firmar", "amount": "$3,750 USD (30%)" }
+  ]
+}
+```
+
+### Otros formatos
+
 - **Porcentajes**: siempre entero o 1 decimal max. "340%" no "341.27%"
 - **Tiempo**: "4.3 meses" acepta decimales; "16 semanas" preferible a "3.7 meses" si es corto
-- **monthlyLossCOP** (campo numérico del schema): número entero sin separadores. Ejemplo: `35000000` para $35M COP.
+- **monthlyLossCOP** (campo numérico del schema, SIEMPRE en COP): número entero sin separadores. Ejemplo: `35000000` para $35M COP. Este campo existe en COP por default porque el template lo anima como counter.
 
 ## Lo que NUNCA hagas
 

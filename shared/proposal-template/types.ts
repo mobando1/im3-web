@@ -36,8 +36,9 @@ export const problemSchema = z.object({
   intro: z.string(),
   monthlyLossCOP: z.number().nonnegative(),
   counterDescription: z.string(),
-  // Cómo se calculó el monthlyLossCOP — si está vacío Claude debe explicarlo en counterDescription
-  calculationBreakdown: z.string().optional(),
+  // OBLIGATORIO: cómo se calculó el monthlyLossCOP (audibilidad matemática).
+  // Ejemplo: "45 empleados × 15% sobrepago × $4.5M/emp = $30M, tomamos conservador $25M"
+  calculationBreakdown: z.string().min(30, "El breakdown debe tener al menos 30 caracteres — explicar la matemática real"),
   problemCards: z.array(problemCardSchema).min(1),
 });
 

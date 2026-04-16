@@ -143,6 +143,97 @@ function FriendlyView({ data, depth = 0 }: { data: unknown; depth?: number }) {
   return <span className="text-gray-500 text-sm">{String(data)}</span>;
 }
 
+/** Compara recursivamente dos valores y devuelve los paths que cambiaron. */
+function diffPaths(a: unknown, b: unknown, path = ""): string[] {
+  if (a === b) return [];
+  if (typeof a !== typeof b) return [path || "(raíz)"];
+  if (a === null || b === null) return [path || "(raíz)"];
+  if (typeof a !== "object") {
+    return JSON.stringify(a) === JSON.stringify(b) ? [] : [path || "(raíz)"];
+  }
+  if (Array.isArray(a) || Array.isArray(b)) {
+    return JSON.stringify(a) === JSON.stringify(b) ? [] : [path || "(raíz)"];
+  }
+  const keys = new Set([...Object.keys(a as object), ...Object.keys(b as object)]);
+  const changed: string[] = [];
+  for (const key of keys) {
+    const subPath = path ? `${path}.${key}` : key;
+    const childChanges = diffPaths(
+      (a as Record<string, unknown>)[key],
+      (b as Record<string, unknown>)[key],
+      subPath
+    );
+    changed.push(...childChanges);
+  }
+  return changed;
+}
+
+/** Render visual de qué campos cambiaron — resaltado con highlight amarillo. */
+function HighlightedFriendlyView({ data, changedFields, currentPath = "" }: { data: unknown; changedFields: string[]; currentPath?: string }) {
+  if (data === null || data === undefined) {
+    return <span className="text-gray-400 italic text-sm">(vacío)</span>;
+  }
+  if (typeof data === "string") {
+    const isChanged = changedFields.some(f => f === currentPath || f.startsWith(currentPath + "."));
+    return (
+      <span className={`text-sm whitespace-pre-wrap ${isChanged ? "bg-yellow-100 px-1 rounded" : "text-gray-800"}`}>
+        {data || <em className="text-gray-400">(sin texto)</em>}
+      </span>
+    );
+  }
+  if (typeof data === "number" || typeof data === "boolean") {
+    const isChanged = changedFields.some(f => f === currentPath);
+    return <span className={`font-mono text-sm ${isChanged ? "bg-yellow-100 px-1 rounded text-emerald-800" : "text-emerald-700"}`}>{String(data)}</span>;
+  }
+  if (Array.isArray(data)) {
+    if (data.length === 0) return <span className="text-gray-400 italic text-sm">(lista vacía)</span>;
+    const allSimple = data.every((it) => typeof it === "string" || typeof it === "number");
+    if (allSimple) {
+      return (
+        <ul className="list-disc pl-5 space-y-1">
+          {data.map((it, idx) => {
+            const subPath = `${currentPath}[${idx}]`;
+            const isChanged = changedFields.some(f => f === subPath || f === currentPath);
+            return <li key={idx} className={`text-sm ${isChanged ? "bg-yellow-100 px-1 rounded" : "text-gray-800"}`}>{String(it)}</li>;
+          })}
+        </ul>
+      );
+    }
+    return (
+      <div className="space-y-3">
+        {data.map((item, idx) => (
+          <div key={idx} className="border-l-2 border-gray-200 pl-3">
+            <div className="text-xs font-medium text-gray-400 mb-1">#{idx + 1}</div>
+            <HighlightedFriendlyView data={item} changedFields={changedFields} currentPath={`${currentPath}[${idx}]`} />
+          </div>
+        ))}
+      </div>
+    );
+  }
+  if (typeof data === "object") {
+    const entries = Object.entries(data as Record<string, unknown>);
+    return (
+      <div className="space-y-2.5">
+        {entries.map(([key, value]) => {
+          const subPath = currentPath ? `${currentPath}.${key}` : key;
+          const isFieldChanged = changedFields.some(f => f === subPath);
+          return (
+            <div key={key} className="grid grid-cols-[140px_1fr] gap-3 items-start">
+              <div className={`text-xs font-mono uppercase tracking-wide pt-0.5 ${isFieldChanged ? "text-yellow-700 font-semibold" : "text-gray-500"}`}>
+                {key} {isFieldChanged && <span className="ml-1 text-[10px]">●</span>}
+              </div>
+              <div className="min-w-0">
+                <HighlightedFriendlyView data={value} changedFields={changedFields} currentPath={subPath} />
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  return <span className="text-gray-500 text-sm">{String(data)}</span>;
+}
+
 const STATUS_LABELS: Record<string, string> = {
   draft: "Borrador",
   sent: "Enviada",
@@ -175,6 +266,9 @@ export default function ProposalEditor() {
   const [aiInstruction, setAiInstruction] = useState("");
   const [aiNewContent, setAiNewContent] = useState<string | null>(null);
   const [aiNewRaw, setAiNewRaw] = useState<unknown>(null); // objeto crudo (para update optimista del cache)
+  const [aiOriginalRaw, setAiOriginalRaw] = useState<unknown>(null); // snapshot de lo original para comparar
+  const [aiChangedFields, setAiChangedFields] = useState<string[]>([]); // qué campos cambiaron
+  const [aiNoChangeWarning, setAiNoChangeWarning] = useState(false); // Claude no cambió nada
 
   const { data: proposal, isLoading } = useQuery<any>({
     queryKey: [`/api/admin/proposals/${id}`],
@@ -226,7 +320,9 @@ export default function ProposalEditor() {
       return res.json() as Promise<{ section?: unknown; content?: string; sectionKey: string }>;
     },
     onSuccess: (data) => {
-      // Nuevo schema devuelve `section` (objeto), legacy devuelve `content` (string)
+      // Detectar qué cambió entre original y nueva versión
+      const newValue = data.section !== undefined ? data.section : data.content;
+
       if (data.section !== undefined) {
         setAiNewContent(JSON.stringify(data.section, null, 2));
         setAiNewRaw(data.section);
@@ -234,9 +330,23 @@ export default function ProposalEditor() {
         setAiNewContent(data.content);
         setAiNewRaw(data.content);
       }
+
+      // Calcular diff
+      const changed = diffPaths(aiOriginalRaw, newValue);
+      setAiChangedFields(changed);
+
+      // Warn si no cambió nada
+      const nothingChanged = changed.length === 0 ||
+        JSON.stringify(aiOriginalRaw) === JSON.stringify(newValue);
+      setAiNoChangeWarning(nothingChanged);
+
+      if (nothingChanged) {
+        console.warn("[AI Modify] Claude devolvió contenido idéntico al original. Instrucción:", aiInstruction);
+      }
     },
     onError: (err: any) => {
-      toast({ title: "Error", description: err?.message || "No se pudo regenerar", variant: "destructive" });
+      toast({ title: "Error regenerando con IA", description: err?.message || "No se pudo regenerar. Revisa la consola del browser (Cmd+Option+J).", variant: "destructive" });
+      console.error("[AI Modify] Error:", err);
     },
   });
 
@@ -245,6 +355,9 @@ export default function ProposalEditor() {
     setAiInstruction("");
     setAiNewContent(null);
     setAiNewRaw(null);
+    setAiOriginalRaw(proposal?.sections?.[sectionKey] ?? null);
+    setAiChangedFields([]);
+    setAiNoChangeWarning(false);
     setAiModifyOpen(true);
   };
 
@@ -263,20 +376,33 @@ export default function ProposalEditor() {
       return { ...old, sections: newSections };
     });
 
-    // Forzar refetch para confirmar contra DB
+    // Forzar refetch para confirmar contra DB (la API ya persistió)
     await queryClient.invalidateQueries({ queryKey: [`/api/admin/proposals/${id}`] });
     await queryClient.refetchQueries({ queryKey: [`/api/admin/proposals/${id}`], type: "active" });
 
-    toast({ title: "Sección actualizada con IA" });
+    const changedSummary = aiChangedFields.length > 0
+      ? `${aiChangedFields.length} campo${aiChangedFields.length > 1 ? "s" : ""} modificado${aiChangedFields.length > 1 ? "s" : ""}: ${aiChangedFields.slice(0, 3).join(", ")}${aiChangedFields.length > 3 ? "..." : ""}`
+      : "Sin cambios detectados";
+
+    toast({
+      title: "✓ Sección actualizada",
+      description: changedSummary,
+    });
+
     setAiModifyOpen(false);
     setAiNewContent(null);
     setAiNewRaw(null);
+    setAiOriginalRaw(null);
+    setAiChangedFields([]);
+    setAiNoChangeWarning(false);
     setAiInstruction("");
   };
 
   const tryAgain = () => {
     setAiNewContent(null);
     setAiNewRaw(null);
+    setAiChangedFields([]);
+    setAiNoChangeWarning(false);
     // Mantener instrucción para editarla o cambiarla
   };
 
@@ -778,15 +904,46 @@ export default function ProposalEditor() {
               </div>
             )}
 
-            {/* Nueva versión */}
+            {/* Nueva versión con diff highlighted */}
             {aiNewContent !== null && !aiModifyMut.isPending && (
               <div>
-                <Label className="text-xs text-purple-700 font-semibold mb-1 block flex items-center gap-1">
-                  <Sparkles className="w-3 h-3" /> Nueva versión (ya guardada — click Aceptar para confirmar)
-                </Label>
+                <div className="flex items-center justify-between mb-1">
+                  <Label className="text-xs text-purple-700 font-semibold flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" /> Nueva versión
+                  </Label>
+                  {aiChangedFields.length > 0 && (
+                    <span className="text-[10px] text-purple-600 font-mono">
+                      {aiChangedFields.length} campo{aiChangedFields.length > 1 ? "s" : ""} cambiado{aiChangedFields.length > 1 ? "s" : ""}
+                    </span>
+                  )}
+                </div>
+
+                {/* Warning si Claude no cambió nada */}
+                {aiNoChangeWarning && (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-2">
+                    <p className="text-sm text-amber-800 font-semibold">⚠️ Claude no cambió nada</p>
+                    <p className="text-xs text-amber-700 mt-0.5">
+                      La versión generada es idéntica al original. Prueba con una instrucción más específica
+                      (ej: "cambia el precio a $26.000.000 COP" en vez de "bájale el precio").
+                    </p>
+                  </div>
+                )}
+
+                {/* Diff visual de campos cambiados */}
+                {aiChangedFields.length > 0 && aiChangedFields.length <= 10 && (
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5 mb-2">
+                    <p className="text-[11px] font-mono text-blue-700 font-medium mb-1">Cambios detectados:</p>
+                    <ul className="text-[11px] text-blue-900 space-y-0.5">
+                      {aiChangedFields.slice(0, 10).map((path) => (
+                        <li key={path} className="font-mono">• {path}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
                 {isNewFormat && aiNewRaw !== null ? (
                   <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4 max-h-96 overflow-y-auto">
-                    <FriendlyView data={aiNewRaw} />
+                    <HighlightedFriendlyView data={aiNewRaw} changedFields={aiChangedFields} />
                   </div>
                 ) : (
                   <div
@@ -794,6 +951,11 @@ export default function ProposalEditor() {
                     dangerouslySetInnerHTML={{ __html: aiNewContent }}
                   />
                 )}
+
+                <details className="mt-2">
+                  <summary className="text-[10px] text-gray-400 cursor-pointer hover:text-gray-600">Ver JSON crudo (debug)</summary>
+                  <pre className="text-[10px] bg-gray-50 border border-gray-200 rounded p-2 mt-1 overflow-x-auto max-h-40">{aiNewContent}</pre>
+                </details>
               </div>
             )}
           </div>
