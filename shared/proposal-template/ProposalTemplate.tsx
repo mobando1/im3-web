@@ -10,11 +10,11 @@ import { Tech } from "./sections/Tech";
 import { Timeline } from "./sections/Timeline";
 import { ROI } from "./sections/ROI";
 import { Authority } from "./sections/Authority";
-import { Testimonials } from "./sections/Testimonials";
 import { Pricing } from "./sections/Pricing";
 import { Hardware } from "./sections/Hardware";
 import { OperationalCosts } from "./sections/OperationalCosts";
 import { CTA } from "./sections/CTA";
+// import { Testimonials } from "./sections/Testimonials"; // removida por ahora — revivir cuando hayan casos reales
 
 import "./styles/tokens.css";
 import "./styles/template.css";
@@ -67,12 +67,7 @@ export function ProposalTemplate({
       <ROI data={data.roi} interactive={interactive} />
       <div className="pt-divider" />
       <Authority data={data.authority} />
-      {data.testimonials && data.testimonials.length > 0 && (
-        <>
-          <div className="pt-divider" />
-          <Testimonials items={data.testimonials} />
-        </>
-      )}
+      {/* Testimonials section removida por ahora — hasta tener casos reales con autorización */}
       <div className="pt-divider" />
       <Pricing data={data.pricing} />
       {data.hardware && data.hardware.items && data.hardware.items.length > 0 && (

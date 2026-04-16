@@ -214,6 +214,8 @@ ${CASE_STUDIES}
 INSTRUCCIONES DE GENERACIÓN:
 ═══════════════════════════════════════════════════════════════
 
+IMPORTANTE: La sección "testimonials" está REMOVIDA por política de IM3 hasta tener casos reales autorizados. NO incluyas la key "testimonials" en el JSON bajo ningún motivo. Las testimonios inventados dañan la reputación. Omítela completamente.
+
 REGLAS CRÍTICAS:
 - ANALIZA TODO el contexto: diagnóstico, emails, documentos, notas, auditoría, actividad. Cada fuente es relevante.
 - Tono: profesional, confiado, orientado a resultados. Como consultor que sabe cerrar deals.
@@ -337,7 +339,6 @@ ESTRUCTURA EXACTA QUE DEBES DEVOLVER (JSON estricto, sin markdown wrapper, sin c
         { "icon": "<emoji>", "title": "...", "description": "..." }
       ]
     },
-    "testimonials": "<OPCIONAL. SOLO incluir si el archivo CASE STUDIES arriba contiene casos reales relevantes. Si está vacío o sin caso relevante a la industria del prospect → OMITIR esta key completamente (no incluirla en el JSON) o devolver []. NUNCA inventar testimonios. Formato cuando hay casos reales: [{ text: 'quote literal del archivo', author: 'nombre literal', role: 'cargo, empresa literal' }]>",
     "pricing": {
       "label": "<ej: 'Tu inversión'>",
       "amount": "<ej: '12.500'>",
@@ -591,7 +592,7 @@ export async function regenerateProposalSection(
 
   const validKeys: ProposalSectionKey[] = [
     "meta", "hero", "summary", "problem", "solution", "tech",
-    "timeline", "roi", "authority", "testimonials", "pricing", "hardware", "operationalCosts", "cta"
+    "timeline", "roi", "authority", "pricing", "hardware", "operationalCosts", "cta"
   ];
   if (!validKeys.includes(sectionKey as ProposalSectionKey)) {
     return { error: `Sección inválida. Debe ser una de: ${validKeys.join(", ")}` };

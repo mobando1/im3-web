@@ -11,6 +11,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 
 // Nuevo schema ProposalData (shared/proposal-template/types.ts)
+// Nota: "testimonials" removida por ahora — revivir cuando tengamos casos reales autorizados
 const SECTION_LABELS_NEW: Record<string, string> = {
   meta: "Metadatos",
   hero: "Hero (Portada)",
@@ -21,14 +22,13 @@ const SECTION_LABELS_NEW: Record<string, string> = {
   timeline: "Cronograma",
   roi: "Retorno de Inversión",
   authority: "Sobre IM3 Systems",
-  testimonials: "Testimonios",
   pricing: "Inversión",
   hardware: "Hardware",
   operationalCosts: "Costos Operativos",
   cta: "Próximos Pasos",
 };
 
-const SECTION_ORDER_NEW = ["meta", "hero", "summary", "problem", "solution", "tech", "timeline", "roi", "authority", "testimonials", "pricing", "hardware", "operationalCosts", "cta"];
+const SECTION_ORDER_NEW = ["meta", "hero", "summary", "problem", "solution", "tech", "timeline", "roi", "authority", "pricing", "hardware", "operationalCosts", "cta"];
 
 // Legacy schema (propuestas viejas)
 const SECTION_LABELS_LEGACY: Record<string, string> = {
