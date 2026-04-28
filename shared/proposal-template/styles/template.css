@@ -36,12 +36,12 @@
 
 /* ── SECTION HEADINGS — spacing consistente entre label → h2 → intro → contenido ── */
 .pt-problem-heading { font-size: 2.2rem; margin-bottom: 2rem; }
-.pt-solution-heading { font-size: 2.2rem; margin-bottom: .65rem; }
-.pt-tech-heading { font-size: 2rem; margin-bottom: .45rem; }
+.pt-solution-heading { font-size: 2.2rem; margin-bottom: 1rem; }
+.pt-tech-heading { font-size: 2rem; margin-bottom: 1rem; }
 .pt-timeline-heading { font-size: 2.2rem; margin-bottom: 2.25rem; }
-.pt-authority-heading { font-size: 2rem; margin-bottom: .45rem; }
+.pt-authority-heading { font-size: 2rem; margin-bottom: 1rem; }
 .pt-testimonials-heading { font-size: 2rem; margin-bottom: 1.75rem; }
-.pt-pricing-heading { font-size: 2.2rem; margin-bottom: .45rem; text-align: center; }
+.pt-pricing-heading { font-size: 2.2rem; margin-bottom: 1rem; text-align: center; }
 .pt-pricing-intro { color: var(--smoke); text-align: center; margin-bottom: 1.75rem; }
 
 /* Intro paragraphs after headings — consistent 2.25rem gap before content */
@@ -107,7 +107,7 @@
 .pt-module-solves::before { content: '→'; opacity: .7; }
 
 .pt-tech-section { background: var(--ink2); }
-.pt-tech-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 1.1rem; }
+.pt-tech-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(155px, 1fr)); gap: 1.1rem; margin-bottom: 1.75rem; }
 .pt-tech-pill { display: flex; align-items: center; gap: .6rem; padding: .8rem 1rem; background: var(--ink3); border: 1px solid rgba(255,255,255,.06); border-radius: var(--r); font-size: .83rem; color: var(--light); transition: border-color .2s; }
 .pt-tech-pill:hover { border-color: rgba(14,181,168,.28); }
 .pt-tech-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--teal); flex-shrink: 0; }
