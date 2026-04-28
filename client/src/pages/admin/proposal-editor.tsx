@@ -297,8 +297,8 @@ export default function ProposalEditor() {
       return res.json();
     },
     onSuccess: () => {
-      invalidate();
-      toast({ title: "Propuesta generada con IA" });
+      toast({ title: "Propuesta generada — recargando..." });
+      setTimeout(() => window.location.reload(), 800);
     },
     onError: () => toast({ title: "Error generando propuesta", variant: "destructive" }),
   });
@@ -370,33 +370,15 @@ export default function ProposalEditor() {
   const acceptAiResult = async () => {
     if (!aiModifySection || aiNewContent === null) return;
 
-    // Optimistic update del cache para que el UI refleje inmediatamente
-    queryClient.setQueryData([`/api/admin/proposals/${id}`], (old: any) => {
-      if (!old) return old;
-      const newSections = { ...(old.sections || {}), [aiModifySection]: aiNewRaw };
-      return { ...old, sections: newSections };
-    });
-
-    // Forzar refetch para confirmar contra DB (la API ya persistió)
-    await queryClient.invalidateQueries({ queryKey: [`/api/admin/proposals/${id}`] });
-    await queryClient.refetchQueries({ queryKey: [`/api/admin/proposals/${id}`], type: "active" });
-
-    const changedSummary = aiChangedFields.length > 0
-      ? `${aiChangedFields.length} campo${aiChangedFields.length > 1 ? "s" : ""} modificado${aiChangedFields.length > 1 ? "s" : ""}: ${aiChangedFields.slice(0, 3).join(", ")}${aiChangedFields.length > 3 ? "..." : ""}`
-      : "Sin cambios detectados";
-
     toast({
-      title: "✓ Sección actualizada",
-      description: changedSummary,
+      title: "✓ Sección actualizada — recargando...",
+      description: "Los cambios se guardaron en el servidor. Recargando para mostrarlos.",
     });
 
-    setAiModifyOpen(false);
-    setAiNewContent(null);
-    setAiNewRaw(null);
-    setAiOriginalRaw(null);
-    setAiChangedFields([]);
-    setAiNoChangeWarning(false);
-    setAiInstruction("");
+    // La API ya persistió los cambios en DB. Recargar la página es lo más confiable
+    // para que el UI refleje el estado real. El cache de TanStack Query tiene issues
+    // con actualizaciones optimistas en este flujo.
+    setTimeout(() => window.location.reload(), 800);
   };
 
   const tryAgain = () => {
