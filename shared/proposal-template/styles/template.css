@@ -34,18 +34,22 @@
 .pt-section-label::before { content: ''; width: 20px; height: 1px; background: var(--teal); }
 .pt-section-label.pt-centered { justify-content: center; }
 
-/* ── SECTION HEADINGS — spacing consistente entre label → h2 → intro → contenido ── */
-.pt-problem-heading { font-size: 2.2rem; margin-bottom: 2rem; }
-.pt-solution-heading { font-size: 2.2rem; margin-bottom: 1rem; }
-.pt-tech-heading { font-size: 2rem; margin-bottom: 1rem; }
-.pt-timeline-heading { font-size: 2.2rem; margin-bottom: 2.25rem; }
-.pt-authority-heading { font-size: 2rem; margin-bottom: 1rem; }
-.pt-testimonials-heading { font-size: 2rem; margin-bottom: 1.75rem; }
-.pt-pricing-heading { font-size: 2.2rem; margin-bottom: 1rem; text-align: center; }
-.pt-pricing-intro { color: var(--smoke); text-align: center; margin-bottom: 1.75rem; }
+/* ── SECTION HEADINGS — spacing GENEROSO entre label → h2 → intro → contenido ── */
+.pt-problem-heading { font-size: 2.2rem; margin-top: 0.5rem; margin-bottom: 2rem !important; }
+.pt-solution-heading { font-size: 2.2rem; margin-top: 0.5rem; margin-bottom: 1.5rem !important; }
+.pt-tech-heading { font-size: 2rem; margin-top: 0.5rem; margin-bottom: 1.5rem !important; }
+.pt-timeline-heading { font-size: 2.2rem; margin-top: 0.5rem; margin-bottom: 2.5rem !important; }
+.pt-authority-heading { font-size: 2rem; margin-top: 0.5rem; margin-bottom: 1.5rem !important; }
+.pt-testimonials-heading { font-size: 2rem; margin-top: 0.5rem; margin-bottom: 2rem !important; }
+.pt-pricing-heading { font-size: 2.2rem; margin-top: 0.5rem; margin-bottom: 1.5rem !important; text-align: center; }
+.pt-pricing-intro { color: var(--smoke); text-align: center; margin-bottom: 2.5rem !important; }
+.pt-opcosts-heading { margin-top: 0.5rem; margin-bottom: 1.5rem !important; }
+.pt-hardware-heading { margin-top: 0.5rem; margin-bottom: 1.5rem !important; }
 
-/* Intro paragraphs after headings — consistent 2.25rem gap before content */
-.pt-section-intro { color: var(--smoke); margin-bottom: 2.25rem; max-width: 560px; font-size: 1rem; line-height: 1.55; }
+/* Intro paragraphs after headings — AMPLIO gap antes del contenido */
+.pt-section-intro { color: var(--smoke); margin-bottom: 3rem !important; max-width: 560px; font-size: 1rem; line-height: 1.55; }
+.pt-opcosts-intro { margin-bottom: 3rem !important; }
+.pt-hardware-intro { margin-bottom: 3rem !important; }
 
 .pt-hero { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 8rem 0 5rem !important; position: relative; overflow: hidden; }
 .pt-hero-bg { position: absolute; inset: 0; background: radial-gradient(ellipse 65% 55% at 75% 25%, rgba(14,181,168,.1) 0%, transparent 60%), radial-gradient(ellipse 45% 45% at 15% 75%, rgba(14,181,168,.05) 0%, transparent 60%), linear-gradient(160deg, #080f1a 0%, #0d1626 55%, #091220 100%); }
@@ -125,12 +129,12 @@
 .pt-phase-outcome { margin-top: 1.25rem; font-size: .76rem; color: var(--teal); font-family: 'DM Mono', monospace; opacity: .8; }
 
 .proposal-template section:has(.pt-roi-grid) { padding: 6rem 0 !important; }
-.pt-roi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.4rem; margin-bottom: 2.5rem; }
+.pt-roi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.8rem; margin-bottom: 3rem; }
 .pt-roi-card { background: var(--ink2); border: 1px solid rgba(14,181,168,.13); border-radius: var(--r2); padding: 1.75rem; text-align: center; }
 .pt-roi-figure { font-size: 2rem; font-weight: 700; color: var(--teal2); line-height: 1; margin-bottom: .2rem; }
 .pt-roi-currency { font-size: .65rem; color: var(--teal); font-family: 'DM Mono', monospace; letter-spacing: .08em; margin-bottom: .3rem; }
 .pt-roi-label { font-size: .78rem; color: var(--smoke); }
-.pt-roi-comparison { background: var(--ink2); border: 1px solid rgba(14,181,168,.15); border-radius: var(--r2); padding: 2.5rem; margin-bottom: 2.5rem; }
+.pt-roi-comparison { background: var(--ink2); border: 1px solid rgba(14,181,168,.15); border-radius: var(--r2); padding: 2.5rem; margin-bottom: 3rem; }
 .pt-roi-comparison-title { font-size: .72rem; color: var(--smoke); font-family: 'DM Mono', monospace; letter-spacing: .08em; text-transform: uppercase; margin-bottom: 2rem; }
 .pt-bar-row { display: grid; grid-template-columns: 180px 1fr auto; gap: 1rem; align-items: center; margin-bottom: 1.25rem; }
 .pt-bar-row:last-child { margin-bottom: 0; }
@@ -147,12 +151,12 @@
 .pt-roi-big span { display: block; font-size: .9rem; font-weight: 400; color: var(--smoke); }
 
 .pt-authority-section { background: var(--ink2); }
-.pt-authority-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.2rem; margin-bottom: 3rem; }
+.pt-authority-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-bottom: 3.5rem; }
 .pt-auth-stat { background: var(--ink3); border: 1px solid rgba(255,255,255,.06); border-radius: var(--r2); padding: 1.5rem; text-align: center; transition: border-color .2s; }
 .pt-auth-stat:hover { border-color: rgba(14,181,168,.22); }
 .pt-auth-stat-num { font-size: 2rem; font-weight: 700; color: var(--teal2); line-height: 1; margin-bottom: .25rem; }
 .pt-auth-stat-label { font-size: .78rem; color: var(--smoke); }
-.pt-authority-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(195px, 1fr)); gap: 1.1rem; }
+.pt-authority-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(195px, 1fr)); gap: 1.5rem; }
 .pt-authority-card { background: var(--ink3); border: 1px solid rgba(255,255,255,.06); border-radius: var(--r2); padding: 1.4rem; transition: border-color .2s; }
 .pt-authority-card:hover { border-color: rgba(14,181,168,.22); }
 .pt-authority-card-icon { font-size: 1.4rem; margin-bottom: .65rem; }
