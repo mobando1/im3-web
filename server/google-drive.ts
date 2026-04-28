@@ -575,8 +575,45 @@ export async function readGoogleDriveContent(fileUrl: string): Promise<{ content
     // Plain text files → download directly
     const res = await drive.files.get({ fileId, alt: "media" }, { responseType: "text" });
     content = res.data as string;
+  } else if (mimeType === "application/pdf") {
+    // PDF → convertir a Google Doc (OCR built-in de Google) → exportar como texto → borrar copia
+    try {
+      // 1. Crear copia del PDF como Google Doc (Google aplica OCR automáticamente)
+      const copy = await drive.files.copy({
+        fileId,
+        requestBody: {
+          name: `_temp_ocr_${meta.data.name}`,
+          mimeType: "application/vnd.google-apps.document",
+        },
+      });
+      const tempDocId = copy.data.id;
+
+      if (tempDocId) {
+        // 2. Exportar el Google Doc como texto plano
+        const textRes = await drive.files.export(
+          { fileId: tempDocId, mimeType: "text/plain" },
+          { responseType: "text" }
+        );
+        content = (textRes.data as string)?.trim() || "";
+
+        // 3. Borrar la copia temporal
+        await drive.files.delete({ fileId: tempDocId }).catch(() => {});
+
+        if (content.length < 50) {
+          log(`[Drive] PDF "${meta.data.name}" OCR resultó en poco texto (${content.length} chars)`);
+          content = `[PDF: ${meta.data.name} — contenido extraído muy corto, posiblemente PDF de imágenes sin OCR legible]\n${content}`;
+        } else {
+          log(`[Drive] PDF "${meta.data.name}" OCR exitoso: ${content.length} chars`);
+        }
+      } else {
+        content = `[PDF: ${meta.data.name} — no se pudo crear copia para OCR]`;
+      }
+    } catch (pdfErr) {
+      log(`[Drive] Error extrayendo texto de PDF "${meta.data.name}": ${pdfErr}`);
+      content = `[PDF: ${meta.data.name} — error al extraer texto: ${(pdfErr as Error).message}]`;
+    }
   } else {
-    // PDFs, images, etc. → can't extract text, return metadata
+    // Images, videos, etc. → can't extract text, return metadata
     content = `[Archivo: ${meta.data.name}, tipo: ${mimeType} — contenido no extraíble automáticamente]`;
   }
 
