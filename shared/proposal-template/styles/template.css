@@ -32,6 +32,20 @@
 
 .pt-section-label { display: inline-flex; align-items: center; gap: .5rem; font-size: .7rem; color: var(--teal); letter-spacing: .15em; text-transform: uppercase; margin-bottom: 1rem; font-family: 'DM Mono', monospace; }
 .pt-section-label::before { content: ''; width: 20px; height: 1px; background: var(--teal); }
+.pt-section-label.pt-centered { justify-content: center; }
+
+/* ── SECTION HEADINGS — spacing consistente entre label → h2 → intro → contenido ── */
+.pt-problem-heading { font-size: 2.2rem; margin-bottom: 2rem; }
+.pt-solution-heading { font-size: 2.2rem; margin-bottom: .65rem; }
+.pt-tech-heading { font-size: 2rem; margin-bottom: .45rem; }
+.pt-timeline-heading { font-size: 2.2rem; margin-bottom: 2.25rem; }
+.pt-authority-heading { font-size: 2rem; margin-bottom: .45rem; }
+.pt-testimonials-heading { font-size: 2rem; margin-bottom: 1.75rem; }
+.pt-pricing-heading { font-size: 2.2rem; margin-bottom: .45rem; text-align: center; }
+.pt-pricing-intro { color: var(--smoke); text-align: center; margin-bottom: 1.75rem; }
+
+/* Intro paragraphs after headings — consistent 2.25rem gap before content */
+.pt-section-intro { color: var(--smoke); margin-bottom: 2.25rem; max-width: 560px; font-size: 1rem; line-height: 1.55; }
 
 .pt-hero { min-height: 100vh; display: flex; flex-direction: column; justify-content: center; padding: 8rem 0 5rem !important; position: relative; overflow: hidden; }
 .pt-hero-bg { position: absolute; inset: 0; background: radial-gradient(ellipse 65% 55% at 75% 25%, rgba(14,181,168,.1) 0%, transparent 60%), radial-gradient(ellipse 45% 45% at 15% 75%, rgba(14,181,168,.05) 0%, transparent 60%), linear-gradient(160deg, #080f1a 0%, #0d1626 55%, #091220 100%); }
