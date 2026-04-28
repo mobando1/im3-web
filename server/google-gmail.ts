@@ -3,6 +3,8 @@ import { db } from "./db";
 import { gmailEmails, gmailSyncState, contacts, sentEmails, activityLog, contactEmails } from "@shared/schema";
 import { eq, and, gte, lte, ilike } from "drizzle-orm";
 import { log } from "./index";
+import { classifyEmailRelevance } from "./agents/email-classifier";
+import { runAgent } from "./agents/runner";
 
 const SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"];
 
@@ -90,11 +92,16 @@ function hasAttachmentParts(payload: gmail_v1.Schema$MessagePart): boolean {
 }
 
 /**
+ * Result of matching an email address to a CRM contact.
+ */
+type MatchResult = { contactId: string; matchMethod: "exact" | "associated" | "domain" } | null;
+
+/**
  * Match an email address to a CRM contact.
  * Strategy: 1) exact match on contacts.email, 2) match on contact_emails table,
- * 3) domain fallback — match @domain.com against existing contacts.
+ * 3) domain fallback — only if exactly 1 contact shares the domain (no ambiguity).
  */
-async function matchEmailToContact(emailAddress: string): Promise<string | null> {
+async function matchEmailToContact(emailAddress: string): Promise<MatchResult> {
   if (!db) return null;
 
   const normalized = emailAddress.toLowerCase().trim();
@@ -106,7 +113,7 @@ async function matchEmailToContact(emailAddress: string): Promise<string | null>
     .where(eq(contacts.email, normalized))
     .limit(1);
 
-  if (directMatch) return directMatch.id;
+  if (directMatch) return { contactId: directMatch.id, matchMethod: "exact" };
 
   // 2. Match on associated emails (contact_emails table)
   const [assocMatch] = await db
@@ -115,18 +122,21 @@ async function matchEmailToContact(emailAddress: string): Promise<string | null>
     .where(eq(contactEmails.email, normalized))
     .limit(1);
 
-  if (assocMatch) return assocMatch.contactId;
+  if (assocMatch) return { contactId: assocMatch.contactId, matchMethod: "associated" };
 
-  // 3. Domain fallback — extract domain and find a contact with same domain
+  // 3. Domain fallback — only match if exactly 1 contact has this domain (unambiguous)
   const domain = normalized.split("@")[1];
   if (domain && !isGenericDomain(domain)) {
-    const [domainMatch] = await db
+    const domainMatches = await db
       .select({ id: contacts.id })
       .from(contacts)
       .where(ilike(contacts.email, `%@${domain}`))
-      .limit(1);
+      .limit(2); // fetch up to 2 to detect ambiguity
 
-    if (domainMatch) return domainMatch.id;
+    if (domainMatches.length === 1) {
+      return { contactId: domainMatches[0].id, matchMethod: "domain" };
+    }
+    // If multiple contacts share the domain, don't auto-match (ambiguous)
   }
 
   return null;
@@ -177,11 +187,23 @@ async function isDuplicateOfSentEmail(
 /**
  * Fetch and parse a single Gmail message.
  */
+type StoreResult = {
+  stored: boolean;
+  contactId: string | null;
+  matchMethod: "exact" | "associated" | "domain" | null;
+  gmailEmailId: string | null;
+  subject: string | null;
+  bodyText: string | null;
+  fromEmail: string | null;
+  toEmails: string[];
+};
+
 async function fetchAndStoreMessage(
   gmail: gmail_v1.Gmail,
   messageId: string
-): Promise<{ stored: boolean; contactId: string | null }> {
-  if (!db) return { stored: false, contactId: null };
+): Promise<StoreResult> {
+  const empty: StoreResult = { stored: false, contactId: null, matchMethod: null, gmailEmailId: null, subject: null, bodyText: null, fromEmail: null, toEmails: [] };
+  if (!db) return empty;
 
   // Check if already synced
   const [existing] = await db
@@ -190,7 +212,7 @@ async function fetchAndStoreMessage(
     .where(eq(gmailEmails.gmailMessageId, messageId))
     .limit(1);
 
-  if (existing) return { stored: false, contactId: null };
+  if (existing) return empty;
 
   const res = await gmail.users.messages.get({
     userId: "me",
@@ -199,7 +221,7 @@ async function fetchAndStoreMessage(
   });
 
   const msg = res.data;
-  if (!msg.payload?.headers) return { stored: false, contactId: null };
+  if (!msg.payload?.headers) return empty;
 
   const headers = msg.payload.headers;
   const fromRaw = getHeader(headers, "From");
@@ -216,21 +238,30 @@ async function fetchAndStoreMessage(
 
   // Match to contact
   let contactId: string | null = null;
+  let matchMethod: "exact" | "associated" | "domain" | null = null;
   if (direction === "outbound") {
     // Match against recipients
     for (const to of toEmails) {
-      contactId = await matchEmailToContact(to);
-      if (contactId) break;
+      const match = await matchEmailToContact(to);
+      if (match) {
+        contactId = match.contactId;
+        matchMethod = match.matchMethod;
+        break;
+      }
     }
   } else {
     // Match against sender
-    contactId = await matchEmailToContact(fromEmail);
+    const match = await matchEmailToContact(fromEmail);
+    if (match) {
+      contactId = match.contactId;
+      matchMethod = match.matchMethod;
+    }
   }
 
   // Check for duplicates with Resend-sent emails
   if (direction === "outbound" && contactId) {
     const isDup = await isDuplicateOfSentEmail(subject, contactId, gmailDate);
-    if (isDup) return { stored: false, contactId: null };
+    if (isDup) return empty;
   }
 
   // Extract bodies
@@ -251,6 +282,7 @@ async function fetchAndStoreMessage(
     labelIds: msg.labelIds || [],
     hasAttachments: hasAttach,
     gmailDate,
+    matchMethod,
   }).returning({ id: gmailEmails.id });
 
   // Log activity for matched contacts
@@ -270,41 +302,65 @@ async function fetchAndStoreMessage(
     }
   }
 
-  return { stored: true, contactId };
+  return { stored: true, contactId, matchMethod, gmailEmailId: inserted.id, subject: subject || null, bodyText: text || null, fromEmail, toEmails };
 }
 
 /**
  * Re-match orphaned emails (contactId is null) against current contacts.
  * Runs after each sync to pick up emails that arrived before the contact was created.
+ * Skips emails that were manually unlinked (by admin or by the classifier).
  */
 async function rematchOrphanedEmails(): Promise<number> {
   if (!db) return 0;
 
   const { sql } = await import("drizzle-orm");
   const orphans = await db
-    .select({ id: gmailEmails.id, fromEmail: gmailEmails.fromEmail, toEmails: gmailEmails.toEmails, direction: gmailEmails.direction })
+    .select({
+      id: gmailEmails.id,
+      fromEmail: gmailEmails.fromEmail,
+      toEmails: gmailEmails.toEmails,
+      direction: gmailEmails.direction,
+      subject: gmailEmails.subject,
+      bodyText: gmailEmails.bodyText,
+    })
     .from(gmailEmails)
-    .where(sql`${gmailEmails.contactId} IS NULL`)
+    .where(sql`${gmailEmails.contactId} IS NULL AND ${gmailEmails.manuallyUnlinked} = false`)
     .limit(200);
 
   let matched = 0;
 
   for (const orphan of orphans) {
-    let contactId: string | null = null;
+    let matchResult: MatchResult = null;
 
     if (orphan.direction === "outbound") {
       const tos = (orphan.toEmails as string[]) || [];
       for (const to of tos) {
-        contactId = await matchEmailToContact(to);
-        if (contactId) break;
+        matchResult = await matchEmailToContact(to);
+        if (matchResult) break;
       }
     } else {
-      contactId = await matchEmailToContact(orphan.fromEmail);
+      matchResult = await matchEmailToContact(orphan.fromEmail);
     }
 
-    if (contactId) {
-      await db.update(gmailEmails).set({ contactId }).where(eq(gmailEmails.id, orphan.id));
+    if (matchResult) {
+      await db.update(gmailEmails).set({
+        contactId: matchResult.contactId,
+        matchMethod: matchResult.matchMethod,
+      }).where(eq(gmailEmails.id, orphan.id));
       matched++;
+
+      // Queue for classification if non-exact match
+      if (matchResult.matchMethod !== "exact") {
+        pendingRematchClassification.push({
+          gmailEmailId: orphan.id,
+          contactId: matchResult.contactId,
+          subject: orphan.subject,
+          bodyText: orphan.bodyText,
+          fromEmail: orphan.fromEmail,
+          toEmails: (orphan.toEmails as string[]) || [],
+          matchMethod: matchResult.matchMethod as "associated" | "domain",
+        });
+      }
     }
   }
 
@@ -313,6 +369,54 @@ async function rematchOrphanedEmails(): Promise<number> {
   }
 
   return matched;
+}
+
+// Temporary storage for rematch emails that need classification
+let pendingRematchClassification: Array<{
+  gmailEmailId: string;
+  contactId: string;
+  subject: string | null;
+  bodyText: string | null;
+  fromEmail: string;
+  toEmails: string[];
+  matchMethod: "associated" | "domain";
+}> = [];
+
+/**
+ * Run AI classification on a batch of newly synced emails that were matched
+ * via non-exact methods (associated, domain). Auto-unlinks irrelevant emails.
+ */
+async function classifyNewEmails(
+  emailsToClassify: Array<{
+    gmailEmailId: string;
+    contactId: string;
+    subject: string | null;
+    bodyText: string | null;
+    fromEmail: string;
+    toEmails: string[];
+    matchMethod: "associated" | "domain";
+  }>
+): Promise<{ classified: number; unlinked: number }> {
+  if (emailsToClassify.length === 0) return { classified: 0, unlinked: 0 };
+
+  let classified = 0;
+  let unlinked = 0;
+
+  for (const email of emailsToClassify) {
+    try {
+      const result = await classifyEmailRelevance(email);
+      classified++;
+      if (!result.kept) unlinked++;
+    } catch (err) {
+      log(`[email-classifier] Error classifying email ${email.gmailEmailId}: ${(err as Error).message}`);
+    }
+  }
+
+  if (classified > 0) {
+    log(`[email-classifier] Classified ${classified} emails, unlinked ${unlinked}`);
+  }
+
+  return { classified, unlinked };
 }
 
 /**
@@ -331,6 +435,15 @@ export async function syncGmailEmails(): Promise<{ newMessages: number; errors: 
 
   let newMessages = 0;
   let errors = 0;
+  const pendingClassification: Array<{
+    gmailEmailId: string;
+    contactId: string;
+    subject: string | null;
+    bodyText: string | null;
+    fromEmail: string;
+    toEmails: string[];
+    matchMethod: "associated" | "domain";
+  }> = [];
 
   try {
     // Get current sync state
@@ -371,7 +484,20 @@ export async function syncGmailEmails(): Promise<{ newMessages: number; errors: 
         for (const msgId of messageIds) {
           try {
             const result = await fetchAndStoreMessage(gmail, msgId);
-            if (result.stored) newMessages++;
+            if (result.stored) {
+              newMessages++;
+              if (result.contactId && result.matchMethod && result.matchMethod !== "exact" && result.gmailEmailId && result.fromEmail) {
+                pendingClassification.push({
+                  gmailEmailId: result.gmailEmailId,
+                  contactId: result.contactId,
+                  subject: result.subject,
+                  bodyText: result.bodyText,
+                  fromEmail: result.fromEmail,
+                  toEmails: result.toEmails,
+                  matchMethod: result.matchMethod as "associated" | "domain",
+                });
+              }
+            }
           } catch (err: unknown) {
             errors++;
             log(`[Gmail Sync] Error fetching message ${msgId}: ${(err as Error).message}`);
@@ -424,7 +550,20 @@ export async function syncGmailEmails(): Promise<{ newMessages: number; errors: 
             if (!msg.id) continue;
             try {
               const result = await fetchAndStoreMessage(gmail, msg.id);
-              if (result.stored) newMessages++;
+              if (result.stored) {
+                newMessages++;
+                if (result.contactId && result.matchMethod && result.matchMethod !== "exact" && result.gmailEmailId && result.fromEmail) {
+                  pendingClassification.push({
+                    gmailEmailId: result.gmailEmailId,
+                    contactId: result.contactId,
+                    subject: result.subject,
+                    bodyText: result.bodyText,
+                    fromEmail: result.fromEmail,
+                    toEmails: result.toEmails,
+                    matchMethod: result.matchMethod as "associated" | "domain",
+                  });
+                }
+              }
             } catch (err: unknown) {
               errors++;
               log(`[Gmail Sync] Error fetching message ${msg.id}: ${(err as Error).message}`);
@@ -465,7 +604,18 @@ export async function syncGmailEmails(): Promise<{ newMessages: number; errors: 
     }
 
     // Re-match orphaned emails to newly created contacts
+    pendingRematchClassification = [];
     await rematchOrphanedEmails().catch(err => log(`[Gmail Sync] Rematch error: ${(err as Error).message}`));
+
+    // Combine all emails needing classification (new + rematched)
+    const allToClassify = [...pendingClassification, ...pendingRematchClassification];
+    pendingRematchClassification = [];
+
+    // Classify non-exact matched emails with AI (wrapped in runAgent for observability)
+    if (allToClassify.length > 0) {
+      await runAgent("email-classifier", () => classifyNewEmails(allToClassify))
+        .catch(err => log(`[Gmail Sync] Classification error: ${(err as Error).message}`));
+    }
 
     log(`[Gmail Sync] Done: ${newMessages} new, ${errors} errors`);
   } catch (err: unknown) {

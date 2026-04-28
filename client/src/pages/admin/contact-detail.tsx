@@ -73,6 +73,7 @@ import {
   FolderOpen,
   ClipboardCheck,
   Link2,
+  Link2Off,
   File,
 } from "lucide-react";
 import { useState } from "react";
@@ -571,6 +572,16 @@ export default function ContactDetailPage() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/email-timeline`] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/gmail-sync-status"] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/activity`] });
+    },
+  });
+
+  const unlinkEmailMutation = useMutation({
+    mutationFn: async (emailId: string) => {
+      await apiRequest("PATCH", `/api/admin/gmail-emails/${emailId}/unlink`);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/email-timeline`] });
       queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/activity`] });
     },
   });
@@ -2052,7 +2063,17 @@ export default function ContactDetailPage() {
                             {email.status && (
                               <Badge variant="outline" className={`text-[10px] ${emailStatusColors[email.status] || ""}`}>{email.status}</Badge>
                             )}
-                            <div className="ml-auto">
+                            <div className="ml-auto flex items-center gap-1">
+                              {isGmail && (
+                                <button
+                                  onClick={() => unlinkEmailMutation.mutate(email.id)}
+                                  className="text-gray-300 hover:text-red-500 transition-colors p-1"
+                                  title="Desvincular email de este contacto"
+                                  disabled={unlinkEmailMutation.isPending}
+                                >
+                                  <Link2Off className="w-3.5 h-3.5" />
+                                </button>
+                              )}
                               <button onClick={() => setExpandedTimelineEmail(isExpanded ? null : email.id)} className="text-gray-400 hover:text-gray-700 transition-colors flex items-center gap-1 text-xs p-1" title="Ver email">
                                 <Eye className="w-3.5 h-3.5" />{isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                               </button>

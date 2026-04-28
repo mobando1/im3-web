@@ -7502,6 +7502,94 @@ ${urls}
     }
   });
 
+  // Unlink a Gmail email from a contact
+  app.patch("/api/admin/gmail-emails/:emailId/unlink", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const emailId = req.params.emailId as string;
+
+    try {
+      // Get email before unlinking (for activity log)
+      const [email] = await db
+        .select({ id: gmailEmails.id, contactId: gmailEmails.contactId, subject: gmailEmails.subject })
+        .from(gmailEmails)
+        .where(eq(gmailEmails.id, emailId))
+        .limit(1);
+
+      if (!email) return res.status(404).json({ error: "Email not found" });
+
+      // Log activity before unlinking
+      if (email.contactId) {
+        await db.insert(activityLog).values({
+          contactId: email.contactId,
+          type: "email_unlinked",
+          description: `Email desvinculado manualmente: "${(email.subject || "Sin asunto").substring(0, 80)}"`,
+          metadata: { gmailEmailId: emailId },
+        }).catch(() => {});
+      }
+
+      // Unlink: clear contactId, set manuallyUnlinked flag
+      const [updated] = await db
+        .update(gmailEmails)
+        .set({ contactId: null, matchMethod: null, manuallyUnlinked: true })
+        .where(eq(gmailEmails.id, emailId))
+        .returning();
+
+      res.json(updated);
+    } catch (err: unknown) {
+      log(`Error unlinking email: ${(err as Error).message}`);
+      res.status(500).json({ error: "Error unlinking email" });
+    }
+  });
+
+  // Relink a Gmail email to a different contact
+  app.patch("/api/admin/gmail-emails/:emailId/relink", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const emailId = req.params.emailId as string;
+    const { contactId } = req.body as { contactId: string };
+
+    if (!contactId) return res.status(400).json({ error: "contactId is required" });
+
+    try {
+      // Validate contact exists
+      const [contact] = await db
+        .select({ id: contacts.id, nombre: contacts.nombre })
+        .from(contacts)
+        .where(eq(contacts.id, contactId))
+        .limit(1);
+
+      if (!contact) return res.status(404).json({ error: "Contact not found" });
+
+      // Validate email exists
+      const [email] = await db
+        .select({ id: gmailEmails.id, subject: gmailEmails.subject })
+        .from(gmailEmails)
+        .where(eq(gmailEmails.id, emailId))
+        .limit(1);
+
+      if (!email) return res.status(404).json({ error: "Email not found" });
+
+      // Relink
+      const [updated] = await db
+        .update(gmailEmails)
+        .set({ contactId, matchMethod: "manual", manuallyUnlinked: false })
+        .where(eq(gmailEmails.id, emailId))
+        .returning();
+
+      // Log activity on new contact
+      await db.insert(activityLog).values({
+        contactId,
+        type: "email_linked",
+        description: `Email vinculado manualmente: "${(email.subject || "Sin asunto").substring(0, 80)}"`,
+        metadata: { gmailEmailId: emailId },
+      }).catch(() => {});
+
+      res.json(updated);
+    } catch (err: unknown) {
+      log(`Error relinking email: ${(err as Error).message}`);
+      res.status(500).json({ error: "Error relinking email" });
+    }
+  });
+
   // Manual Gmail sync trigger
   app.post("/api/admin/gmail-sync", requireAuth, async (req, res) => {
     if (!isGmailConfigured()) {

@@ -341,6 +341,17 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
     runnable: runFollowupWriter,
   },
 
+  {
+    name: "email-classifier",
+    displayName: "Clasificador de Emails",
+    domain: "ai",
+    description: "Valida relevancia de emails sincronizados con Claude Haiku. Auto-desvincula irrelevantes y notifica",
+    trigger: "cron",
+    schedule: "*/15 * * * *",
+    scheduleHuman: "cada 15 min (integrado en Gmail sync)",
+    criticality: "normal",
+  },
+
   // ─── Contenido ───────────────────────────────────────────────
   {
     name: "blog-generator",
