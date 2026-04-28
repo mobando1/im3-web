@@ -375,6 +375,13 @@ export async function runMigrations() {
     await pool.query(`ALTER TABLE "diagnostics" ALTER COLUMN "comodidad_tech" DROP NOT NULL;`).catch(() => {});
     await pool.query(`ALTER TABLE "diagnostics" ALTER COLUMN "familiaridad" DROP NOT NULL;`).catch(() => {});
 
+    // Contact Drive folder cache
+    await pool.query(`ALTER TABLE "contacts" ADD COLUMN IF NOT EXISTS "drive_folder_id" text;`).catch(() => {});
+
+    // Gmail email classifier — match tracking + manual override
+    await pool.query(`ALTER TABLE "gmail_emails" ADD COLUMN IF NOT EXISTS "match_method" text;`).catch(() => {});
+    await pool.query(`ALTER TABLE "gmail_emails" ADD COLUMN IF NOT EXISTS "manually_unlinked" boolean DEFAULT false NOT NULL;`).catch(() => {});
+
     console.log("✓ Database tables and indexes ensured");
 
     // Ensure admin user exists with correct password

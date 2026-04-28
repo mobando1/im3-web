@@ -8,7 +8,7 @@ import { runAgent } from "./agents/runner";
 import { syncGmailEmails, isGmailConfigured } from "./google-gmail";
 import { generateBlogContent, improveBlogContent } from "./blog-ai";
 import { log } from "./index";
-import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive, uploadFileToDrive, createProjectFolder, readGoogleDriveContent } from "./google-drive";
+import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive, uploadFileToDrive, createProjectFolder, readGoogleDriveContent, extractFolderIdFromUrl, findOrCreateClientFolder } from "./google-drive";
 import multer from "multer";
 import { createCalendarEvent, deleteCalendarEvent } from "./google-calendar";
 import { isEmailConfigured, sendEmail } from "./email-sender";
@@ -7190,20 +7190,26 @@ ${urls}
       const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId));
       if (!contact) return res.status(404).json({ message: "Contacto no encontrado" });
 
-      let folderId: string | null = null;
+      // Resolve Drive folder: 1) cached on contact, 2) from diagnostic, 3) search/create by empresa
+      let folderId: string | null = contact.driveFolderId || null;
 
-      // Try to get folder from diagnostic
-      if (contact.diagnosticId) {
+      if (!folderId && contact.diagnosticId) {
         const [diag] = await db.select({ googleDriveUrl: diagnostics.googleDriveUrl }).from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId));
         if (diag?.googleDriveUrl) {
-          const { extractFolderIdFromUrl } = await import("./google-drive");
           folderId = extractFolderIdFromUrl(diag.googleDriveUrl);
         }
       }
 
-      // If no folder, create one
       if (!folderId) {
-        folderId = await createProjectFolder(`${contact.empresa} - ${contact.nombre}`);
+        folderId = await findOrCreateClientFolder(contact.empresa);
+      }
+
+      // Cache folder ID on contact for future uploads
+      if (folderId && folderId !== contact.driveFolderId) {
+        db.update(contacts)
+          .set({ driveFolderId: folderId })
+          .where(eq(contacts.id, contactId))
+          .catch(() => {});
       }
 
       // Upload to subfolder if specified

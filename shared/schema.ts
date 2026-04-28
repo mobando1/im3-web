@@ -97,6 +97,7 @@ export const contacts = pgTable("contacts", {
   idioma: varchar("idioma", { length: 5 }).default("es").notNull(),
   leadScore: integer("lead_score").default(0).notNull(),
   lastActivityAt: timestamp("last_activity_at"),
+  driveFolderId: text("drive_folder_id"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -675,6 +676,8 @@ export const gmailEmails = pgTable("gmail_emails", {
   hasAttachments: boolean("has_attachments").default(false).notNull(),
   gmailDate: timestamp("gmail_date").notNull(),
   syncedAt: timestamp("synced_at").defaultNow().notNull(),
+  matchMethod: text("match_method"), // "exact" | "associated" | "domain" | "manual" | null
+  manuallyUnlinked: boolean("manually_unlinked").default(false).notNull(),
 });
 
 export type GmailEmail = typeof gmailEmails.$inferSelect;

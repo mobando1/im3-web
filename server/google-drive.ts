@@ -682,3 +682,59 @@ export async function createProjectFolder(projectName: string): Promise<string> 
 
   return folder.data.id!;
 }
+
+/**
+ * Find an existing client folder in Google Drive by company name, or create one if none exists.
+ * Searches the root IM3 folder for folders matching the empresa name (exact or prefix match).
+ */
+export async function findOrCreateClientFolder(empresa: string): Promise<string> {
+  const auth = getAuth();
+  if (!auth) throw new Error("Google Drive no configurado");
+
+  const parentFolderId = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  if (!parentFolderId) throw new Error("GOOGLE_DRIVE_FOLDER_ID no configurado");
+
+  const drive = google.drive({ version: "v3", auth });
+  const escapedEmpresa = empresa.replace(/'/g, "\\'");
+
+  // Search for existing folders containing the company name
+  const results = await drive.files.list({
+    q: `'${parentFolderId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false and name contains '${escapedEmpresa}'`,
+    fields: "files(id, name)",
+    pageSize: 20,
+  });
+
+  const files = results.data.files || [];
+
+  if (files.length > 0) {
+    // Priority: exact match > starts with empresa (e.g. "Empresa — 2026-04-15") > contains
+    const exact = files.find(f => f.name === empresa);
+    if (exact) {
+      log(`[Drive] Carpeta existente (exacta): "${exact.name}" → ${exact.id}`);
+      return exact.id!;
+    }
+
+    const startsWith = files.find(f => f.name?.startsWith(empresa));
+    if (startsWith) {
+      log(`[Drive] Carpeta existente (prefijo): "${startsWith.name}" → ${startsWith.id}`);
+      return startsWith.id!;
+    }
+
+    // Any contains match
+    log(`[Drive] Carpeta existente (contiene): "${files[0].name}" → ${files[0].id}`);
+    return files[0].id!;
+  }
+
+  // No existing folder found — create one
+  const folder = await drive.files.create({
+    requestBody: {
+      name: empresa,
+      mimeType: "application/vnd.google-apps.folder",
+      parents: [parentFolderId],
+    },
+    fields: "id",
+  });
+
+  log(`[Drive] Carpeta nueva creada: "${empresa}" → ${folder.data.id}`);
+  return folder.data.id!;
+}
