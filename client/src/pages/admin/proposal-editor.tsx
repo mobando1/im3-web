@@ -3,6 +3,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
 import { ArrowLeft, Copy, ExternalLink, Send, Sparkles, Save, Eye, FolderKanban, FileSearch, X, Wand2, Check, RotateCcw } from "lucide-react";
+import { SectionForm, hasTypedForm } from "@/components/proposal/SectionForm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -784,12 +785,14 @@ export default function ProposalEditor() {
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-bold text-gray-900">{SECTION_LABELS[activeSection]}</h2>
                   {editingSection === activeSection ? (
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={saveSection} className="gap-1.5 bg-[#2FA4A9] hover:bg-[#238b8f]">
-                        <Save className="w-3.5 h-3.5" /> Guardar
-                      </Button>
-                      <Button size="sm" variant="ghost" onClick={() => setEditingSection(null)}>Cancelar</Button>
-                    </div>
+                    (isNewFormat && hasTypedForm(activeSection)) ? null : (
+                      <div className="flex gap-2">
+                        <Button size="sm" onClick={saveSection} className="gap-1.5 bg-[#2FA4A9] hover:bg-[#238b8f]">
+                          <Save className="w-3.5 h-3.5" /> Guardar
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingSection(null)}>Cancelar</Button>
+                      </div>
+                    )
                   ) : (
                     <div className="flex gap-2">
                       <Button
@@ -808,20 +811,42 @@ export default function ProposalEditor() {
                 </div>
 
                 {editingSection === activeSection ? (
-                  <>
-                    <Textarea
-                      value={editContent}
-                      onChange={e => setEditContent(e.target.value)}
-                      rows={20}
-                      className="font-mono text-xs"
-                      placeholder={isNewFormat ? "JSON de la sección (respeta los tipos: strings, numbers, arrays)…" : "HTML de la sección…"}
+                  isNewFormat && hasTypedForm(activeSection) ? (
+                    <SectionForm
+                      sectionKey={activeSection}
+                      data={(sections[activeSection] as Record<string, unknown>) ?? {}}
+                      onSave={(updated) => {
+                        const newSections = { ...sections, [activeSection]: updated };
+                        updateMut.mutate({ sections: newSections });
+                        setEditingSection(null);
+                      }}
+                      onCancel={() => setEditingSection(null)}
                     />
-                    {isNewFormat && (
-                      <p className="text-xs text-amber-600 mt-1">
-                        ⓘ Editando JSON estructurado. Mantén los mismos campos y tipos. Si rompes el formato, el save fallará.
-                      </p>
-                    )}
-                  </>
+                  ) : (
+                    <>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs text-gray-500">Editando {isNewFormat ? "JSON" : "HTML"}</p>
+                        <div className="flex gap-2">
+                          <Button size="sm" onClick={saveSection} className="gap-1.5 bg-[#2FA4A9] hover:bg-[#238b8f]">
+                            <Save className="w-3.5 h-3.5" /> Guardar
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditingSection(null)}>Cancelar</Button>
+                        </div>
+                      </div>
+                      <Textarea
+                        value={editContent}
+                        onChange={e => setEditContent(e.target.value)}
+                        rows={20}
+                        className="font-mono text-xs"
+                        placeholder={isNewFormat ? "JSON de la sección…" : "HTML de la sección…"}
+                      />
+                      {isNewFormat && (
+                        <p className="text-xs text-amber-600 mt-1">
+                          ⓘ Editando JSON. Esta sección no tiene formulario visual todavía — usa JSON o "Modificar con IA".
+                        </p>
+                      )}
+                    </>
+                  )
                 ) : sections[activeSection] !== undefined && sections[activeSection] !== null ? (
                   isNewFormat ? (
                     <div className="bg-gray-50/50 border border-gray-200 rounded-lg p-5">
