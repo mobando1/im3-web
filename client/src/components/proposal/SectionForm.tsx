@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash2, Save, X, GripVertical } from "lucide-react";
+import { AiFieldHelper } from "./AiFieldHelper";
 
 /** Hook for HTML5 drag-and-drop reordering of any array */
 function useDragReorder<T>(items: T[], onChange: (items: T[]) => void) {
@@ -108,7 +109,7 @@ function Field({ label, children, hint }: { label: string; children: React.React
   );
 }
 
-function StringListEditor({ items, onChange, placeholder }: { items: string[]; onChange: (items: string[]) => void; placeholder?: string }) {
+function StringListEditor({ items, onChange, placeholder, context }: { items: string[]; onChange: (items: string[]) => void; placeholder?: string; context?: string }) {
   const add = () => onChange([...items, ""]);
   const remove = (i: number) => onChange(items.filter((_, idx) => idx !== i));
   const update = (i: number, val: string) => { const next = [...items]; next[i] = val; onChange(next); };
@@ -119,15 +120,19 @@ function StringListEditor({ items, onChange, placeholder }: { items: string[]; o
       {items.map((item, i) => (
         <div
           key={i}
-          className="flex items-center gap-2"
+          className="flex items-start gap-2"
           draggable
           onDragStart={onDragStart(i)}
           onDragOver={onDragOver(i)}
           onDragEnd={onDragEnd}
         >
-          <GripVertical className="w-3 h-3 text-gray-300 shrink-0 cursor-grab active:cursor-grabbing" />
-          <Input value={item} onChange={e => update(i, e.target.value)} placeholder={placeholder} className="text-sm h-8" />
-          <button onClick={() => remove(i)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 className="w-3.5 h-3.5" /></button>
+          <GripVertical className="w-3 h-3 text-gray-300 shrink-0 cursor-grab active:cursor-grabbing mt-2" />
+          <div className="flex-1 min-w-0">
+            <AiFieldHelper value={item} onChange={val => update(i, val)} context={context}>
+              <Input value={item} onChange={e => update(i, e.target.value)} placeholder={placeholder} className="text-sm h-8" />
+            </AiFieldHelper>
+          </div>
+          <button onClick={() => remove(i)} className="text-gray-400 hover:text-red-500 p-1 mt-1"><Trash2 className="w-3.5 h-3.5" /></button>
         </div>
       ))}
       <Button size="sm" variant="outline" onClick={add} className="text-xs h-7 gap-1">
@@ -171,16 +176,24 @@ function HeroForm({ data, set }: { data: Record<string, unknown>; set: (k: strin
   return (
     <div className="space-y-4">
       <Field label="Headline del dolor" hint="1 frase impactante. Ej: 'APP Logistics pierde $25M COP cada mes en horas extras'">
-        <Textarea value={String(data.painHeadline ?? "")} onChange={e => set("painHeadline", e.target.value)} rows={2} />
+        <AiFieldHelper value={String(data.painHeadline ?? "")} onChange={v => set("painHeadline", v)} context="Hero headline de propuesta comercial">
+          <Textarea value={String(data.painHeadline ?? "")} onChange={e => set("painHeadline", e.target.value)} rows={2} />
+        </AiFieldHelper>
       </Field>
       <Field label="Cifra del dolor" hint="La cifra grande que se ve en el hero. Ej: '$25M COP/mes perdidos'">
-        <Input value={String(data.painAmount ?? "")} onChange={e => set("painAmount", e.target.value)} />
+        <AiFieldHelper value={String(data.painAmount ?? "")} onChange={v => set("painAmount", v)} context="Cifra de dolor en hero">
+          <Input value={String(data.painAmount ?? "")} onChange={e => set("painAmount", e.target.value)} />
+        </AiFieldHelper>
       </Field>
       <Field label="Subtítulo" hint="Transición del dolor a la promesa. 2-3 líneas.">
-        <Textarea value={String(data.subtitle ?? "")} onChange={e => set("subtitle", e.target.value)} rows={2} />
+        <AiFieldHelper value={String(data.subtitle ?? "")} onChange={v => set("subtitle", v)} context="Subtítulo del hero de propuesta">
+          <Textarea value={String(data.subtitle ?? "")} onChange={e => set("subtitle", e.target.value)} rows={2} />
+        </AiFieldHelper>
       </Field>
       <Field label="Referencia al diagnóstico" hint="Ej: 'Basado en el diagnóstico gratuito que realizamos para APP Logistics · 27 de marzo de 2026'">
-        <Input value={String(data.diagnosisRef ?? "")} onChange={e => set("diagnosisRef", e.target.value)} />
+        <AiFieldHelper value={String(data.diagnosisRef ?? "")} onChange={v => set("diagnosisRef", v)} context="Referencia al diagnóstico gratuito">
+          <Input value={String(data.diagnosisRef ?? "")} onChange={e => set("diagnosisRef", e.target.value)} />
+        </AiFieldHelper>
       </Field>
     </div>
   );
@@ -225,13 +238,15 @@ function ProblemForm({ data, set }: { data: Record<string, unknown>; set: (k: st
         </Field>
       </div>
       <Field label="Breakdown del cálculo" hint="OBLIGATORIO: explica de dónde sale la cifra. El cliente debe poder auditar este número.">
-        <Textarea
-          value={String(data.calculationBreakdown ?? "")}
-          onChange={e => set("calculationBreakdown", e.target.value)}
-          rows={4}
-          className="text-sm"
-          placeholder="Ej: 45 empleados que registran manualmente horas extras. Si 15% tiene sobrepago (estudios del sector: 10-20%), a $4.5M COP/emp/mes promedio, son ~$30M. Tomamos conservador: $25M."
-        />
+        <AiFieldHelper value={String(data.calculationBreakdown ?? "")} onChange={v => set("calculationBreakdown", v)} context="Breakdown del cálculo de pérdidas mensuales">
+          <Textarea
+            value={String(data.calculationBreakdown ?? "")}
+            onChange={e => set("calculationBreakdown", e.target.value)}
+            rows={4}
+            className="text-sm"
+            placeholder="Ej: 45 empleados que registran manualmente horas extras. Si 15% tiene sobrepago (estudios del sector: 10-20%), a $4.5M COP/emp/mes promedio, son ~$30M. Tomamos conservador: $25M."
+          />
+        </AiFieldHelper>
       </Field>
 
       <div>
@@ -247,11 +262,15 @@ function ProblemForm({ data, set }: { data: Record<string, unknown>; set: (k: st
                   <Input value={card.icon} onChange={e => updateCard(i, "icon", e.target.value)} className="text-center" />
                 </Field>
                 <Field label="Título">
-                  <Input value={card.title} onChange={e => updateCard(i, "title", e.target.value)} />
+                  <AiFieldHelper value={card.title} onChange={v => updateCard(i, "title", v)} context="Título de problem card en propuesta">
+                    <Input value={card.title} onChange={e => updateCard(i, "title", e.target.value)} />
+                  </AiFieldHelper>
                 </Field>
               </div>
               <Field label="Descripción">
-                <Textarea value={card.description} onChange={e => updateCard(i, "description", e.target.value)} rows={2} className="text-sm" />
+                <AiFieldHelper value={card.description} onChange={v => updateCard(i, "description", v)} context="Descripción de problema del cliente">
+                  <Textarea value={card.description} onChange={e => updateCard(i, "description", e.target.value)} rows={2} className="text-sm" />
+                </AiFieldHelper>
               </Field>
             </div>
           ))}
@@ -434,7 +453,9 @@ function TimelineForm({ data, set }: { data: Record<string, unknown>; set: (k: s
               />
             </Field>
             <Field label="Outcome" hint="Al finalizar: [lo que el cliente puede hacer]">
-              <Input value={phase.outcome} onChange={e => updatePhase(i, "outcome", e.target.value)} className="h-8 text-sm" placeholder="Al finalizar: horas extras controladas automáticamente" />
+              <AiFieldHelper value={phase.outcome} onChange={v => updatePhase(i, "outcome", v)} context="Outcome de fase del cronograma">
+                <Input value={phase.outcome} onChange={e => updatePhase(i, "outcome", e.target.value)} className="h-8 text-sm" placeholder="Al finalizar: horas extras controladas automáticamente" />
+              </AiFieldHelper>
             </Field>
           </div>
         ))}
@@ -615,13 +636,19 @@ function SolutionForm({ data, set }: { data: Record<string, unknown>; set: (k: s
                 <span className="text-sm font-medium text-gray-700">Módulo {m.number}</span>
               </div>
               <Field label="Título">
-                <Input value={m.title} onChange={e => updateModule(i, "title", e.target.value)} className="h-8 text-sm" placeholder="Control Inteligente de Asistencia" />
+                <AiFieldHelper value={m.title} onChange={v => updateModule(i, "title", v)} context="Título de módulo de solución">
+                  <Input value={m.title} onChange={e => updateModule(i, "title", e.target.value)} className="h-8 text-sm" placeholder="Control Inteligente de Asistencia" />
+                </AiFieldHelper>
               </Field>
               <Field label="Descripción" hint="Qué hace este módulo">
-                <Textarea value={m.description} onChange={e => updateModule(i, "description", e.target.value)} rows={2} className="text-sm" />
+                <AiFieldHelper value={m.description} onChange={v => updateModule(i, "description", v)} context="Descripción de módulo de solución">
+                  <Textarea value={m.description} onChange={e => updateModule(i, "description", e.target.value)} rows={2} className="text-sm" />
+                </AiFieldHelper>
               </Field>
               <Field label="Resuelve" hint="Conecta con un problema card: 'Ataca directamente los $25M en horas extras'">
-                <Input value={m.solves} onChange={e => updateModule(i, "solves", e.target.value)} className="h-8 text-sm text-[#2FA4A9]" />
+                <AiFieldHelper value={m.solves} onChange={v => updateModule(i, "solves", v)} context="Qué problema resuelve este módulo">
+                  <Input value={m.solves} onChange={e => updateModule(i, "solves", e.target.value)} className="h-8 text-sm text-[#2FA4A9]" />
+                </AiFieldHelper>
               </Field>
             </div>
           ))}

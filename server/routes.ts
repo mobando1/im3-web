@@ -6704,6 +6704,39 @@ ${urls}
     }
   });
 
+  // AI field-level rewrite — rewrites a single text field with an instruction
+  app.post("/api/admin/ai/rewrite", requireAuth, async (req, res) => {
+    const text = String(req.body?.text ?? "").trim();
+    const instruction = String(req.body?.instruction ?? "").trim();
+    const context = String(req.body?.context ?? "");
+    if (!text) return res.status(400).json({ error: "Texto vacío" });
+    if (!instruction) return res.status(400).json({ error: "Instrucción vacía" });
+
+    try {
+      const Anthropic = (await import("@anthropic-ai/sdk")).default;
+      const apiKey = process.env.ANTHROPIC_API_KEY;
+      if (!apiKey) return res.status(500).json({ error: "ANTHROPIC_API_KEY not set" });
+      const client = new Anthropic({ apiKey });
+
+      const response = await client.messages.create({
+        model: "claude-haiku-4-5-20251001",
+        max_tokens: 500,
+        temperature: 0.4,
+        system: `Reescribe el texto que te dan aplicando la instrucción. Devuelve SOLO el texto reescrito, sin comillas, sin explicaciones, sin markdown. Español latinoamericano. Mantén el mismo tipo de contenido (si es un título corto, devuelve un título corto; si es un párrafo, devuelve un párrafo).`,
+        messages: [{
+          role: "user",
+          content: `${context ? `CONTEXTO: ${context}\n\n` : ""}TEXTO ACTUAL:\n${text}\n\nINSTRUCCIÓN:\n${instruction}\n\nDevuelve SOLO el texto reescrito:`
+        }]
+      });
+
+      const result = response.content?.[0]?.type === "text" ? response.content[0].text.trim() : text;
+      res.json({ text: result });
+    } catch (err: any) {
+      log(`[ai-rewrite] Error: ${err?.message}`);
+      res.status(500).json({ error: err?.message || "Error reescribiendo" });
+    }
+  });
+
   // Send proposal (change status + send email)
   app.post("/api/admin/proposals/:id/send", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
