@@ -309,8 +309,12 @@ export default function ProposalEditor() {
       await apiRequest("PATCH", `/api/admin/proposals/${id}`, data);
     },
     onSuccess: () => {
-      invalidate();
-      toast({ title: "Propuesta actualizada" });
+      toast({ title: "✓ Guardado — recargando..." });
+      setTimeout(() => window.location.reload(), 800);
+    },
+    onError: (err: any) => {
+      toast({ title: "Error guardando", description: err?.message || "Revisa la consola", variant: "destructive" });
+      console.error("[Save] Error:", err);
     },
   });
 

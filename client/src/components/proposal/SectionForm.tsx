@@ -1,10 +1,44 @@
-import { useState } from "react";
+import { useState, useRef, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Trash2, Save, X, GripVertical } from "lucide-react";
+
+/** Hook for HTML5 drag-and-drop reordering of any array */
+function useDragReorder<T>(items: T[], onChange: (items: T[]) => void) {
+  const dragIdx = useRef<number | null>(null);
+  const overIdx = useRef<number | null>(null);
+
+  const onDragStart = useCallback((i: number) => (e: React.DragEvent) => {
+    dragIdx.current = i;
+    e.dataTransfer.effectAllowed = "move";
+    (e.target as HTMLElement).style.opacity = "0.4";
+  }, []);
+
+  const onDragOver = useCallback((i: number) => (e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = "move";
+    overIdx.current = i;
+  }, []);
+
+  const onDragEnd = useCallback((e: React.DragEvent) => {
+    (e.target as HTMLElement).style.opacity = "1";
+    const from = dragIdx.current;
+    const to = overIdx.current;
+    if (from !== null && to !== null && from !== to) {
+      const next = [...items];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      onChange(next);
+    }
+    dragIdx.current = null;
+    overIdx.current = null;
+  }, [items, onChange]);
+
+  return { onDragStart, onDragOver, onDragEnd };
+}
 
 type SectionFormProps = {
   sectionKey: string;
@@ -78,12 +112,20 @@ function StringListEditor({ items, onChange, placeholder }: { items: string[]; o
   const add = () => onChange([...items, ""]);
   const remove = (i: number) => onChange(items.filter((_, idx) => idx !== i));
   const update = (i: number, val: string) => { const next = [...items]; next[i] = val; onChange(next); };
+  const { onDragStart, onDragOver, onDragEnd } = useDragReorder(items, onChange);
 
   return (
     <div className="space-y-1.5">
       {items.map((item, i) => (
-        <div key={i} className="flex items-center gap-2">
-          <GripVertical className="w-3 h-3 text-gray-300 shrink-0" />
+        <div
+          key={i}
+          className="flex items-center gap-2"
+          draggable
+          onDragStart={onDragStart(i)}
+          onDragOver={onDragOver(i)}
+          onDragEnd={onDragEnd}
+        >
+          <GripVertical className="w-3 h-3 text-gray-300 shrink-0 cursor-grab active:cursor-grabbing" />
           <Input value={item} onChange={e => update(i, e.target.value)} placeholder={placeholder} className="text-sm h-8" />
           <button onClick={() => remove(i)} className="text-gray-400 hover:text-red-500 p-1"><Trash2 className="w-3.5 h-3.5" /></button>
         </div>
@@ -157,6 +199,7 @@ function ProblemForm({ data, set }: { data: Record<string, unknown>; set: (k: st
   };
   const addCard = () => set("problemCards", [...cards, { icon: "📌", title: "", description: "" }]);
   const removeCard = (i: number) => set("problemCards", cards.filter((_, idx) => idx !== i));
+  const cardDrag = useDragReorder(cards, (v) => set("problemCards", v));
 
   return (
     <div className="space-y-4">
@@ -195,7 +238,7 @@ function ProblemForm({ data, set }: { data: Record<string, unknown>; set: (k: st
         <Label className="text-xs font-medium text-gray-700 mb-2 block">Problem cards ({cards.length})</Label>
         <div className="space-y-3">
           {cards.map((card, i) => (
-            <div key={i} className="border border-gray-200 rounded-lg p-3 space-y-2 relative">
+            <div key={i} className="border border-gray-200 rounded-lg p-3 space-y-2 relative" draggable onDragStart={cardDrag.onDragStart(i)} onDragOver={cardDrag.onDragOver(i)} onDragEnd={cardDrag.onDragEnd}>
               <button onClick={() => removeCard(i)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 p-1">
                 <Trash2 className="w-3.5 h-3.5" />
               </button>
@@ -236,6 +279,7 @@ function PricingForm({ data, set }: { data: Record<string, unknown>; set: (k: st
   };
   const addMilestone = () => set("milestones", [...milestones, { step: milestones.length + 1, name: "", desc: "", amount: "" }]);
   const removeMilestone = (i: number) => set("milestones", milestones.filter((_, idx) => idx !== i).map((m, idx) => ({ ...m, step: idx + 1 })));
+  const milestoneDrag = useDragReorder(milestones, (v) => set("milestones", v.map((m, idx) => ({ ...m, step: idx + 1 }))));
 
   return (
     <div className="space-y-4">
@@ -276,7 +320,7 @@ function PricingForm({ data, set }: { data: Record<string, unknown>; set: (k: st
         <Label className="text-xs font-medium text-gray-700 mb-2 block">Milestones de pago ({milestones.length})</Label>
         <div className="space-y-2">
           {milestones.map((m, i) => (
-            <div key={i} className="grid grid-cols-[40px_1fr_1fr_140px_30px] gap-2 items-end">
+            <div key={i} className="grid grid-cols-[40px_1fr_1fr_140px_30px] gap-2 items-end cursor-grab active:cursor-grabbing" draggable onDragStart={milestoneDrag.onDragStart(i)} onDragOver={milestoneDrag.onDragOver(i)} onDragEnd={milestoneDrag.onDragEnd}>
               <div className="text-center text-xs font-bold text-gray-400 pb-2">{m.step}</div>
               <Field label={i === 0 ? "Nombre" : ""}>
                 <Input value={m.name} onChange={e => updateMilestone(i, "name", e.target.value)} placeholder="Al firmar" className="h-8 text-sm" />
@@ -353,6 +397,7 @@ function TimelineForm({ data, set }: { data: Record<string, unknown>; set: (k: s
   };
   const addPhase = () => set("phases", [...phases, { number: phases.length + 1, title: "", durationWeeks: 2, items: [], outcome: "" }]);
   const removePhase = (i: number) => set("phases", phases.filter((_, idx) => idx !== i).map((p, idx) => ({ ...p, number: idx + 1 })));
+  const phaseDrag = useDragReorder(phases, (v) => set("phases", v.map((p, idx) => ({ ...p, number: idx + 1 }))));
 
   const totalWeeks = phases.reduce((sum, p) => sum + (p.durationWeeks || 0), 0);
 
@@ -365,7 +410,7 @@ function TimelineForm({ data, set }: { data: Record<string, unknown>; set: (k: s
 
       <div className="space-y-3">
         {phases.map((phase, i) => (
-          <div key={i} className="border border-gray-200 rounded-lg p-4 space-y-3 relative">
+          <div key={i} className="border border-gray-200 rounded-lg p-4 space-y-3 relative cursor-grab active:cursor-grabbing" draggable onDragStart={phaseDrag.onDragStart(i)} onDragOver={phaseDrag.onDragOver(i)} onDragEnd={phaseDrag.onDragEnd}>
             <button onClick={() => removePhase(i)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 p-1">
               <Trash2 className="w-3.5 h-3.5" />
             </button>
@@ -549,6 +594,7 @@ function SolutionForm({ data, set }: { data: Record<string, unknown>; set: (k: s
   };
   const addModule = () => set("modules", [...modules, { number: modules.length + 1, title: "", description: "", solves: "" }]);
   const removeModule = (i: number) => set("modules", modules.filter((_, idx) => idx !== i).map((m, idx) => ({ ...m, number: idx + 1 })));
+  const moduleDrag = useDragReorder(modules, (v) => set("modules", v.map((m, idx) => ({ ...m, number: idx + 1 }))));
 
   return (
     <div className="space-y-4">
@@ -562,7 +608,7 @@ function SolutionForm({ data, set }: { data: Record<string, unknown>; set: (k: s
         <Label className="text-xs font-medium text-gray-700 mb-2 block">Módulos ({modules.length})</Label>
         <div className="space-y-3">
           {modules.map((m, i) => (
-            <div key={i} className="border border-gray-200 rounded-lg p-4 space-y-3 relative">
+            <div key={i} className="border border-gray-200 rounded-lg p-4 space-y-3 relative cursor-grab active:cursor-grabbing" draggable onDragStart={moduleDrag.onDragStart(i)} onDragOver={moduleDrag.onDragOver(i)} onDragEnd={moduleDrag.onDragEnd}>
               <button onClick={() => removeModule(i)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 p-1"><Trash2 className="w-3.5 h-3.5" /></button>
               <div className="flex items-center gap-2 mb-1">
                 <span className="text-xs font-bold text-[#2FA4A9] bg-[#2FA4A9]/10 rounded-full w-6 h-6 flex items-center justify-center">{m.number}</span>
@@ -626,6 +672,7 @@ function ROIForm({ data, set }: { data: Record<string, unknown>; set: (k: string
   };
   const addRecovery = () => set("recoveries", [...recoveries, { amount: "", currency: "COP", label: "" }]);
   const removeRecovery = (i: number) => set("recoveries", recoveries.filter((_, idx) => idx !== i));
+  const recoveryDrag = useDragReorder(recoveries, (v) => set("recoveries", v));
 
   const setComp = (key: string, value: unknown) => set("comparison", { ...comparison, [key]: value });
 
@@ -639,7 +686,7 @@ function ROIForm({ data, set }: { data: Record<string, unknown>; set: (k: string
         <Label className="text-xs font-medium text-gray-700 mb-2 block">Recoveries ({recoveries.length})</Label>
         <div className="space-y-2">
           {recoveries.map((r, i) => (
-            <div key={i} className="grid grid-cols-[100px_80px_1fr_30px] gap-2 items-end">
+            <div key={i} className="grid grid-cols-[100px_80px_1fr_30px] gap-2 items-end cursor-grab" draggable onDragStart={recoveryDrag.onDragStart(i)} onDragOver={recoveryDrag.onDragOver(i)} onDragEnd={recoveryDrag.onDragEnd}>
               <Field label={i === 0 ? "Monto" : ""}>
                 <Input value={r.amount} onChange={e => updateRecovery(i, "amount", e.target.value)} className="h-8 text-sm font-mono font-bold" placeholder="$120M" />
               </Field>
@@ -712,6 +759,7 @@ function AuthorityForm({ data, set }: { data: Record<string, unknown>; set: (k: 
   const updateDiff = (i: number, field: string, value: string) => { const next = [...differentiators]; next[i] = { ...next[i], [field]: value }; set("differentiators", next); };
   const addDiff = () => set("differentiators", [...differentiators, { icon: "🎯", title: "", description: "" }]);
   const removeDiff = (i: number) => set("differentiators", differentiators.filter((_, idx) => idx !== i));
+  const diffDrag = useDragReorder(differentiators, (v) => set("differentiators", v));
 
   return (
     <div className="space-y-4">
@@ -744,7 +792,7 @@ function AuthorityForm({ data, set }: { data: Record<string, unknown>; set: (k: 
         <Label className="text-xs font-medium text-gray-700 mb-2 block">Diferenciadores ({differentiators.length})</Label>
         <div className="space-y-3">
           {differentiators.map((d, i) => (
-            <div key={i} className="border border-gray-200 rounded-lg p-3 space-y-2 relative">
+            <div key={i} className="border border-gray-200 rounded-lg p-3 space-y-2 relative cursor-grab active:cursor-grabbing" draggable onDragStart={diffDrag.onDragStart(i)} onDragOver={diffDrag.onDragOver(i)} onDragEnd={diffDrag.onDragEnd}>
               <button onClick={() => removeDiff(i)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 p-1"><Trash2 className="w-3.5 h-3.5" /></button>
               <div className="grid grid-cols-[50px_1fr] gap-2">
                 <Field label="Emoji"><Input value={d.icon} onChange={e => updateDiff(i, "icon", e.target.value)} className="text-center" /></Field>
@@ -774,6 +822,7 @@ function HardwareForm({ data, set }: { data: Record<string, unknown>; set: (k: s
   };
   const addItem = () => set("items", [...items, { name: "", description: "", quantity: 1, unitPriceUSD: "", totalPriceUSD: "", notes: "", paidBy: "cliente-compra" }]);
   const removeItem = (i: number) => set("items", items.filter((_, idx) => idx !== i));
+  const hwDrag = useDragReorder(items, (v) => set("items", v));
 
   return (
     <div className="space-y-4">
@@ -788,7 +837,7 @@ function HardwareForm({ data, set }: { data: Record<string, unknown>; set: (k: s
         <Label className="text-xs font-medium text-gray-700 mb-2 block">Equipos ({items.length})</Label>
         <div className="space-y-3">
           {items.map((item, i) => (
-            <div key={i} className="border border-gray-200 rounded-lg p-3 space-y-2 relative">
+            <div key={i} className="border border-gray-200 rounded-lg p-3 space-y-2 relative cursor-grab active:cursor-grabbing" draggable onDragStart={hwDrag.onDragStart(i)} onDragOver={hwDrag.onDragOver(i)} onDragEnd={hwDrag.onDragEnd}>
               <button onClick={() => removeItem(i)} className="absolute top-2 right-2 text-gray-400 hover:text-red-500 p-1"><Trash2 className="w-3.5 h-3.5" /></button>
               <Field label="Nombre del equipo" hint="Marca + modelo específico. Ej: 'ZKTeco ZK4500 USB'">
                 <Input value={item.name} onChange={e => updateItem(i, "name", e.target.value)} />
