@@ -692,6 +692,138 @@ Devuelve el JSON del objeto "${sectionKey}" aplicando la instrucción. Mismos ca
 }
 
 /**
+ * Generate 3 different options for rewriting a section.
+ * Each option has a different "angle" (conservative, bold, creative).
+ * Does NOT persist — the user picks one, then we save it.
+ */
+export async function generateSectionOptions(
+  proposalId: string,
+  sectionKey: string,
+  instruction: string
+): Promise<{ options: Array<{ label: string; description: string; section: unknown }> } | { error: string }> {
+  if (!db) return { error: "DB not configured" };
+  const anthropic = getClient();
+  if (!anthropic) return { error: "ANTHROPIC_API_KEY not set" };
+
+  const validKeys: ProposalSectionKey[] = [
+    "meta", "hero", "summary", "problem", "solution", "tech",
+    "timeline", "roi", "authority", "pricing", "hardware", "operationalCosts", "cta"
+  ];
+  if (!validKeys.includes(sectionKey as ProposalSectionKey)) {
+    return { error: `Sección inválida` };
+  }
+
+  const { proposals } = await import("@shared/schema");
+  const [proposal] = await db.select().from(proposals).where(eq(proposals.id, proposalId)).limit(1);
+  if (!proposal) return { error: "Propuesta no encontrada" };
+
+  const currentData = (proposal.sections as Partial<ProposalData> | null) || {};
+  const currentSection = (currentData as Record<string, unknown>)[sectionKey];
+
+  const otherSections: Record<string, unknown> = {};
+  for (const key of validKeys) {
+    if (key === sectionKey) continue;
+    const val = (currentData as Record<string, unknown>)[key];
+    if (val !== undefined) otherSections[key] = val;
+  }
+  const otherSummary = JSON.stringify(otherSections).substring(0, 2000);
+
+  const [contact] = await db.select().from(contacts).where(eq(contacts.id, proposal.contactId)).limit(1);
+  let contactBrief = "";
+  if (contact) {
+    contactBrief = `CLIENTE: ${contact.nombre} — ${contact.empresa}`;
+    if (contact.diagnosticId) {
+      const [diag] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId)).limit(1);
+      if (diag) {
+        contactBrief += ` · ${getIndustriaLabel(diag.industria)} · ${diag.empleados} empleados`;
+      }
+    }
+  }
+
+  try {
+    const response = await anthropic.messages.create({
+      model: "claude-sonnet-4-20250514",
+      max_tokens: 6000,
+      temperature: 0.6,
+      system: `Eres un consultor senior de IM3 Systems. El admin te pide reescribir UNA sección de una propuesta, dándote contexto de POR QUÉ quiere el cambio.
+
+Tu tarea: generar EXACTAMENTE 3 opciones diferentes de esa sección, cada una con un enfoque distinto.
+
+REGLAS:
+- Cada opción mantiene la MISMA estructura JSON (mismas keys, mismos tipos).
+- Las 3 opciones deben ser genuinamente DIFERENTES en tono/enfoque, no variaciones mínimas.
+- Español latinoamericano.
+- No inventes datos del cliente que no estén en el contexto.
+
+Responde SOLO con JSON (sin markdown), con esta forma exacta:
+{
+  "options": [
+    {
+      "label": "Nombre corto de esta opción (3-5 palabras)",
+      "description": "Por qué esta opción es diferente (1 línea)",
+      "section": { ...el objeto JSON completo de la sección reescrita... }
+    },
+    { "label": "...", "description": "...", "section": { ... } },
+    { "label": "...", "description": "...", "section": { ... } }
+  ]
+}`,
+      messages: [{
+        role: "user",
+        content: `${contactBrief}
+
+SECCIÓN ACTUAL (key="${sectionKey}"):
+${JSON.stringify(currentSection, null, 2)}
+
+OTRAS SECCIONES (referencia):
+${otherSummary}
+
+CONTEXTO E INSTRUCCIÓN DEL ADMIN:
+${instruction}
+
+Genera 3 opciones diferentes para reescribir "${sectionKey}". Cada una debe ser un enfoque genuinamente distinto.`
+      }]
+    });
+
+    const text = response.content?.[0]?.type === "text" ? response.content[0].text.trim() : "";
+    if (!text) return { error: "Respuesta vacía" };
+
+    const cleaned = text.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/\s*```$/i, "").trim();
+    const parsed = JSON.parse(cleaned);
+
+    if (!parsed.options || !Array.isArray(parsed.options) || parsed.options.length < 2) {
+      return { error: "Claude no generó opciones válidas" };
+    }
+
+    return { options: parsed.options.slice(0, 3) };
+  } catch (err: any) {
+    log(`Error generating section options: ${err?.message || err}`);
+    return { error: err?.message || "Error generando opciones" };
+  }
+}
+
+/**
+ * Save a specific option as the section content (called after user picks one).
+ */
+export async function applySectionOption(
+  proposalId: string,
+  sectionKey: string,
+  sectionData: unknown
+): Promise<{ success: boolean } | { error: string }> {
+  if (!db) return { error: "DB not configured" };
+  const { proposals } = await import("@shared/schema");
+  const [proposal] = await db.select().from(proposals).where(eq(proposals.id, proposalId)).limit(1);
+  if (!proposal) return { error: "Propuesta no encontrada" };
+
+  const currentData = (proposal.sections as Record<string, unknown>) || {};
+  const newData = { ...currentData, [sectionKey]: sectionData };
+  await db.update(proposals)
+    .set({ sections: newData, updatedAt: new Date() })
+    .where(eq(proposals.id, proposalId));
+
+  return { success: true };
+}
+
+/**
  * Quality Gate 2: valida coherencia matemática cruzada entre problem, roi y pricing.
  * Si el problema dice "pierdes $35M/mes", las recoveries del ROI deberían cubrir al menos
  * 60% del dolor anual. Los milestones de pricing deben sumar el pricing.amount.

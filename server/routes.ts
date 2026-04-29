@@ -21,7 +21,7 @@ import passport from "passport";
 import { z } from "zod";
 import { analyzeCommitsForProject, generateWeeklySummary, calculateProjectHealth, generateProjectFromProposal } from "./project-ai";
 import { syncDriveFilesToProject } from "./drive-file-sync";
-import { generateProposal, regenerateProposalSection } from "./proposal-ai";
+import { generateProposal, regenerateProposalSection, generateSectionOptions, applySectionOption } from "./proposal-ai";
 import crypto from "crypto";
 import { getIndustriaLabel } from "@shared/industrias";
 
@@ -6663,6 +6663,44 @@ ${urls}
     } catch (err: any) {
       log(`Error regenerating section: ${err?.message}`);
       res.status(500).json({ error: err?.message || "Error regenerando sección" });
+    }
+  });
+
+  // Generate 3 options for rewriting a section (user picks one)
+  app.post("/api/admin/proposals/:id/sections/:sectionKey/options", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const proposalId = String(req.params.id);
+    const sectionKey = String(req.params.sectionKey);
+    const instruction = String(req.body?.instruction ?? "").trim();
+    if (!instruction) return res.status(400).json({ error: "Instrucción vacía" });
+
+    try {
+      const result = await runAgent(
+        "proposal-section-options",
+        () => generateSectionOptions(proposalId, sectionKey, instruction),
+        { triggeredBy: "manual" }
+      );
+      if ("error" in result) return res.status(500).json({ error: result.error });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Error generando opciones" });
+    }
+  });
+
+  // Apply a chosen option to a section
+  app.post("/api/admin/proposals/:id/sections/:sectionKey/apply", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const proposalId = String(req.params.id);
+    const sectionKey = String(req.params.sectionKey);
+    const sectionData = req.body?.section;
+    if (!sectionData) return res.status(400).json({ error: "No section data" });
+
+    try {
+      const result = await applySectionOption(proposalId, sectionKey, sectionData);
+      if ("error" in result) return res.status(500).json({ error: result.error });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Error aplicando opción" });
     }
   });
 

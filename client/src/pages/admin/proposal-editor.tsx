@@ -262,14 +262,11 @@ export default function ProposalEditor() {
   const [showPreview, setShowPreview] = useState(false);
   const [showSources, setShowSources] = useState(false);
   // AI modify modal state
+  // AI modify modal state — generates 3 options for user to pick
   const [aiModifyOpen, setAiModifyOpen] = useState(false);
   const [aiModifySection, setAiModifySection] = useState<string | null>(null);
   const [aiInstruction, setAiInstruction] = useState("");
-  const [aiNewContent, setAiNewContent] = useState<string | null>(null);
-  const [aiNewRaw, setAiNewRaw] = useState<unknown>(null); // objeto crudo (para update optimista del cache)
-  const [aiOriginalRaw, setAiOriginalRaw] = useState<unknown>(null); // snapshot de lo original para comparar
-  const [aiChangedFields, setAiChangedFields] = useState<string[]>([]); // qué campos cambiaron
-  const [aiNoChangeWarning, setAiNoChangeWarning] = useState(false); // Claude no cambió nada
+  const [aiOptions, setAiOptions] = useState<Array<{ label: string; description: string; section: unknown }> | null>(null);
 
   const { data: proposal, isLoading } = useQuery<any>({
     queryKey: [`/api/admin/proposals/${id}`],
@@ -318,79 +315,44 @@ export default function ProposalEditor() {
     },
   });
 
-  // Regenerate section with AI instruction (returns structured section for new schema, or string for legacy)
-  const aiModifyMut = useMutation({
+  // AI modify: generates 3 options, user picks one
+  const aiOptionsMut = useMutation({
     mutationFn: async ({ sectionKey, instruction }: { sectionKey: string; instruction: string }) => {
-      const res = await apiRequest("POST", `/api/admin/proposals/${id}/sections/${sectionKey}/regenerate`, { instruction });
-      return res.json() as Promise<{ section?: unknown; content?: string; sectionKey: string }>;
+      const res = await apiRequest("POST", `/api/admin/proposals/${id}/sections/${sectionKey}/options`, { instruction });
+      return res.json() as Promise<{ options: Array<{ label: string; description: string; section: unknown }> }>;
     },
-    onSuccess: (data) => {
-      // Detectar qué cambió entre original y nueva versión
-      const newValue = data.section !== undefined ? data.section : data.content;
+    onSuccess: (data) => setAiOptions(data.options || []),
+    onError: (err: any) => toast({ title: "Error generando opciones", description: err?.message, variant: "destructive" }),
+  });
 
-      if (data.section !== undefined) {
-        setAiNewContent(JSON.stringify(data.section, null, 2));
-        setAiNewRaw(data.section);
-      } else if (typeof data.content === "string") {
-        setAiNewContent(data.content);
-        setAiNewRaw(data.content);
-      }
-
-      // Calcular diff
-      const changed = diffPaths(aiOriginalRaw, newValue);
-      setAiChangedFields(changed);
-
-      // Warn si no cambió nada
-      const nothingChanged = changed.length === 0 ||
-        JSON.stringify(aiOriginalRaw) === JSON.stringify(newValue);
-      setAiNoChangeWarning(nothingChanged);
-
-      if (nothingChanged) {
-        console.warn("[AI Modify] Claude devolvió contenido idéntico al original. Instrucción:", aiInstruction);
-      }
+  const aiApplyMut = useMutation({
+    mutationFn: async ({ sectionKey, section }: { sectionKey: string; section: unknown }) => {
+      const res = await apiRequest("POST", `/api/admin/proposals/${id}/sections/${sectionKey}/apply`, { section });
+      return res.json();
     },
-    onError: (err: any) => {
-      toast({ title: "Error regenerando con IA", description: err?.message || "No se pudo regenerar. Revisa la consola del browser (Cmd+Option+J).", variant: "destructive" });
-      console.error("[AI Modify] Error:", err);
+    onSuccess: () => {
+      toast({ title: "✓ Opción aplicada — recargando..." });
+      setTimeout(() => window.location.reload(), 800);
     },
+    onError: (err: any) => toast({ title: "Error aplicando", description: err?.message, variant: "destructive" }),
   });
 
   const openAiModify = (sectionKey: string) => {
     setAiModifySection(sectionKey);
     setAiInstruction("");
-    setAiNewContent(null);
-    setAiNewRaw(null);
-    setAiOriginalRaw(proposal?.sections?.[sectionKey] ?? null);
-    setAiChangedFields([]);
-    setAiNoChangeWarning(false);
+    setAiOptions(null);
     setAiModifyOpen(true);
   };
 
   const submitAiModify = () => {
     if (!aiModifySection || !aiInstruction.trim()) return;
-    aiModifyMut.mutate({ sectionKey: aiModifySection, instruction: aiInstruction.trim() });
+    setAiOptions(null);
+    aiOptionsMut.mutate({ sectionKey: aiModifySection, instruction: aiInstruction.trim() });
   };
 
-  const acceptAiResult = async () => {
-    if (!aiModifySection || aiNewContent === null) return;
-
-    toast({
-      title: "✓ Sección actualizada — recargando...",
-      description: "Los cambios se guardaron en el servidor. Recargando para mostrarlos.",
-    });
-
-    // La API ya persistió los cambios en DB. Recargar la página es lo más confiable
-    // para que el UI refleje el estado real. El cache de TanStack Query tiene issues
-    // con actualizaciones optimistas en este flujo.
-    setTimeout(() => window.location.reload(), 800);
-  };
-
-  const tryAgain = () => {
-    setAiNewContent(null);
-    setAiNewRaw(null);
-    setAiChangedFields([]);
-    setAiNoChangeWarning(false);
-    // Mantener instrucción para editarla o cambiarla
+  const pickOption = (option: { section: unknown }) => {
+    if (!aiModifySection) return;
+    aiApplyMut.mutate({ sectionKey: aiModifySection, section: option.section });
   };
 
   // Send to client
@@ -853,148 +815,108 @@ export default function ProposalEditor() {
         </div>
       )}
 
-      {/* AI Modify Dialog */}
+      {/* AI Modify Dialog — 3 opciones */}
       <Dialog open={aiModifyOpen} onOpenChange={(open) => {
-        if (!open) {
-          setAiModifyOpen(false);
-          setAiNewContent(null);
-          setAiInstruction("");
-        }
+        if (!open) { setAiModifyOpen(false); setAiOptions(null); setAiInstruction(""); }
       }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Wand2 className="w-5 h-5 text-purple-600" />
               Modificar con IA: {aiModifySection ? SECTION_LABELS[aiModifySection] : ""}
             </DialogTitle>
             <DialogDescription>
-              Dile a Claude qué quieres cambiar. Reescribe solo esta sección en ~5 segundos manteniendo coherencia con el resto.
+              Explica qué quieres cambiar y por qué. Claude genera 3 opciones diferentes para que elijas.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
-            {/* Contenido actual (read-only) */}
-            <div>
-              <Label className="text-xs text-gray-500 mb-1 block">Contenido actual</Label>
-              {isNewFormat ? (
-                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto">
-                  <FriendlyView data={aiModifySection ? sections[aiModifySection] : null} />
-                </div>
-              ) : (
-                <div
-                  className="prose prose-sm max-w-none text-gray-700 bg-gray-50 rounded-lg p-3 max-h-40 overflow-y-auto border border-gray-200"
-                  dangerouslySetInnerHTML={{ __html: (aiModifySection && sections[aiModifySection]) || "<p class='text-gray-400'>(vacío)</p>" }}
-                />
-              )}
-            </div>
+            {/* Contenido actual colapsable */}
+            <details className="bg-gray-50 border border-gray-200 rounded-lg">
+              <summary className="px-3 py-2 text-xs text-gray-500 cursor-pointer hover:text-gray-700">Ver contenido actual</summary>
+              <div className="px-3 pb-3 max-h-40 overflow-y-auto">
+                <FriendlyView data={aiModifySection ? sections[aiModifySection] : null} />
+              </div>
+            </details>
 
-            {/* Instrucción */}
+            {/* Instrucción con contexto */}
             <div>
               <Label htmlFor="ai-instruction" className="text-sm font-medium">
-                ¿Qué quieres cambiar?
+                ¿Qué quieres cambiar y por qué?
               </Label>
               <Textarea
                 id="ai-instruction"
                 value={aiInstruction}
                 onChange={e => setAiInstruction(e.target.value)}
                 rows={4}
-                disabled={aiModifyMut.isPending || !!aiNewContent}
-                placeholder="Ejemplos:&#10;- Hazlo más corto, 3 párrafos máximo&#10;- Tono más informal, cercano&#10;- Agrega que ofrecemos 30% de descuento por pago anual&#10;- Enfócalo más en el retorno de inversión&#10;- Cambia el ejemplo del tráfico por uno de retail"
+                disabled={aiOptionsMut.isPending}
+                placeholder="Sé específico — dale contexto:&#10;&#10;Ej: 'El cliente mencionó en la reunión que su mayor dolor es perder contratos por lentitud en contratación. Reescribe esta sección enfocándote en eso, no en las horas extras. Usa un tono más directo y agrega que podemos tener candidatos listos en 24h.'&#10;&#10;Mientras más contexto des, mejores las opciones."
                 className="mt-1.5 text-sm"
               />
             </div>
 
-            {/* Loading state con progreso */}
-            {aiModifyMut.isPending && (
-              <div className="flex items-center gap-3 bg-purple-50 border border-purple-200 rounded-lg p-3">
-                <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
-                <div className="flex-1">
-                  <p className="text-sm text-purple-700 font-medium">Reescribiendo con Claude…</p>
-                  <p className="text-[11px] text-purple-600">Manteniendo coherencia con las otras secciones · ~3-5s</p>
+            {/* Loading */}
+            {aiOptionsMut.isPending && (
+              <div className="flex items-center gap-3 bg-purple-50 border border-purple-200 rounded-lg p-4">
+                <div className="w-5 h-5 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
+                <div>
+                  <p className="text-sm text-purple-700 font-medium">Generando 3 opciones con Claude…</p>
+                  <p className="text-[11px] text-purple-600">Cada una con un enfoque diferente · ~8-12 segundos</p>
                 </div>
               </div>
             )}
 
-            {/* Nueva versión con diff highlighted */}
-            {aiNewContent !== null && !aiModifyMut.isPending && (
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <Label className="text-xs text-purple-700 font-semibold flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" /> Nueva versión
-                  </Label>
-                  {aiChangedFields.length > 0 && (
-                    <span className="text-[10px] text-purple-600 font-mono">
-                      {aiChangedFields.length} campo{aiChangedFields.length > 1 ? "s" : ""} cambiado{aiChangedFields.length > 1 ? "s" : ""}
-                    </span>
-                  )}
-                </div>
-
-                {/* Warning si Claude no cambió nada */}
-                {aiNoChangeWarning && (
-                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 mb-2">
-                    <p className="text-sm text-amber-800 font-semibold">⚠️ Claude no cambió nada</p>
-                    <p className="text-xs text-amber-700 mt-0.5">
-                      La versión generada es idéntica al original. Prueba con una instrucción más específica
-                      (ej: "cambia el precio a $26.000.000 COP" en vez de "bájale el precio").
-                    </p>
+            {/* 3 Opciones */}
+            {aiOptions && aiOptions.length > 0 && !aiOptionsMut.isPending && (
+              <div className="space-y-3">
+                <Label className="text-xs text-purple-700 font-semibold flex items-center gap-1">
+                  <Sparkles className="w-3 h-3" /> {aiOptions.length} opciones generadas — elige una:
+                </Label>
+                {aiOptions.map((option, idx) => (
+                  <div key={idx} className="border-2 border-gray-200 hover:border-purple-400 rounded-lg p-4 transition-colors">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs font-bold text-purple-600 bg-purple-100 rounded-full w-6 h-6 flex items-center justify-center">{idx + 1}</span>
+                          <h4 className="text-sm font-semibold text-gray-900">{option.label}</h4>
+                        </div>
+                        <p className="text-xs text-gray-500 mt-0.5 ml-8">{option.description}</p>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => pickOption(option)}
+                        disabled={aiApplyMut.isPending}
+                        className="bg-emerald-600 hover:bg-emerald-700 gap-1 shrink-0"
+                      >
+                        <Check className="w-3.5 h-3.5" />
+                        {aiApplyMut.isPending ? "Aplicando…" : "Usar esta"}
+                      </Button>
+                    </div>
+                    <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 max-h-48 overflow-y-auto ml-8">
+                      <FriendlyView data={option.section} />
+                    </div>
                   </div>
-                )}
-
-                {/* Diff visual de campos cambiados */}
-                {aiChangedFields.length > 0 && aiChangedFields.length <= 10 && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-2.5 mb-2">
-                    <p className="text-[11px] font-mono text-blue-700 font-medium mb-1">Cambios detectados:</p>
-                    <ul className="text-[11px] text-blue-900 space-y-0.5">
-                      {aiChangedFields.slice(0, 10).map((path) => (
-                        <li key={path} className="font-mono">• {path}</li>
-                      ))}
-                    </ul>
-                  </div>
-                )}
-
-                {isNewFormat && aiNewRaw !== null ? (
-                  <div className="bg-purple-50 border-2 border-purple-200 rounded-lg p-4 max-h-96 overflow-y-auto">
-                    <HighlightedFriendlyView data={aiNewRaw} changedFields={aiChangedFields} />
-                  </div>
-                ) : (
-                  <div
-                    className="prose prose-sm max-w-none text-gray-900 bg-purple-50 border-2 border-purple-200 rounded-lg p-4 max-h-96 overflow-y-auto"
-                    dangerouslySetInnerHTML={{ __html: aiNewContent }}
-                  />
-                )}
-
-                <details className="mt-2">
-                  <summary className="text-[10px] text-gray-400 cursor-pointer hover:text-gray-600">Ver JSON crudo (debug)</summary>
-                  <pre className="text-[10px] bg-gray-50 border border-gray-200 rounded p-2 mt-1 overflow-x-auto max-h-40">{aiNewContent}</pre>
-                </details>
+                ))}
               </div>
             )}
           </div>
 
-          <DialogFooter className="gap-2 flex-wrap">
-            {aiNewContent === null ? (
-              <>
-                <Button variant="ghost" onClick={() => setAiModifyOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button
-                  onClick={submitAiModify}
-                  disabled={!aiInstruction.trim() || aiModifyMut.isPending}
-                  className="bg-purple-600 hover:bg-purple-700 gap-1.5"
-                >
-                  <Wand2 className="w-4 h-4" />
-                  {aiModifyMut.isPending ? "Generando…" : "Generar nueva versión"}
-                </Button>
-              </>
-            ) : (
-              <>
-                <Button variant="ghost" onClick={tryAgain} className="gap-1.5">
-                  <RotateCcw className="w-4 h-4" /> Intentar otra vez
-                </Button>
-                <Button onClick={acceptAiResult} className="bg-emerald-600 hover:bg-emerald-700 gap-1.5">
-                  <Check className="w-4 h-4" /> Aceptar
-                </Button>
-              </>
+          <DialogFooter className="gap-2">
+            <Button variant="ghost" onClick={() => setAiModifyOpen(false)}>Cerrar</Button>
+            {!aiOptions && (
+              <Button
+                onClick={submitAiModify}
+                disabled={!aiInstruction.trim() || aiOptionsMut.isPending}
+                className="bg-purple-600 hover:bg-purple-700 gap-1.5"
+              >
+                <Wand2 className="w-4 h-4" />
+                {aiOptionsMut.isPending ? "Generando…" : "Generar 3 opciones"}
+              </Button>
+            )}
+            {aiOptions && (
+              <Button variant="outline" onClick={() => { setAiOptions(null); }} className="gap-1.5">
+                <RotateCcw className="w-4 h-4" /> Nuevas opciones
+              </Button>
             )}
           </DialogFooter>
         </DialogContent>
