@@ -84,10 +84,28 @@ export default function CalendarPage() {
   const [newTime, setNewTime] = useState("10:00");
   const [newDuration, setNewDuration] = useState("45");
   const [newNotes, setNewNotes] = useState("");
+  const [newContactId, setNewContactId] = useState("");
+
+  // Contacts list for the selector
+  const { data: contactsList = [] } = useQuery<Array<{ id: string; nombre: string; empresa: string; email: string; telefono: string | null }>>({
+    queryKey: ["/api/admin/contacts"],
+  });
+
+  // Auto-fill title when contact is selected
+  const handleContactSelect = (contactId: string) => {
+    setNewContactId(contactId);
+    if (contactId) {
+      const contact = contactsList.find((c: any) => c.id === contactId);
+      if (contact && !newTitle) {
+        setNewTitle(`Reunión con ${contact.nombre} — ${contact.empresa}`);
+      }
+    }
+  };
 
   const createMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("POST", "/api/admin/appointments", {
+        contactId: newContactId || undefined,
         title: newTitle,
         date: newDate,
         time: newTime,
@@ -97,12 +115,14 @@ export default function CalendarPage() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/appointments"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/calendar"] });
       setShowCreate(false);
       setNewTitle("");
       setNewDate("");
       setNewTime("10:00");
       setNewDuration("45");
       setNewNotes("");
+      setNewContactId("");
     },
   });
 
@@ -239,6 +259,32 @@ export default function CalendarPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {/* Selector de contacto */}
+              <div className="sm:col-span-2">
+                <label className="text-xs text-gray-500 mb-1 block">Cliente (opcional)</label>
+                <select
+                  value={newContactId}
+                  onChange={(e) => handleContactSelect(e.target.value)}
+                  className="w-full rounded-md border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 focus:outline-none focus:ring-2 focus:ring-[#2FA4A9]"
+                >
+                  <option value="">— Sin cliente asociado —</option>
+                  {contactsList.map((c: any) => (
+                    <option key={c.id} value={c.id}>
+                      {c.nombre} — {c.empresa} ({c.email})
+                    </option>
+                  ))}
+                </select>
+                {newContactId && (() => {
+                  const selected = contactsList.find((c: any) => c.id === newContactId);
+                  if (!selected) return null;
+                  return (
+                    <div className="mt-1.5 bg-[#2FA4A9]/5 border border-[#2FA4A9]/20 rounded-lg px-3 py-2 text-xs text-gray-600 space-y-0.5">
+                      <p><strong className="text-gray-800">{selected.nombre}</strong> · {selected.empresa}</p>
+                      <p>📧 {selected.email}{selected.telefono ? ` · 📱 ${selected.telefono}` : ""}</p>
+                    </div>
+                  );
+                })()}
+              </div>
               <div className="sm:col-span-2">
                 <label className="text-xs text-gray-500 mb-1 block">Titulo</label>
                 <Input value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="Reunion de seguimiento..." className="bg-white border-gray-200 text-gray-900" />
@@ -315,7 +361,11 @@ export default function CalendarPage() {
                     return (
                       <div
                         key={cell.key}
-                        className={`bg-white min-h-[80px] p-1.5 ${isToday ? "ring-2 ring-[#2FA4A9] ring-inset" : ""}`}
+                        className={`bg-white min-h-[80px] p-1.5 cursor-pointer hover:bg-gray-50 transition-colors ${isToday ? "ring-2 ring-[#2FA4A9] ring-inset" : ""}`}
+                        onClick={() => {
+                          setNewDate(cell.key);
+                          setShowCreate(true);
+                        }}
                       >
                         <span
                           className={`text-xs font-medium inline-flex w-6 h-6 items-center justify-center rounded-full ${
