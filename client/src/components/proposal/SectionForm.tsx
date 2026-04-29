@@ -329,10 +329,14 @@ function PricingForm({ data, set }: { data: Record<string, unknown>; set: (k: st
         </Field>
       </div>
       <Field label="Nota de precio" hint="Ej: 'Pago único. Sin mensualidades ocultas.'">
-        <Input value={String(data.priceFootnote ?? "")} onChange={e => set("priceFootnote", e.target.value)} />
+        <AiFieldHelper value={String(data.priceFootnote ?? "")} onChange={v => set("priceFootnote", v)} context="Nota de precio en propuesta">
+          <Input value={String(data.priceFootnote ?? "")} onChange={e => set("priceFootnote", e.target.value)} />
+        </AiFieldHelper>
       </Field>
       <Field label="Mensaje de escasez" hint="Urgencia real, no artificial">
-        <Textarea value={String(data.scarcityMessage ?? "")} onChange={e => set("scarcityMessage", e.target.value)} rows={2} className="text-sm" />
+        <AiFieldHelper value={String(data.scarcityMessage ?? "")} onChange={v => set("scarcityMessage", v)} context="Mensaje de escasez/urgencia en propuesta">
+          <Textarea value={String(data.scarcityMessage ?? "")} onChange={e => set("scarcityMessage", e.target.value)} rows={2} className="text-sm" />
+        </AiFieldHelper>
       </Field>
 
       <div>

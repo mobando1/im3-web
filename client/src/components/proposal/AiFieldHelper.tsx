@@ -57,10 +57,11 @@ export function AiFieldHelper({ value, onChange, context, children }: AiFieldHel
         {!showInput && value && (
           <button
             onClick={() => setShowInput(true)}
-            className="shrink-0 mt-1 p-1 rounded text-gray-300 hover:text-purple-600 hover:bg-purple-50 opacity-0 group-hover:opacity-100 transition-opacity"
+            className="shrink-0 mt-0.5 px-1.5 py-1 rounded-md bg-purple-50 text-purple-500 hover:text-purple-700 hover:bg-purple-100 border border-purple-200 transition-colors flex items-center gap-1"
             title="Reescribir con IA"
           >
-            <Wand2 className="w-3.5 h-3.5" />
+            <Wand2 className="w-3 h-3" />
+            <span className="text-[10px] font-medium">IA</span>
           </button>
         )}
       </div>

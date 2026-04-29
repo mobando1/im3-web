@@ -699,7 +699,8 @@ export default function ProposalEditor() {
 
           {/* Section content */}
           <div className="lg:col-span-3">
-            {activeSection === "pricing" ? (
+            {/* Legacy pricing view — solo para propuestas viejas que tienen proposal.pricing separado */}
+            {activeSection === "pricing" && !isNewFormat && pricing ? (
               <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
                 <h2 className="text-lg font-bold text-gray-900">Inversión</h2>
                 <div className="text-center py-4">
@@ -715,16 +716,6 @@ export default function ProposalEditor() {
                         </li>
                       ))}
                     </ul>
-                  </div>
-                )}
-                {pricing?.paymentOptions && (
-                  <div className="pt-2">
-                    <p className="text-xs text-gray-500 font-medium mb-1">Opciones de pago:</p>
-                    <div className="flex gap-2">
-                      {pricing.paymentOptions.map((po: string, i: number) => (
-                        <span key={i} className="text-xs bg-gray-100 text-gray-600 px-2.5 py-1 rounded-full">{po}</span>
-                      ))}
-                    </div>
                   </div>
                 )}
               </div>
