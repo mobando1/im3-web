@@ -518,6 +518,155 @@ const BILLING_OPTIONS: Array<{ value: OpCostGroup["billingModel"]; label: string
   { value: "client-direct", label: "Cliente paga directo" },
 ];
 
+function CategoryEditor({
+  category,
+  index,
+  onUpdate,
+  onRemove,
+  groupHandlers,
+}: {
+  category: OpCostCategory;
+  index: number;
+  onUpdate: (next: OpCostCategory) => void;
+  onRemove: () => void;
+  groupHandlers: { onDragStart: (i: number) => (e: React.DragEvent) => void; onDragOver: (i: number) => (e: React.DragEvent) => void; onDragEnd: (e: React.DragEvent) => void };
+}) {
+  const items = category.items;
+  const itemHandlers = useDragReorder(items, (next) => onUpdate({ ...category, items: next }));
+
+  const updateItem = (ii: number, field: keyof OpCostItem, value: string) => {
+    const next = [...items];
+    next[ii] = { ...next[ii], [field]: value };
+    onUpdate({ ...category, items: next });
+  };
+  const addItem = () => onUpdate({ ...category, items: [...items, { service: "", cost: "", note: "" }] });
+  const removeItem = (ii: number) => onUpdate({ ...category, items: items.filter((_, i) => i !== ii) });
+
+  return (
+    <div
+      className="border border-gray-200 rounded-lg p-3 space-y-2 bg-white"
+      draggable
+      onDragStart={groupHandlers.onDragStart(index)}
+      onDragOver={groupHandlers.onDragOver(index)}
+      onDragEnd={groupHandlers.onDragEnd}
+    >
+      <div className="flex items-center gap-2">
+        <span className="cursor-grab text-gray-400 hover:text-gray-600 mt-5"><GripVertical className="w-4 h-4" /></span>
+        <Field label={`Categoría ${index + 1}`}>
+          <Input value={category.name} onChange={e => onUpdate({ ...category, name: e.target.value })} className="h-8 text-sm font-semibold" />
+        </Field>
+        <button onClick={onRemove} className="text-gray-400 hover:text-red-500 p-1 mt-5"><X className="w-3.5 h-3.5" /></button>
+      </div>
+      {items.map((item, ii) => (
+        <div
+          key={ii}
+          className="grid grid-cols-[20px_1fr_120px_1fr_30px] gap-2 items-end"
+          draggable
+          onDragStart={itemHandlers.onDragStart(ii)}
+          onDragOver={itemHandlers.onDragOver(ii)}
+          onDragEnd={itemHandlers.onDragEnd}
+        >
+          <span className="cursor-grab text-gray-300 hover:text-gray-500 pb-2"><GripVertical className="w-3.5 h-3.5" /></span>
+          <Field label={ii === 0 ? "Servicio" : ""}>
+            <Input value={item.service} onChange={e => updateItem(ii, "service", e.target.value)} className="h-8 text-sm" />
+          </Field>
+          <Field label={ii === 0 ? "Costo" : ""}>
+            <Input value={item.cost} onChange={e => updateItem(ii, "cost", e.target.value)} className="h-8 text-sm font-mono" />
+          </Field>
+          <Field label={ii === 0 ? "Nota" : ""}>
+            <Input value={item.note ?? ""} onChange={e => updateItem(ii, "note", e.target.value)} className="h-8 text-sm" />
+          </Field>
+          <button onClick={() => removeItem(ii)} className="text-gray-400 hover:text-red-500 p-1 pb-2"><Trash2 className="w-3.5 h-3.5" /></button>
+        </div>
+      ))}
+      <Button size="sm" variant="outline" onClick={addItem} className="text-xs h-6 gap-1">
+        <Plus className="w-3 h-3" /> Item
+      </Button>
+    </div>
+  );
+}
+
+function GroupEditor({
+  group,
+  index,
+  onUpdate,
+  onRemove,
+  groupHandlers,
+}: {
+  group: OpCostGroup;
+  index: number;
+  onUpdate: (next: OpCostGroup) => void;
+  onRemove: () => void;
+  groupHandlers: { onDragStart: (i: number) => (e: React.DragEvent) => void; onDragOver: (i: number) => (e: React.DragEvent) => void; onDragEnd: (e: React.DragEvent) => void };
+}) {
+  const categoryHandlers = useDragReorder(group.categories, (next) => onUpdate({ ...group, categories: next }));
+
+  const updateCategory = (ci: number, next: OpCostCategory) => {
+    const cats = [...group.categories];
+    cats[ci] = next;
+    onUpdate({ ...group, categories: cats });
+  };
+  const addCategory = () => onUpdate({ ...group, categories: [...group.categories, { name: "Nueva categoría", items: [{ service: "", cost: "" }] }] });
+  const removeCategory = (ci: number) => onUpdate({ ...group, categories: group.categories.filter((_, i) => i !== ci) });
+
+  return (
+    <div
+      className="border-2 border-gray-300 rounded-lg p-4 space-y-3 bg-gray-50"
+      draggable
+      onDragStart={groupHandlers.onDragStart(index)}
+      onDragOver={groupHandlers.onDragOver(index)}
+      onDragEnd={groupHandlers.onDragEnd}
+    >
+      <div className="flex items-start justify-between gap-2">
+        <span className="cursor-grab text-gray-400 hover:text-gray-600 mt-5"><GripVertical className="w-5 h-5" /></span>
+        <div className="flex-1 grid grid-cols-2 gap-3">
+          <Field label={`Grupo ${index + 1} — Nombre`} hint="ej. Servicios predecibles">
+            <Input value={group.name} onChange={e => onUpdate({ ...group, name: e.target.value })} className="h-8 text-sm font-semibold" />
+          </Field>
+          <Field label="Modelo de cobro">
+            <Select value={group.billingModel} onValueChange={v => onUpdate({ ...group, billingModel: v as OpCostGroup["billingModel"] })}>
+              <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                {BILLING_OPTIONS.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </Field>
+        </div>
+        <button onClick={onRemove} className="text-gray-400 hover:text-red-500 p-1 mt-5"><Trash2 className="w-4 h-4" /></button>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        {group.billingModel === "fixed" && (
+          <Field label="Tarifa fija mensual" hint="Lo que IM3 cobra al cliente">
+            <Input value={group.monthlyFee ?? ""} onChange={e => onUpdate({ ...group, monthlyFee: e.target.value })} className="h-8 text-sm font-mono" placeholder="$50 USD/mes" />
+          </Field>
+        )}
+        {(group.billingModel === "passthrough" || group.billingModel === "passthrough-with-cap") && (
+          <Field label="Markup" hint="ej. 10%">
+            <Input value={group.markup ?? ""} onChange={e => onUpdate({ ...group, markup: e.target.value })} className="h-8 text-sm font-mono" placeholder="10%" />
+          </Field>
+        )}
+      </div>
+      <Field label="Descripción del grupo" hint="Cómo se cobra este grupo (visible en la propuesta)">
+        <Textarea value={group.description ?? ""} onChange={e => onUpdate({ ...group, description: e.target.value })} rows={2} className="text-sm" />
+      </Field>
+
+      {group.categories.map((cat, ci) => (
+        <CategoryEditor
+          key={ci}
+          category={cat}
+          index={ci}
+          onUpdate={(next) => updateCategory(ci, next)}
+          onRemove={() => removeCategory(ci)}
+          groupHandlers={categoryHandlers}
+        />
+      ))}
+      <Button size="sm" variant="outline" onClick={addCategory} className="text-xs h-7 gap-1">
+        <Plus className="w-3 h-3" /> Categoría
+      </Button>
+    </div>
+  );
+}
+
 function OpCostsForm({ data, set }: { data: Record<string, unknown>; set: (k: string, v: unknown) => void }) {
   // Migración legacy: si hay categories[] sin groups, envolver en un solo grupo "fixed"
   const rawGroups = data.groups as OpCostGroup[] | undefined;
@@ -530,59 +679,18 @@ function OpCostsForm({ data, set }: { data: Record<string, unknown>; set: (k: st
 
   const commit = (next: OpCostGroup[]) => {
     set("groups", next);
-    // Eliminar categories legacy si existe (consolidar en groups)
     if (rawCategories) set("categories", undefined);
   };
 
-  const updateGroup = (gi: number, field: keyof OpCostGroup, value: unknown) => {
-    const next = [...groups];
-    next[gi] = { ...next[gi], [field]: value };
-    commit(next);
+  const updateGroup = (gi: number, next: OpCostGroup) => {
+    const g = [...groups];
+    g[gi] = next;
+    commit(g);
   };
   const addGroup = () => commit([...groups, { name: "Nuevo grupo", billingModel: "fixed", categories: [{ name: "Categoría", items: [{ service: "", cost: "" }] }] }]);
   const removeGroup = (gi: number) => commit(groups.filter((_, i) => i !== gi));
 
-  const updateCategory = (gi: number, ci: number, field: keyof OpCostCategory, value: unknown) => {
-    const next = [...groups];
-    const cats = [...next[gi].categories];
-    cats[ci] = { ...cats[ci], [field]: value } as OpCostCategory;
-    next[gi] = { ...next[gi], categories: cats };
-    commit(next);
-  };
-  const addCategory = (gi: number) => {
-    const next = [...groups];
-    next[gi] = { ...next[gi], categories: [...next[gi].categories, { name: "Nueva categoría", items: [{ service: "", cost: "" }] }] };
-    commit(next);
-  };
-  const removeCategory = (gi: number, ci: number) => {
-    const next = [...groups];
-    next[gi] = { ...next[gi], categories: next[gi].categories.filter((_, i) => i !== ci) };
-    commit(next);
-  };
-
-  const updateItem = (gi: number, ci: number, ii: number, field: keyof OpCostItem, value: string) => {
-    const next = [...groups];
-    const cats = [...next[gi].categories];
-    const items = [...cats[ci].items];
-    items[ii] = { ...items[ii], [field]: value };
-    cats[ci] = { ...cats[ci], items };
-    next[gi] = { ...next[gi], categories: cats };
-    commit(next);
-  };
-  const addItem = (gi: number, ci: number) => {
-    const next = [...groups];
-    const cats = [...next[gi].categories];
-    cats[ci] = { ...cats[ci], items: [...cats[ci].items, { service: "", cost: "", note: "" }] };
-    next[gi] = { ...next[gi], categories: cats };
-    commit(next);
-  };
-  const removeItem = (gi: number, ci: number, ii: number) => {
-    const next = [...groups];
-    const cats = [...next[gi].categories];
-    cats[ci] = { ...cats[ci], items: cats[ci].items.filter((_, i) => i !== ii) };
-    next[gi] = { ...next[gi], categories: cats };
-    commit(next);
-  };
+  const groupHandlers = useDragReorder(groups, commit);
 
   return (
     <div className="space-y-4">
@@ -606,71 +714,17 @@ function OpCostsForm({ data, set }: { data: Record<string, unknown>; set: (k: st
         <Textarea value={String(data.intro ?? "")} onChange={e => set("intro", e.target.value)} rows={2} className="text-sm" />
       </Field>
 
-      {groups.map((group, gi) => (
-        <div key={gi} className="border-2 border-gray-300 rounded-lg p-4 space-y-3 bg-gray-50">
-          <div className="flex items-start justify-between gap-2">
-            <div className="flex-1 grid grid-cols-2 gap-3">
-              <Field label={`Grupo ${gi + 1} — Nombre`} hint="ej. Servicios predecibles">
-                <Input value={group.name} onChange={e => updateGroup(gi, "name", e.target.value)} className="h-8 text-sm font-semibold" />
-              </Field>
-              <Field label="Modelo de cobro">
-                <Select value={group.billingModel} onValueChange={v => updateGroup(gi, "billingModel", v)}>
-                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    {BILLING_OPTIONS.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
-                  </SelectContent>
-                </Select>
-              </Field>
-            </div>
-            <button onClick={() => removeGroup(gi)} className="text-gray-400 hover:text-red-500 p-1 mt-5"><Trash2 className="w-4 h-4" /></button>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            {group.billingModel === "fixed" && (
-              <Field label="Tarifa fija mensual" hint="Lo que IM3 cobra al cliente">
-                <Input value={group.monthlyFee ?? ""} onChange={e => updateGroup(gi, "monthlyFee", e.target.value)} className="h-8 text-sm font-mono" placeholder="$50 USD/mes" />
-              </Field>
-            )}
-            {(group.billingModel === "passthrough" || group.billingModel === "passthrough-with-cap") && (
-              <Field label="Markup" hint="ej. 10%">
-                <Input value={group.markup ?? ""} onChange={e => updateGroup(gi, "markup", e.target.value)} className="h-8 text-sm font-mono" placeholder="10%" />
-              </Field>
-            )}
-          </div>
-          <Field label="Descripción del grupo" hint="Cómo se cobra este grupo (visible en la propuesta)">
-            <Textarea value={group.description ?? ""} onChange={e => updateGroup(gi, "description", e.target.value)} rows={2} className="text-sm" />
-          </Field>
+      <p className="text-xs text-gray-500 italic">💡 Arrastra los grupos, categorías e ítems desde el handle (⋮⋮) para reordenar</p>
 
-          {group.categories.map((cat, ci) => (
-            <div key={ci} className="border border-gray-200 rounded-lg p-3 space-y-2 bg-white">
-              <div className="flex items-center gap-2">
-                <Field label={`Categoría ${ci + 1}`}>
-                  <Input value={cat.name} onChange={e => updateCategory(gi, ci, "name", e.target.value)} className="h-8 text-sm font-semibold" />
-                </Field>
-                <button onClick={() => removeCategory(gi, ci)} className="text-gray-400 hover:text-red-500 p-1 mt-5"><X className="w-3.5 h-3.5" /></button>
-              </div>
-              {cat.items.map((item, ii) => (
-                <div key={ii} className="grid grid-cols-[1fr_120px_1fr_30px] gap-2 items-end">
-                  <Field label={ii === 0 ? "Servicio" : ""}>
-                    <Input value={item.service} onChange={e => updateItem(gi, ci, ii, "service", e.target.value)} className="h-8 text-sm" />
-                  </Field>
-                  <Field label={ii === 0 ? "Costo" : ""}>
-                    <Input value={item.cost} onChange={e => updateItem(gi, ci, ii, "cost", e.target.value)} className="h-8 text-sm font-mono" />
-                  </Field>
-                  <Field label={ii === 0 ? "Nota" : ""}>
-                    <Input value={item.note ?? ""} onChange={e => updateItem(gi, ci, ii, "note", e.target.value)} className="h-8 text-sm" />
-                  </Field>
-                  <button onClick={() => removeItem(gi, ci, ii)} className="text-gray-400 hover:text-red-500 p-1 pb-2"><Trash2 className="w-3.5 h-3.5" /></button>
-                </div>
-              ))}
-              <Button size="sm" variant="outline" onClick={() => addItem(gi, ci)} className="text-xs h-6 gap-1">
-                <Plus className="w-3 h-3" /> Item
-              </Button>
-            </div>
-          ))}
-          <Button size="sm" variant="outline" onClick={() => addCategory(gi)} className="text-xs h-7 gap-1">
-            <Plus className="w-3 h-3" /> Categoría
-          </Button>
-        </div>
+      {groups.map((group, gi) => (
+        <GroupEditor
+          key={gi}
+          group={group}
+          index={gi}
+          onUpdate={(next) => updateGroup(gi, next)}
+          onRemove={() => removeGroup(gi)}
+          groupHandlers={groupHandlers}
+        />
       ))}
       <Button size="sm" variant="outline" onClick={addGroup} className="text-xs h-8 gap-1 border-dashed">
         <Plus className="w-3.5 h-3.5" /> Agregar grupo
