@@ -17,6 +17,21 @@ export function Tech({ data }: Props) {
             </div>
           ))}
         </div>
+        {data.optionalFeatures && data.optionalFeatures.filter((f) => typeof f === "string" && f.trim()).length > 0 && (
+          <>
+            <div className="pt-tech-optional-label pt-reveal">Opcionales</div>
+            <div className="pt-tech-grid pt-tech-grid-optional pt-reveal">
+              {data.optionalFeatures
+                .filter((f) => typeof f === "string" && f.trim())
+                .map((f, i) => (
+                  <div key={i} className="pt-tech-pill pt-tech-pill-optional">
+                    <div className="pt-tech-dot" />
+                    {f}
+                  </div>
+                ))}
+            </div>
+          </>
+        )}
         <p className="pt-tech-stack pt-reveal">Stack: {data.stack}</p>
       </div>
     </section>
