@@ -545,13 +545,16 @@ function CategoryEditor({
   return (
     <div
       className="border border-gray-200 rounded-lg p-3 space-y-2 bg-white"
-      draggable
-      onDragStart={groupHandlers.onDragStart(index)}
       onDragOver={groupHandlers.onDragOver(index)}
       onDragEnd={groupHandlers.onDragEnd}
     >
       <div className="flex items-center gap-2">
-        <span className="cursor-grab text-gray-400 hover:text-gray-600 mt-5"><GripVertical className="w-4 h-4" /></span>
+        <span
+          className="cursor-grab text-gray-400 hover:text-gray-600 mt-5"
+          draggable
+          onDragStart={groupHandlers.onDragStart(index)}
+          onDragEnd={groupHandlers.onDragEnd}
+        ><GripVertical className="w-4 h-4" /></span>
         <Field label={`Categoría ${index + 1}`}>
           <Input value={category.name} onChange={e => onUpdate({ ...category, name: e.target.value })} className="h-8 text-sm font-semibold" />
         </Field>
@@ -561,12 +564,15 @@ function CategoryEditor({
         <div
           key={ii}
           className="grid grid-cols-[20px_1fr_120px_1fr_30px] gap-2 items-end"
-          draggable
-          onDragStart={itemHandlers.onDragStart(ii)}
           onDragOver={itemHandlers.onDragOver(ii)}
           onDragEnd={itemHandlers.onDragEnd}
         >
-          <span className="cursor-grab text-gray-300 hover:text-gray-500 pb-2"><GripVertical className="w-3.5 h-3.5" /></span>
+          <span
+            className="cursor-grab text-gray-300 hover:text-gray-500 pb-2"
+            draggable
+            onDragStart={itemHandlers.onDragStart(ii)}
+            onDragEnd={itemHandlers.onDragEnd}
+          ><GripVertical className="w-3.5 h-3.5" /></span>
           <Field label={ii === 0 ? "Servicio" : ""}>
             <Input value={item.service} onChange={e => updateItem(ii, "service", e.target.value)} className="h-8 text-sm" />
           </Field>
@@ -612,13 +618,16 @@ function GroupEditor({
   return (
     <div
       className="border-2 border-gray-300 rounded-lg p-4 space-y-3 bg-gray-50"
-      draggable
-      onDragStart={groupHandlers.onDragStart(index)}
       onDragOver={groupHandlers.onDragOver(index)}
       onDragEnd={groupHandlers.onDragEnd}
     >
       <div className="flex items-start justify-between gap-2">
-        <span className="cursor-grab text-gray-400 hover:text-gray-600 mt-5"><GripVertical className="w-5 h-5" /></span>
+        <span
+          className="cursor-grab text-gray-400 hover:text-gray-600 mt-5"
+          draggable
+          onDragStart={groupHandlers.onDragStart(index)}
+          onDragEnd={groupHandlers.onDragEnd}
+        ><GripVertical className="w-5 h-5" /></span>
         <div className="flex-1 grid grid-cols-2 gap-3">
           <Field label={`Grupo ${index + 1} — Nombre`} hint="ej. Servicios predecibles">
             <Input value={group.name} onChange={e => onUpdate({ ...group, name: e.target.value })} className="h-8 text-sm font-semibold" />
