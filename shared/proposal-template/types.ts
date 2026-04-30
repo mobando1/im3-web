@@ -185,14 +185,31 @@ export const operationalCostCategorySchema = z.object({
   items: z.array(operationalCostItemSchema).min(1),
 });
 
+// Modelo de cobro por grupo:
+// - "fixed":              tarifa fija mensual de "operaciones" (servicios predecibles)
+// - "passthrough":        IM3 paga y cobra al cliente con markup
+// - "passthrough-with-cap": pass-through con cap mensual + alertas (típico LLMs)
+// - "client-direct":      el cliente paga directo al proveedor (montos grandes, BYO API key)
+export const operationalCostGroupSchema = z.object({
+  name: z.string(),
+  billingModel: z.enum(["fixed", "passthrough", "passthrough-with-cap", "client-direct"]),
+  description: z.string().optional(),
+  monthlyFee: z.string().optional(), // tarifa fija que IM3 cobra (para billingModel="fixed")
+  markup: z.string().optional(),     // ej. "10%" (para passthrough)
+  categories: z.array(operationalCostCategorySchema).min(1),
+});
+
 export const operationalCostsSchema = z.object({
   heading: z.string(),
   intro: z.string(),
-  categories: z.array(operationalCostCategorySchema).min(1),
+  // Nuevo formato: grupos por modelo de cobro (predecibles vs. uso). Recomendado.
+  groups: z.array(operationalCostGroupSchema).optional(),
+  // Formato legacy: categorías sueltas. Si está presente y `groups` no, se renderiza como antes.
+  categories: z.array(operationalCostCategorySchema).optional(),
   monthlyRangeLow: z.string(),
   monthlyRangeHigh: z.string(),
   annualEstimate: z.string(),
-  paidBy: z.enum(["cliente-directo", "im3-managed", "hibrido"]),
+  paidBy: z.enum(["cliente-directo", "im3-managed", "hibrido"]).optional(),
   managedServicesUpsell: z.string().optional(),
   disclaimer: z.string(),
 });
@@ -232,6 +249,7 @@ export type HardwareItem = z.infer<typeof hardwareItemSchema>;
 export type OperationalCostsData = z.infer<typeof operationalCostsSchema>;
 export type OperationalCostItem = z.infer<typeof operationalCostItemSchema>;
 export type OperationalCostCategory = z.infer<typeof operationalCostCategorySchema>;
+export type OperationalCostGroup = z.infer<typeof operationalCostGroupSchema>;
 export type ProposalSectionKey = keyof ProposalData;
 
 export type ProposalSourcesReport = Partial<Record<ProposalSectionKey, string[]>>;

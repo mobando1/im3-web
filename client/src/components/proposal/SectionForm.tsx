@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
@@ -46,6 +46,7 @@ type SectionFormProps = {
   data: Record<string, unknown>;
   onSave: (updated: Record<string, unknown>) => void;
   onCancel: () => void;
+  onDirtyChange?: (isDirty: boolean) => void;
 };
 
 /** Determina si una sección tiene formulario tipado (o cae a JSON edit) */
@@ -57,24 +58,48 @@ export function hasTypedForm(sectionKey: string): boolean {
   ].includes(sectionKey);
 }
 
-export function SectionForm({ sectionKey, data, onSave, onCancel }: SectionFormProps) {
+export function SectionForm({ sectionKey, data, onSave, onCancel, onDirtyChange }: SectionFormProps) {
   const [local, setLocal] = useState<Record<string, unknown>>(structuredClone(data));
+  const originalRef = useRef<string>(JSON.stringify(data));
+
+  const isDirty = JSON.stringify(local) !== originalRef.current;
+
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
+
+  useEffect(() => {
+    return () => onDirtyChange?.(false);
+  }, [onDirtyChange]);
 
   const set = (key: string, value: unknown) => {
     setLocal(prev => ({ ...prev, [key]: value }));
   };
 
-  const save = () => onSave(local);
+  const save = () => {
+    onDirtyChange?.(false);
+    originalRef.current = JSON.stringify(local);
+    onSave(local);
+  };
+
+  const cancel = () => {
+    if (isDirty && !window.confirm("Tienes cambios sin guardar. ¿Descartar?")) return;
+    onDirtyChange?.(false);
+    onCancel();
+  };
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-500">Editando con formulario</p>
+        <p className="text-xs text-gray-500">
+          Editando con formulario
+          {isDirty && <span className="ml-2 text-amber-600 font-medium">● Sin guardar</span>}
+        </p>
         <div className="flex gap-2">
           <Button size="sm" onClick={save} className="gap-1.5 bg-[#2FA4A9] hover:bg-[#238b8f]">
             <Save className="w-3.5 h-3.5" /> Guardar
           </Button>
-          <Button size="sm" variant="ghost" onClick={onCancel}>Cancelar</Button>
+          <Button size="sm" variant="ghost" onClick={cancel}>Cancelar</Button>
         </div>
       </div>
 
@@ -475,30 +500,88 @@ function TimelineForm({ data, set }: { data: Record<string, unknown>; set: (k: s
 // SECTION: OPERATIONAL COSTS
 // ────────────────────────────────────────────────────────────────
 
-function OpCostsForm({ data, set }: { data: Record<string, unknown>; set: (k: string, v: unknown) => void }) {
-  const categories = (data.categories as Array<{ name: string; items: Array<{ service: string; cost: string; note?: string }> }>) ?? [];
+type OpCostItem = { service: string; cost: string; note?: string };
+type OpCostCategory = { name: string; items: OpCostItem[] };
+type OpCostGroup = {
+  name: string;
+  billingModel: "fixed" | "passthrough" | "passthrough-with-cap" | "client-direct";
+  description?: string;
+  monthlyFee?: string;
+  markup?: string;
+  categories: OpCostCategory[];
+};
 
-  const updateCategory = (ci: number, field: string, value: unknown) => {
-    const next = [...categories];
-    next[ci] = { ...next[ci], [field]: value };
-    set("categories", next);
+const BILLING_OPTIONS: Array<{ value: OpCostGroup["billingModel"]; label: string }> = [
+  { value: "fixed", label: "Tarifa fija mensual (operaciones)" },
+  { value: "passthrough", label: "Pass-through con markup" },
+  { value: "passthrough-with-cap", label: "Pass-through con tope mensual" },
+  { value: "client-direct", label: "Cliente paga directo" },
+];
+
+function OpCostsForm({ data, set }: { data: Record<string, unknown>; set: (k: string, v: unknown) => void }) {
+  // Migración legacy: si hay categories[] sin groups, envolver en un solo grupo "fixed"
+  const rawGroups = data.groups as OpCostGroup[] | undefined;
+  const rawCategories = data.categories as OpCostCategory[] | undefined;
+  const groups: OpCostGroup[] = rawGroups && rawGroups.length > 0
+    ? rawGroups
+    : rawCategories && rawCategories.length > 0
+      ? [{ name: "Servicios predecibles", billingModel: "fixed", categories: rawCategories }]
+      : [];
+
+  const commit = (next: OpCostGroup[]) => {
+    set("groups", next);
+    // Eliminar categories legacy si existe (consolidar en groups)
+    if (rawCategories) set("categories", undefined);
   };
-  const updateItem = (ci: number, ii: number, field: string, value: string) => {
-    const next = [...categories];
-    const items = [...next[ci].items];
+
+  const updateGroup = (gi: number, field: keyof OpCostGroup, value: unknown) => {
+    const next = [...groups];
+    next[gi] = { ...next[gi], [field]: value };
+    commit(next);
+  };
+  const addGroup = () => commit([...groups, { name: "Nuevo grupo", billingModel: "fixed", categories: [{ name: "Categoría", items: [{ service: "", cost: "" }] }] }]);
+  const removeGroup = (gi: number) => commit(groups.filter((_, i) => i !== gi));
+
+  const updateCategory = (gi: number, ci: number, field: keyof OpCostCategory, value: unknown) => {
+    const next = [...groups];
+    const cats = [...next[gi].categories];
+    cats[ci] = { ...cats[ci], [field]: value } as OpCostCategory;
+    next[gi] = { ...next[gi], categories: cats };
+    commit(next);
+  };
+  const addCategory = (gi: number) => {
+    const next = [...groups];
+    next[gi] = { ...next[gi], categories: [...next[gi].categories, { name: "Nueva categoría", items: [{ service: "", cost: "" }] }] };
+    commit(next);
+  };
+  const removeCategory = (gi: number, ci: number) => {
+    const next = [...groups];
+    next[gi] = { ...next[gi], categories: next[gi].categories.filter((_, i) => i !== ci) };
+    commit(next);
+  };
+
+  const updateItem = (gi: number, ci: number, ii: number, field: keyof OpCostItem, value: string) => {
+    const next = [...groups];
+    const cats = [...next[gi].categories];
+    const items = [...cats[ci].items];
     items[ii] = { ...items[ii], [field]: value };
-    next[ci] = { ...next[ci], items };
-    set("categories", next);
+    cats[ci] = { ...cats[ci], items };
+    next[gi] = { ...next[gi], categories: cats };
+    commit(next);
   };
-  const addItem = (ci: number) => {
-    const next = [...categories];
-    next[ci] = { ...next[ci], items: [...next[ci].items, { service: "", cost: "", note: "" }] };
-    set("categories", next);
+  const addItem = (gi: number, ci: number) => {
+    const next = [...groups];
+    const cats = [...next[gi].categories];
+    cats[ci] = { ...cats[ci], items: [...cats[ci].items, { service: "", cost: "", note: "" }] };
+    next[gi] = { ...next[gi], categories: cats };
+    commit(next);
   };
-  const removeItem = (ci: number, ii: number) => {
-    const next = [...categories];
-    next[ci] = { ...next[ci], items: next[ci].items.filter((_, idx) => idx !== ii) };
-    set("categories", next);
+  const removeItem = (gi: number, ci: number, ii: number) => {
+    const next = [...groups];
+    const cats = [...next[gi].categories];
+    cats[ci] = { ...cats[ci], items: cats[ci].items.filter((_, i) => i !== ii) };
+    next[gi] = { ...next[gi], categories: cats };
+    commit(next);
   };
 
   return (
@@ -523,30 +606,75 @@ function OpCostsForm({ data, set }: { data: Record<string, unknown>; set: (k: st
         <Textarea value={String(data.intro ?? "")} onChange={e => set("intro", e.target.value)} rows={2} className="text-sm" />
       </Field>
 
-      {categories.map((cat, ci) => (
-        <div key={ci} className="border border-gray-200 rounded-lg p-3 space-y-2">
-          <Field label={`Categoría ${ci + 1}`}>
-            <Input value={cat.name} onChange={e => updateCategory(ci, "name", e.target.value)} className="h-8 text-sm font-semibold" />
+      {groups.map((group, gi) => (
+        <div key={gi} className="border-2 border-gray-300 rounded-lg p-4 space-y-3 bg-gray-50">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 grid grid-cols-2 gap-3">
+              <Field label={`Grupo ${gi + 1} — Nombre`} hint="ej. Servicios predecibles">
+                <Input value={group.name} onChange={e => updateGroup(gi, "name", e.target.value)} className="h-8 text-sm font-semibold" />
+              </Field>
+              <Field label="Modelo de cobro">
+                <Select value={group.billingModel} onValueChange={v => updateGroup(gi, "billingModel", v)}>
+                  <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    {BILLING_OPTIONS.map(opt => <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </Field>
+            </div>
+            <button onClick={() => removeGroup(gi)} className="text-gray-400 hover:text-red-500 p-1 mt-5"><Trash2 className="w-4 h-4" /></button>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            {group.billingModel === "fixed" && (
+              <Field label="Tarifa fija mensual" hint="Lo que IM3 cobra al cliente">
+                <Input value={group.monthlyFee ?? ""} onChange={e => updateGroup(gi, "monthlyFee", e.target.value)} className="h-8 text-sm font-mono" placeholder="$50 USD/mes" />
+              </Field>
+            )}
+            {(group.billingModel === "passthrough" || group.billingModel === "passthrough-with-cap") && (
+              <Field label="Markup" hint="ej. 10%">
+                <Input value={group.markup ?? ""} onChange={e => updateGroup(gi, "markup", e.target.value)} className="h-8 text-sm font-mono" placeholder="10%" />
+              </Field>
+            )}
+          </div>
+          <Field label="Descripción del grupo" hint="Cómo se cobra este grupo (visible en la propuesta)">
+            <Textarea value={group.description ?? ""} onChange={e => updateGroup(gi, "description", e.target.value)} rows={2} className="text-sm" />
           </Field>
-          {cat.items.map((item, ii) => (
-            <div key={ii} className="grid grid-cols-[1fr_120px_1fr_30px] gap-2 items-end">
-              <Field label={ii === 0 ? "Servicio" : ""}>
-                <Input value={item.service} onChange={e => updateItem(ci, ii, "service", e.target.value)} className="h-8 text-sm" />
-              </Field>
-              <Field label={ii === 0 ? "Costo" : ""}>
-                <Input value={item.cost} onChange={e => updateItem(ci, ii, "cost", e.target.value)} className="h-8 text-sm font-mono" />
-              </Field>
-              <Field label={ii === 0 ? "Nota" : ""}>
-                <Input value={item.note ?? ""} onChange={e => updateItem(ci, ii, "note", e.target.value)} className="h-8 text-sm" />
-              </Field>
-              <button onClick={() => removeItem(ci, ii)} className="text-gray-400 hover:text-red-500 p-1 pb-2"><Trash2 className="w-3.5 h-3.5" /></button>
+
+          {group.categories.map((cat, ci) => (
+            <div key={ci} className="border border-gray-200 rounded-lg p-3 space-y-2 bg-white">
+              <div className="flex items-center gap-2">
+                <Field label={`Categoría ${ci + 1}`}>
+                  <Input value={cat.name} onChange={e => updateCategory(gi, ci, "name", e.target.value)} className="h-8 text-sm font-semibold" />
+                </Field>
+                <button onClick={() => removeCategory(gi, ci)} className="text-gray-400 hover:text-red-500 p-1 mt-5"><X className="w-3.5 h-3.5" /></button>
+              </div>
+              {cat.items.map((item, ii) => (
+                <div key={ii} className="grid grid-cols-[1fr_120px_1fr_30px] gap-2 items-end">
+                  <Field label={ii === 0 ? "Servicio" : ""}>
+                    <Input value={item.service} onChange={e => updateItem(gi, ci, ii, "service", e.target.value)} className="h-8 text-sm" />
+                  </Field>
+                  <Field label={ii === 0 ? "Costo" : ""}>
+                    <Input value={item.cost} onChange={e => updateItem(gi, ci, ii, "cost", e.target.value)} className="h-8 text-sm font-mono" />
+                  </Field>
+                  <Field label={ii === 0 ? "Nota" : ""}>
+                    <Input value={item.note ?? ""} onChange={e => updateItem(gi, ci, ii, "note", e.target.value)} className="h-8 text-sm" />
+                  </Field>
+                  <button onClick={() => removeItem(gi, ci, ii)} className="text-gray-400 hover:text-red-500 p-1 pb-2"><Trash2 className="w-3.5 h-3.5" /></button>
+                </div>
+              ))}
+              <Button size="sm" variant="outline" onClick={() => addItem(gi, ci)} className="text-xs h-6 gap-1">
+                <Plus className="w-3 h-3" /> Item
+              </Button>
             </div>
           ))}
-          <Button size="sm" variant="outline" onClick={() => addItem(ci)} className="text-xs h-6 gap-1">
-            <Plus className="w-3 h-3" /> Item
+          <Button size="sm" variant="outline" onClick={() => addCategory(gi)} className="text-xs h-7 gap-1">
+            <Plus className="w-3 h-3" /> Categoría
           </Button>
         </div>
       ))}
+      <Button size="sm" variant="outline" onClick={addGroup} className="text-xs h-8 gap-1 border-dashed">
+        <Plus className="w-3.5 h-3.5" /> Agregar grupo
+      </Button>
 
       <Field label="Upsell managed services">
         <Textarea value={String(data.managedServicesUpsell ?? "")} onChange={e => set("managedServicesUpsell", e.target.value)} rows={2} className="text-sm" />

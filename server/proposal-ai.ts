@@ -358,33 +358,64 @@ ESTRUCTURA EXACTA QUE DEBES DEVOLVER (JSON estricto, sin markdown wrapper, sin c
     "hardware": "<OPCIONAL pero IMPORTANTE si la solución lo requiere. Si ALGÚN módulo de solution.modules requiere equipo físico según el HARDWARE CATALOG, incluir este objeto con MÁXIMA ESPECIFICIDAD. Si la solución es puramente SaaS/web/app (no requiere hardware físico), OMITIR esta key completamente. REGLAS: (1) Cada item debe tener MARCA Y MODELO específicos del catálogo (ej: 'Huellero ZKTeco K40 USB', NO 'huellero genérico'); (2) La CANTIDAD debe basarse en datos del diagnóstico (# sedes, # empleados, # puntos de venta) — explicítalo en notes; (3) Precios DEL CATÁLOGO, no inventados; (4) NO olvides items críticos (si hay control de asistencia biométrico siempre hay huelleros); (5) NO inventes items que no estén en el catálogo. Formato: { heading: 'Equipos físicos requeridos', intro: '2-3 líneas honestas sobre por qué son necesarios', items: [{ name: 'MARCA + MODELO específico', description: 'para qué sirve y cómo se usa en TU negocio', quantity: número entero, unitPriceUSD: '$120 USD', totalPriceUSD: '$240 USD', notes: 'Por qué esta cantidad — ej: 1 por cada una de tus 2 sedes + 1 spare', paidBy: 'cliente-compra' }], subtotalUSD: string, recommendationNote: 'Te pasamos el link de compra en Colombia + configuración sin costo', disclaimer: 'IM3 no agrega margen — precio que paga el cliente directo al proveedor' }>",
     "operationalCosts": {
       "heading": "<ej: 'Costos operativos mensuales'>",
-      "intro": "<2-3 líneas explicando que estos son los gastos recurrentes que paga el cliente directamente a cada proveedor después del lanzamiento. Mencionar transparencia y que IM3 no agrega margen>",
-      "categories": [
+      "intro": "<2-3 líneas explicando que estos son los gastos recurrentes después del lanzamiento, divididos en dos modelos de cobro: predecibles (tarifa fija) vs. uso variable (pass-through o pago directo)>",
+      "groups": [
         {
-          "name": "Infraestructura",
-          "items": [
-            { "service": "<ej: Railway (hosting + base de datos)>", "cost": "<ej: $25-40 USD/mes>", "note": "<explicación breve, ej: 'Escala con usuarios activos'>" }
+          "name": "Servicios predecibles",
+          "billingModel": "fixed",
+          "monthlyFee": "<ej: '$50 USD/mes' — tarifa fija que IM3 cobra por administrar todos los servicios de este grupo>",
+          "description": "<1 línea: 'Cobramos una tarifa fija mensual de operaciones que cubre estos servicios. Tú no te preocupas por cada cuenta.'>",
+          "categories": [
+            {
+              "name": "Email & dominios",
+              "items": [
+                { "service": "<ej: Resend>", "cost": "<ej: $0-20/mes>", "note": "<ej: Gratis hasta 3.000 emails/mes>" },
+                { "service": "<ej: Dominio anual>", "cost": "<ej: $15/año>", "note": "" }
+              ]
+            },
+            {
+              "name": "Hosting frontend & monitoring",
+              "items": [
+                { "service": "<ej: Vercel Pro>", "cost": "<ej: $20/mes>", "note": "<ej: Hobby gratis hasta cierto tráfico>" },
+                { "service": "<ej: Sentry/UptimeRobot>", "cost": "<ej: $0-15/mes>", "note": "" }
+              ]
+            }
           ]
         },
         {
-          "name": "Comunicación",
-          "items": [
-            { "service": "<ej: Resend (envío de emails)>", "cost": "<ej: $0-20 USD/mes>", "note": "<ej: 'Gratis hasta 3.000 emails/mes'>" }
-          ]
-        },
-        {
-          "name": "IA y automatización",
-          "items": [
-            { "service": "<ej: Anthropic Claude>", "cost": "<ej: $30-100 USD/mes>", "note": "<ej: 'Uso estimado según volumen proyectado'>" }
+          "name": "Servicios que escalan con uso",
+          "billingModel": "<elegir 'passthrough' (con markup) o 'client-direct' (cliente paga directo). Para LLMs específicamente usar 'passthrough-with-cap'>",
+          "markup": "<si billingModel='passthrough', ej: '10%'. Si client-direct, omitir>",
+          "description": "<1-2 líneas explicando: 'Estos servicios cobran por uso. IM3 hace pass-through con markup del X%, o el cliente puede pagar directo al proveedor. Para APIs de IA aplicamos cap mensual con alertas — o el cliente puede traer su propia API key.'>",
+          "categories": [
+            {
+              "name": "Base de datos & backend",
+              "items": [
+                { "service": "<ej: Railway (hosting + DB)>", "cost": "<ej: $25-40/mes>", "note": "<ej: Escala con usuarios activos>" },
+                { "service": "<ej: Supabase>", "cost": "<ej: $0-25/mes>", "note": "" }
+              ]
+            },
+            {
+              "name": "APIs de IA (LLMs)",
+              "items": [
+                { "service": "<ej: Anthropic Claude>", "cost": "<ej: $30-100/mes con cap>", "note": "<ej: Cap mensual + alertas, o BYO API key>" },
+                { "service": "<ej: OpenAI>", "cost": "<ej: $20-80/mes con cap>", "note": "<ej: Configurable según volumen>" }
+              ]
+            },
+            {
+              "name": "Almacenamiento",
+              "items": [
+                { "service": "<ej: Supabase Storage / S3>", "cost": "<ej: $5-30/mes>", "note": "<ej: Crece con archivos subidos>" }
+              ]
+            }
           ]
         }
       ],
       "monthlyRangeLow": "<suma mínima en formato '$XX USD/mes'>",
       "monthlyRangeHigh": "<suma máxima en formato '$XXX USD/mes'>",
       "annualEstimate": "<ej: '$1.500 USD/año aprox'>",
-      "paidBy": "cliente-directo",
-      "managedServicesUpsell": "<Oferta opcional de managed services, ej: '¿Prefieres no preocuparte por esto? Por $150 USD/mes adicionales administramos todo (hosting, APIs, actualizaciones, soporte 24/7).'>",
-      "disclaimer": "<ej: 'Estos costos los pagas directamente a cada proveedor. IM3 no agrega margen aquí.'>"
+      "managedServicesUpsell": "<OPCIONAL: para proyectos grandes. Ej: '¿Prefieres olvidarte de todo? Por $150 USD/mes adicionales administramos todo (hosting, APIs, actualizaciones, soporte 24/7).'>",
+      "disclaimer": "<ej: 'Los rangos son estimados según volumen proyectado. Para servicios de uso variable aplicamos caps con alertas para evitar sorpresas.'>"
     },
     "cta": {
       "heading": "<ej: '¿Listo para recuperar tu tiempo?'>",
@@ -503,7 +534,7 @@ async function validateAndRepairOperationalCosts(
     system: `Eres un auditor de costos operativos ESTRICTO. Tu tarea principal: REMOVER servicios que la solución NO usa (WhatsApp ghost, storage ghost, etc.) y verificar coherencia.
 
 1. REGLA #1 — SERVICIOS GHOST (la más importante):
-   Revisa los módulos de la solución arriba. Luego revisa cada item de operationalCosts:
+   Revisa los módulos de la solución arriba. Luego revisa cada item dentro de groups[].categories[].items[]:
    - Si un servicio está listado pero NINGÚN módulo lo usa → REMOVER el item
    - WhatsApp Cloud API solo si algún módulo menciona: "WhatsApp", "mensajería", "chat con clientes", "notificaciones a celular del cliente"
    - Supabase Storage solo si algún módulo menciona: "archivos", "audio", "video", "imágenes de productos"
@@ -514,6 +545,7 @@ async function validateAndRepairOperationalCosts(
 
 2. COHERENCIA MATEMÁTICA:
    - monthlyRangeLow y monthlyRangeHigh deben ser strings con formato "$XX USD/mes"
+   - Sumar TODOS los items de TODOS los grupos (predecibles + uso variable)
    - Suma de mínimos ≈ monthlyRangeLow
    - Suma de máximos × 1.2 (buffer) ≈ monthlyRangeHigh
    - annualEstimate ≈ (promedio mensual × 12) redondeado a $100
@@ -527,10 +559,17 @@ async function validateAndRepairOperationalCosts(
    - monthlyRangeHigh con buffer del +20% sobre suma real
    - Si dudas, subir el rango
 
-5. FORMATO:
-   - paidBy: "cliente-directo" | "im3-managed" | "hibrido"
+5. FORMATO DE GRUPOS (estructura nueva):
+   - Debe haber array groups[] con al menos 1 grupo
+   - Cada grupo: { name, billingModel, description?, monthlyFee?, markup?, categories[] }
+   - billingModel: "fixed" | "passthrough" | "passthrough-with-cap" | "client-direct"
+   - Grupo "fixed" debe tener monthlyFee con monto concreto (lo que IM3 cobra)
+   - Grupos "passthrough" y "passthrough-with-cap" pueden tener markup (ej: "10%")
+   - Servicios LLM (Anthropic, OpenAI) deben ir en grupo con billingModel="passthrough-with-cap"
+   - Servicios predecibles (Resend, Vercel, Sentry, dominios) → grupo billingModel="fixed"
+   - Servicios que escalan (Railway, Supabase, almacenamiento) → "passthrough" o "client-direct"
    - disclaimer debe existir
-   - managedServicesUpsell debe tener monto concreto
+   - managedServicesUpsell es opcional pero recomendado para proyectos grandes
 
 Responde SOLO con JSON, sin markdown:
 

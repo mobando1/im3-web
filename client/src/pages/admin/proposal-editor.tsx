@@ -10,6 +10,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { useUnsavedChangesWarning } from "@/hooks/useUnsavedChangesWarning";
 
 // Nuevo schema ProposalData (shared/proposal-template/types.ts)
 // Nota: "testimonials" removida por ahora — revivir cuando tengamos casos reales autorizados
@@ -258,6 +260,18 @@ export default function ProposalEditor() {
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState("resumen");
   const [editingSection, setEditingSection] = useState<string | null>(null);
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [pendingNav, setPendingNav] = useState<null | (() => void)>(null);
+
+  useUnsavedChangesWarning(hasUnsavedChanges);
+
+  const guardedNav = (action: () => void) => {
+    if (hasUnsavedChanges) {
+      setPendingNav(() => action);
+    } else {
+      action();
+    }
+  };
   const [editContent, setEditContent] = useState("");
   const [showPreview, setShowPreview] = useState(false);
   const [showSources, setShowSources] = useState(false);
@@ -446,7 +460,7 @@ export default function ProposalEditor() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-start gap-4">
-        <button onClick={() => navigate("/admin/proposals")} className="mt-1 p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
+        <button onClick={() => guardedNav(() => navigate("/admin/proposals"))} className="mt-1 p-1.5 rounded-lg hover:bg-gray-100 text-gray-400">
           <ArrowLeft className="w-5 h-5" />
         </button>
         <div className="flex-1">
@@ -671,7 +685,7 @@ export default function ProposalEditor() {
               {SECTION_ORDER.map(key => (
                 <button
                   key={key}
-                  onClick={() => { setActiveSection(key); setEditingSection(null); }}
+                  onClick={() => guardedNav(() => { setActiveSection(key); setEditingSection(null); })}
                   className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                     activeSection === key
                       ? "bg-[#2FA4A9]/10 text-[#2FA4A9] font-medium"
@@ -684,7 +698,7 @@ export default function ProposalEditor() {
               ))}
               {pricing && (
                 <button
-                  onClick={() => { setActiveSection("pricing"); setEditingSection(null); }}
+                  onClick={() => guardedNav(() => { setActiveSection("pricing"); setEditingSection(null); })}
                   className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
                     activeSection === "pricing"
                       ? "bg-[#2FA4A9]/10 text-[#2FA4A9] font-medium"
@@ -757,9 +771,11 @@ export default function ProposalEditor() {
                       onSave={(updated) => {
                         const newSections = { ...sections, [activeSection]: updated };
                         updateMut.mutate({ sections: newSections });
+                        setHasUnsavedChanges(false);
                         setEditingSection(null);
                       }}
-                      onCancel={() => setEditingSection(null)}
+                      onCancel={() => { setHasUnsavedChanges(false); setEditingSection(null); }}
+                      onDirtyChange={setHasUnsavedChanges}
                     />
                   ) : (
                     <>
@@ -912,6 +928,31 @@ export default function ProposalEditor() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={pendingNav !== null} onOpenChange={(open) => { if (!open) setPendingNav(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Tienes cambios sin guardar</AlertDialogTitle>
+            <AlertDialogDescription>
+              Si continúas, los cambios que hiciste en esta sección se perderán. ¿Quieres descartarlos?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => setPendingNav(null)}>Seguir editando</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                const action = pendingNav;
+                setPendingNav(null);
+                setHasUnsavedChanges(false);
+                if (action) action();
+              }}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Descartar cambios
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
