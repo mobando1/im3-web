@@ -214,20 +214,22 @@ export const operationalCostsSchema = z.object({
   disclaimer: z.string(),
 });
 
+// Secciones obligatorias: meta, hero, solution, pricing, cta — el resto son opcionales
+// y pueden eliminarse desde el editor si no aplican o no hay datos
 export const proposalDataSchema = z.object({
   meta: proposalMetaSchema,
   hero: heroSchema,
-  summary: summarySchema,
-  problem: problemSchema,
+  summary: summarySchema.optional(),
+  problem: problemSchema.optional(),
   solution: solutionSchema,
-  tech: techSchema,
-  timeline: timelineSchema,
-  roi: roiSchema,
-  authority: authoritySchema,
-  testimonials: z.array(testimonialSchema).optional(), // Omitir si no hay testimonios reales
+  tech: techSchema.optional(),
+  timeline: timelineSchema.optional(),
+  roi: roiSchema.optional(),
+  authority: authoritySchema.optional(),
+  testimonials: z.array(testimonialSchema).optional(),
   pricing: pricingSchema,
-  hardware: hardwareSchema.optional(), // solo si aplica
-  operationalCosts: operationalCostsSchema,
+  hardware: hardwareSchema.optional(),
+  operationalCosts: operationalCostsSchema.optional(),
   cta: ctaSchema,
 });
 

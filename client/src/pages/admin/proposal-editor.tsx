@@ -33,6 +33,9 @@ const SECTION_LABELS_NEW: Record<string, string> = {
 
 const SECTION_ORDER_NEW = ["meta", "hero", "summary", "problem", "solution", "tech", "timeline", "roi", "authority", "pricing", "hardware", "operationalCosts", "cta"];
 
+// Secciones que se pueden eliminar de la propuesta (todas las opcionales en proposalDataSchema)
+const DELETABLE_SECTIONS_NEW = new Set(["summary", "problem", "tech", "timeline", "roi", "authority", "hardware", "operationalCosts"]);
+
 // Legacy schema (propuestas viejas)
 const SECTION_LABELS_LEGACY: Record<string, string> = {
   resumen: "Resumen Ejecutivo",
@@ -382,6 +385,47 @@ export default function ProposalEditor() {
     onError: () => toast({ title: "Error enviando propuesta", variant: "destructive" }),
   });
 
+  // Delete a section (set to null)
+  const deleteSectionMut = useMutation({
+    mutationFn: async (sectionKey: string) => {
+      const newSections = { ...sections, [sectionKey]: null };
+      await apiRequest("PATCH", `/api/admin/proposals/${id}`, { sections: newSections });
+    },
+    onSuccess: () => {
+      toast({ title: "✓ Sección eliminada — recargando..." });
+      setTimeout(() => window.location.reload(), 600);
+    },
+    onError: () => toast({ title: "Error eliminando sección", variant: "destructive" }),
+  });
+
+  // Restore a section (regenerate via AI by clearing it then regenerating)
+  const restoreSectionMut = useMutation({
+    mutationFn: async (sectionKey: string) => {
+      const res = await apiRequest("POST", `/api/admin/proposals/${id}/sections/${sectionKey}/options`, { instruction: "Generar contenido completo y útil para esta sección desde cero, basado en el resto de la propuesta y datos del cliente." });
+      return res.json() as Promise<{ options: Array<{ label: string; description: string; section: unknown }> }>;
+    },
+    onSuccess: (data) => {
+      setAiModifySection(prev => prev); // keep
+      setAiOptions(data.options || []);
+      setAiModifyOpen(true);
+    },
+    onError: () => toast({ title: "Error generando sección", variant: "destructive" }),
+  });
+
+  const handleDeleteSection = (sectionKey: string) => {
+    if (window.confirm(`¿Eliminar la sección "${SECTION_LABELS[sectionKey]}"? No se mostrará en la propuesta. Podrás restaurarla luego.`)) {
+      deleteSectionMut.mutate(sectionKey);
+    }
+  };
+
+  const handleRestoreSection = (sectionKey: string) => {
+    setAiModifySection(sectionKey);
+    setAiInstruction("");
+    setAiOptions(null);
+    setAiModifyOpen(true);
+    restoreSectionMut.mutate(sectionKey);
+  };
+
   // Convert to project
   const convertMut = useMutation({
     mutationFn: async () => {
@@ -682,20 +726,27 @@ export default function ProposalEditor() {
           {/* Section nav */}
           <div className="lg:col-span-1">
             <nav className="space-y-1 sticky top-4">
-              {SECTION_ORDER.map(key => (
-                <button
-                  key={key}
-                  onClick={() => guardedNav(() => { setActiveSection(key); setEditingSection(null); })}
-                  className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
-                    activeSection === key
-                      ? "bg-[#2FA4A9]/10 text-[#2FA4A9] font-medium"
-                      : "text-gray-600 hover:bg-gray-100"
-                  }`}
-                >
-                  {SECTION_LABELS[key]}
-                  {!sections[key] && <span className="text-gray-300 ml-1">—</span>}
-                </button>
-              ))}
+              {SECTION_ORDER.map(key => {
+                const isDeleted = isNewFormat && DELETABLE_SECTIONS_NEW.has(key) && sections[key] === null;
+                const isEmpty = !sections[key] && !isDeleted;
+                return (
+                  <button
+                    key={key}
+                    onClick={() => guardedNav(() => { setActiveSection(key); setEditingSection(null); })}
+                    className={`w-full text-left px-3 py-2 rounded-lg text-sm transition-colors ${
+                      activeSection === key
+                        ? "bg-[#2FA4A9]/10 text-[#2FA4A9] font-medium"
+                        : isDeleted
+                          ? "text-gray-400 line-through hover:bg-gray-50"
+                          : "text-gray-600 hover:bg-gray-100"
+                    }`}
+                  >
+                    {SECTION_LABELS[key]}
+                    {isDeleted && <span className="text-amber-500 ml-1 no-underline" title="Eliminada">⊘</span>}
+                    {isEmpty && <span className="text-gray-300 ml-1">—</span>}
+                  </button>
+                );
+              })}
               {pricing && (
                 <button
                   onClick={() => guardedNav(() => { setActiveSection("pricing"); setEditingSection(null); })}
@@ -759,6 +810,16 @@ export default function ProposalEditor() {
                       <Button size="sm" variant="outline" onClick={() => { setEditingSection(activeSection); setEditContent(getSectionDisplayContent(activeSection)); }}>
                         Editar
                       </Button>
+                      {isNewFormat && DELETABLE_SECTIONS_NEW.has(activeSection) && sections[activeSection] && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="gap-1.5 border-red-200 text-red-600 hover:bg-red-50"
+                          onClick={() => handleDeleteSection(activeSection)}
+                        >
+                          <X className="w-3.5 h-3.5" /> Eliminar
+                        </Button>
+                      )}
                     </div>
                   )}
                 </div>
@@ -813,6 +874,19 @@ export default function ProposalEditor() {
                       dangerouslySetInnerHTML={{ __html: String(sections[activeSection]) }}
                     />
                   )
+                ) : isNewFormat && DELETABLE_SECTIONS_NEW.has(activeSection) ? (
+                  <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
+                    <p className="text-sm text-amber-800 mb-3">Esta sección está eliminada — no se mostrará en la propuesta.</p>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => handleRestoreSection(activeSection)}
+                      disabled={restoreSectionMut.isPending}
+                      className="gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-100"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" /> {restoreSectionMut.isPending ? "Generando..." : "Restaurar con IA"}
+                    </Button>
+                  </div>
                 ) : (
                   <p className="text-gray-400 text-sm">Esta sección aún no tiene contenido.</p>
                 )}

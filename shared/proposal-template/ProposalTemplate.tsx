@@ -43,7 +43,7 @@ export function ProposalTemplate({
     <div className="proposal-template" ref={rootRef}>
       <nav className="pt-nav">
         <div className="pt-nav-brand">
-          <div className="pt-nav-logo">IM3</div>
+          <img src="/assets/im3-logo.png" alt="IM3 Systems" className="pt-nav-logo-img" />
           <div className="pt-nav-label">
             <strong>Propuesta Comercial</strong>
             {data.meta.clientName}
@@ -53,21 +53,44 @@ export function ProposalTemplate({
       </nav>
 
       <Hero data={data.hero} meta={data.meta} />
-      <div className="pt-divider" />
-      <Summary data={data.summary} />
-      <div className="pt-divider" />
-      <Problem data={data.problem} interactive={interactive} />
+      {data.summary && (
+        <>
+          <div className="pt-divider" />
+          <Summary data={data.summary} />
+        </>
+      )}
+      {data.problem && (
+        <>
+          <div className="pt-divider" />
+          <Problem data={data.problem} interactive={interactive} />
+        </>
+      )}
       <div className="pt-divider" />
       <Solution data={data.solution} />
-      <div className="pt-divider" />
-      <Tech data={data.tech} />
-      <div className="pt-divider" />
-      <Timeline data={data.timeline} />
-      <div className="pt-divider" />
-      <ROI data={data.roi} interactive={interactive} />
-      <div className="pt-divider" />
-      <Authority data={data.authority} />
-      {/* Testimonials section removida por ahora — hasta tener casos reales con autorización */}
+      {data.tech && (
+        <>
+          <div className="pt-divider" />
+          <Tech data={data.tech} />
+        </>
+      )}
+      {data.timeline && (
+        <>
+          <div className="pt-divider" />
+          <Timeline data={data.timeline} />
+        </>
+      )}
+      {data.roi && (
+        <>
+          <div className="pt-divider" />
+          <ROI data={data.roi} interactive={interactive} />
+        </>
+      )}
+      {data.authority && (
+        <>
+          <div className="pt-divider" />
+          <Authority data={data.authority} />
+        </>
+      )}
       <div className="pt-divider" />
       <Pricing data={data.pricing} />
       {data.hardware && data.hardware.items && data.hardware.items.length > 0 && (
@@ -87,9 +110,7 @@ export function ProposalTemplate({
 
       <footer className="pt-footer">
         <div className="pt-footer-brand">
-          <div className="pt-nav-logo" style={{ width: 26, height: 26, fontSize: "0.75rem" }}>
-            IM3
-          </div>
+          <img src="/assets/im3-logo.png" alt="IM3 Systems" className="pt-footer-logo-img" />
           <span className="pt-footer-brand-name">IM3 Systems</span>
         </div>
         <div className="pt-footer-links">

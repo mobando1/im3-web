@@ -481,9 +481,9 @@ function TimelineForm({ data, set }: { data: Record<string, unknown>; set: (k: s
                 placeholder="Ej: App móvil con geolocalización"
               />
             </Field>
-            <Field label="Outcome" hint="Al finalizar: [lo que el cliente puede hacer]">
-              <AiFieldHelper value={phase.outcome} onChange={v => updatePhase(i, "outcome", v)} context="Outcome de fase del cronograma">
-                <Input value={phase.outcome} onChange={e => updatePhase(i, "outcome", e.target.value)} className="h-8 text-sm" placeholder="Al finalizar: horas extras controladas automáticamente" />
+            <Field label="Outcome" hint="Solo lo que el cliente puede hacer (NO incluyas 'Al finalizar:' — se agrega automático)">
+              <AiFieldHelper value={phase.outcome} onChange={v => updatePhase(i, "outcome", v)} context="Outcome de fase del cronograma — sin prefijo 'Al finalizar'">
+                <Input value={phase.outcome} onChange={e => updatePhase(i, "outcome", e.target.value)} className="h-8 text-sm" placeholder="horas extras controladas automáticamente" />
               </AiFieldHelper>
             </Field>
           </div>

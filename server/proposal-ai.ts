@@ -298,7 +298,7 @@ ESTRUCTURA EXACTA QUE DEBES DEVOLVER (JSON estricto, sin markdown wrapper, sin c
     "timeline": {
       "heading": "<ej: 'Tu implementación en 3 fases'>",
       "phases": [
-        { "number": 1, "title": "<nombre de la fase>", "durationWeeks": <entero>, "items": ["<tarea>", "<tarea>", "<tarea>"], "outcome": "<qué tienen al terminar esta fase>" },
+        { "number": 1, "title": "<nombre de la fase>", "durationWeeks": <entero>, "items": ["<tarea>", "<tarea>", "<tarea>"], "outcome": "<qué tienen al terminar esta fase — NO incluyas 'Al finalizar:' al inicio, el template lo agrega automático>" },
         { "number": 2, "title": "...", "durationWeeks": 0, "items": ["..."], "outcome": "..." },
         { "number": 3, "title": "...", "durationWeeks": 0, "items": ["..."], "outcome": "..." }
       ]

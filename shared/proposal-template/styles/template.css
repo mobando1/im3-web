@@ -26,6 +26,8 @@
 .pt-nav { position: fixed; top: 0; left: 0; right: 0; z-index: 100; padding: 1rem 2.5rem; display: flex; align-items: center; justify-content: space-between; background: rgba(8,15,26,.92); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(14,181,168,.12); }
 .pt-nav-brand { display: flex; align-items: center; gap: .75rem; }
 .pt-nav-logo { width: 32px; height: 32px; border-radius: 8px; background: var(--teal); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: .85rem; color: var(--ink); }
+.pt-nav-logo-img { height: 32px; width: auto; object-fit: contain; }
+.pt-footer-logo-img { height: 26px; width: auto; object-fit: contain; }
 .pt-nav-label { font-size: .78rem; color: var(--smoke); }
 .pt-nav-label strong { color: var(--light); font-weight: 500; display: block; font-size: .82rem; }
 .pt-nav-progress { position: absolute; bottom: 0; left: 0; height: 2px; background: linear-gradient(90deg, var(--teal), var(--teal2)); width: 0%; transition: width .1s linear; }
@@ -211,13 +213,13 @@
 .pt-opcosts-section { padding: 5rem 0; background: var(--ink); }
 .pt-opcosts-heading { font-size: 2.4rem; font-weight: 600; line-height: 1.1; color: var(--white); margin: .5rem 0 .75rem; }
 .pt-opcosts-intro { color: var(--smoke); max-width: 620px; font-size: 1rem; line-height: 1.55; margin-bottom: 2.5rem; }
-.pt-opcosts-group { margin-bottom: 2.5rem; }
+.pt-opcosts-group { margin-bottom: 3.5rem; }
 .pt-opcosts-group:last-of-type { margin-bottom: 2rem; }
-.pt-opcosts-group-header { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-bottom: .75rem; padding-bottom: .75rem; border-bottom: 1px solid rgba(14,181,168,.2); flex-wrap: wrap; }
+.pt-opcosts-group-header { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; margin-bottom: 1rem; padding-bottom: .85rem; border-bottom: 1px solid rgba(14,181,168,.2); flex-wrap: wrap; }
 .pt-opcosts-group-name { font-size: 1.15rem; font-weight: 600; color: var(--white); }
 .pt-opcosts-group-billing { font-family: 'DM Mono', monospace; font-size: .72rem; letter-spacing: .08em; color: var(--teal); text-transform: uppercase; }
 .pt-opcosts-group-fee { color: var(--white); }
-.pt-opcosts-group-description { font-size: .9rem; color: var(--smoke); line-height: 1.5; margin: 0 0 1rem; max-width: 720px; }
+.pt-opcosts-group-description { font-size: .9rem; color: var(--smoke); line-height: 1.6; margin: 0 0 2rem; max-width: 720px; }
 .pt-opcosts-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.25rem; margin-bottom: 1rem; }
 .pt-opcosts-category { background: var(--ink3); border: 1px solid rgba(255,255,255,.06); border-radius: 14px; padding: 1.5rem 1.4rem; }
 .pt-opcosts-category-name { font-family: 'DM Mono', monospace; font-size: .68rem; letter-spacing: .12em; color: var(--teal); text-transform: uppercase; margin-bottom: 1rem; font-weight: 500; }
