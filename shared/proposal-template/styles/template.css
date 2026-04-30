@@ -275,3 +275,35 @@
   .pt-hardware-table-head { display: none; }
   .pt-hardware-row { grid-template-columns: 1fr; gap: .5rem; }
 }
+
+/* ── PDF capture mode (puppeteer) ──
+   Cuando ?pdf=1 está activo, ocultamos nav y CTAs interactivos pero MANTENEMOS
+   todos los fondos oscuros, gradientes y colores intactos (al revés del @media print). */
+html[data-pdf="1"] {
+  background: var(--ink) !important;
+  scroll-behavior: auto !important;
+}
+.pt-pdf-mode .pt-nav,
+.pt-pdf-mode .pt-scroll-hint,
+.pt-pdf-mode .pt-hero-cta-single,
+.pt-pdf-mode .pt-cta-buttons,
+.pt-pdf-mode .pt-nav-progress {
+  display: none !important;
+}
+.pt-pdf-mode .pt-reveal,
+.pt-pdf-mode .pt-reveal.pt-visible {
+  opacity: 1 !important;
+  transform: none !important;
+  transition: none !important;
+}
+.pt-pdf-mode * {
+  animation: none !important;
+}
+/* Ocultar widgets externos (chat tutor.im3systems, etc) durante captura PDF */
+html[data-pdf="1"] iframe[src*="tutor"],
+html[data-pdf="1"] [id*="tutor"],
+html[data-pdf="1"] [class*="tutor-widget"],
+html[data-pdf="1"] [class*="chat-widget"],
+html[data-pdf="1"] [id*="chat-widget"] {
+  display: none !important;
+}

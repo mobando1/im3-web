@@ -23,6 +23,7 @@ import { z } from "zod";
 import { analyzeCommitsForProject, generateWeeklySummary, calculateProjectHealth, generateProjectFromProposal } from "./project-ai";
 import { syncDriveFilesToProject } from "./drive-file-sync";
 import { generateProposal, regenerateProposalSection, generateSectionOptions, applySectionOption } from "./proposal-ai";
+import { generateProposalPdf } from "./proposal-pdf";
 import crypto from "crypto";
 import { getIndustriaLabel } from "@shared/industrias";
 
@@ -7296,6 +7297,32 @@ ${urls}
   });
 
   // Track view analytics (public) + alertas de alto-intent al admin
+  // Genera PDF idéntico al render web (Chrome headless con emulateMediaType('screen'))
+  app.get("/api/proposal/:token/pdf", async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const token = String(req.params.token);
+      const [proposal] = await db.select().from(proposals).where(eq(proposals.accessToken, token)).limit(1);
+      if (!proposal) return res.status(404).json({ error: "Propuesta no encontrada" });
+
+      const [contact] = await db
+        .select({ nombre: contacts.nombre, empresa: contacts.empresa })
+        .from(contacts)
+        .where(eq(contacts.id, proposal.contactId))
+        .limit(1);
+
+      const pdf = await generateProposalPdf({ token });
+      const safeName = (contact?.empresa || contact?.nombre || "IM3").replace(/[^\w-]+/g, "_");
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `attachment; filename="Propuesta-${safeName}.pdf"`);
+      res.setHeader("Content-Length", String(pdf.length));
+      res.end(pdf);
+    } catch (err: any) {
+      console.error("[proposal pdf] error:", err);
+      res.status(500).json({ error: err?.message || "Error generando PDF" });
+    }
+  });
+
   app.post("/api/proposal/:token/track", async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {

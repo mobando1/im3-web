@@ -372,8 +372,9 @@ export default function ProposalView() {
   const [showMobileCta, setShowMobileCta] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const heroRef = useRef<HTMLDivElement>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
-  const isPdfMode = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("pdf") === "true";
+  const isPdfMode = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("pdf") === "1";
   const scrollProgress = useScrollProgress();
   const activeSection = useActiveSection(sectionRefs);
 
@@ -381,20 +382,32 @@ export default function ProposalView() {
     queryKey: [`/api/proposal/${token}`],
   });
 
-  // Download PDF: usamos el render nativo del navegador (window.print → "Guardar como PDF").
-  // Es más fiable que html2pdf/html2canvas con CSS moderno (gradientes, web fonts, position:fixed)
-  // y aprovecha el print.css ya armado en shared/proposal-template/styles/print.css.
-  const handleDownloadPdf = () => {
-    window.print();
-  };
-
-  // Auto-print en modo ?pdf=true (para envíos automáticos)
-  useEffect(() => {
-    if (isPdfMode && proposal && !isLoading) {
-      const t = setTimeout(() => window.print(), 800);
-      return () => clearTimeout(t);
+  // Descarga PDF generado en el backend con Chrome headless (idéntico al render web).
+  // Más fiable que window.print() porque no aplica @media print y no depende
+  // del check "Background graphics" del usuario.
+  const handleDownloadPdf = async () => {
+    if (isGeneratingPdf) return;
+    setIsGeneratingPdf(true);
+    try {
+      const res = await fetch(`/api/proposal/${token}/pdf`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      const name = (proposal?.contactEmpresa || proposal?.contactName || "IM3").replace(/[^\w-]+/g, "_");
+      a.href = url;
+      a.download = `Propuesta-${name}.pdf`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("[PDF] Error:", err);
+      alert("Error al generar el PDF. Intenta de nuevo en unos segundos.");
+    } finally {
+      setIsGeneratingPdf(false);
     }
-  }, [isPdfMode, proposal, isLoading]);
+  };
 
   // Track views
   useEffect(() => {
@@ -593,8 +606,8 @@ export default function ProposalView() {
             >
               Ver inversión <ChevronDown className="w-3 h-3" />
             </Button>
-            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleDownloadPdf}>
-              <Download className="w-3 h-3" /> PDF
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleDownloadPdf} disabled={isGeneratingPdf}>
+              <Download className="w-3 h-3" /> {isGeneratingPdf ? "Generando..." : "PDF"}
             </Button>
           </div>
         </div>

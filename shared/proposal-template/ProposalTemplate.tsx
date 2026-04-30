@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import type { ProposalData } from "./types";
 import { useRevealOnScroll } from "./hooks/useRevealOnScroll";
 import { useScrollProgress } from "./hooks/useScrollProgress";
@@ -39,8 +39,18 @@ export function ProposalTemplate({
   useRevealOnScroll(rootRef, interactive);
   useScrollProgress(progressBarRef, interactive);
 
+  // Marca <html data-pdf="1"> cuando la URL tiene ?pdf=1 (puppeteer)
+  // para que el CSS oculte elementos interactivos (nav, CTAs, modales).
+  const isPdfCapture = typeof window !== "undefined"
+    && new URLSearchParams(window.location.search).get("pdf") === "1";
+  useEffect(() => {
+    if (!isPdfCapture) return;
+    document.documentElement.setAttribute("data-pdf", "1");
+    return () => document.documentElement.removeAttribute("data-pdf");
+  }, [isPdfCapture]);
+
   return (
-    <div className="proposal-template" ref={rootRef}>
+    <div className={`proposal-template${isPdfCapture ? " pt-pdf-mode" : ""}`} ref={rootRef}>
       <nav className="pt-nav">
         <div className="pt-nav-brand">
           <img src="/assets/im3-logo.png" alt="IM3 Systems" className="pt-nav-logo-img" />
