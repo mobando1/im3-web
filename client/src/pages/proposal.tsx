@@ -372,6 +372,8 @@ export default function ProposalView() {
   const [showMobileCta, setShowMobileCta] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const heroRef = useRef<HTMLDivElement>(null);
+  const pdfContainerRef = useRef<HTMLDivElement>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const isPdfMode = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("pdf") === "true";
   const scrollProgress = useScrollProgress();
@@ -381,11 +383,37 @@ export default function ProposalView() {
     queryKey: [`/api/proposal/${token}`],
   });
 
-  // Auto-print in PDF mode
+  // Download PDF using html2pdf.js (capture rendered HTML and trigger download)
+  const handleDownloadPdf = async () => {
+    if (!pdfContainerRef.current || isGeneratingPdf) return;
+    setIsGeneratingPdf(true);
+    try {
+      const html2pdf = (await import("html2pdf.js")).default;
+      const filename = `Propuesta-${(proposal?.contactEmpresa || "IM3").replace(/[^\w-]/g, "_")}.pdf`;
+      await html2pdf()
+        .set({
+          margin: [10, 10, 10, 10],
+          filename,
+          image: { type: "jpeg", quality: 0.95 },
+          html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: "#ffffff" },
+          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
+        })
+        .from(pdfContainerRef.current)
+        .save();
+    } catch (err) {
+      console.error("[PDF] Error generating PDF:", err);
+      alert("Error al generar el PDF. Intenta de nuevo.");
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
+
+  // Auto-download in PDF mode (legacy, kept for old query-string links)
   useEffect(() => {
     if (isPdfMode && proposal && !isLoading) {
-      setTimeout(() => window.print(), 1000);
+      setTimeout(() => handleDownloadPdf(), 1000);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPdfMode, proposal, isLoading]);
 
   // Track views
@@ -550,7 +578,7 @@ export default function ProposalView() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50" ref={pdfContainerRef}>
       {/* ── Scroll Progress Bar ── */}
       <div className="fixed top-0 left-0 right-0 z-30 print:hidden">
         <div className="h-1 bg-gray-200/50">
@@ -584,8 +612,8 @@ export default function ProposalView() {
             >
               Ver inversión <ChevronDown className="w-3 h-3" />
             </Button>
-            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={() => window.print()}>
-              <Download className="w-3 h-3" /> PDF
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleDownloadPdf} disabled={isGeneratingPdf}>
+              <Download className="w-3 h-3" /> {isGeneratingPdf ? "Generando..." : "PDF"}
             </Button>
           </div>
         </div>
