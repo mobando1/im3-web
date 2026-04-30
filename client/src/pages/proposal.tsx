@@ -372,8 +372,6 @@ export default function ProposalView() {
   const [showMobileCta, setShowMobileCta] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const heroRef = useRef<HTMLDivElement>(null);
-  const pdfContainerRef = useRef<HTMLDivElement>(null);
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const isPdfMode = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("pdf") === "true";
   const scrollProgress = useScrollProgress();
@@ -383,37 +381,19 @@ export default function ProposalView() {
     queryKey: [`/api/proposal/${token}`],
   });
 
-  // Download PDF using html2pdf.js (capture rendered HTML and trigger download)
-  const handleDownloadPdf = async () => {
-    if (!pdfContainerRef.current || isGeneratingPdf) return;
-    setIsGeneratingPdf(true);
-    try {
-      const html2pdf = (await import("html2pdf.js")).default;
-      const filename = `Propuesta-${(proposal?.contactEmpresa || "IM3").replace(/[^\w-]/g, "_")}.pdf`;
-      await html2pdf()
-        .set({
-          margin: [10, 10, 10, 10],
-          filename,
-          image: { type: "jpeg", quality: 0.95 },
-          html2canvas: { scale: 2, useCORS: true, logging: false, backgroundColor: "#ffffff" },
-          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-        })
-        .from(pdfContainerRef.current)
-        .save();
-    } catch (err) {
-      console.error("[PDF] Error generating PDF:", err);
-      alert("Error al generar el PDF. Intenta de nuevo.");
-    } finally {
-      setIsGeneratingPdf(false);
-    }
+  // Download PDF: usamos el render nativo del navegador (window.print → "Guardar como PDF").
+  // Es más fiable que html2pdf/html2canvas con CSS moderno (gradientes, web fonts, position:fixed)
+  // y aprovecha el print.css ya armado en shared/proposal-template/styles/print.css.
+  const handleDownloadPdf = () => {
+    window.print();
   };
 
-  // Auto-download in PDF mode (legacy, kept for old query-string links)
+  // Auto-print en modo ?pdf=true (para envíos automáticos)
   useEffect(() => {
     if (isPdfMode && proposal && !isLoading) {
-      setTimeout(() => handleDownloadPdf(), 1000);
+      const t = setTimeout(() => window.print(), 800);
+      return () => clearTimeout(t);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isPdfMode, proposal, isLoading]);
 
   // Track views
@@ -482,9 +462,10 @@ export default function ProposalView() {
   // ── Nuevo formato ProposalData (con template premium) ──
   // Detecta formato por presencia de `sections.meta` y `sections.hero`.
   // Propuestas viejas no tienen estas keys → cae al render legacy de abajo.
+  // En modo `?pdf=true` el template se renderiza igual; el useEffect dispara window.print().
   const rawSections = proposal.sections || {};
   const isNewFormat = rawSections.meta && rawSections.hero && rawSections.summary;
-  if (isNewFormat && !isPdfMode) {
+  if (isNewFormat) {
     return (
       <ProposalTemplate
         data={rawSections as ProposalData}
@@ -578,7 +559,7 @@ export default function ProposalView() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50" ref={pdfContainerRef}>
+    <div className="min-h-screen bg-gray-50">
       {/* ── Scroll Progress Bar ── */}
       <div className="fixed top-0 left-0 right-0 z-30 print:hidden">
         <div className="h-1 bg-gray-200/50">
@@ -612,8 +593,8 @@ export default function ProposalView() {
             >
               Ver inversión <ChevronDown className="w-3 h-3" />
             </Button>
-            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleDownloadPdf} disabled={isGeneratingPdf}>
-              <Download className="w-3 h-3" /> {isGeneratingPdf ? "Generando..." : "PDF"}
+            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleDownloadPdf}>
+              <Download className="w-3 h-3" /> PDF
             </Button>
           </div>
         </div>
