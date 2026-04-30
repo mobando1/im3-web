@@ -21,9 +21,11 @@ export function Timeline({ data }: Props) {
                   <span key={i} className="pt-phase-item">{it}</span>
                 ))}
               </div>
-              <div className="pt-phase-outcome">
-                {/al\s+finalizar/i.test(p.outcome.trim().slice(0, 20)) ? p.outcome : `Al finalizar: ${p.outcome}`}
-              </div>
+              {p.outcome && p.outcome.trim() && (
+                <div className="pt-phase-outcome">
+                  {/al\s+finalizar/i.test(p.outcome.trim().slice(0, 20)) ? p.outcome : `Al finalizar: ${p.outcome}`}
+                </div>
+              )}
             </div>
           ))}
         </div>

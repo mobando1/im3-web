@@ -323,8 +323,8 @@ export default function ProposalEditor() {
       await apiRequest("PATCH", `/api/admin/proposals/${id}`, data);
     },
     onSuccess: () => {
-      toast({ title: "✓ Guardado — recargando..." });
-      setTimeout(() => window.location.reload(), 800);
+      toast({ title: "✓ Guardado" });
+      invalidate();
     },
     onError: (err: any) => {
       toast({ title: "Error guardando", description: err?.message || "Revisa la consola", variant: "destructive" });
@@ -348,8 +348,11 @@ export default function ProposalEditor() {
       return res.json();
     },
     onSuccess: () => {
-      toast({ title: "✓ Opción aplicada — recargando..." });
-      setTimeout(() => window.location.reload(), 800);
+      toast({ title: "✓ Opción aplicada" });
+      invalidate();
+      setAiModifyOpen(false);
+      setAiOptions(null);
+      setAiInstruction("");
     },
     onError: (err: any) => toast({ title: "Error aplicando", description: err?.message, variant: "destructive" }),
   });
@@ -392,8 +395,8 @@ export default function ProposalEditor() {
       await apiRequest("PATCH", `/api/admin/proposals/${id}`, { sections: newSections });
     },
     onSuccess: () => {
-      toast({ title: "✓ Sección eliminada — recargando..." });
-      setTimeout(() => window.location.reload(), 600);
+      toast({ title: "✓ Sección eliminada" });
+      invalidate();
     },
     onError: () => toast({ title: "Error eliminando sección", variant: "destructive" }),
   });

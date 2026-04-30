@@ -117,6 +117,10 @@
 .pt-tech-pill { display: flex; align-items: center; gap: .6rem; padding: .8rem 1rem; background: var(--ink3); border: 1px solid rgba(255,255,255,.06); border-radius: var(--r); font-size: .83rem; color: var(--light); transition: border-color .2s; }
 .pt-tech-pill:hover { border-color: rgba(14,181,168,.28); }
 .pt-tech-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--teal); flex-shrink: 0; }
+.pt-tech-optional-label { font-family: 'DM Mono', monospace; font-size: .68rem; letter-spacing: .12em; color: var(--teal); text-transform: uppercase; margin: 1.25rem 0 .9rem; opacity: .85; }
+.pt-tech-grid-optional { margin-bottom: 1.75rem; }
+.pt-tech-pill-optional { background: transparent; border-style: dashed; border-color: rgba(14,181,168,.25); }
+.pt-tech-pill-optional .pt-tech-dot { background: rgba(14,181,168,.5); }
 
 .pt-phases { display: flex; flex-direction: column; position: relative; padding-left: 3rem; }
 .pt-phases::before { content: ''; position: absolute; left: 13px; top: 18px; bottom: 18px; width: 1px; background: linear-gradient(to bottom, var(--teal), rgba(14,181,168,.08)); }
@@ -187,9 +191,13 @@
 .pt-milestone-amount { font-size: 1.1rem; font-weight: 600; color: var(--teal2); }
 .pt-pricing-includes { padding: 1.75rem 2.25rem; }
 .pt-includes-title { font-size: .68rem; color: var(--teal); letter-spacing: .12em; text-transform: uppercase; font-family: 'DM Mono', monospace; margin-bottom: .9rem; }
+.pt-includes-title-optional { margin-top: 1.5rem; opacity: .8; }
 .pt-includes-grid { display: grid; grid-template-columns: 1fr 1fr; gap: .55rem; }
+.pt-includes-grid-optional { padding-top: .25rem; border-top: 1px dashed rgba(14,181,168,.2); margin-top: .25rem; padding-top: .85rem; }
 .pt-include-item { display: flex; align-items: center; gap: .45rem; font-size: .81rem; color: var(--smoke); }
 .pt-include-item::before { content: '✓'; color: var(--success); font-weight: 700; }
+.pt-include-item-optional::before { content: '+'; color: var(--teal); opacity: .7; }
+.pt-include-item-optional { opacity: .85; }
 
 .pt-hardware-section { padding: 5rem 0; background: var(--ink2); }
 .pt-hardware-heading { font-size: 2.2rem; font-weight: 600; line-height: 1.15; color: var(--white); margin: .5rem 0 1rem; }

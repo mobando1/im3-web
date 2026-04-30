@@ -48,6 +48,16 @@ export function Pricing({ data }: Props) {
                 <div key={idx} className="pt-include-item">{i}</div>
               ))}
             </div>
+            {data.optionalIncludes && data.optionalIncludes.length > 0 && (
+              <>
+                <div className="pt-includes-title pt-includes-title-optional">Opcionales</div>
+                <div className="pt-includes-grid pt-includes-grid-optional">
+                  {data.optionalIncludes.map((i, idx) => (
+                    <div key={idx} className="pt-include-item pt-include-item-optional">{i}</div>
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       </div>

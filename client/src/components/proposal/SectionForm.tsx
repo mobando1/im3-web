@@ -346,6 +346,7 @@ function ProblemForm({ data, set }: { data: Record<string, unknown>; set: (k: st
 function PricingForm({ data, set }: { data: Record<string, unknown>; set: (k: string, v: unknown) => void }) {
   const milestones = (data.milestones as Array<{ step: number; name: string; desc: string; amount: string }>) ?? [];
   const includes = (data.includes as string[]) ?? [];
+  const optionalIncludes = (data.optionalIncludes as string[] | undefined) ?? [];
 
   const updateMilestone = (i: number, field: string, value: unknown) => {
     const next = [...milestones];
@@ -419,8 +420,11 @@ function PricingForm({ data, set }: { data: Record<string, unknown>; set: (k: st
         </div>
       </div>
 
-      <Field label={`Incluye (${includes.length} items)`}>
+      <Field label={`Incluye (${includes.length} items)`} hint="Lo que SÍ va incluido en el precio">
         <StringListEditor items={includes} onChange={v => set("includes", v)} placeholder="Ej: Portal de seguimiento en tiempo real" />
+      </Field>
+      <Field label={`Opcionales (${optionalIncludes.length})`} hint="Entregables/checkpoints opcionales — se muestran en bloque separado bajo título 'Opcionales'. Si lo dejas vacío, no aparece nada.">
+        <StringListEditor items={optionalIncludes} onChange={v => set("optionalIncludes", v.length > 0 ? v : undefined)} placeholder="Ej: Capacitación adicional al equipo" />
       </Field>
     </div>
   );
@@ -935,6 +939,7 @@ function SolutionForm({ data, set }: { data: Record<string, unknown>; set: (k: s
 
 function TechForm({ data, set }: { data: Record<string, unknown>; set: (k: string, v: unknown) => void }) {
   const features = (data.features as string[]) ?? [];
+  const optionalFeatures = (data.optionalFeatures as string[] | undefined) ?? [];
 
   return (
     <div className="space-y-4">
@@ -944,8 +949,11 @@ function TechForm({ data, set }: { data: Record<string, unknown>; set: (k: strin
       <Field label="Intro" hint="Lenguaje de negocio, NO técnico. 2-3 líneas.">
         <Textarea value={String(data.intro ?? "")} onChange={e => set("intro", e.target.value)} rows={2} className="text-sm" />
       </Field>
-      <Field label={`Features (${features.length})`} hint="Ej: 'Funciona en celular, tablet y PC', 'Sin instalación', 'Modo offline'">
+      <Field label={`Features (${features.length})`} hint="Lo que SÍ va incluido. Ej: 'Funciona en celular, tablet y PC', 'Sin instalación'">
         <StringListEditor items={features} onChange={v => set("features", v)} placeholder="Feature en lenguaje de negocio" />
+      </Field>
+      <Field label={`Features opcionales (${optionalFeatures.length})`} hint="Si llenas esto, aparecen en una fila separada con etiqueta 'Opcionales'. Si lo dejas vacío, no se muestra la fila.">
+        <StringListEditor items={optionalFeatures} onChange={v => set("optionalFeatures", v.length > 0 ? v : undefined)} placeholder="Feature opcional (no incluido por defecto)" />
       </Field>
       <Field label="Stack técnico" hint="Solo para técnicos que quieran verificar. Se muestra pequeño.">
         <Input value={String(data.stack ?? "")} onChange={e => set("stack", e.target.value)} className="font-mono text-xs" placeholder="React · Node.js · PostgreSQL · Claude AI" />

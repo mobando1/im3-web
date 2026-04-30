@@ -59,6 +59,8 @@ export const techSchema = z.object({
   heading: z.string(),
   intro: z.string(),
   features: z.array(z.string()).min(1),
+  // Features opcionales — se renderizan en una fila separada con etiqueta "Opcionales"
+  optionalFeatures: z.array(z.string()).optional(),
   stack: z.string(),
 });
 
@@ -67,7 +69,7 @@ export const phaseSchema = z.object({
   title: z.string(),
   durationWeeks: z.number().int().positive(),
   items: z.array(z.string()).min(1),
-  outcome: z.string(),
+  outcome: z.string().optional(),
 });
 
 export const timelineSchema = z.object({
@@ -141,6 +143,8 @@ export const pricingSchema = z.object({
   scarcityMessage: z.string(),
   milestones: z.array(milestoneSchema).min(1),
   includes: z.array(z.string()).min(1),
+  // Entregables/checkpoints opcionales — se renderizan en bloque separado con título "Opcionales"
+  optionalIncludes: z.array(z.string()).optional(),
 });
 
 export const ctaSchema = z.object({

@@ -291,7 +291,10 @@ ESTRUCTURA EXACTA QUE DEBES DEVOLVER (JSON estricto, sin markdown wrapper, sin c
       "heading": "<ej: 'Tecnología de punta, lista para escalar'>",
       "intro": "<2-3 líneas. Explica el stack EN LENGUAJE DE NEGOCIO, no de programador.>",
       "features": [
-        "<4-6 features concretas, ej: 'Automatización de emails con IA que se adapta a cada cliente', 'Dashboard en tiempo real con métricas que importan'>"
+        "<4-6 features OBLIGATORIAS — lo que SÍ va incluido. Ej: 'Automatización de emails con IA', 'Dashboard en tiempo real'. NO incluyas aquí features opcionales, esos van en optionalFeatures.>"
+      ],
+      "optionalFeatures": [
+        "<OPCIONAL: 0-4 features opcionales — extras que el cliente puede agregar. Si no hay extras claros, OMITIR esta key completamente (no array vacío). Estas se renderizan en una fila separada con etiqueta 'Opcionales'.>"
       ],
       "stack": "<lista corta de tecnologías: 'React · Node.js · PostgreSQL · Claude AI · Google Workspace'>"
     },
@@ -352,7 +355,10 @@ ESTRUCTURA EXACTA QUE DEBES DEVOLVER (JSON estricto, sin markdown wrapper, sin c
         { "step": 3, "name": "Entrega final", "desc": "<...>", "amount": "<monto 30%>" }
       ],
       "includes": [
-        "<8-10 bullets de qué incluye la inversión>"
+        "<6-8 bullets OBLIGATORIOS de qué incluye la inversión. Solo lo que SÍ va incluido en el precio. NO mezcles aquí cosas opcionales — esos van en optionalIncludes.>"
+      ],
+      "optionalIncludes": [
+        "<OPCIONAL: 0-4 entregables/checkpoints opcionales — extras no incluidos en el precio base. Si no hay claros, OMITIR esta key completamente. Se renderizan en bloque separado bajo título 'Opcionales' con icono '+' en vez de '✓'.>"
       ]
     },
     "hardware": "<OPCIONAL pero IMPORTANTE si la solución lo requiere. Si ALGÚN módulo de solution.modules requiere equipo físico según el HARDWARE CATALOG, incluir este objeto con MÁXIMA ESPECIFICIDAD. Si la solución es puramente SaaS/web/app (no requiere hardware físico), OMITIR esta key completamente. REGLAS: (1) Cada item debe tener MARCA Y MODELO específicos del catálogo (ej: 'Huellero ZKTeco K40 USB', NO 'huellero genérico'); (2) La CANTIDAD debe basarse en datos del diagnóstico (# sedes, # empleados, # puntos de venta) — explicítalo en notes; (3) Precios DEL CATÁLOGO, no inventados; (4) NO olvides items críticos (si hay control de asistencia biométrico siempre hay huelleros); (5) NO inventes items que no estén en el catálogo. Formato: { heading: 'Equipos físicos requeridos', intro: '2-3 líneas honestas sobre por qué son necesarios', items: [{ name: 'MARCA + MODELO específico', description: 'para qué sirve y cómo se usa en TU negocio', quantity: número entero, unitPriceUSD: '$120 USD', totalPriceUSD: '$240 USD', notes: 'Por qué esta cantidad — ej: 1 por cada una de tus 2 sedes + 1 spare', paidBy: 'cliente-compra' }], subtotalUSD: string, recommendationNote: 'Te pasamos el link de compra en Colombia + configuración sin costo', disclaimer: 'IM3 no agrega margen — precio que paga el cliente directo al proveedor' }>",
