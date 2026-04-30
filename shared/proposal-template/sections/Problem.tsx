@@ -12,11 +12,12 @@ export function Problem({ data, interactive }: Props) {
   const counterRef = useRef<HTMLDivElement>(null);
   const meterRef = useRef<HTMLDivElement>(null);
 
-  const showCounter = data.monthlyLossCOP !== undefined && data.monthlyLossCOP !== null && data.monthlyLossCOP > 0;
+  const lossNum = Number(data.monthlyLossCOP);
+  const showCounter = Number.isFinite(lossNum) && lossNum > 0;
 
   useCostCounter(
     { wrapRef, counterRef, meterRef },
-    showCounter ? data.monthlyLossCOP! : 0,
+    showCounter ? lossNum : 0,
     interactive && showCounter,
   );
 

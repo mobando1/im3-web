@@ -4,7 +4,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Save, X, GripVertical } from "lucide-react";
+import { Plus, Trash2, Save, X, GripVertical, Undo2, Redo2 } from "lucide-react";
 import { AiFieldHelper } from "./AiFieldHelper";
 
 /** Hook for HTML5 drag-and-drop reordering of any array */
@@ -58,11 +58,28 @@ export function hasTypedForm(sectionKey: string): boolean {
   ].includes(sectionKey);
 }
 
+type HistoryState = {
+  past: Record<string, unknown>[];
+  present: Record<string, unknown>;
+  future: Record<string, unknown>[];
+};
+
+const HISTORY_LIMIT = 100;
+const COALESCE_MS = 500;
+
 export function SectionForm({ sectionKey, data, onSave, onCancel, onDirtyChange }: SectionFormProps) {
-  const [local, setLocal] = useState<Record<string, unknown>>(structuredClone(data));
+  const [history, setHistory] = useState<HistoryState>(() => ({
+    past: [],
+    present: structuredClone(data),
+    future: [],
+  }));
+  const local = history.present;
   const originalRef = useRef<string>(JSON.stringify(data));
+  const lastChangeRef = useRef<{ key: string; time: number } | null>(null);
 
   const isDirty = JSON.stringify(local) !== originalRef.current;
+  const canUndo = history.past.length > 0;
+  const canRedo = history.future.length > 0;
 
   useEffect(() => {
     onDirtyChange?.(isDirty);
@@ -72,9 +89,77 @@ export function SectionForm({ sectionKey, data, onSave, onCancel, onDirtyChange 
     return () => onDirtyChange?.(false);
   }, [onDirtyChange]);
 
-  const set = (key: string, value: unknown) => {
-    setLocal(prev => ({ ...prev, [key]: value }));
-  };
+  const set = useCallback((key: string, value: unknown) => {
+    setHistory(h => {
+      const now = Date.now();
+      const last = lastChangeRef.current;
+      const coalesce = last && last.key === key && now - last.time < COALESCE_MS;
+      lastChangeRef.current = { key, time: now };
+      const nextPast = coalesce
+        ? h.past
+        : [...h.past, h.present].slice(-HISTORY_LIMIT);
+      return {
+        past: nextPast,
+        present: { ...h.present, [key]: value },
+        future: [],
+      };
+    });
+  }, []);
+
+  const undo = useCallback(() => {
+    setHistory(h => {
+      if (h.past.length === 0) return h;
+      lastChangeRef.current = null;
+      const previous = h.past[h.past.length - 1];
+      return {
+        past: h.past.slice(0, -1),
+        present: previous,
+        future: [h.present, ...h.future].slice(0, HISTORY_LIMIT),
+      };
+    });
+  }, []);
+
+  const redo = useCallback(() => {
+    setHistory(h => {
+      if (h.future.length === 0) return h;
+      lastChangeRef.current = null;
+      const next = h.future[0];
+      return {
+        past: [...h.past, h.present].slice(-HISTORY_LIMIT),
+        present: next,
+        future: h.future.slice(1),
+      };
+    });
+  }, []);
+
+  // Keyboard shortcut: Cmd/Ctrl+Z (undo), Cmd/Ctrl+Shift+Z or Cmd/Ctrl+Y (redo).
+  // Native text-input undo (within a single input/textarea) is preserved — we only
+  // intercept when focus is outside an input or when there's nothing to undo natively.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      const mod = e.metaKey || e.ctrlKey;
+      if (!mod) return;
+      const key = e.key.toLowerCase();
+      const isUndo = key === "z" && !e.shiftKey;
+      const isRedo = (key === "z" && e.shiftKey) || key === "y";
+      if (!isUndo && !isRedo) return;
+
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName;
+      const inEditable =
+        tag === "INPUT" ||
+        tag === "TEXTAREA" ||
+        (target && (target as HTMLElement).isContentEditable);
+      // Let the browser handle native undo within text fields.
+      if (inEditable) return;
+
+      e.preventDefault();
+      if (isUndo) undo();
+      else redo();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [undo, redo]);
 
   const save = () => {
     onDirtyChange?.(false);
@@ -96,6 +181,26 @@ export function SectionForm({ sectionKey, data, onSave, onCancel, onDirtyChange 
           {isDirty && <span className="ml-2 text-amber-600 font-medium">● Sin guardar</span>}
         </p>
         <div className="flex gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={undo}
+            disabled={!canUndo}
+            title="Deshacer (⌘Z / Ctrl+Z)"
+            className="gap-1.5"
+          >
+            <Undo2 className="w-3.5 h-3.5" />
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={redo}
+            disabled={!canRedo}
+            title="Rehacer (⇧⌘Z / Ctrl+Shift+Z)"
+            className="gap-1.5"
+          >
+            <Redo2 className="w-3.5 h-3.5" />
+          </Button>
           <Button size="sm" onClick={save} className="gap-1.5 bg-[#2FA4A9] hover:bg-[#238b8f]">
             <Save className="w-3.5 h-3.5" /> Guardar
           </Button>
@@ -516,7 +621,7 @@ function TimelineForm({ data, set }: { data: Record<string, unknown>; set: (k: s
                 placeholder="Ej: App móvil con geolocalización"
               />
             </Field>
-            <Field label="Outcome" hint="Solo lo que el cliente puede hacer (NO incluyas 'Al finalizar:' — se agrega automático)">
+            <Field label="Al finalizar" hint="Lo que el cliente puede hacer al terminar la fase. Déjalo vacío para no mostrar la línea. NO escribas 'Al finalizar:' — se agrega automático.">
               <AiFieldHelper value={phase.outcome} onChange={v => updatePhase(i, "outcome", v)} context="Outcome de fase del cronograma — sin prefijo 'Al finalizar'">
                 <Input value={phase.outcome} onChange={e => updatePhase(i, "outcome", e.target.value)} className="h-8 text-sm" placeholder="horas extras controladas automáticamente" />
               </AiFieldHelper>
