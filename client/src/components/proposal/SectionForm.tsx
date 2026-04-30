@@ -239,40 +239,71 @@ function ProblemForm({ data, set }: { data: Record<string, unknown>; set: (k: st
   const removeCard = (i: number) => set("problemCards", cards.filter((_, idx) => idx !== i));
   const cardDrag = useDragReorder(cards, (v) => set("problemCards", v));
 
+  const hasLossWidget = data.monthlyLossCOP !== undefined && data.monthlyLossCOP !== null;
+  const removeLossWidget = () => {
+    if (!window.confirm("¿Eliminar el widget de pérdida mensual? El contador animado, la descripción y el breakdown desaparecerán de la propuesta.")) return;
+    set("monthlyLossCOP", undefined);
+    set("counterDescription", undefined);
+    set("calculationBreakdown", undefined);
+  };
+  const restoreLossWidget = () => {
+    set("monthlyLossCOP", 0);
+    set("counterDescription", "");
+    set("calculationBreakdown", "");
+  };
+
   return (
     <div className="space-y-4">
       <Field label="Intro del problema" hint="2-3 líneas que abren la sección">
         <Textarea value={String(data.intro ?? "")} onChange={e => set("intro", e.target.value)} rows={2} />
       </Field>
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="Pérdida mensual en COP" hint="Número entero sin separadores. Ej: 25000000">
-          <Input
-            type="number"
-            value={String(data.monthlyLossCOP ?? "")}
-            onChange={e => set("monthlyLossCOP", parseInt(e.target.value) || 0)}
-            className="font-mono"
-          />
-          {typeof data.monthlyLossCOP === "number" && data.monthlyLossCOP > 0 && (
-            <p className="text-xs text-emerald-600 mt-0.5 font-medium">
-              = ${(data.monthlyLossCOP as number / 1_000_000).toFixed(0)}M COP/mes · ${((data.monthlyLossCOP as number) * 12 / 1_000_000).toFixed(0)}M COP/año
-            </p>
-          )}
-        </Field>
-        <Field label="Descripción del counter" hint="Texto debajo del número animado">
-          <Input value={String(data.counterDescription ?? "")} onChange={e => set("counterDescription", e.target.value)} />
-        </Field>
-      </div>
-      <Field label="Breakdown del cálculo" hint="OBLIGATORIO: explica de dónde sale la cifra. El cliente debe poder auditar este número.">
-        <AiFieldHelper value={String(data.calculationBreakdown ?? "")} onChange={v => set("calculationBreakdown", v)} context="Breakdown del cálculo de pérdidas mensuales">
-          <Textarea
-            value={String(data.calculationBreakdown ?? "")}
-            onChange={e => set("calculationBreakdown", e.target.value)}
-            rows={4}
-            className="text-sm"
-            placeholder="Ej: 45 empleados que registran manualmente horas extras. Si 15% tiene sobrepago (estudios del sector: 10-20%), a $4.5M COP/emp/mes promedio, son ~$30M. Tomamos conservador: $25M."
-          />
-        </AiFieldHelper>
-      </Field>
+
+      {hasLossWidget ? (
+        <div className="border border-gray-200 rounded-lg p-3 space-y-3 bg-gray-50">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-semibold text-gray-700">Widget de pérdida mensual (contador animado)</Label>
+            <Button size="sm" variant="outline" onClick={removeLossWidget} className="h-7 text-xs gap-1 border-red-200 text-red-600 hover:bg-red-50">
+              <X className="w-3 h-3" /> Eliminar widget
+            </Button>
+          </div>
+          <div className="grid grid-cols-2 gap-4">
+            <Field label="Pérdida mensual en COP" hint="Número entero sin separadores. Ej: 25000000">
+              <Input
+                type="number"
+                value={String(data.monthlyLossCOP ?? "")}
+                onChange={e => set("monthlyLossCOP", parseInt(e.target.value) || 0)}
+                className="font-mono"
+              />
+              {typeof data.monthlyLossCOP === "number" && data.monthlyLossCOP > 0 && (
+                <p className="text-xs text-emerald-600 mt-0.5 font-medium">
+                  = ${(data.monthlyLossCOP as number / 1_000_000).toFixed(0)}M COP/mes · ${((data.monthlyLossCOP as number) * 12 / 1_000_000).toFixed(0)}M COP/año
+                </p>
+              )}
+            </Field>
+            <Field label="Descripción del counter" hint="Texto debajo del número animado">
+              <Input value={String(data.counterDescription ?? "")} onChange={e => set("counterDescription", e.target.value)} />
+            </Field>
+          </div>
+          <Field label="Breakdown del cálculo" hint="Explica de dónde sale la cifra. El cliente debe poder auditar este número.">
+            <AiFieldHelper value={String(data.calculationBreakdown ?? "")} onChange={v => set("calculationBreakdown", v)} context="Breakdown del cálculo de pérdidas mensuales">
+              <Textarea
+                value={String(data.calculationBreakdown ?? "")}
+                onChange={e => set("calculationBreakdown", e.target.value)}
+                rows={4}
+                className="text-sm"
+                placeholder="Ej: 45 empleados que registran manualmente horas extras. Si 15% tiene sobrepago (estudios del sector: 10-20%), a $4.5M COP/emp/mes promedio, son ~$30M. Tomamos conservador: $25M."
+              />
+            </AiFieldHelper>
+          </Field>
+        </div>
+      ) : (
+        <div className="border border-dashed border-amber-300 bg-amber-50 rounded-lg p-3 flex items-center justify-between">
+          <span className="text-xs text-amber-700">Widget de pérdida mensual eliminado — no se mostrará en la propuesta.</span>
+          <Button size="sm" variant="outline" onClick={restoreLossWidget} className="h-7 text-xs gap-1 border-amber-300 text-amber-700 hover:bg-amber-100">
+            <Plus className="w-3 h-3" /> Restaurar widget
+          </Button>
+        </div>
+      )}
 
       <div>
         <Label className="text-xs font-medium text-gray-700 mb-2 block">Problem cards ({cards.length})</Label>
@@ -755,19 +786,46 @@ function OpCostsForm({ data, set }: { data: Record<string, unknown>; set: (k: st
 
 function SummaryForm({ data, set }: { data: Record<string, unknown>; set: (k: string, v: unknown) => void }) {
   const paragraphs = (data.paragraphs as string[]) ?? [];
-  const stats = (data.stats as Array<{ label: string; value: string }>) ?? [];
+  const stats = (data.stats as Array<{ label: string; value: string }> | undefined);
+  const hasStats = stats !== undefined;
+  const hasQuote = data.commitmentQuote !== undefined && data.commitmentQuote !== null;
 
   const updateStat = (i: number, field: string, value: string) => {
-    const next = [...stats]; next[i] = { ...next[i], [field]: value }; set("stats", next);
+    const next = [...(stats ?? [])]; next[i] = { ...next[i], [field]: value }; set("stats", next);
   };
-  const addStat = () => set("stats", [...stats, { label: "", value: "" }]);
-  const removeStat = (i: number) => set("stats", stats.filter((_, idx) => idx !== i));
+  const addStat = () => set("stats", [...(stats ?? []), { label: "", value: "" }]);
+  const removeStat = (i: number) => set("stats", (stats ?? []).filter((_, idx) => idx !== i));
+
+  const removeQuote = () => {
+    if (!window.confirm("¿Eliminar la frase memorable? El banner del commitment quote desaparecerá.")) return;
+    set("commitmentQuote", undefined);
+  };
+  const removeStatsBlock = () => {
+    if (!window.confirm("¿Eliminar el cuadro de 'Datos del proyecto'? Las stats desaparecerán de la propuesta.")) return;
+    set("stats", undefined);
+  };
 
   return (
     <div className="space-y-4">
-      <Field label="Commitment quote" hint="Frase fuerte y memorable que define a IM3. No usar tópicos.">
-        <Textarea value={String(data.commitmentQuote ?? "")} onChange={e => set("commitmentQuote", e.target.value)} rows={2} />
-      </Field>
+      {hasQuote ? (
+        <div className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-semibold text-gray-700">Frase memorable (commitment quote)</Label>
+            <Button size="sm" variant="outline" onClick={removeQuote} className="h-7 text-xs gap-1 border-red-200 text-red-600 hover:bg-red-50">
+              <X className="w-3 h-3" /> Eliminar
+            </Button>
+          </div>
+          <Textarea value={String(data.commitmentQuote ?? "")} onChange={e => set("commitmentQuote", e.target.value)} rows={2} />
+        </div>
+      ) : (
+        <div className="border border-dashed border-amber-300 bg-amber-50 rounded-lg p-3 flex items-center justify-between">
+          <span className="text-xs text-amber-700">Frase memorable eliminada — no se mostrará el banner.</span>
+          <Button size="sm" variant="outline" onClick={() => set("commitmentQuote", "")} className="h-7 text-xs gap-1 border-amber-300 text-amber-700 hover:bg-amber-100">
+            <Plus className="w-3 h-3" /> Restaurar
+          </Button>
+        </div>
+      )}
+
       <Field label={`Párrafos (${paragraphs.length})`} hint="Contexto del cliente, propuesta de IM3, transformación esperada">
         <StringListEditor
           items={paragraphs}
@@ -775,25 +833,40 @@ function SummaryForm({ data, set }: { data: Record<string, unknown>; set: (k: st
           placeholder="Párrafo del resumen ejecutivo"
         />
       </Field>
-      <div>
-        <Label className="text-xs font-medium text-gray-700 mb-2 block">Stats ({stats.length})</Label>
-        <div className="space-y-2">
-          {stats.map((s, i) => (
-            <div key={i} className="grid grid-cols-[1fr_120px_30px] gap-2 items-end">
-              <Field label={i === 0 ? "Label" : ""}>
-                <Input value={s.label} onChange={e => updateStat(i, "label", e.target.value)} className="h-8 text-sm" placeholder="Tiempo de desarrollo" />
-              </Field>
-              <Field label={i === 0 ? "Valor" : ""}>
-                <Input value={s.value} onChange={e => updateStat(i, "value", e.target.value)} className="h-8 text-sm font-mono font-semibold" placeholder="16 semanas" />
-              </Field>
-              <button onClick={() => removeStat(i)} className="text-gray-400 hover:text-red-500 p-1 pb-2"><Trash2 className="w-3.5 h-3.5" /></button>
-            </div>
-          ))}
-          <Button size="sm" variant="outline" onClick={addStat} className="text-xs h-7 gap-1">
-            <Plus className="w-3 h-3" /> Agregar stat
+
+      {hasStats ? (
+        <div className="border border-gray-200 rounded-lg p-3 space-y-2 bg-gray-50">
+          <div className="flex items-center justify-between">
+            <Label className="text-xs font-semibold text-gray-700">Datos del proyecto ({stats!.length})</Label>
+            <Button size="sm" variant="outline" onClick={removeStatsBlock} className="h-7 text-xs gap-1 border-red-200 text-red-600 hover:bg-red-50">
+              <X className="w-3 h-3" /> Eliminar bloque
+            </Button>
+          </div>
+          <div className="space-y-2">
+            {stats!.map((s, i) => (
+              <div key={i} className="grid grid-cols-[1fr_120px_30px] gap-2 items-end">
+                <Field label={i === 0 ? "Label" : ""}>
+                  <Input value={s.label} onChange={e => updateStat(i, "label", e.target.value)} className="h-8 text-sm" placeholder="Tiempo de desarrollo" />
+                </Field>
+                <Field label={i === 0 ? "Valor" : ""}>
+                  <Input value={s.value} onChange={e => updateStat(i, "value", e.target.value)} className="h-8 text-sm font-mono font-semibold" placeholder="16 semanas" />
+                </Field>
+                <button onClick={() => removeStat(i)} className="text-gray-400 hover:text-red-500 p-1 pb-2"><Trash2 className="w-3.5 h-3.5" /></button>
+              </div>
+            ))}
+            <Button size="sm" variant="outline" onClick={addStat} className="text-xs h-7 gap-1">
+              <Plus className="w-3 h-3" /> Agregar stat
+            </Button>
+          </div>
+        </div>
+      ) : (
+        <div className="border border-dashed border-amber-300 bg-amber-50 rounded-lg p-3 flex items-center justify-between">
+          <span className="text-xs text-amber-700">Bloque de "Datos del proyecto" eliminado — no se mostrará.</span>
+          <Button size="sm" variant="outline" onClick={() => set("stats", [])} className="h-7 text-xs gap-1 border-amber-300 text-amber-700 hover:bg-amber-100">
+            <Plus className="w-3 h-3" /> Restaurar
           </Button>
         </div>
-      </div>
+      )}
     </div>
   );
 }

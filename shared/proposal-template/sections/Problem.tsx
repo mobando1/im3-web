@@ -12,10 +12,12 @@ export function Problem({ data, interactive }: Props) {
   const counterRef = useRef<HTMLDivElement>(null);
   const meterRef = useRef<HTMLDivElement>(null);
 
+  const showCounter = data.monthlyLossCOP !== undefined && data.monthlyLossCOP !== null && data.monthlyLossCOP > 0;
+
   useCostCounter(
     { wrapRef, counterRef, meterRef },
-    data.monthlyLossCOP,
-    interactive,
+    showCounter ? data.monthlyLossCOP! : 0,
+    interactive && showCounter,
   );
 
   return (
@@ -24,29 +26,33 @@ export function Problem({ data, interactive }: Props) {
         <div className="pt-section-label">El Problema</div>
         <h2 className="pt-problem-heading pt-reveal" dangerouslySetInnerHTML={{ __html: data.intro }} />
 
-        <div className="pt-cost-counter-wrap pt-reveal" ref={wrapRef}>
-          <div className="pt-cost-counter-label">
-            Pérdida acumulada desde que abriste esta propuesta
-          </div>
-          <div className="pt-cost-counter-row">
-            <div className="pt-cost-counter" ref={counterRef}>
-              $0
+        {showCounter && (
+          <div className="pt-cost-counter-wrap pt-reveal" ref={wrapRef}>
+            <div className="pt-cost-counter-label">
+              Pérdida acumulada desde que abriste esta propuesta
             </div>
-            <div
-              className="pt-cost-counter-desc"
-              dangerouslySetInnerHTML={{ __html: data.counterDescription }}
-            />
-          </div>
-          <div className="pt-cost-meter">
-            <div className="pt-cost-meter-fill" ref={meterRef} />
-          </div>
-          {data.calculationBreakdown && (
-            <div className="pt-cost-breakdown">
-              <div className="pt-cost-breakdown-label">Cómo calculamos esto</div>
-              <p dangerouslySetInnerHTML={{ __html: data.calculationBreakdown }} />
+            <div className="pt-cost-counter-row">
+              <div className="pt-cost-counter" ref={counterRef}>
+                $0
+              </div>
+              {data.counterDescription && (
+                <div
+                  className="pt-cost-counter-desc"
+                  dangerouslySetInnerHTML={{ __html: data.counterDescription }}
+                />
+              )}
             </div>
-          )}
-        </div>
+            <div className="pt-cost-meter">
+              <div className="pt-cost-meter-fill" ref={meterRef} />
+            </div>
+            {data.calculationBreakdown && (
+              <div className="pt-cost-breakdown">
+                <div className="pt-cost-breakdown-label">Cómo calculamos esto</div>
+                <p dangerouslySetInnerHTML={{ __html: data.calculationBreakdown }} />
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="pt-problems-grid">
           {data.problemCards.map((card, i) => (

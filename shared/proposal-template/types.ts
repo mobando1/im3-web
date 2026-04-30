@@ -21,9 +21,9 @@ export const summaryStatSchema = z.object({
 });
 
 export const summarySchema = z.object({
-  commitmentQuote: z.string(),
+  commitmentQuote: z.string().optional(),
   paragraphs: z.array(z.string()).min(1),
-  stats: z.array(summaryStatSchema).min(1),
+  stats: z.array(summaryStatSchema).optional(),
 });
 
 export const problemCardSchema = z.object({
@@ -34,11 +34,11 @@ export const problemCardSchema = z.object({
 
 export const problemSchema = z.object({
   intro: z.string(),
-  monthlyLossCOP: z.number().nonnegative(),
-  counterDescription: z.string(),
-  // OBLIGATORIO: cómo se calculó el monthlyLossCOP (audibilidad matemática).
-  // Ejemplo: "45 empleados × 15% sobrepago × $4.5M/emp = $30M, tomamos conservador $25M"
-  calculationBreakdown: z.string().min(30, "El breakdown debe tener al menos 30 caracteres — explicar la matemática real"),
+  // Widget de pérdida mensual (todo el bloque del contador animado).
+  // Si monthlyLossCOP es undefined/null, el widget completo no se renderiza.
+  monthlyLossCOP: z.number().nonnegative().optional(),
+  counterDescription: z.string().optional(),
+  calculationBreakdown: z.string().optional(),
   problemCards: z.array(problemCardSchema).min(1),
 });
 
