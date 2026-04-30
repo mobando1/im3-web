@@ -734,3 +734,63 @@ export const agentRuns = pgTable("agent_runs", {
 
 export type AgentRun = typeof agentRuns.$inferSelect;
 export type InsertAgentRun = typeof agentRuns.$inferInsert;
+
+// ───────────────────────────────────────────────────────────────
+// Portal de Clientes — Auth (login + reset password + invite)
+// ───────────────────────────────────────────────────────────────
+
+// Cuentas de cliente que pueden loguearse al portal
+export const clientUsers = pgTable("client_users", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull().unique(), // siempre lowercase
+  passwordHash: text("password_hash"), // null hasta que acepte invite
+  name: text("name"),
+  status: text("status").notNull().default("invited"), // invited | active | disabled
+  invitedAt: timestamp("invited_at").defaultNow().notNull(),
+  acceptedAt: timestamp("accepted_at"),
+  lastLoginAt: timestamp("last_login_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type ClientUser = typeof clientUsers.$inferSelect;
+export type InsertClientUser = typeof clientUsers.$inferInsert;
+
+// Junction M:N entre cuentas de cliente y proyectos
+export const clientUserProjects = pgTable("client_user_projects", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientUserId: varchar("client_user_id").notNull(),
+  clientProjectId: varchar("client_project_id").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ClientUserProject = typeof clientUserProjects.$inferSelect;
+export type InsertClientUserProject = typeof clientUserProjects.$inferInsert;
+
+// Invites enviadas por admin a clientes
+export const clientInvites = pgTable("client_invites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  email: text("email").notNull(), // lowercase
+  token: varchar("token").notNull().unique().default(sql`gen_random_uuid()`),
+  clientProjectId: varchar("client_project_id"), // proyecto a auto-vincular al aceptar
+  invitedByUserId: varchar("invited_by_user_id"), // FK -> users.id (admin que invitó)
+  expiresAt: timestamp("expires_at").notNull(), // default now() + 7 días, set en runtime
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ClientInvite = typeof clientInvites.$inferSelect;
+export type InsertClientInvite = typeof clientInvites.$inferInsert;
+
+// Tokens de reset de password
+export const clientPasswordResets = pgTable("client_password_resets", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientUserId: varchar("client_user_id").notNull(),
+  token: varchar("token").notNull().unique().default(sql`gen_random_uuid()`),
+  expiresAt: timestamp("expires_at").notNull(), // default now() + 1 hora, set en runtime
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ClientPasswordReset = typeof clientPasswordResets.$inferSelect;
+export type InsertClientPasswordReset = typeof clientPasswordResets.$inferInsert;

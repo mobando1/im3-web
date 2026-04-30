@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets } from "@shared/schema";
 import { AGENT_REGISTRY, AGENT_DOMAINS, findAgent } from "./agents/registry";
 import { runAgent } from "./agents/runner";
 import { syncGmailEmails, isGmailConfigured } from "./google-gmail";
@@ -15,6 +15,7 @@ import { isEmailConfigured, sendEmail } from "./email-sender";
 import { generateEmailContent, buildMicroReminderEmail, build6hReminderEmail, buildFollowUpConfirmationEmail, buildNoShowEmail, generateDailyNewsDigest, generateContactInsight, generateWhatsAppMessage, generateNewsletterWelcome, generateMiniAudit, classifyWhatsAppIntent, generateWhatsAppAutoReply, buildWhatsAppNotificationEmail, buildProjectNotificationEmail, escapeHtml } from "./email-ai";
 import { parseFechaCita } from "./date-utils";
 import { requireAuth, hashPassword } from "./auth";
+import { requireClient, publicClientUser, sendInviteEmail, sendPasswordResetEmail } from "./client-auth";
 import { calculateLeadScore } from "./lead-scoring";
 import { isWhatsAppConfigured, calculateWhatsAppSchedule, WHATSAPP_SEQUENCE, sendWhatsAppText } from "./whatsapp";
 import passport from "passport";
@@ -5473,6 +5474,344 @@ ${urls}
         notifyProjectClient(projectId, `💬 Nuevo mensaje en ${proj.name}`, html);
       }
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Portal del Cliente — Auth (login + invite + reset password)
+  // ─────────────────────────────────────────────────────────────
+
+  // Login (email + password)
+  app.post("/api/portal/auth/login", (req, res, next) => {
+    passport.authenticate("client-local", (err: any, user: any, info: any) => {
+      if (err) return next(err);
+      if (!user) return res.status(401).json({ error: info?.message || "Credenciales inválidas" });
+      req.login(user, (err2) => {
+        if (err2) return next(err2);
+        res.json(publicClientUser(user));
+      });
+    })(req, res, next);
+  });
+
+  // Logout
+  app.post("/api/portal/auth/logout", (req, res) => {
+    req.logout(() => res.json({ ok: true }));
+  });
+
+  // Current user
+  app.get("/api/portal/auth/me", (req, res) => {
+    if (!req.isAuthenticated() || (req.user as any)?.kind !== "client") {
+      return res.status(401).json({ error: "No autorizado" });
+    }
+    res.json(publicClientUser(req.user));
+  });
+
+  // Accept invite — sets password, creates/links client_user, auto-login
+  app.post("/api/portal/auth/accept-invite", async (req, res) => {
+    try {
+      const token = String(req.body?.token || "").trim();
+      const password = String(req.body?.password || "");
+      const name = req.body?.name ? String(req.body.name).trim() : null;
+      if (!token || password.length < 8) {
+        return res.status(400).json({ error: "Token y contraseña (≥ 8 caracteres) son requeridos" });
+      }
+      const [invite] = await db!.select().from(clientInvites).where(eq(clientInvites.token, token));
+      if (!invite) return res.status(404).json({ error: "Invitación no encontrada" });
+      if (invite.usedAt) return res.status(410).json({ error: "Esta invitación ya fue usada" });
+      if (new Date(invite.expiresAt).getTime() < Date.now()) {
+        return res.status(410).json({ error: "Esta invitación expiró" });
+      }
+
+      const email = String(invite.email).toLowerCase().trim();
+      const passwordHash = await hashPassword(password);
+
+      // Upsert client_user
+      const [existing] = await db!.select().from(clientUsers).where(eq(clientUsers.email, email));
+      let user;
+      if (existing) {
+        const [updated] = await db!
+          .update(clientUsers)
+          .set({
+            passwordHash,
+            name: name || existing.name,
+            status: "active",
+            acceptedAt: existing.acceptedAt || sql`now()`,
+            updatedAt: sql`now()`,
+          })
+          .where(eq(clientUsers.id, existing.id))
+          .returning();
+        user = updated;
+      } else {
+        const [created] = await db!
+          .insert(clientUsers)
+          .values({
+            email,
+            passwordHash,
+            name,
+            status: "active",
+            acceptedAt: sql`now()` as any,
+          })
+          .returning();
+        user = created;
+      }
+
+      // Link to project if invite carries one
+      if (invite.clientProjectId) {
+        await db!
+          .insert(clientUserProjects)
+          .values({ clientUserId: user.id, clientProjectId: invite.clientProjectId })
+          .onConflictDoNothing()
+          .catch(() => {});
+      }
+
+      // Mark invite used
+      await db!.update(clientInvites).set({ usedAt: sql`now()` }).where(eq(clientInvites.id, invite.id));
+
+      // Auto-login
+      req.login({ ...user, kind: "client" }, (err) => {
+        if (err) return res.status(500).json({ error: "Login automático falló" });
+        res.json(publicClientUser(user));
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Error aceptando invitación" });
+    }
+  });
+
+  // Forgot password — always 200 (no email enumeration)
+  app.post("/api/portal/auth/forgot-password", async (req, res) => {
+    try {
+      const email = String(req.body?.email || "").toLowerCase().trim();
+      if (!email) return res.json({ ok: true });
+
+      const [u] = await db!.select().from(clientUsers).where(eq(clientUsers.email, email));
+      if (u && u.status !== "disabled") {
+        const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1h
+        const [reset] = await db!
+          .insert(clientPasswordResets)
+          .values({ clientUserId: u.id, expiresAt: expiresAt as any })
+          .returning();
+        await sendPasswordResetEmail({
+          to: u.email,
+          name: u.name,
+          resetToken: reset.token,
+        }).catch((e) => console.error("[portal] sendPasswordResetEmail failed:", e));
+      }
+      res.json({ ok: true });
+    } catch (err: any) {
+      // Never leak — always 200
+      console.error("[portal] forgot-password error:", err);
+      res.json({ ok: true });
+    }
+  });
+
+  // Reset password
+  app.post("/api/portal/auth/reset-password", async (req, res) => {
+    try {
+      const token = String(req.body?.token || "").trim();
+      const newPassword = String(req.body?.newPassword || "");
+      if (!token || newPassword.length < 8) {
+        return res.status(400).json({ error: "Token y contraseña (≥ 8 caracteres) son requeridos" });
+      }
+      const [reset] = await db!.select().from(clientPasswordResets).where(eq(clientPasswordResets.token, token));
+      if (!reset) return res.status(404).json({ error: "Token inválido" });
+      if (reset.usedAt) return res.status(410).json({ error: "Este link ya fue usado" });
+      if (new Date(reset.expiresAt).getTime() < Date.now()) {
+        return res.status(410).json({ error: "Este link expiró" });
+      }
+      const passwordHash = await hashPassword(newPassword);
+      await db!
+        .update(clientUsers)
+        .set({ passwordHash, status: "active", updatedAt: sql`now()` })
+        .where(eq(clientUsers.id, reset.clientUserId));
+      await db!.update(clientPasswordResets).set({ usedAt: sql`now()` }).where(eq(clientPasswordResets.id, reset.id));
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Error reseteando contraseña" });
+    }
+  });
+
+  // Get invite info (for accept-invite UI to show email/projectName before submit)
+  app.get("/api/portal/auth/invite/:token", async (req, res) => {
+    const [invite] = await db!.select().from(clientInvites).where(eq(clientInvites.token, String(req.params.token)));
+    if (!invite) return res.status(404).json({ error: "Invitación no encontrada" });
+    if (invite.usedAt) return res.status(410).json({ error: "Esta invitación ya fue usada" });
+    if (new Date(invite.expiresAt).getTime() < Date.now()) {
+      return res.status(410).json({ error: "Esta invitación expiró" });
+    }
+    let projectName: string | null = null;
+    if (invite.clientProjectId) {
+      const [p] = await db!.select({ name: clientProjects.name }).from(clientProjects).where(eq(clientProjects.id, invite.clientProjectId));
+      projectName = p?.name || null;
+    }
+    res.json({ email: invite.email, projectName });
+  });
+
+  // List projects accessible to the logged-in client (for selector)
+  app.get("/api/portal/projects", requireClient, async (req, res) => {
+    const userId = (req.user as any).id;
+    const links = await db!
+      .select({
+        id: clientProjects.id,
+        name: clientProjects.name,
+        description: clientProjects.description,
+        status: clientProjects.status,
+        startDate: clientProjects.startDate,
+        estimatedEndDate: clientProjects.estimatedEndDate,
+        healthStatus: clientProjects.healthStatus,
+      })
+      .from(clientUserProjects)
+      .innerJoin(clientProjects, eq(clientProjects.id, clientUserProjects.clientProjectId))
+      .where(eq(clientUserProjects.clientUserId, userId));
+    res.json(links);
+  });
+
+  // Bridge: rewrite /api/portal/projects/:projectId(/*) → /api/portal/:accessToken(/*)
+  // so all existing token-based handlers below work for authenticated clients too.
+  // Excludes "/api/portal/projects" (no id) which is handled by the list endpoint above.
+  app.use(async (req, res, next) => {
+    const m = req.url.match(/^\/api\/portal\/projects\/([^/?]+)(\/.*)?(\?.*)?$/);
+    if (!m) return next();
+    if (!req.isAuthenticated() || (req.user as any)?.kind !== "client") {
+      return res.status(401).json({ error: "No autorizado" });
+    }
+    const projectId = m[1];
+    const userId = (req.user as any).id;
+    const [link] = await db!
+      .select()
+      .from(clientUserProjects)
+      .where(and(eq(clientUserProjects.clientUserId, userId), eq(clientUserProjects.clientProjectId, projectId)));
+    if (!link) return res.status(403).json({ error: "No tienes acceso a este proyecto" });
+    const [project] = await db!
+      .select({ accessToken: clientProjects.accessToken })
+      .from(clientProjects)
+      .where(eq(clientProjects.id, projectId));
+    if (!project) return res.status(404).json({ error: "Proyecto no encontrado" });
+    const tail = m[2] || "";
+    const qs = m[3] || "";
+    req.url = `/api/portal/${project.accessToken}${tail}${qs}`;
+    next();
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Portal — Admin endpoints (manage client_users + invites)
+  // ─────────────────────────────────────────────────────────────
+
+  // Invite a client to a specific project
+  app.post("/api/admin/projects/:id/invite-client", requireAuth, async (req, res) => {
+    try {
+      const projectId = String(req.params.id);
+      const email = String(req.body?.email || "").toLowerCase().trim();
+      const name = req.body?.name ? String(req.body.name).trim() : null;
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({ error: "Email inválido" });
+      }
+      const [project] = await db!.select().from(clientProjects).where(eq(clientProjects.id, projectId));
+      if (!project) return res.status(404).json({ error: "Proyecto no encontrado" });
+
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const adminId = (req.user as any)?.id;
+      const [invite] = await db!
+        .insert(clientInvites)
+        .values({
+          email,
+          clientProjectId: projectId,
+          invitedByUserId: adminId,
+          expiresAt: expiresAt as any,
+        })
+        .returning();
+
+      await sendInviteEmail({
+        to: email,
+        name,
+        inviteToken: invite.token,
+        projectName: project.name,
+      });
+
+      res.json({ inviteId: invite.id, expiresAt: invite.expiresAt });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Error invitando cliente" });
+    }
+  });
+
+  // List clients with access to a specific project
+  app.get("/api/admin/projects/:id/clients", requireAuth, async (req, res) => {
+    const projectId = String(req.params.id);
+    const linked = await db!
+      .select({
+        id: clientUsers.id,
+        email: clientUsers.email,
+        name: clientUsers.name,
+        status: clientUsers.status,
+        acceptedAt: clientUsers.acceptedAt,
+        lastLoginAt: clientUsers.lastLoginAt,
+        invitedAt: clientUsers.invitedAt,
+      })
+      .from(clientUserProjects)
+      .innerJoin(clientUsers, eq(clientUsers.id, clientUserProjects.clientUserId))
+      .where(eq(clientUserProjects.clientProjectId, projectId));
+
+    const pendingInvites = await db!
+      .select({
+        id: clientInvites.id,
+        email: clientInvites.email,
+        expiresAt: clientInvites.expiresAt,
+        createdAt: clientInvites.createdAt,
+      })
+      .from(clientInvites)
+      .where(and(eq(clientInvites.clientProjectId, projectId), isNull(clientInvites.usedAt)));
+
+    res.json({ users: linked, pendingInvites });
+  });
+
+  // Unlink a client from a project
+  app.post("/api/admin/projects/:id/clients/:clientId/unlink", requireAuth, async (req, res) => {
+    const projectId = String(req.params.id);
+    const clientId = String(req.params.clientId);
+    await db!
+      .delete(clientUserProjects)
+      .where(and(eq(clientUserProjects.clientProjectId, projectId), eq(clientUserProjects.clientUserId, clientId)));
+    res.json({ ok: true });
+  });
+
+  // Resend invite (creates a fresh token)
+  app.post("/api/admin/projects/:id/invites/:inviteId/resend", requireAuth, async (req, res) => {
+    try {
+      const projectId = String(req.params.id);
+      const inviteId = String(req.params.inviteId);
+      const [old] = await db!.select().from(clientInvites).where(eq(clientInvites.id, inviteId));
+      if (!old) return res.status(404).json({ error: "Invitación no encontrada" });
+      if (old.usedAt) return res.status(410).json({ error: "Invitación ya usada — ya no se puede reenviar" });
+
+      const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const [fresh] = await db!
+        .insert(clientInvites)
+        .values({
+          email: old.email,
+          clientProjectId: projectId,
+          invitedByUserId: (req.user as any)?.id,
+          expiresAt: expiresAt as any,
+        })
+        .returning();
+
+      const [project] = await db!.select({ name: clientProjects.name }).from(clientProjects).where(eq(clientProjects.id, projectId));
+      await sendInviteEmail({
+        to: old.email,
+        name: null,
+        inviteToken: fresh.token,
+        projectName: project?.name,
+      });
+      res.json({ inviteId: fresh.id, expiresAt: fresh.expiresAt });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Error reenviando invitación" });
+    }
+  });
+
+  // Disable a client (cuts access across all their projects)
+  app.post("/api/admin/clients/:id/disable", requireAuth, async (req, res) => {
+    await db!
+      .update(clientUsers)
+      .set({ status: "disabled", updatedAt: sql`now()` })
+      .where(eq(clientUsers.id, String(req.params.id)));
+    res.json({ ok: true });
   });
 
   // ─────────────────────────────────────────────────────────────

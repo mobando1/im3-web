@@ -5,11 +5,14 @@ import connectPgSimple from "connect-pg-simple";
 import { scrypt, randomBytes, timingSafeEqual } from "crypto";
 import { promisify } from "util";
 import { db } from "./db";
-import { users } from "@shared/schema";
+import { users, clientUsers } from "@shared/schema";
 import { eq, sql } from "drizzle-orm";
 import type { Express, RequestHandler } from "express";
 
 const scryptAsync = promisify(scrypt);
+
+// Sessions store both admin and client users; `kind` tells them apart.
+type SessionPrincipal = { kind: "admin" | "client"; id: string };
 
 export async function hashPassword(password: string): Promise<string> {
   const salt = randomBytes(16).toString("hex");
@@ -85,17 +88,36 @@ export async function setupAuth(app: Express) {
   );
 
   passport.serializeUser((user: any, done) => {
-    done(null, user.id);
+    // Admin user serialization (client serialization is set in client-auth.ts).
+    // Both write { kind, id } so deserialize can route correctly.
+    const principal: SessionPrincipal = {
+      kind: user?.kind === "client" ? "client" : "admin",
+      id: user.id,
+    };
+    done(null, principal);
   });
 
-  passport.deserializeUser(async (id: string, done) => {
+  passport.deserializeUser(async (raw: SessionPrincipal | string, done) => {
     try {
       if (!db) return done(null, false);
-      const [user] = await db
+      // Backwards compat: legacy sessions stored just the id (string) → treat as admin.
+      const principal: SessionPrincipal =
+        typeof raw === "string" ? { kind: "admin", id: raw } : raw;
+
+      if (principal.kind === "client") {
+        const [u] = await db
+          .select()
+          .from(clientUsers)
+          .where(eq(clientUsers.id, principal.id));
+        if (!u || u.status === "disabled") return done(null, false);
+        return done(null, { ...u, kind: "client" });
+      }
+
+      const [u] = await db
         .select()
         .from(users)
-        .where(eq(users.id, id));
-      done(null, user || false);
+        .where(eq(users.id, principal.id));
+      done(null, u ? { ...u, kind: "admin" } : false);
     } catch (err) {
       done(err);
     }
@@ -103,7 +125,7 @@ export async function setupAuth(app: Express) {
 }
 
 export const requireAuth: RequestHandler = (req, res, next) => {
-  if (!req.isAuthenticated()) {
+  if (!req.isAuthenticated() || (req.user as any)?.kind !== "admin") {
     return res.status(401).json({ error: "No autorizado" });
   }
   next();

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
-import { useParams } from "wouter";
+import { useParams, useLocation } from "wouter";
+import { useClientAuth } from "@/hooks/useClientAuth";
 import { Send, CheckCircle2, Circle, Clock, AlertCircle, ChevronDown, ChevronRight, ExternalLink, X, Zap, ArrowRight, FileText, Mic, Image, ClipboardCheck, FileSignature, FolderOpen, Download, Lightbulb, ThumbsUp, Plus, Diamond, File } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -250,7 +251,18 @@ function ActivityItem({ entry }: { entry: ActivityEntry }) {
 // ── Main Portal Component ──
 
 export default function Portal() {
-  const { token } = useParams<{ token: string }>();
+  const params = useParams<{ token?: string; projectId?: string }>();
+  const isAuthMode = !!params.projectId;
+  const { isAuthenticated, isLoading: authLoading } = useClientAuth();
+  const [, navigate] = useLocation();
+
+  // Auth mode: redirect to login if not authenticated
+  useEffect(() => {
+    if (isAuthMode && !authLoading && !isAuthenticated) {
+      navigate("/portal/login");
+    }
+  }, [isAuthMode, authLoading, isAuthenticated, navigate]);
+
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState("Pulso");
   const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set());
@@ -266,7 +278,13 @@ export default function Portal() {
   const [ideaDesc, setIdeaDesc] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  const base = `/api/portal/${token}`;
+  // Either /portal/:token (legacy magic link) or /portal/projects/:projectId (auth).
+  // Backend rewrites /api/portal/projects/:projectId/* → /api/portal/<accessToken>/* so handlers are shared.
+  const identifier = params.projectId || params.token || "";
+  const base = isAuthMode
+    ? `/api/portal/projects/${params.projectId}`
+    : `/api/portal/${params.token}`;
+  const token = identifier; // used for localStorage keys below — kept stable per project
 
   // Queries
   const { data: overview, isLoading, error } = useQuery<PortalOverview>({ queryKey: [base] });

@@ -382,6 +382,61 @@ export async function runMigrations() {
     await pool.query(`ALTER TABLE "gmail_emails" ADD COLUMN IF NOT EXISTS "match_method" text;`).catch(() => {});
     await pool.query(`ALTER TABLE "gmail_emails" ADD COLUMN IF NOT EXISTS "manually_unlinked" boolean DEFAULT false NOT NULL;`).catch(() => {});
 
+    // Portal de Clientes — Auth (login + reset + invite)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "client_users" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "email" text NOT NULL UNIQUE,
+        "password_hash" text,
+        "name" text,
+        "status" text NOT NULL DEFAULT 'invited',
+        "invited_at" timestamp DEFAULT now() NOT NULL,
+        "accepted_at" timestamp,
+        "last_login_at" timestamp,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "updated_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "client_user_projects" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "client_user_id" varchar NOT NULL,
+        "client_project_id" varchar NOT NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        UNIQUE ("client_user_id", "client_project_id")
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_cup_client_user" ON "client_user_projects" ("client_user_id");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_cup_project" ON "client_user_projects" ("client_project_id");`).catch(() => {});
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "client_invites" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "email" text NOT NULL,
+        "token" varchar NOT NULL UNIQUE DEFAULT gen_random_uuid(),
+        "client_project_id" varchar,
+        "invited_by_user_id" varchar,
+        "expires_at" timestamp NOT NULL,
+        "used_at" timestamp,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_client_invites_token" ON "client_invites" ("token");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_client_invites_email" ON "client_invites" ("email");`).catch(() => {});
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "client_password_resets" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "client_user_id" varchar NOT NULL,
+        "token" varchar NOT NULL UNIQUE DEFAULT gen_random_uuid(),
+        "expires_at" timestamp NOT NULL,
+        "used_at" timestamp,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_client_pwd_resets_token" ON "client_password_resets" ("token");`).catch(() => {});
+
     console.log("✓ Database tables and indexes ensured");
 
     // Ensure admin user exists with correct password

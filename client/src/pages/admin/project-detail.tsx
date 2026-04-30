@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useRef, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Copy, ExternalLink, Plus, Trash2, Send, Clock, CheckCircle2, Circle, AlertCircle, ChevronDown, ChevronRight, Github, CalendarDays, BarChart3, Diamond, TrendingUp, Package, MessageSquare, Timer, Mic, FolderOpen, Lightbulb, FileText, Image, File, ThumbsUp, X } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Plus, Trash2, Send, Clock, CheckCircle2, Circle, AlertCircle, ChevronDown, ChevronRight, Github, CalendarDays, BarChart3, Diamond, TrendingUp, Package, MessageSquare, Timer, Mic, FolderOpen, Lightbulb, FileText, Image, File, ThumbsUp, X, UserPlus, Users, RefreshCw, Mail } from "lucide-react";
 import { format, parseISO, differenceInDays, startOfMonth, endOfMonth, eachDayOfInterval, eachMonthOfInterval, isSameDay, isSameMonth, addMonths, subMonths, isWithinInterval } from "date-fns";
 import { es } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
@@ -579,6 +579,9 @@ export default function AdminProjectDetail() {
           );
         })}
       </div>
+
+      {/* Acceso del cliente — invitar con login + lista */}
+      <ClientAccessSection projectId={project.id} />
 
       {/* Tabs — with icons */}
       <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
@@ -2048,6 +2051,231 @@ export default function AdminProjectDetail() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+// ────────────────────────────────────────────────────────────
+// Acceso del cliente — invitaciones + lista de cuentas con login
+// ────────────────────────────────────────────────────────────
+
+type ClientAccessUser = {
+  id: string;
+  email: string;
+  name: string | null;
+  status: string;
+  acceptedAt: string | null;
+  lastLoginAt: string | null;
+  invitedAt: string | null;
+};
+
+type PendingInvite = {
+  id: string;
+  email: string;
+  expiresAt: string;
+  createdAt: string;
+};
+
+function ClientAccessSection({ projectId }: { projectId: string }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteName, setInviteName] = useState("");
+  const [expanded, setExpanded] = useState(false);
+
+  const { data, isLoading } = useQuery<{ users: ClientAccessUser[]; pendingInvites: PendingInvite[] }>({
+    queryKey: [`/api/admin/projects/${projectId}/clients`],
+  });
+
+  const inviteMut = useMutation({
+    mutationFn: async (body: { email: string; name?: string }) => {
+      const res = await apiRequest("POST", `/api/admin/projects/${projectId}/invite-client`, body);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "✓ Invitación enviada" });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${projectId}/clients`] });
+      setInviteEmail("");
+      setInviteName("");
+      setInviteOpen(false);
+    },
+    onError: (err: any) => toast({ title: "Error invitando", description: err?.message, variant: "destructive" }),
+  });
+
+  const resendMut = useMutation({
+    mutationFn: async (inviteId: string) => {
+      await apiRequest("POST", `/api/admin/projects/${projectId}/invites/${inviteId}/resend`);
+    },
+    onSuccess: () => {
+      toast({ title: "✓ Invitación reenviada" });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${projectId}/clients`] });
+    },
+    onError: (err: any) => toast({ title: "Error reenviando", description: err?.message, variant: "destructive" }),
+  });
+
+  const unlinkMut = useMutation({
+    mutationFn: async (clientId: string) => {
+      await apiRequest("POST", `/api/admin/projects/${projectId}/clients/${clientId}/unlink`);
+    },
+    onSuccess: () => {
+      toast({ title: "✓ Acceso revocado" });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${projectId}/clients`] });
+    },
+    onError: (err: any) => toast({ title: "Error revocando", description: err?.message, variant: "destructive" }),
+  });
+
+  const users = data?.users || [];
+  const pending = data?.pendingInvites || [];
+  const total = users.length + pending.length;
+
+  const handleInvite = (e: React.FormEvent) => {
+    e.preventDefault();
+    const email = inviteEmail.trim().toLowerCase();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      toast({ title: "Email inválido", variant: "destructive" });
+      return;
+    }
+    inviteMut.mutate({ email, name: inviteName.trim() || undefined });
+  };
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200">
+      <button
+        onClick={() => setExpanded(v => !v)}
+        className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors rounded-xl"
+      >
+        <div className="flex items-center gap-2">
+          <Users className="w-4 h-4 text-[#2FA4A9]" />
+          <span className="text-sm font-semibold text-gray-900">Acceso del cliente</span>
+          {total > 0 && (
+            <span className="text-xs px-2 py-0.5 bg-[#2FA4A9]/10 text-[#2FA4A9] rounded-full font-medium">
+              {users.length} con login{pending.length > 0 ? ` · ${pending.length} pendiente${pending.length === 1 ? "" : "s"}` : ""}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            onClick={(e) => { e.stopPropagation(); setInviteOpen(true); }}
+            className="h-8 gap-1.5 bg-[#2FA4A9] hover:bg-[#238b8f] text-white text-xs"
+          >
+            <UserPlus className="w-3.5 h-3.5" /> Invitar cliente
+          </Button>
+          <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? "rotate-180" : ""}`} />
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="border-t border-gray-100 px-4 py-3 space-y-2">
+          {isLoading ? (
+            <p className="text-xs text-gray-400 py-2">Cargando...</p>
+          ) : total === 0 ? (
+            <p className="text-xs text-gray-400 py-2">
+              Ningún cliente tiene login a este proyecto todavía. Envía una invitación para que pueda acceder con email + contraseña.
+            </p>
+          ) : (
+            <>
+              {users.map((u) => (
+                <div key={u.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-medium text-gray-900 truncate">{u.name || u.email}</p>
+                      <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                        u.status === "active" ? "bg-emerald-50 text-emerald-700" :
+                        u.status === "invited" ? "bg-amber-50 text-amber-700" :
+                        "bg-gray-100 text-gray-500"
+                      }`}>
+                        {u.status === "active" ? "Activo" : u.status === "invited" ? "Invitado" : "Deshabilitado"}
+                      </span>
+                    </div>
+                    {u.name && <p className="text-xs text-gray-500 truncate">{u.email}</p>}
+                    <p className="text-[10px] text-gray-400 mt-0.5">
+                      {u.lastLoginAt ? `Último login: ${format(parseISO(u.lastLoginAt), "d MMM yyyy HH:mm", { locale: es })}` : "Nunca ha entrado"}
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => { if (confirm(`¿Revocar acceso de ${u.email} a este proyecto? La cuenta no se elimina, solo se desvincula.`)) unlinkMut.mutate(u.id); }}
+                    className="p-1.5 rounded text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
+                    title="Revocar acceso a este proyecto"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+              {pending.map((inv) => {
+                const expired = new Date(inv.expiresAt).getTime() < Date.now();
+                return (
+                  <div key={inv.id} className="flex items-center justify-between py-2 border-b border-gray-50 last:border-0">
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-3 h-3 text-amber-500" />
+                        <p className="text-sm font-medium text-gray-900 truncate">{inv.email}</p>
+                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                          expired ? "bg-red-50 text-red-700" : "bg-amber-50 text-amber-700"
+                        }`}>
+                          {expired ? "Expirada" : "Invitación pendiente"}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-gray-400 mt-0.5">
+                        Enviada {format(parseISO(inv.createdAt), "d MMM HH:mm", { locale: es })} · vence {format(parseISO(inv.expiresAt), "d MMM HH:mm", { locale: es })}
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => resendMut.mutate(inv.id)}
+                      disabled={resendMut.isPending}
+                      className="p-1.5 rounded text-gray-400 hover:text-[#2FA4A9] hover:bg-[#2FA4A9]/10 transition-colors disabled:opacity-50"
+                      title="Reenviar invitación (genera link nuevo)"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                );
+              })}
+            </>
+          )}
+        </div>
+      )}
+
+      <Dialog open={inviteOpen} onOpenChange={setInviteOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Invitar cliente al portal</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleInvite} className="space-y-4">
+            <p className="text-sm text-gray-500">
+              Le enviaremos un email con un link para configurar su contraseña. El link es válido por 7 días.
+            </p>
+            <div>
+              <Label htmlFor="invite-email">Email</Label>
+              <Input
+                id="invite-email"
+                type="email"
+                value={inviteEmail}
+                onChange={(e) => setInviteEmail(e.target.value)}
+                placeholder="cliente@empresa.com"
+                required
+                autoFocus
+              />
+            </div>
+            <div>
+              <Label htmlFor="invite-name">Nombre (opcional)</Label>
+              <Input
+                id="invite-name"
+                value={inviteName}
+                onChange={(e) => setInviteName(e.target.value)}
+                placeholder="Juan Pérez"
+              />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button type="button" variant="ghost" onClick={() => setInviteOpen(false)}>Cancelar</Button>
+              <Button type="submit" disabled={inviteMut.isPending} className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white">
+                {inviteMut.isPending ? "Enviando..." : "Enviar invitación"}
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -74,6 +74,11 @@ const ProposalView = lazy(() => import("@/pages/proposal"));
 const Blog = lazy(() => import("@/pages/blog"));
 const BlogPost = lazy(() => import("@/pages/blog-post"));
 const Portal = lazy(() => import("@/pages/portal"));
+const PortalLogin = lazy(() => import("@/pages/portal/login"));
+const PortalForgotPassword = lazy(() => import("@/pages/portal/forgot-password"));
+const PortalResetPassword = lazy(() => import("@/pages/portal/reset-password"));
+const PortalAcceptInvite = lazy(() => import("@/pages/portal/accept-invite"));
+const PortalProjects = lazy(() => import("@/pages/portal/projects"));
 const AdminLayout = lazy(() => import("@/pages/admin/layout"));
 
 function ProtectedAdmin({ children }: { children: React.ReactNode }) {
@@ -103,6 +108,14 @@ function Router() {
         <Route path="/confirmed" component={Confirmed} />
         <Route path="/reschedule/:contactId" component={Reschedule} />
         <Route path="/proposal/:token" component={ProposalView} />
+        {/* Portal del cliente — auth (login + multi-proyecto) */}
+        <Route path="/portal/login" component={PortalLogin} />
+        <Route path="/portal/forgot-password" component={PortalForgotPassword} />
+        <Route path="/portal/reset-password" component={PortalResetPassword} />
+        <Route path="/portal/accept-invite" component={PortalAcceptInvite} />
+        <Route path="/portal/projects/:projectId" component={Portal} />
+        <Route path="/portal/projects" component={PortalProjects} />
+        {/* Portal del cliente — link mágico legacy (sin auth) */}
         <Route path="/portal/:token" component={Portal} />
         <Route path="/blog/:slug" component={BlogPost} />
         <Route path="/blog" component={Blog} />

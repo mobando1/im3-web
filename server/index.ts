@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import { startEmailScheduler } from "./email-scheduler";
 import { setupAuth } from "./auth";
+import { setupClientAuth } from "./client-auth";
 import { runMigrations } from "./db";
 
 const app = express();
@@ -93,6 +94,7 @@ app.use((req, res, next) => {
 
   // Setup auth (session + passport) before routes
   await setupAuth(app);
+  setupClientAuth();
 
   await registerRoutes(httpServer, app);
 
