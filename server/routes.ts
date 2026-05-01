@@ -23,7 +23,6 @@ import { z } from "zod";
 import { analyzeCommitsForProject, generateWeeklySummary, calculateProjectHealth, generateProjectFromProposal } from "./project-ai";
 import { syncDriveFilesToProject } from "./drive-file-sync";
 import { generateProposal, regenerateProposalSection, generateSectionOptions, applySectionOption } from "./proposal-ai";
-import { generateProposalPdf } from "./proposal-pdf";
 import crypto from "crypto";
 import { getIndustriaLabel } from "@shared/industrias";
 
@@ -7298,6 +7297,8 @@ ${urls}
 
   // Track view analytics (public) + alertas de alto-intent al admin
   // Genera PDF idéntico al render web (Chrome headless con emulateMediaType('screen'))
+  // Import lazy para que si puppeteer/chromium falla en producción solo se rompa
+  // este endpoint y no toda la app.
   app.get("/api/proposal/:token/pdf", async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
@@ -7310,6 +7311,17 @@ ${urls}
         .from(contacts)
         .where(eq(contacts.id, proposal.contactId))
         .limit(1);
+
+      let generateProposalPdf: typeof import("./proposal-pdf").generateProposalPdf;
+      try {
+        ({ generateProposalPdf } = await import("./proposal-pdf"));
+      } catch (impErr: any) {
+        console.error("[proposal pdf] puppeteer/chromium no disponible:", impErr?.message);
+        return res.status(503).json({
+          error: "PDF service unavailable",
+          detail: "Puppeteer no está instalado o Chromium falta. Verifica el deploy del servidor.",
+        });
+      }
 
       const pdf = await generateProposalPdf({ token });
       const safeName = (contact?.empresa || contact?.nombre || "IM3").replace(/[^\w-]+/g, "_");

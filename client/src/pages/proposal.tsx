@@ -389,21 +389,46 @@ export default function ProposalView() {
     if (isGeneratingPdf) return;
     setIsGeneratingPdf(true);
     try {
-      const res = await fetch(`/api/proposal/${token}/pdf`);
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const res = await fetch(`/api/proposal/${token}/pdf`, { credentials: "include" });
+      const ct = res.headers.get("content-type") || "";
+
+      // Si el servidor no tiene el endpoint registrado, suele caer al SPA fallback
+      // que devuelve text/html con el index.html → eso NO es un PDF. También es 200.
+      if (!res.ok || (!ct.includes("pdf") && !ct.includes("octet-stream"))) {
+        const txt = await res.text().catch(() => "");
+        const snippet = txt.slice(0, 200).replace(/<[^>]+>/g, " ").trim();
+        const msg =
+          ct.includes("html")
+            ? "El servidor todavía no tiene la generación de PDF habilitada. Pídele al equipo que actualice el deploy (puppeteer + Chromium)."
+            : `Servidor respondió ${res.status} (${ct || "sin content-type"}). ${snippet || ""}`;
+        console.error("[PDF] Respuesta inesperada:", { status: res.status, ct, snippet });
+        alert(msg);
+        return;
+      }
+
       const blob = await res.blob();
+      // Validación extra: un PDF real empieza con "%PDF"
+      const head = await blob.slice(0, 5).text();
+      if (!head.startsWith("%PDF")) {
+        alert("La respuesta no parece un PDF válido. El deploy del servidor puede estar desactualizado.");
+        console.error("[PDF] Magic bytes inesperados:", head);
+        return;
+      }
+
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       const name = (proposal?.contactEmpresa || proposal?.contactName || "IM3").replace(/[^\w-]+/g, "_");
       a.href = url;
       a.download = `Propuesta-${name}.pdf`;
+      a.style.display = "none";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
+      // pequeño delay antes de revocar para dejar al navegador iniciar la descarga
+      setTimeout(() => URL.revokeObjectURL(url), 1500);
+    } catch (err: any) {
       console.error("[PDF] Error:", err);
-      alert("Error al generar el PDF. Intenta de nuevo en unos segundos.");
+      alert(`Error al generar el PDF: ${err?.message || "intenta de nuevo en unos segundos"}`);
     } finally {
       setIsGeneratingPdf(false);
     }
