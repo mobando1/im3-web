@@ -7348,9 +7348,15 @@ ${urls}
 
       const pdf = await generateProposalPdf({ token });
       const safeName = (contact?.empresa || contact?.nombre || "IM3").replace(/[^\w-]+/g, "_");
-      res.setHeader("Content-Type", "application/pdf");
+      // application/octet-stream OBLIGA al browser a descargar (no puede renderizar inline).
+      // Algunos browsers (Arc, Chrome con plugin PDF, etc) ignoran Content-Disposition:attachment
+      // si el Content-Type es application/pdf y abren el PDF inline. Con octet-stream es
+      // universalmente descargado.
+      res.setHeader("Content-Type", "application/octet-stream");
       res.setHeader("Content-Disposition", `attachment; filename="Propuesta-${safeName}.pdf"`);
       res.setHeader("Content-Length", String(pdf.length));
+      res.setHeader("Cache-Control", "no-store");
+      res.setHeader("X-Content-Type-Options", "nosniff");
       res.end(pdf);
     } catch (err: any) {
       console.error("[proposal pdf] error:", err);
