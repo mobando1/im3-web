@@ -204,15 +204,16 @@ export const operationalCostGroupSchema = z.object({
 });
 
 export const operationalCostsSchema = z.object({
-  heading: z.string(),
-  intro: z.string(),
+  // null = campo ocultado por el usuario (no aparece en el render). string vacío = campo visible pero sin contenido.
+  heading: z.string().nullable(),
+  intro: z.string().nullable(),
   // Nuevo formato: grupos por modelo de cobro (predecibles vs. uso). Recomendado.
   groups: z.array(operationalCostGroupSchema).optional(),
   // Formato legacy: categorías sueltas. Si está presente y `groups` no, se renderiza como antes.
   categories: z.array(operationalCostCategorySchema).optional(),
-  monthlyRangeLow: z.string(),
-  monthlyRangeHigh: z.string(),
-  annualEstimate: z.string(),
+  monthlyRangeLow: z.string().nullable(),
+  monthlyRangeHigh: z.string().nullable(),
+  annualEstimate: z.string().nullable(),
   paidBy: z.enum(["cliente-directo", "im3-managed", "hibrido"]).optional(),
   managedServicesUpsell: z.string().optional(),
   disclaimer: z.string(),

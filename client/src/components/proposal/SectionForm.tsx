@@ -854,64 +854,117 @@ function OpCostsForm({ data, set, onSaveImmediate }: { data: Record<string, unkn
 
   const groupHandlers = useDragReorder(groups, commit);
 
-  const clearBlock = () => {
-    if (!window.confirm("¿Vaciar el bloque (Heading, rangos e Intro)? Esto NO elimina la sección.")) return;
-    set("heading", "");
-    set("monthlyRangeLow", "");
-    set("monthlyRangeHigh", "");
-    set("annualEstimate", "");
-    set("intro", "");
+  // Un campo se considera "oculto/eliminado" si es null. Empty string aún se renderiza para permitir tipear.
+  const isHidden = (key: string) => data[key] === null;
+
+  const hideField = (key: string) => {
+    set(key, null);
     if (onSaveImmediate) {
-      onSaveImmediate({
-        ...data,
-        heading: "",
-        monthlyRangeLow: "",
-        monthlyRangeHigh: "",
-        annualEstimate: "",
-        intro: "",
-      });
+      onSaveImmediate({ ...data, [key]: null });
     }
   };
 
-  const clearField = (key: string) => {
+  const restoreField = (key: string) => {
     set(key, "");
     if (onSaveImmediate) {
       onSaveImmediate({ ...data, [key]: "" });
     }
   };
 
+  const clearBlock = () => {
+    if (!window.confirm("¿Eliminar el bloque (Heading, rangos e Intro)? Los campos desaparecerán del formulario y de la propuesta.")) return;
+    set("heading", null);
+    set("monthlyRangeLow", null);
+    set("monthlyRangeHigh", null);
+    set("annualEstimate", null);
+    set("intro", null);
+    if (onSaveImmediate) {
+      onSaveImmediate({
+        ...data,
+        heading: null,
+        monthlyRangeLow: null,
+        monthlyRangeHigh: null,
+        annualEstimate: null,
+        intro: null,
+      });
+    }
+  };
+
+  const fieldLabels: Record<string, string> = {
+    heading: "Heading",
+    monthlyRangeLow: "Rango bajo mensual",
+    monthlyRangeHigh: "Rango alto mensual",
+    annualEstimate: "Estimado anual",
+    intro: "Intro",
+  };
+  const hiddenKeys = Object.keys(fieldLabels).filter(k => isHidden(k));
+  const allHidden = hiddenKeys.length === Object.keys(fieldLabels).length;
+
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={clearBlock}
-          className="gap-1.5 text-amber-700 border-amber-200 hover:bg-amber-50"
-          title="Vaciar Heading, rangos e Intro (no elimina la sección)"
-        >
-          <Trash2 className="w-3.5 h-3.5" /> Eliminar bloque
-        </Button>
+      <div className="flex items-center justify-between gap-3 flex-wrap">
+        {hiddenKeys.length > 0 && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-gray-500">Restaurar:</span>
+            {hiddenKeys.map(k => (
+              <Button
+                key={k}
+                size="sm"
+                variant="outline"
+                onClick={() => restoreField(k)}
+                className="text-xs h-7 gap-1 border-dashed text-gray-600"
+                title={`Volver a mostrar ${fieldLabels[k]}`}
+              >
+                <Plus className="w-3 h-3" /> {fieldLabels[k]}
+              </Button>
+            ))}
+          </div>
+        )}
+        {!allHidden && (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={clearBlock}
+            className="gap-1.5 text-amber-700 border-amber-200 hover:bg-amber-50 ml-auto"
+            title="Eliminar Heading, rangos e Intro (no elimina la sección)"
+          >
+            <Trash2 className="w-3.5 h-3.5" /> Eliminar bloque
+          </Button>
+        )}
       </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Heading" onClear={() => clearField("heading")}>
-          <Input value={String(data.heading ?? "")} onChange={e => set("heading", e.target.value)} />
+      {(!isHidden("heading") || !isHidden("monthlyRangeLow")) && (
+        <div className="grid grid-cols-2 gap-3">
+          {!isHidden("heading") && (
+            <Field label="Heading" onClear={() => hideField("heading")}>
+              <Input value={String(data.heading ?? "")} onChange={e => set("heading", e.target.value)} />
+            </Field>
+          )}
+          {!isHidden("monthlyRangeLow") && (
+            <Field label="Rango bajo mensual" onClear={() => hideField("monthlyRangeLow")}>
+              <Input value={String(data.monthlyRangeLow ?? "")} onChange={e => set("monthlyRangeLow", e.target.value)} className="font-mono" placeholder="$65 USD/mes" />
+            </Field>
+          )}
+        </div>
+      )}
+      {(!isHidden("monthlyRangeHigh") || !isHidden("annualEstimate")) && (
+        <div className="grid grid-cols-2 gap-3">
+          {!isHidden("monthlyRangeHigh") && (
+            <Field label="Rango alto mensual" onClear={() => hideField("monthlyRangeHigh")}>
+              <Input value={String(data.monthlyRangeHigh ?? "")} onChange={e => set("monthlyRangeHigh", e.target.value)} className="font-mono" placeholder="$190 USD/mes" />
+            </Field>
+          )}
+          {!isHidden("annualEstimate") && (
+            <Field label="Estimado anual" onClear={() => hideField("annualEstimate")}>
+              <Input value={String(data.annualEstimate ?? "")} onChange={e => set("annualEstimate", e.target.value)} className="font-mono" placeholder="$1.500 USD/año" />
+            </Field>
+          )}
+        </div>
+      )}
+      {!isHidden("intro") && (
+        <Field label="Intro" onClear={() => hideField("intro")}>
+          <Textarea value={String(data.intro ?? "")} onChange={e => set("intro", e.target.value)} rows={2} className="text-sm" />
         </Field>
-        <Field label="Rango bajo mensual" onClear={() => clearField("monthlyRangeLow")}>
-          <Input value={String(data.monthlyRangeLow ?? "")} onChange={e => set("monthlyRangeLow", e.target.value)} className="font-mono" placeholder="$65 USD/mes" />
-        </Field>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        <Field label="Rango alto mensual" onClear={() => clearField("monthlyRangeHigh")}>
-          <Input value={String(data.monthlyRangeHigh ?? "")} onChange={e => set("monthlyRangeHigh", e.target.value)} className="font-mono" placeholder="$190 USD/mes" />
-        </Field>
-        <Field label="Estimado anual" onClear={() => clearField("annualEstimate")}>
-          <Input value={String(data.annualEstimate ?? "")} onChange={e => set("annualEstimate", e.target.value)} className="font-mono" placeholder="$1.500 USD/año" />
-        </Field>
-      </div>
-      <Field label="Intro" onClear={() => clearField("intro")}>
-        <Textarea value={String(data.intro ?? "")} onChange={e => set("intro", e.target.value)} rows={2} className="text-sm" />
-      </Field>
+      )}
 
       <p className="text-xs text-gray-500 italic">💡 Arrastra los grupos, categorías e ítems desde el handle (⋮⋮) para reordenar</p>
 

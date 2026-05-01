@@ -36,12 +36,17 @@ export function OperationalCosts({ data }: Props) {
       ? [{ name: "Servicios operativos", billingModel: "fixed", categories: data.categories }]
       : [];
 
+  const showRangeLow = data.monthlyRangeLow !== null && data.monthlyRangeLow !== undefined && data.monthlyRangeLow !== "";
+  const showRangeHigh = data.monthlyRangeHigh !== null && data.monthlyRangeHigh !== undefined && data.monthlyRangeHigh !== "";
+  const showAnnual = data.annualEstimate !== null && data.annualEstimate !== undefined && data.annualEstimate !== "";
+  const showTotals = showRangeLow || showRangeHigh || showAnnual;
+
   return (
     <section className="pt-opcosts-section" id="costos-operativos">
       <div className="pt-container">
         <div className="pt-section-label">Costos Operativos</div>
-        <h2 className="pt-opcosts-heading pt-reveal">{data.heading}</h2>
-        <p className="pt-opcosts-intro pt-reveal">{data.intro}</p>
+        {data.heading && <h2 className="pt-opcosts-heading pt-reveal">{data.heading}</h2>}
+        {data.intro && <p className="pt-opcosts-intro pt-reveal">{data.intro}</p>}
 
         {groups.map((group, groupIdx) => (
           <div key={groupIdx} className="pt-opcosts-group pt-reveal">
@@ -64,18 +69,26 @@ export function OperationalCosts({ data }: Props) {
           </div>
         ))}
 
-        <div className="pt-opcosts-totals pt-reveal">
-          <div className="pt-opcosts-total-block">
-            <div className="pt-opcosts-total-label">Rango mensual</div>
-            <div className="pt-opcosts-total-value">
-              {data.monthlyRangeLow} – {data.monthlyRangeHigh}
-            </div>
+        {showTotals && (
+          <div className="pt-opcosts-totals pt-reveal">
+            {(showRangeLow || showRangeHigh) && (
+              <div className="pt-opcosts-total-block">
+                <div className="pt-opcosts-total-label">Rango mensual</div>
+                <div className="pt-opcosts-total-value">
+                  {showRangeLow && data.monthlyRangeLow}
+                  {showRangeLow && showRangeHigh && " – "}
+                  {showRangeHigh && data.monthlyRangeHigh}
+                </div>
+              </div>
+            )}
+            {showAnnual && (
+              <div className="pt-opcosts-total-block">
+                <div className="pt-opcosts-total-label">Estimado anual</div>
+                <div className="pt-opcosts-total-value">{data.annualEstimate}</div>
+              </div>
+            )}
           </div>
-          <div className="pt-opcosts-total-block">
-            <div className="pt-opcosts-total-label">Estimado anual</div>
-            <div className="pt-opcosts-total-value">{data.annualEstimate}</div>
-          </div>
-        </div>
+        )}
 
         {data.managedServicesUpsell && (
           <div className="pt-opcosts-upsell pt-reveal">
