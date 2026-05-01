@@ -383,52 +383,67 @@ export default function ProposalView() {
   });
 
   // Descarga PDF generado en el backend con Chrome headless (idéntico al render web).
-  // Más fiable que window.print() porque no aplica @media print y no depende
-  // del check "Background graphics" del usuario.
+  // Estrategia robusta:
+  // 1. Abre una nueva pestaña apuntando al endpoint → el browser hace TODO el trabajo:
+  //    - Si el servidor responde application/pdf con Content-Disposition: attachment,
+  //      el browser descarga el archivo automáticamente y la pestaña se cierra sola.
+  //    - Si el servidor responde HTML/JSON/error, queda visible en la pestaña → puedes
+  //      ver exactamente qué pasó (deploy desactualizado, puppeteer crash, etc).
+  // 2. En paralelo loggeamos a consola para debug.
+  // 3. Mantenemos un fallback con fetch+blob por si el popup blocker se mete.
   const handleDownloadPdf = async () => {
     if (isGeneratingPdf) return;
+    const url = `/api/proposal/${token}/pdf`;
+    console.log("[PDF] Descargando desde:", url);
+
+    // Plan A: abrir nueva pestaña (browser maneja attachment + errores visibles).
+    const win = window.open(url, "_blank");
+    if (win) {
+      console.log("[PDF] Pestaña abierta — el browser maneja la descarga.");
+      return;
+    }
+
+    // Plan B: popup bloqueado → fallback con fetch+blob.
+    console.warn("[PDF] Popup bloqueado, usando fetch fallback.");
     setIsGeneratingPdf(true);
     try {
-      const res = await fetch(`/api/proposal/${token}/pdf`, { credentials: "include" });
+      const res = await fetch(url, { credentials: "include" });
       const ct = res.headers.get("content-type") || "";
+      console.log("[PDF] Respuesta:", { status: res.status, contentType: ct });
 
-      // Si el servidor no tiene el endpoint registrado, suele caer al SPA fallback
-      // que devuelve text/html con el index.html → eso NO es un PDF. También es 200.
       if (!res.ok || (!ct.includes("pdf") && !ct.includes("octet-stream"))) {
         const txt = await res.text().catch(() => "");
         const snippet = txt.slice(0, 200).replace(/<[^>]+>/g, " ").trim();
-        const msg =
-          ct.includes("html")
-            ? "El servidor todavía no tiene la generación de PDF habilitada. Pídele al equipo que actualice el deploy (puppeteer + Chromium)."
-            : `Servidor respondió ${res.status} (${ct || "sin content-type"}). ${snippet || ""}`;
         console.error("[PDF] Respuesta inesperada:", { status: res.status, ct, snippet });
-        alert(msg);
+        alert(
+          ct.includes("html")
+            ? "El deploy del servidor no tiene la generación de PDF habilitada todavía. Espera a que termine el deploy de Railway."
+            : `Servidor respondió ${res.status}: ${snippet || "sin contenido"}`
+        );
         return;
       }
 
       const blob = await res.blob();
-      // Validación extra: un PDF real empieza con "%PDF"
       const head = await blob.slice(0, 5).text();
       if (!head.startsWith("%PDF")) {
-        alert("La respuesta no parece un PDF válido. El deploy del servidor puede estar desactualizado.");
-        console.error("[PDF] Magic bytes inesperados:", head);
+        alert("La respuesta no es un PDF válido. Revisa los logs de Railway.");
+        console.error("[PDF] Magic bytes:", head);
         return;
       }
 
-      const url = URL.createObjectURL(blob);
+      const blobUrl = URL.createObjectURL(blob);
       const a = document.createElement("a");
       const name = (proposal?.contactEmpresa || proposal?.contactName || "IM3").replace(/[^\w-]+/g, "_");
-      a.href = url;
+      a.href = blobUrl;
       a.download = `Propuesta-${name}.pdf`;
       a.style.display = "none";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      // pequeño delay antes de revocar para dejar al navegador iniciar la descarga
-      setTimeout(() => URL.revokeObjectURL(url), 1500);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
     } catch (err: any) {
       console.error("[PDF] Error:", err);
-      alert(`Error al generar el PDF: ${err?.message || "intenta de nuevo en unos segundos"}`);
+      alert(`Error: ${err?.message || "Intenta de nuevo en unos segundos"}`);
     } finally {
       setIsGeneratingPdf(false);
     }
