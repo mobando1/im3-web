@@ -49,6 +49,13 @@ export function ProposalTemplate({
     return () => document.documentElement.removeAttribute("data-pdf");
   }, [isPdfCapture]);
 
+  // Oculta el widget del tutor AI en la página de propuesta (no es contexto
+  // donde el cliente quiera chatear con el tutor, distrae de la propuesta).
+  useEffect(() => {
+    document.documentElement.setAttribute("data-hide-widgets", "1");
+    return () => document.documentElement.removeAttribute("data-hide-widgets");
+  }, []);
+
   return (
     <div className={`proposal-template${isPdfCapture ? " pt-pdf-mode" : ""}`} ref={rootRef}>
       <nav className="pt-nav">

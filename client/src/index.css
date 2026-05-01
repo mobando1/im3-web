@@ -407,3 +407,16 @@
     transform: none !important;
   }
 }
+/* ── Tutor AI widget: ocultar en propuestas y portal del cliente ──
+   El widget se carga desde index.html con tutor.im3systems.com/widget.js.
+   Cuando una página setea html[data-hide-widgets="1"] (vía useEffect en
+   proposal.tsx, ProposalTemplate.tsx, portal.tsx), el widget queda oculto. */
+html[data-hide-widgets="1"] iframe[src*="tutor"],
+html[data-hide-widgets="1"] [id*="tutor"i],
+html[data-hide-widgets="1"] [class*="tutor"i],
+html[data-hide-widgets="1"] [class*="chat-widget"i],
+html[data-hide-widgets="1"] [id*="chat-widget"i] {
+  display: none !important;
+  visibility: hidden !important;
+  pointer-events: none !important;
+}

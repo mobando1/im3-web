@@ -4,7 +4,7 @@ import { useParams } from "wouter";
 import { ProposalTemplate } from "@shared/proposal-template";
 import type { ProposalData } from "@shared/proposal-template/types";
 import {
-  CheckCircle2, Download, Calendar, ChevronDown, ChevronRight,
+  CheckCircle2, Calendar, ChevronDown, ChevronRight,
   AlertTriangle, Quote, ArrowDown, TrendingUp, Shield, Clock, Zap,
   Star, Users, Target, DollarSign,
 } from "lucide-react";
@@ -372,9 +372,6 @@ export default function ProposalView() {
   const [showMobileCta, setShowMobileCta] = useState(false);
   const sectionRefs = useRef<Record<string, HTMLElement | null>>({});
   const heroRef = useRef<HTMLDivElement>(null);
-  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
-
-  const isPdfMode = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("pdf") === "1";
   const scrollProgress = useScrollProgress();
   const activeSection = useActiveSection(sectionRefs);
 
@@ -382,47 +379,15 @@ export default function ProposalView() {
     queryKey: [`/api/proposal/${token}`],
   });
 
-  // Descarga PDF: técnica cross-browser más robusta = iframe oculto que
-  // navega al endpoint. El server responde con Content-Type: application/octet-stream
-  // + Content-Disposition: attachment, así que el browser SIEMPRE descarga (no puede
-  // renderizar octet-stream inline). Funciona en Chrome, Arc, Safari, Firefox, IE.
-  // Sin window.open, sin fetch+blob, sin CSP issues, sin a.click() ignorado.
-  const handleDownloadPdf = () => {
-    if (isGeneratingPdf) return;
-    setIsGeneratingPdf(true);
-    const url = `/api/proposal/${token}/pdf`;
-    const name = (proposal?.contactEmpresa || proposal?.contactName || "IM3").replace(/[^\w-]+/g, "_");
-    console.log("[PDF] Triggering download via hidden iframe:", url);
+  // (El botón de descarga PDF vive en el admin editor, no aquí. La vista pública
+  // del cliente no tiene un botón de PDF — el cliente recibe el archivo por email
+  // o lo generamos desde el admin.)
 
-    // Estrategia 1 (primaria): iframe oculto. Browser lo trata como navegación,
-    // el server responde con attachment+octet-stream → descarga automática a disco.
-    // El iframe queda con error "Failed to load resource" pero eso es esperado y
-    // no afecta nada — la descarga ya se disparó.
-    const iframe = document.createElement("iframe");
-    iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:0;height:0;border:0;";
-    iframe.src = url;
-    document.body.appendChild(iframe);
-
-    // Estrategia 2 (refuerzo): además del iframe, creamos un anchor con download
-    // attribute apuntando al MISMO URL. Algunos browsers (especialmente Safari/Arc)
-    // responden mejor a anchor.click() que a iframe.src. Disparamos los dos.
-    setTimeout(() => {
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Propuesta-${name}.pdf`;
-      a.rel = "noopener";
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-    }, 100);
-
-    // Cleanup del iframe después de que la descarga haya iniciado
-    setTimeout(() => {
-      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
-      setIsGeneratingPdf(false);
-      console.log("[PDF] Download flow completed");
-    }, 60000);
-  };
+  // Oculta el widget del tutor AI en la vista pública de la propuesta
+  useEffect(() => {
+    document.documentElement.setAttribute("data-hide-widgets", "1");
+    return () => document.documentElement.removeAttribute("data-hide-widgets");
+  }, []);
 
   // Track views
   useEffect(() => {
@@ -620,9 +585,6 @@ export default function ProposalView() {
               onClick={() => document.getElementById("pricing-section")?.scrollIntoView({ behavior: "smooth" })}
             >
               Ver inversión <ChevronDown className="w-3 h-3" />
-            </Button>
-            <Button size="sm" variant="outline" className="gap-1.5 text-xs" onClick={handleDownloadPdf} disabled={isGeneratingPdf}>
-              <Download className="w-3 h-3" /> {isGeneratingPdf ? "Generando..." : "PDF"}
             </Button>
           </div>
         </div>

@@ -263,6 +263,12 @@ export default function Portal() {
     }
   }, [isAuthMode, authLoading, isAuthenticated, navigate]);
 
+  // Oculta el widget del tutor AI en el portal del cliente
+  useEffect(() => {
+    document.documentElement.setAttribute("data-hide-widgets", "1");
+    return () => document.documentElement.removeAttribute("data-hide-widgets");
+  }, []);
+
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState("Pulso");
   const [expandedPhases, setExpandedPhases] = useState<Set<string>>(new Set());
