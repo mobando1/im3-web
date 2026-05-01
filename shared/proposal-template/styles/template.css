@@ -307,3 +307,48 @@ html[data-pdf="1"] [class*="chat-widget"],
 html[data-pdf="1"] [id*="chat-widget"] {
   display: none !important;
 }
+
+/* ── Page break control para captura PDF ──
+   Sin estas reglas puppeteer corta cards y secciones a la mitad entre páginas.
+   page-break-inside: avoid + break-inside: avoid = el bloque se mueve completo
+   a la siguiente página si no cabe. */
+.pt-pdf-mode .pt-summary-card,
+.pt-pdf-mode .pt-problem-card,
+.pt-pdf-mode .pt-module-card,
+.pt-pdf-mode .pt-tech-pill,
+.pt-pdf-mode .pt-phase,
+.pt-pdf-mode .pt-roi-card,
+.pt-pdf-mode .pt-roi-comparison,
+.pt-pdf-mode .pt-roi-hero-card,
+.pt-pdf-mode .pt-auth-stat,
+.pt-pdf-mode .pt-authority-card,
+.pt-pdf-mode .pt-testimonial,
+.pt-pdf-mode .pt-pricing-card,
+.pt-pdf-mode .pt-milestone,
+.pt-pdf-mode .pt-include-item,
+.pt-pdf-mode .pt-opcosts-category,
+.pt-pdf-mode .pt-opcosts-group,
+.pt-pdf-mode .pt-opcosts-totals,
+.pt-pdf-mode .pt-opcosts-upsell,
+.pt-pdf-mode .pt-hardware-row,
+.pt-pdf-mode .pt-cta-section,
+.pt-pdf-mode .pt-cost-counter-wrap,
+.pt-pdf-mode .pt-commitment-banner,
+.pt-pdf-mode .pt-scarcity-banner {
+  page-break-inside: avoid !important;
+  break-inside: avoid !important;
+}
+
+/* Headings no se separan del contenido siguiente */
+.pt-pdf-mode h1,
+.pt-pdf-mode h2,
+.pt-pdf-mode h3,
+.pt-pdf-mode h4 {
+  page-break-after: avoid !important;
+  break-after: avoid !important;
+}
+
+/* Cada sección grande puede empezar en página nueva si está cerca del fin */
+.pt-pdf-mode section {
+  page-break-inside: auto;
+}
