@@ -60,10 +60,17 @@ export async function generateProposalPdf(opts: {
     await page.setViewport({ width: 1280, height: 1800, deviceScaleFactor: 1 });
     await page.emulateMediaType("screen");
 
+    // CRÍTICO: el server tiene isBot() en static.ts que detecta "HeadlessChrome"
+    // y sirve HTML pre-renderizado de la home a crawlers → puppeteer recibiría la
+    // home en vez de la SPA real. Forzamos UA de Chrome normal para evitarlo.
+    await page.setUserAgent(
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+    );
+
     const url = `${baseUrl}/proposal/${encodeURIComponent(opts.token)}?pdf=1`;
     console.log("[proposal-pdf] navigating:", url);
     await page.goto(url, { waitUntil: "load", timeout: 45000 });
-    // Esperamos un poquito que la SPA cargue + reveal animations terminen
+    // Esperamos a que la SPA cargue el ProposalTemplate
     await page.waitForFunction(
       () => document.querySelector(".proposal-template") !== null,
       { timeout: 15000 },
