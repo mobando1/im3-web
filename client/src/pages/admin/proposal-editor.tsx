@@ -396,6 +396,8 @@ export default function ProposalEditor() {
     },
     onSuccess: () => {
       toast({ title: "✓ Sección eliminada" });
+      setEditingSection(null);
+      setHasUnsavedChanges(false);
       invalidate();
     },
     onError: () => toast({ title: "Error eliminando sección", variant: "destructive" }),
@@ -840,6 +842,10 @@ export default function ProposalEditor() {
                         updateMut.mutate({ sections: newSections });
                         setHasUnsavedChanges(false);
                         setEditingSection(null);
+                      }}
+                      onSaveImmediate={(updated) => {
+                        const newSections = { ...sections, [activeSection]: updated };
+                        updateMut.mutate({ sections: newSections });
                       }}
                       onCancel={() => { setHasUnsavedChanges(false); setEditingSection(null); }}
                       onDirtyChange={setHasUnsavedChanges}

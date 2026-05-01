@@ -47,6 +47,7 @@ type SectionFormProps = {
   onSave: (updated: Record<string, unknown>) => void;
   onCancel: () => void;
   onDirtyChange?: (isDirty: boolean) => void;
+  onSaveImmediate?: (updated: Record<string, unknown>) => void;
 };
 
 /** Determina si una sección tiene formulario tipado (o cae a JSON edit) */
@@ -67,7 +68,7 @@ type HistoryState = {
 const HISTORY_LIMIT = 100;
 const COALESCE_MS = 500;
 
-export function SectionForm({ sectionKey, data, onSave, onCancel, onDirtyChange }: SectionFormProps) {
+export function SectionForm({ sectionKey, data, onSave, onCancel, onDirtyChange, onSaveImmediate }: SectionFormProps) {
   const [history, setHistory] = useState<HistoryState>(() => ({
     past: [],
     present: structuredClone(data),
@@ -219,7 +220,7 @@ export function SectionForm({ sectionKey, data, onSave, onCancel, onDirtyChange 
       {sectionKey === "authority" && <AuthorityForm data={local} set={set} />}
       {sectionKey === "pricing" && <PricingForm data={local} set={set} />}
       {sectionKey === "hardware" && <HardwareForm data={local} set={set} />}
-      {sectionKey === "operationalCosts" && <OpCostsForm data={local} set={set} />}
+      {sectionKey === "operationalCosts" && <OpCostsForm data={local} set={set} onSaveImmediate={onSaveImmediate} />}
       {sectionKey === "cta" && <CTAForm data={local} set={set} />}
     </div>
   );
@@ -828,7 +829,7 @@ function GroupEditor({
   );
 }
 
-function OpCostsForm({ data, set }: { data: Record<string, unknown>; set: (k: string, v: unknown) => void }) {
+function OpCostsForm({ data, set, onSaveImmediate }: { data: Record<string, unknown>; set: (k: string, v: unknown) => void; onSaveImmediate?: (updated: Record<string, unknown>) => void }) {
   // Migración legacy: si hay categories[] sin groups, envolver en un solo grupo "fixed"
   const rawGroups = data.groups as OpCostGroup[] | undefined;
   const rawCategories = data.categories as OpCostCategory[] | undefined;
@@ -854,12 +855,29 @@ function OpCostsForm({ data, set }: { data: Record<string, unknown>; set: (k: st
   const groupHandlers = useDragReorder(groups, commit);
 
   const clearBlock = () => {
-    if (!window.confirm("¿Vaciar el bloque (Heading, rangos e Intro)? Esto NO elimina la sección. Podrás deshacer con Ctrl+Z.")) return;
+    if (!window.confirm("¿Vaciar el bloque (Heading, rangos e Intro)? Esto NO elimina la sección.")) return;
     set("heading", "");
     set("monthlyRangeLow", "");
     set("monthlyRangeHigh", "");
     set("annualEstimate", "");
     set("intro", "");
+    if (onSaveImmediate) {
+      onSaveImmediate({
+        ...data,
+        heading: "",
+        monthlyRangeLow: "",
+        monthlyRangeHigh: "",
+        annualEstimate: "",
+        intro: "",
+      });
+    }
+  };
+
+  const clearField = (key: string) => {
+    set(key, "");
+    if (onSaveImmediate) {
+      onSaveImmediate({ ...data, [key]: "" });
+    }
   };
 
   return (
@@ -876,22 +894,22 @@ function OpCostsForm({ data, set }: { data: Record<string, unknown>; set: (k: st
         </Button>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Heading" onClear={() => set("heading", "")}>
+        <Field label="Heading" onClear={() => clearField("heading")}>
           <Input value={String(data.heading ?? "")} onChange={e => set("heading", e.target.value)} />
         </Field>
-        <Field label="Rango bajo mensual" onClear={() => set("monthlyRangeLow", "")}>
+        <Field label="Rango bajo mensual" onClear={() => clearField("monthlyRangeLow")}>
           <Input value={String(data.monthlyRangeLow ?? "")} onChange={e => set("monthlyRangeLow", e.target.value)} className="font-mono" placeholder="$65 USD/mes" />
         </Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Rango alto mensual" onClear={() => set("monthlyRangeHigh", "")}>
+        <Field label="Rango alto mensual" onClear={() => clearField("monthlyRangeHigh")}>
           <Input value={String(data.monthlyRangeHigh ?? "")} onChange={e => set("monthlyRangeHigh", e.target.value)} className="font-mono" placeholder="$190 USD/mes" />
         </Field>
-        <Field label="Estimado anual" onClear={() => set("annualEstimate", "")}>
+        <Field label="Estimado anual" onClear={() => clearField("annualEstimate")}>
           <Input value={String(data.annualEstimate ?? "")} onChange={e => set("annualEstimate", e.target.value)} className="font-mono" placeholder="$1.500 USD/año" />
         </Field>
       </div>
-      <Field label="Intro" onClear={() => set("intro", "")}>
+      <Field label="Intro" onClear={() => clearField("intro")}>
         <Textarea value={String(data.intro ?? "")} onChange={e => set("intro", e.target.value)} rows={2} className="text-sm" />
       </Field>
 
