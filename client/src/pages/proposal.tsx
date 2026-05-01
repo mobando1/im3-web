@@ -382,79 +382,46 @@ export default function ProposalView() {
     queryKey: [`/api/proposal/${token}`],
   });
 
-  // Descarga PDF: hacemos primero un health check al subsistema PDF.
-  // Si el servidor no tiene puppeteer disponible (deploy viejo, Chromium falta),
-  // el health responde 503 con detalle → mostramos error claro al usuario.
-  // Si está OK → fetch+blob para descargar el archivo (fuerza el download
-  // independientemente del Content-Disposition del server).
-  const handleDownloadPdf = async () => {
+  // Descarga PDF: técnica cross-browser más robusta = iframe oculto que
+  // navega al endpoint. El server responde con Content-Type: application/octet-stream
+  // + Content-Disposition: attachment, así que el browser SIEMPRE descarga (no puede
+  // renderizar octet-stream inline). Funciona en Chrome, Arc, Safari, Firefox, IE.
+  // Sin window.open, sin fetch+blob, sin CSP issues, sin a.click() ignorado.
+  const handleDownloadPdf = () => {
     if (isGeneratingPdf) return;
     setIsGeneratingPdf(true);
-    console.log("[PDF] Iniciando descarga...");
+    const url = `/api/proposal/${token}/pdf`;
+    const name = (proposal?.contactEmpresa || proposal?.contactName || "IM3").replace(/[^\w-]+/g, "_");
+    console.log("[PDF] Triggering download via hidden iframe:", url);
 
-    try {
-      // Paso 1: verificar que el endpoint PDF existe y puppeteer carga
-      const healthRes = await fetch("/api/proposal-pdf/health", { credentials: "include" });
-      const healthCt = healthRes.headers.get("content-type") || "";
-      if (!healthCt.includes("json")) {
-        console.error("[PDF] Health check no es JSON:", healthCt);
-        alert(
-          "El deploy del servidor todavía no tiene la generación de PDF activa. " +
-          "Verifica en Railway que el último deploy haya terminado (estado 'Active'). " +
-          "Si ya está activo, recarga la página con Cmd+Shift+R y vuelve a intentar.",
-        );
-        return;
-      }
-      const health = await healthRes.json();
-      console.log("[PDF] Health:", health);
-      if (!health.ok) {
-        alert(
-          `El servidor no puede generar PDFs todavía:\n\n` +
-          `${health.detail || health.error || "puppeteer no carga"}\n\n` +
-          `Mira los logs de Railway para más detalle.`,
-        );
-        return;
-      }
+    // Estrategia 1 (primaria): iframe oculto. Browser lo trata como navegación,
+    // el server responde con attachment+octet-stream → descarga automática a disco.
+    // El iframe queda con error "Failed to load resource" pero eso es esperado y
+    // no afecta nada — la descarga ya se disparó.
+    const iframe = document.createElement("iframe");
+    iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:0;height:0;border:0;";
+    iframe.src = url;
+    document.body.appendChild(iframe);
 
-      // Paso 2: descargar el PDF real
-      const url = `/api/proposal/${token}/pdf`;
-      console.log("[PDF] Fetching:", url);
-      const res = await fetch(url, { credentials: "include" });
-      console.log("[PDF] Response:", { status: res.status, ct: res.headers.get("content-type") });
-
-      if (!res.ok) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(`HTTP ${res.status}: ${txt.slice(0, 200)}`);
-      }
-      const ct = res.headers.get("content-type") || "";
-      if (!ct.includes("pdf") && !ct.includes("octet-stream")) {
-        const txt = await res.text().catch(() => "");
-        throw new Error(`Respuesta no es PDF (${ct}): ${txt.slice(0, 200)}`);
-      }
-
-      const blob = await res.blob();
-      const head = await blob.slice(0, 5).text();
-      if (!head.startsWith("%PDF")) {
-        throw new Error(`Magic bytes inválidos: "${head}"`);
-      }
-
-      const blobUrl = URL.createObjectURL(blob);
+    // Estrategia 2 (refuerzo): además del iframe, creamos un anchor con download
+    // attribute apuntando al MISMO URL. Algunos browsers (especialmente Safari/Arc)
+    // responden mejor a anchor.click() que a iframe.src. Disparamos los dos.
+    setTimeout(() => {
       const a = document.createElement("a");
-      const name = (proposal?.contactEmpresa || proposal?.contactName || "IM3").replace(/[^\w-]+/g, "_");
-      a.href = blobUrl;
+      a.href = url;
       a.download = `Propuesta-${name}.pdf`;
-      a.style.display = "none";
+      a.rel = "noopener";
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
-      console.log("[PDF] Descarga iniciada:", `Propuesta-${name}.pdf`);
-    } catch (err: any) {
-      console.error("[PDF] Error:", err);
-      alert(`Error generando PDF:\n\n${err?.message || "Intenta de nuevo en unos segundos"}\n\nMira la consola del browser (F12) para más detalle.`);
-    } finally {
+    }, 100);
+
+    // Cleanup del iframe después de que la descarga haya iniciado
+    setTimeout(() => {
+      if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
       setIsGeneratingPdf(false);
-    }
+      console.log("[PDF] Download flow completed");
+    }, 60000);
   };
 
   // Track views
