@@ -308,38 +308,78 @@ html[data-pdf="1"] [id*="chat-widget"] {
   display: none !important;
 }
 
-/* ── Page break control para captura PDF ──
-   Sin estas reglas puppeteer corta cards y secciones a la mitad entre páginas.
-   page-break-inside: avoid + break-inside: avoid = el bloque se mueve completo
-   a la siguiente página si no cabe. */
+/* ── PDF mode: layout compacto para A4 ──
+   El template está diseñado para pantalla completa (hero 100vh, sections
+   5rem padding, etc). En A4 esos espacios crean huecos enormes y obligan
+   a que cada sección casi tome una página. Aquí compactamos todo. */
+
+/* Hero: sin altura mínima de viewport, padding compacto */
+.pt-pdf-mode .pt-hero {
+  min-height: auto !important;
+  padding: 2.5rem 0 2rem !important;
+}
+.pt-pdf-mode .pt-hero-line { display: none !important; }
+
+/* Sections: padding mucho más chico (era 5rem) */
+.pt-pdf-mode .proposal-template section,
+html[data-pdf="1"] .proposal-template section {
+  padding: 2rem 0 !important;
+}
+
+/* Headings + intros con menos margen */
+.pt-pdf-mode .pt-problem-heading,
+.pt-pdf-mode .pt-solution-heading,
+.pt-pdf-mode .pt-tech-heading,
+.pt-pdf-mode .pt-timeline-heading,
+.pt-pdf-mode .pt-authority-heading,
+.pt-pdf-mode .pt-pricing-heading,
+.pt-pdf-mode .pt-opcosts-heading,
+.pt-pdf-mode .pt-hardware-heading {
+  margin-bottom: 1rem !important;
+  font-size: 1.6rem !important;
+}
+.pt-pdf-mode .pt-section-intro,
+.pt-pdf-mode .pt-opcosts-intro,
+.pt-pdf-mode .pt-hardware-intro,
+.pt-pdf-mode .pt-pricing-intro {
+  margin-bottom: 1.25rem !important;
+}
+.pt-pdf-mode .pt-commitment-banner {
+  margin-bottom: 1.25rem !important;
+  padding: 0.85rem 1.25rem !important;
+}
+.pt-pdf-mode .pt-scarcity-banner {
+  margin-bottom: 1.25rem !important;
+}
+
+/* Sticky cards no aplican en PDF */
+.pt-pdf-mode .pt-summary-card { position: static !important; top: auto !important; }
+
+/* Dividers sin espacio extra */
+.pt-pdf-mode .pt-divider { margin: 0 !important; padding: 0 !important; height: 0 !important; }
+
+/* Footer compacto */
+.pt-pdf-mode .pt-footer { padding: 1.25rem 1.5rem !important; }
+
+/* Page break: SOLO en cards individuales pequeñas (no fuerza salto de página
+   entre secciones — preferimos contenido continuo a páginas semi-vacías) */
 .pt-pdf-mode .pt-summary-card,
 .pt-pdf-mode .pt-problem-card,
 .pt-pdf-mode .pt-module-card,
-.pt-pdf-mode .pt-tech-pill,
 .pt-pdf-mode .pt-phase,
 .pt-pdf-mode .pt-roi-card,
-.pt-pdf-mode .pt-roi-comparison,
-.pt-pdf-mode .pt-roi-hero-card,
 .pt-pdf-mode .pt-auth-stat,
 .pt-pdf-mode .pt-authority-card,
-.pt-pdf-mode .pt-testimonial,
 .pt-pdf-mode .pt-pricing-card,
 .pt-pdf-mode .pt-milestone,
-.pt-pdf-mode .pt-include-item,
 .pt-pdf-mode .pt-opcosts-category,
-.pt-pdf-mode .pt-opcosts-group,
-.pt-pdf-mode .pt-opcosts-totals,
-.pt-pdf-mode .pt-opcosts-upsell,
 .pt-pdf-mode .pt-hardware-row,
-.pt-pdf-mode .pt-cta-section,
-.pt-pdf-mode .pt-cost-counter-wrap,
-.pt-pdf-mode .pt-commitment-banner,
-.pt-pdf-mode .pt-scarcity-banner {
+.pt-pdf-mode .pt-cost-counter-wrap {
   page-break-inside: avoid !important;
   break-inside: avoid !important;
 }
 
-/* Headings no se separan del contenido siguiente */
+/* Headings nunca solos al final de página */
 .pt-pdf-mode h1,
 .pt-pdf-mode h2,
 .pt-pdf-mode h3,
@@ -348,7 +388,8 @@ html[data-pdf="1"] [id*="chat-widget"] {
   break-after: avoid !important;
 }
 
-/* Cada sección grande puede empezar en página nueva si está cerca del fin */
+/* Sections fluyen libres — pueden cortarse para evitar huecos */
 .pt-pdf-mode section {
-  page-break-inside: auto;
+  page-break-inside: auto !important;
+  break-inside: auto !important;
 }
