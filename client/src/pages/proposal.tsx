@@ -382,53 +382,60 @@ export default function ProposalView() {
     queryKey: [`/api/proposal/${token}`],
   });
 
-  // Descarga PDF generado en el backend con Chrome headless (idéntico al render web).
-  // Estrategia robusta:
-  // 1. Abre una nueva pestaña apuntando al endpoint → el browser hace TODO el trabajo:
-  //    - Si el servidor responde application/pdf con Content-Disposition: attachment,
-  //      el browser descarga el archivo automáticamente y la pestaña se cierra sola.
-  //    - Si el servidor responde HTML/JSON/error, queda visible en la pestaña → puedes
-  //      ver exactamente qué pasó (deploy desactualizado, puppeteer crash, etc).
-  // 2. En paralelo loggeamos a consola para debug.
-  // 3. Mantenemos un fallback con fetch+blob por si el popup blocker se mete.
+  // Descarga PDF: hacemos primero un health check al subsistema PDF.
+  // Si el servidor no tiene puppeteer disponible (deploy viejo, Chromium falta),
+  // el health responde 503 con detalle → mostramos error claro al usuario.
+  // Si está OK → fetch+blob para descargar el archivo (fuerza el download
+  // independientemente del Content-Disposition del server).
   const handleDownloadPdf = async () => {
     if (isGeneratingPdf) return;
-    const url = `/api/proposal/${token}/pdf`;
-    console.log("[PDF] Descargando desde:", url);
-
-    // Plan A: abrir nueva pestaña (browser maneja attachment + errores visibles).
-    const win = window.open(url, "_blank");
-    if (win) {
-      console.log("[PDF] Pestaña abierta — el browser maneja la descarga.");
-      return;
-    }
-
-    // Plan B: popup bloqueado → fallback con fetch+blob.
-    console.warn("[PDF] Popup bloqueado, usando fetch fallback.");
     setIsGeneratingPdf(true);
-    try {
-      const res = await fetch(url, { credentials: "include" });
-      const ct = res.headers.get("content-type") || "";
-      console.log("[PDF] Respuesta:", { status: res.status, contentType: ct });
+    console.log("[PDF] Iniciando descarga...");
 
-      if (!res.ok || (!ct.includes("pdf") && !ct.includes("octet-stream"))) {
-        const txt = await res.text().catch(() => "");
-        const snippet = txt.slice(0, 200).replace(/<[^>]+>/g, " ").trim();
-        console.error("[PDF] Respuesta inesperada:", { status: res.status, ct, snippet });
+    try {
+      // Paso 1: verificar que el endpoint PDF existe y puppeteer carga
+      const healthRes = await fetch("/api/proposal-pdf/health", { credentials: "include" });
+      const healthCt = healthRes.headers.get("content-type") || "";
+      if (!healthCt.includes("json")) {
+        console.error("[PDF] Health check no es JSON:", healthCt);
         alert(
-          ct.includes("html")
-            ? "El deploy del servidor no tiene la generación de PDF habilitada todavía. Espera a que termine el deploy de Railway."
-            : `Servidor respondió ${res.status}: ${snippet || "sin contenido"}`
+          "El deploy del servidor todavía no tiene la generación de PDF activa. " +
+          "Verifica en Railway que el último deploy haya terminado (estado 'Active'). " +
+          "Si ya está activo, recarga la página con Cmd+Shift+R y vuelve a intentar.",
         );
         return;
+      }
+      const health = await healthRes.json();
+      console.log("[PDF] Health:", health);
+      if (!health.ok) {
+        alert(
+          `El servidor no puede generar PDFs todavía:\n\n` +
+          `${health.detail || health.error || "puppeteer no carga"}\n\n` +
+          `Mira los logs de Railway para más detalle.`,
+        );
+        return;
+      }
+
+      // Paso 2: descargar el PDF real
+      const url = `/api/proposal/${token}/pdf`;
+      console.log("[PDF] Fetching:", url);
+      const res = await fetch(url, { credentials: "include" });
+      console.log("[PDF] Response:", { status: res.status, ct: res.headers.get("content-type") });
+
+      if (!res.ok) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(`HTTP ${res.status}: ${txt.slice(0, 200)}`);
+      }
+      const ct = res.headers.get("content-type") || "";
+      if (!ct.includes("pdf") && !ct.includes("octet-stream")) {
+        const txt = await res.text().catch(() => "");
+        throw new Error(`Respuesta no es PDF (${ct}): ${txt.slice(0, 200)}`);
       }
 
       const blob = await res.blob();
       const head = await blob.slice(0, 5).text();
       if (!head.startsWith("%PDF")) {
-        alert("La respuesta no es un PDF válido. Revisa los logs de Railway.");
-        console.error("[PDF] Magic bytes:", head);
-        return;
+        throw new Error(`Magic bytes inválidos: "${head}"`);
       }
 
       const blobUrl = URL.createObjectURL(blob);
@@ -440,10 +447,11 @@ export default function ProposalView() {
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(blobUrl), 1500);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 2000);
+      console.log("[PDF] Descarga iniciada:", `Propuesta-${name}.pdf`);
     } catch (err: any) {
       console.error("[PDF] Error:", err);
-      alert(`Error: ${err?.message || "Intenta de nuevo en unos segundos"}`);
+      alert(`Error generando PDF:\n\n${err?.message || "Intenta de nuevo en unos segundos"}\n\nMira la consola del browser (F12) para más detalle.`);
     } finally {
       setIsGeneratingPdf(false);
     }

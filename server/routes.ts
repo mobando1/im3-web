@@ -7296,6 +7296,29 @@ ${urls}
   });
 
   // Track view analytics (public) + alertas de alto-intent al admin
+  // Health check del subsistema PDF — sirve para diagnosticar deploy desde el browser
+  app.get("/api/proposal-pdf/health", async (_req, res) => {
+    try {
+      const { pdfHealthCheck } = await import("./proposal-pdf");
+      const result = await pdfHealthCheck();
+      res.json({
+        loaded: true,
+        ...result,
+        env: {
+          hasExecutablePath: !!process.env.PUPPETEER_EXECUTABLE_PATH,
+          executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || null,
+          nodeEnv: process.env.NODE_ENV,
+        },
+      });
+    } catch (err: any) {
+      res.status(503).json({
+        loaded: false,
+        error: err?.message || String(err),
+        stack: err?.stack?.split("\n").slice(0, 5),
+      });
+    }
+  });
+
   // Genera PDF idéntico al render web (Chrome headless con emulateMediaType('screen'))
   // Import lazy para que si puppeteer/chromium falla en producción solo se rompa
   // este endpoint y no toda la app.
