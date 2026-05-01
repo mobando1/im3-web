@@ -792,7 +792,7 @@ export default function ProposalEditor() {
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-bold text-gray-900">{SECTION_LABELS[activeSection]}</h2>
                   <div className="flex gap-2 items-center">
-                    {/* Botón Eliminar siempre visible para secciones eliminables (incluso editando) */}
+                    {/* Eliminar SECCIÓN COMPLETA — siempre visible para secciones eliminables */}
                     {isNewFormat && DELETABLE_SECTIONS_NEW.has(activeSection) && sections[activeSection] && (
                       <Button
                         size="sm"
@@ -843,7 +843,6 @@ export default function ProposalEditor() {
                       }}
                       onCancel={() => { setHasUnsavedChanges(false); setEditingSection(null); }}
                       onDirtyChange={setHasUnsavedChanges}
-                      onDelete={DELETABLE_SECTIONS_NEW.has(activeSection) ? () => handleDeleteSection(activeSection) : undefined}
                     />
                   ) : (
                     <>

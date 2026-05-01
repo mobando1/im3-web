@@ -47,7 +47,6 @@ type SectionFormProps = {
   onSave: (updated: Record<string, unknown>) => void;
   onCancel: () => void;
   onDirtyChange?: (isDirty: boolean) => void;
-  onDelete?: () => void;
 };
 
 /** Determina si una sección tiene formulario tipado (o cae a JSON edit) */
@@ -68,7 +67,7 @@ type HistoryState = {
 const HISTORY_LIMIT = 100;
 const COALESCE_MS = 500;
 
-export function SectionForm({ sectionKey, data, onSave, onCancel, onDirtyChange, onDelete }: SectionFormProps) {
+export function SectionForm({ sectionKey, data, onSave, onCancel, onDirtyChange }: SectionFormProps) {
   const [history, setHistory] = useState<HistoryState>(() => ({
     past: [],
     present: structuredClone(data),
@@ -182,17 +181,6 @@ export function SectionForm({ sectionKey, data, onSave, onCancel, onDirtyChange,
           {isDirty && <span className="ml-2 text-amber-600 font-medium">● Sin guardar</span>}
         </p>
         <div className="flex gap-2">
-          {onDelete && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={onDelete}
-              className="gap-1.5 border-red-200 text-red-600 hover:bg-red-50"
-              title="Eliminar esta sección de la propuesta"
-            >
-              <Trash2 className="w-3.5 h-3.5" /> Eliminar sección
-            </Button>
-          )}
           <Button
             size="sm"
             variant="ghost"
@@ -241,10 +229,22 @@ export function SectionForm({ sectionKey, data, onSave, onCancel, onDirtyChange,
 // FIELD HELPERS
 // ────────────────────────────────────────────────────────────────
 
-function Field({ label, children, hint }: { label: string; children: React.ReactNode; hint?: string }) {
+function Field({ label, children, hint, onClear }: { label: string; children: React.ReactNode; hint?: string; onClear?: () => void }) {
   return (
     <div>
-      <Label className="text-xs font-medium text-gray-700 mb-1 block">{label}</Label>
+      <div className="flex items-center justify-between mb-1">
+        <Label className="text-xs font-medium text-gray-700 block">{label}</Label>
+        {onClear && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-gray-300 hover:text-red-500 transition-colors p-0.5"
+            title={`Vaciar ${label}`}
+          >
+            <Trash2 className="w-3 h-3" />
+          </button>
+        )}
+      </div>
       {children}
       {hint && <p className="text-[10px] text-gray-400 mt-0.5">{hint}</p>}
     </div>
@@ -853,25 +853,45 @@ function OpCostsForm({ data, set }: { data: Record<string, unknown>; set: (k: st
 
   const groupHandlers = useDragReorder(groups, commit);
 
+  const clearBlock = () => {
+    if (!window.confirm("¿Vaciar el bloque (Heading, rangos e Intro)? Esto NO elimina la sección. Podrás deshacer con Ctrl+Z.")) return;
+    set("heading", "");
+    set("monthlyRangeLow", "");
+    set("monthlyRangeHigh", "");
+    set("annualEstimate", "");
+    set("intro", "");
+  };
+
   return (
     <div className="space-y-4">
+      <div className="flex justify-end">
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={clearBlock}
+          className="gap-1.5 text-amber-700 border-amber-200 hover:bg-amber-50"
+          title="Vaciar Heading, rangos e Intro (no elimina la sección)"
+        >
+          <Trash2 className="w-3.5 h-3.5" /> Eliminar bloque
+        </Button>
+      </div>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Heading">
+        <Field label="Heading" onClear={() => set("heading", "")}>
           <Input value={String(data.heading ?? "")} onChange={e => set("heading", e.target.value)} />
         </Field>
-        <Field label="Rango bajo mensual">
+        <Field label="Rango bajo mensual" onClear={() => set("monthlyRangeLow", "")}>
           <Input value={String(data.monthlyRangeLow ?? "")} onChange={e => set("monthlyRangeLow", e.target.value)} className="font-mono" placeholder="$65 USD/mes" />
         </Field>
       </div>
       <div className="grid grid-cols-2 gap-3">
-        <Field label="Rango alto mensual">
+        <Field label="Rango alto mensual" onClear={() => set("monthlyRangeHigh", "")}>
           <Input value={String(data.monthlyRangeHigh ?? "")} onChange={e => set("monthlyRangeHigh", e.target.value)} className="font-mono" placeholder="$190 USD/mes" />
         </Field>
-        <Field label="Estimado anual">
+        <Field label="Estimado anual" onClear={() => set("annualEstimate", "")}>
           <Input value={String(data.annualEstimate ?? "")} onChange={e => set("annualEstimate", e.target.value)} className="font-mono" placeholder="$1.500 USD/año" />
         </Field>
       </div>
-      <Field label="Intro">
+      <Field label="Intro" onClear={() => set("intro", "")}>
         <Textarea value={String(data.intro ?? "")} onChange={e => set("intro", e.target.value)} rows={2} className="text-sm" />
       </Field>
 
