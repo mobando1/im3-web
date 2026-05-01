@@ -592,11 +592,42 @@ export default function ProposalEditor() {
           </Button>
         )}
         {hasSections && (
-          <a href={`/proposal/${proposal.accessToken}?pdf=true`} target="_blank" rel="noopener noreferrer">
-            <Button size="sm" variant="outline" className="gap-1.5">
-              <Save className="w-4 h-4" /> Descargar PDF
-            </Button>
-          </a>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => {
+              // Descarga vía iframe oculto + anchor con download attr.
+              // El server responde con Content-Type: application/octet-stream +
+              // Content-Disposition: attachment, así que el browser SIEMPRE descarga.
+              const url = `/api/proposal/${proposal.accessToken}/pdf`;
+              const name = (proposal.contactEmpresa || proposal.contactName || "IM3").replace(/[^\w-]+/g, "_");
+              console.log("[PDF admin] Descargando:", url);
+
+              const iframe = document.createElement("iframe");
+              iframe.style.cssText = "position:fixed;left:-9999px;top:-9999px;width:0;height:0;border:0;";
+              iframe.src = url;
+              document.body.appendChild(iframe);
+
+              setTimeout(() => {
+                const a = document.createElement("a");
+                a.href = url;
+                a.download = `Propuesta-${name}.pdf`;
+                a.rel = "noopener";
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+              }, 100);
+
+              setTimeout(() => {
+                if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+              }, 60000);
+
+              toast({ title: "Generando PDF…", description: "Tarda ~15s la primera vez. La descarga aparecerá automáticamente." });
+            }}
+          >
+            <Save className="w-4 h-4" /> Descargar PDF
+          </Button>
         )}
         {hasSections && (
           <Button size="sm" variant="outline" className="gap-1.5" onClick={copyLink}>
