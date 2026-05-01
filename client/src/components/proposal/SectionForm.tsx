@@ -47,6 +47,7 @@ type SectionFormProps = {
   onSave: (updated: Record<string, unknown>) => void;
   onCancel: () => void;
   onDirtyChange?: (isDirty: boolean) => void;
+  onDelete?: () => void;
 };
 
 /** Determina si una sección tiene formulario tipado (o cae a JSON edit) */
@@ -67,7 +68,7 @@ type HistoryState = {
 const HISTORY_LIMIT = 100;
 const COALESCE_MS = 500;
 
-export function SectionForm({ sectionKey, data, onSave, onCancel, onDirtyChange }: SectionFormProps) {
+export function SectionForm({ sectionKey, data, onSave, onCancel, onDirtyChange, onDelete }: SectionFormProps) {
   const [history, setHistory] = useState<HistoryState>(() => ({
     past: [],
     present: structuredClone(data),
@@ -181,6 +182,17 @@ export function SectionForm({ sectionKey, data, onSave, onCancel, onDirtyChange 
           {isDirty && <span className="ml-2 text-amber-600 font-medium">● Sin guardar</span>}
         </p>
         <div className="flex gap-2">
+          {onDelete && (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onDelete}
+              className="gap-1.5 border-red-200 text-red-600 hover:bg-red-50"
+              title="Eliminar esta sección de la propuesta"
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Eliminar sección
+            </Button>
+          )}
           <Button
             size="sm"
             variant="ghost"

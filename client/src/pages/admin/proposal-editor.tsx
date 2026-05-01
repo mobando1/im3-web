@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Copy, ExternalLink, Send, Sparkles, Save, Eye, FolderKanban, FileSearch, X, Wand2, Check, RotateCcw } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Send, Sparkles, Save, Eye, FolderKanban, FileSearch, X, Wand2, Check, RotateCcw, Trash2 } from "lucide-react";
 import { SectionForm, hasTypedForm } from "@/components/proposal/SectionForm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -791,40 +791,43 @@ export default function ProposalEditor() {
               <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <h2 className="text-lg font-bold text-gray-900">{SECTION_LABELS[activeSection]}</h2>
-                  {editingSection === activeSection ? (
-                    (isNewFormat && hasTypedForm(activeSection)) ? null : (
-                      <div className="flex gap-2">
-                        <Button size="sm" onClick={saveSection} className="gap-1.5 bg-[#2FA4A9] hover:bg-[#238b8f]">
-                          <Save className="w-3.5 h-3.5" /> Guardar
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => setEditingSection(null)}>Cancelar</Button>
-                      </div>
-                    )
-                  ) : (
-                    <div className="flex gap-2">
+                  <div className="flex gap-2 items-center">
+                    {/* Botón Eliminar siempre visible para secciones eliminables (incluso editando) */}
+                    {isNewFormat && DELETABLE_SECTIONS_NEW.has(activeSection) && sections[activeSection] && (
                       <Button
                         size="sm"
                         variant="outline"
-                        className="gap-1.5 border-purple-200 text-purple-700 hover:bg-purple-50"
-                        onClick={() => openAiModify(activeSection)}
+                        className="gap-1.5 border-red-200 text-red-600 hover:bg-red-50"
+                        onClick={() => handleDeleteSection(activeSection)}
                       >
-                        <Wand2 className="w-3.5 h-3.5" /> Modificar con IA
+                        <Trash2 className="w-3.5 h-3.5" /> Eliminar sección
                       </Button>
-                      <Button size="sm" variant="outline" onClick={() => { setEditingSection(activeSection); setEditContent(getSectionDisplayContent(activeSection)); }}>
-                        Editar
-                      </Button>
-                      {isNewFormat && DELETABLE_SECTIONS_NEW.has(activeSection) && sections[activeSection] && (
+                    )}
+                    {editingSection === activeSection ? (
+                      (isNewFormat && hasTypedForm(activeSection)) ? null : (
+                        <>
+                          <Button size="sm" onClick={saveSection} className="gap-1.5 bg-[#2FA4A9] hover:bg-[#238b8f]">
+                            <Save className="w-3.5 h-3.5" /> Guardar
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => setEditingSection(null)}>Cancelar</Button>
+                        </>
+                      )
+                    ) : (
+                      <>
                         <Button
                           size="sm"
                           variant="outline"
-                          className="gap-1.5 border-red-200 text-red-600 hover:bg-red-50"
-                          onClick={() => handleDeleteSection(activeSection)}
+                          className="gap-1.5 border-purple-200 text-purple-700 hover:bg-purple-50"
+                          onClick={() => openAiModify(activeSection)}
                         >
-                          <X className="w-3.5 h-3.5" /> Eliminar
+                          <Wand2 className="w-3.5 h-3.5" /> Modificar con IA
                         </Button>
-                      )}
-                    </div>
-                  )}
+                        <Button size="sm" variant="outline" onClick={() => { setEditingSection(activeSection); setEditContent(getSectionDisplayContent(activeSection)); }}>
+                          Editar
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </div>
 
                 {editingSection === activeSection ? (
@@ -840,6 +843,7 @@ export default function ProposalEditor() {
                       }}
                       onCancel={() => { setHasUnsavedChanges(false); setEditingSection(null); }}
                       onDirtyChange={setHasUnsavedChanges}
+                      onDelete={DELETABLE_SECTIONS_NEW.has(activeSection) ? () => handleDeleteSection(activeSection) : undefined}
                     />
                   ) : (
                     <>
