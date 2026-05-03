@@ -382,6 +382,10 @@ export async function runMigrations() {
     await pool.query(`ALTER TABLE "gmail_emails" ADD COLUMN IF NOT EXISTS "match_method" text;`).catch(() => {});
     await pool.query(`ALTER TABLE "gmail_emails" ADD COLUMN IF NOT EXISTS "manually_unlinked" boolean DEFAULT false NOT NULL;`).catch(() => {});
 
+    // Proposals: soft-delete (papelera con retención de 30 días)
+    await pool.query(`ALTER TABLE "proposals" ADD COLUMN IF NOT EXISTS "deleted_at" timestamp;`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_proposals_deleted_at" ON "proposals" ("deleted_at");`).catch(() => {});
+
     // Portal de Clientes — Auth (login + reset + invite)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "client_users" (
@@ -436,6 +440,21 @@ export async function runMigrations() {
       );
     `).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_client_pwd_resets_token" ON "client_password_resets" ("token");`).catch(() => {});
+
+    // Magic-link tokens (passwordless access from notifications / "envíame un link")
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "client_magic_tokens" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "client_user_id" varchar NOT NULL,
+        "client_project_id" varchar,
+        "token" varchar NOT NULL UNIQUE DEFAULT gen_random_uuid(),
+        "expires_at" timestamp NOT NULL,
+        "used_at" timestamp,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_client_magic_tokens_token" ON "client_magic_tokens" ("token");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_client_magic_tokens_user" ON "client_magic_tokens" ("client_user_id");`).catch(() => {});
 
     console.log("✓ Database tables and indexes ensured");
 

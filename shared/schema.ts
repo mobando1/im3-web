@@ -637,6 +637,8 @@ export const proposals = pgTable("proposals", {
   acceptedOption: text("accepted_option"),
   acceptanceDetails: json("acceptance_details").$type<Record<string, unknown>>(),
   expiresAt: timestamp("expires_at"),
+  // Soft-delete: si tiene valor, la propuesta está en la papelera. Se purga después de 30 días.
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -794,3 +796,18 @@ export const clientPasswordResets = pgTable("client_password_resets", {
 
 export type ClientPasswordReset = typeof clientPasswordResets.$inferSelect;
 export type InsertClientPasswordReset = typeof clientPasswordResets.$inferInsert;
+
+// Magic-link tokens — acceso passwordless desde notificaciones / "enviarme un link"
+// Single-use, TTL corto. El token se genera con gen_random_uuid() y se valida contra DB.
+export const clientMagicTokens = pgTable("client_magic_tokens", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientUserId: varchar("client_user_id").notNull(),
+  clientProjectId: varchar("client_project_id"), // proyecto al que redirigir tras login (opcional)
+  token: varchar("token").notNull().unique().default(sql`gen_random_uuid()`),
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ClientMagicToken = typeof clientMagicTokens.$inferSelect;
+export type InsertClientMagicToken = typeof clientMagicTokens.$inferInsert;

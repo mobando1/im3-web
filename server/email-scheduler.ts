@@ -1205,6 +1205,34 @@ export async function sendWeeklyProjectSummaries() {
   }
 }
 
+// Auto-purga propuestas en la papelera con más de 30 días.
+// Después de purgar, no se pueden recuperar.
+export async function purgeOldDeletedProposals(): Promise<{ recordsProcessed: number }> {
+  if (!db) return { recordsProcessed: 0 };
+  const RETENTION_DAYS = 30;
+  const cutoff = new Date(Date.now() - RETENTION_DAYS * 24 * 60 * 60 * 1000);
+
+  try {
+    const { sql } = await import("drizzle-orm");
+    const { proposalViews } = await import("@shared/schema");
+    const oldDeleted = await db.select({ id: proposals.id })
+      .from(proposals)
+      .where(sql`${proposals.deletedAt} IS NOT NULL AND ${proposals.deletedAt} <= ${cutoff}`);
+
+    if (oldDeleted.length === 0) return { recordsProcessed: 0 };
+
+    const ids = oldDeleted.map(p => p.id);
+    await db.delete(proposalViews).where(inArray(proposalViews.proposalId, ids)).catch(() => {});
+    await db.delete(proposals).where(inArray(proposals.id, ids));
+
+    log(`[purge-trash] Purgadas ${oldDeleted.length} propuestas con más de ${RETENTION_DAYS} días en papelera`);
+    return { recordsProcessed: oldDeleted.length };
+  } catch (err: any) {
+    log(`Error purgando papelera de propuestas: ${err?.message || err}`);
+    return { recordsProcessed: 0 };
+  }
+}
+
 export function startEmailScheduler() {
   // Gmail sync runs independently of email system configuration
   if (isGmailConfigured()) {
@@ -1263,6 +1291,11 @@ export function startEmailScheduler() {
   // Monthly cost reference freshness check (día 1 de cada mes, 9 AM COT = 14:00 UTC)
   cron.schedule("0 14 1 * *", async () => {
     await runAgent("cost-reference-freshness", runCostReferenceFreshness).catch(err => log(`Cron error cost freshness: ${err}`));
+  }, { timezone: "America/Bogota" });
+
+  // Daily purge of trashed proposals older than 30 days (3 AM COT = 8:00 UTC)
+  cron.schedule("0 8 * * *", async () => {
+    await runAgent("proposal-trash-purge", purgeOldDeletedProposals).catch(err => log(`Cron error proposal purge: ${err}`));
   }, { timezone: "America/Bogota" });
 
   // Also run once at startup (after 10 seconds to let DB connect)

@@ -10,6 +10,7 @@ import {
   sendWeeklyProjectSummaries,
   generateAndSendDailyNewsletter,
   syncGmailEmails,
+  purgeOldDeletedProposals,
 } from "../email-scheduler";
 import { runErrorSupervisor } from "./error-supervisor";
 import { runMeetingPrep } from "./meeting-prep";
@@ -350,6 +351,17 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
     schedule: "*/15 * * * *",
     scheduleHuman: "cada 15 min (integrado en Gmail sync)",
     criticality: "normal",
+  },
+  {
+    name: "proposal-trash-purge",
+    displayName: "Purga de Papelera de Propuestas",
+    domain: "sync",
+    description: "Elimina permanentemente propuestas con más de 30 días en la papelera",
+    trigger: "cron",
+    schedule: "0 8 * * *",
+    scheduleHuman: "diario 3:00 AM COT",
+    criticality: "low",
+    runnable: purgeOldDeletedProposals,
   },
 
   // ─── Contenido ───────────────────────────────────────────────

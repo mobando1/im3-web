@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens } from "@shared/schema";
 import { AGENT_REGISTRY, AGENT_DOMAINS, findAgent } from "./agents/registry";
 import { runAgent } from "./agents/runner";
 import { syncGmailEmails, isGmailConfigured } from "./google-gmail";
@@ -15,7 +15,7 @@ import { isEmailConfigured, sendEmail } from "./email-sender";
 import { generateEmailContent, buildMicroReminderEmail, build6hReminderEmail, buildFollowUpConfirmationEmail, buildNoShowEmail, generateDailyNewsDigest, generateContactInsight, generateWhatsAppMessage, generateNewsletterWelcome, generateMiniAudit, classifyWhatsAppIntent, generateWhatsAppAutoReply, buildWhatsAppNotificationEmail, buildProjectNotificationEmail, escapeHtml } from "./email-ai";
 import { parseFechaCita } from "./date-utils";
 import { requireAuth, hashPassword } from "./auth";
-import { requireClient, publicClientUser, sendInviteEmail, sendPasswordResetEmail } from "./client-auth";
+import { requireClient, publicClientUser, sendInviteEmail, sendPasswordResetEmail, createMagicToken, magicLinkUrl, sendMagicLinkLoginEmail, MAGIC_LINK_TTL_MINUTES } from "./client-auth";
 import { calculateLeadScore } from "./lead-scoring";
 import { isWhatsAppConfigured, calculateWhatsAppSchedule, WHATSAPP_SEQUENCE, sendWhatsAppText } from "./whatsapp";
 import passport from "passport";
@@ -26,23 +26,105 @@ import { generateProposal, regenerateProposalSection, generateSectionOptions, ap
 import crypto from "crypto";
 import { getIndustriaLabel } from "@shared/industrias";
 
+type ProjectNotificationContent = {
+  title: string;
+  headerColor?: string;
+  headerEmoji?: string;
+  bodyLines: string[];
+  ctaText: string;
+  footerNote?: string;
+};
+
 /**
- * Send a project notification email to the linked client contact.
+ * Send a project notification email to all client_users linked to the project.
+ * Each recipient gets a personalized single-use magic link (TTL ~30min) that
+ * auto-logs them into the portal — no password required.
+ *
+ * If no client_user is linked yet (legacy projects), auto-creates one from
+ * the project's contactId so the new flow takes over going forward.
+ *
  * Non-blocking — errors are logged but don't affect the caller.
  */
 async function notifyProjectClient(
   projectId: string,
   subject: string,
-  emailHtml: string
+  content: ProjectNotificationContent,
 ) {
   if (!db) return;
   try {
     const [project] = await db.select().from(clientProjects).where(eq(clientProjects.id, projectId)).limit(1);
-    if (!project?.contactId) return;
-    const [contact] = await db.select({ email: contacts.email, nombre: contacts.nombre, optedOut: contacts.optedOut })
-      .from(contacts).where(eq(contacts.id, project.contactId)).limit(1);
-    if (!contact?.email || contact.optedOut) return;
-    sendEmail(contact.email, subject, emailHtml).catch((err) => log(`Error sending project notification: ${err}`));
+    if (!project) return;
+
+    // 1) Get all linked client_users (active/invited, never disabled)
+    let recipients = await db
+      .select({
+        id: clientUsers.id,
+        email: clientUsers.email,
+        name: clientUsers.name,
+        status: clientUsers.status,
+      })
+      .from(clientUserProjects)
+      .innerJoin(clientUsers, eq(clientUsers.id, clientUserProjects.clientUserId))
+      .where(eq(clientUserProjects.clientProjectId, projectId));
+    recipients = recipients.filter((r) => r.status !== "disabled");
+
+    // 2) Legacy fallback — proyecto sin client_users vinculados pero con contacto:
+    //    auto-crear client_user (sin password) y vincular para que la próxima
+    //    notificación ya tenga destinatario en el sistema nuevo.
+    if (recipients.length === 0 && project.contactId) {
+      const [contact] = await db
+        .select({ email: contacts.email, nombre: contacts.nombre, optedOut: contacts.optedOut })
+        .from(contacts).where(eq(contacts.id, project.contactId)).limit(1);
+      if (!contact?.email || contact.optedOut) return;
+      const lower = contact.email.toLowerCase().trim();
+
+      const [existing] = await db.select().from(clientUsers).where(eq(clientUsers.email, lower));
+      let userId: string;
+      let userName: string | null;
+      if (existing) {
+        userId = existing.id;
+        userName = existing.name ?? contact.nombre ?? null;
+        if (existing.status === "disabled") return;
+      } else {
+        const [created] = await db
+          .insert(clientUsers)
+          .values({ email: lower, name: contact.nombre ?? null, status: "active", acceptedAt: sql`now()` as any })
+          .returning();
+        userId = created.id;
+        userName = created.name;
+      }
+
+      await db
+        .insert(clientUserProjects)
+        .values({ clientUserId: userId, clientProjectId: projectId })
+        .onConflictDoNothing()
+        .catch(() => {});
+
+      recipients = [{ id: userId, email: lower, name: userName, status: "active" }];
+    }
+
+    if (recipients.length === 0) return;
+
+    // 3) For each recipient, generate a personalized magic link and send.
+    for (const r of recipients) {
+      try {
+        const token = await createMagicToken({ clientUserId: r.id, clientProjectId: projectId });
+        const html = buildProjectNotificationEmail({
+          projectName: project.name,
+          clientName: r.name || "cliente",
+          title: content.title,
+          headerColor: content.headerColor,
+          headerEmoji: content.headerEmoji,
+          bodyLines: content.bodyLines,
+          ctaText: content.ctaText,
+          ctaUrl: magicLinkUrl(token),
+          footerNote: content.footerNote,
+        });
+        sendEmail(r.email, subject, html).catch((err) => log(`Error sending project notification to ${r.email}: ${err}`));
+      } catch (err) {
+        log(`Error preparing magic-link for ${r.email}: ${err}`);
+      }
+    }
   } catch (err) {
     log(`Error in notifyProjectClient: ${err}`);
   }
@@ -5278,30 +5360,20 @@ ${urls}
 
       // Notify client only when phase transitions TO completed (not if already completed)
       if (req.body.status === "completed" && prevStatus !== "completed" && updated.projectId) {
-        const [proj] = await db.select().from(clientProjects).where(eq(clientProjects.id, updated.projectId)).limit(1);
-        if (proj?.contactId) {
-          const [contact] = await db.select({ nombre: contacts.nombre }).from(contacts).where(eq(contacts.id, proj.contactId)).limit(1);
-          const allTasks = await db.select({ status: projectTasks.status }).from(projectTasks).where(eq(projectTasks.projectId, updated.projectId));
-          const completedCount = allTasks.filter(t => t.status === "completed").length;
-          const progress = allTasks.length > 0 ? Math.round((completedCount / allTasks.length) * 100) : 0;
-          const baseUrl = process.env.BASE_URL || "https://im3systems.com";
-          const portalUrl = `${baseUrl}/portal/${proj.accessToken}`;
-          const html = buildProjectNotificationEmail({
-            projectName: proj.name,
-            clientName: contact?.nombre || "Cliente",
-            title: "Fase completada",
-            headerEmoji: "✅",
-            headerColor: "linear-gradient(135deg,#059669,#10B981)",
-            bodyLines: [
-              `La fase <strong>"${updated.name}"</strong> ha sido completada exitosamente.`,
-              `Tu proyecto avanza al <strong>${progress}%</strong> de progreso total.`,
-              "Entra al portal para ver el roadmap actualizado y las próximas fases.",
-            ],
-            ctaText: "Ver roadmap →",
-            ctaUrl: portalUrl,
-          });
-          notifyProjectClient(updated.projectId, `✅ Fase completada: ${updated.name}`, html);
-        }
+        const allTasks = await db.select({ status: projectTasks.status }).from(projectTasks).where(eq(projectTasks.projectId, updated.projectId));
+        const completedCount = allTasks.filter(t => t.status === "completed").length;
+        const progress = allTasks.length > 0 ? Math.round((completedCount / allTasks.length) * 100) : 0;
+        notifyProjectClient(updated.projectId, `✅ Fase completada: ${updated.name}`, {
+          title: "Fase completada",
+          headerEmoji: "✅",
+          headerColor: "linear-gradient(135deg,#059669,#10B981)",
+          bodyLines: [
+            `La fase <strong>"${updated.name}"</strong> ha sido completada exitosamente.`,
+            `Tu proyecto avanza al <strong>${progress}%</strong> de progreso total.`,
+            "Entra al portal para ver el roadmap actualizado y las próximas fases.",
+          ],
+          ctaText: "Ver roadmap →",
+        });
       }
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
@@ -5367,14 +5439,9 @@ ${urls}
 
       // Notify client about new deliverable
       const projectId = req.params.id as string;
-      const [proj] = await db.select().from(clientProjects).where(eq(clientProjects.id, projectId)).limit(1);
-      if (proj?.contactId) {
-        const [contact] = await db.select({ nombre: contacts.nombre }).from(contacts).where(eq(contacts.id, proj.contactId)).limit(1);
-        const baseUrl = process.env.BASE_URL || "https://im3systems.com";
-        const portalUrl = `${baseUrl}/portal/${proj.accessToken}`;
-        const html = buildProjectNotificationEmail({
-          projectName: proj.name,
-          clientName: contact?.nombre || "Cliente",
+      const [proj] = await db.select({ name: clientProjects.name }).from(clientProjects).where(eq(clientProjects.id, projectId)).limit(1);
+      if (proj) {
+        notifyProjectClient(projectId, `📦 Nueva entrega: ${deliverable.title}`, {
           title: "Nueva entrega disponible",
           headerEmoji: "📦",
           headerColor: "linear-gradient(135deg,#0F172A,#1E293B)",
@@ -5384,9 +5451,7 @@ ${urls}
             "Puedes revisarla, aprobarla o dejar comentarios directamente desde tu portal.",
           ],
           ctaText: "Ver entrega →",
-          ctaUrl: portalUrl,
         });
-        notifyProjectClient(projectId, `📦 Nueva entrega: ${deliverable.title}`, html);
       }
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
@@ -5452,15 +5517,10 @@ ${urls}
 
       // Notify client about new message
       const projectId = req.params.id as string;
-      const [proj] = await db.select().from(clientProjects).where(eq(clientProjects.id, projectId)).limit(1);
-      if (proj?.contactId) {
-        const [contact] = await db.select({ nombre: contacts.nombre }).from(contacts).where(eq(contacts.id, proj.contactId)).limit(1);
-        const baseUrl = process.env.BASE_URL || "https://im3systems.com";
-        const portalUrl = `${baseUrl}/portal/${proj.accessToken}`;
+      const [proj] = await db.select({ name: clientProjects.name }).from(clientProjects).where(eq(clientProjects.id, projectId)).limit(1);
+      if (proj) {
         const preview = escapeHtml(msg.content.length > 150 ? msg.content.substring(0, 150) + "..." : msg.content);
-        const html = buildProjectNotificationEmail({
-          projectName: proj.name,
-          clientName: contact?.nombre || "Cliente",
+        notifyProjectClient(projectId, `💬 Nuevo mensaje en ${proj.name}`, {
           title: `Mensaje de ${msg.senderName}`,
           headerEmoji: "💬",
           bodyLines: [
@@ -5469,9 +5529,7 @@ ${urls}
             "Responde directamente desde tu portal.",
           ],
           ctaText: "Ver conversación →",
-          ctaUrl: portalUrl,
         });
-        notifyProjectClient(projectId, `💬 Nuevo mensaje en ${proj.name}`, html);
       }
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
@@ -5626,6 +5684,58 @@ ${urls}
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err?.message || "Error reseteando contraseña" });
+    }
+  });
+
+  // Magic-link consume — passwordless login.
+  // Validates token, creates Passport session, redirects into the portal.
+  // Rendered as an HTTP 302 from the backend so the email link lands directly inside.
+  app.get("/portal/magic/:token", async (req, res, next) => {
+    if (!db) return next();
+    const token = String(req.params.token || "").trim();
+    const loginRedirect = (reason: string) =>
+      res.redirect(`/portal/login?error=${encodeURIComponent(reason)}`);
+    try {
+      const [row] = await db.select().from(clientMagicTokens).where(eq(clientMagicTokens.token, token));
+      if (!row) return loginRedirect("link_invalido");
+      if (row.usedAt) return loginRedirect("link_ya_usado");
+      if (new Date(row.expiresAt).getTime() < Date.now()) return loginRedirect("link_expirado");
+
+      const [user] = await db.select().from(clientUsers).where(eq(clientUsers.id, row.clientUserId));
+      if (!user || user.status === "disabled") return loginRedirect("cuenta_deshabilitada");
+
+      // Mark token as used (single-use semantics)
+      await db.update(clientMagicTokens).set({ usedAt: sql`now()` }).where(eq(clientMagicTokens.id, row.id));
+      // Best-effort: bump lastLoginAt
+      await db.update(clientUsers).set({ lastLoginAt: sql`now()`, updatedAt: sql`now()` }).where(eq(clientUsers.id, user.id)).catch(() => {});
+
+      req.login({ ...user, kind: "client" }, (err) => {
+        if (err) return loginRedirect("login_fallo");
+        const target = row.clientProjectId ? `/portal/projects/${row.clientProjectId}` : `/portal/projects`;
+        res.redirect(target);
+      });
+    } catch (err: any) {
+      log(`Magic-link consume error: ${err?.message || err}`);
+      loginRedirect("error_inesperado");
+    }
+  });
+
+  // Magic-link request — "envíame un link" desde /portal/login.
+  // Always returns 200 (sin enumeración de emails).
+  app.post("/api/portal/auth/magic-link-request", async (req, res) => {
+    try {
+      const email = String(req.body?.email || "").toLowerCase().trim();
+      if (!email || !db) return res.json({ ok: true });
+      const [u] = await db.select().from(clientUsers).where(eq(clientUsers.email, email));
+      if (u && u.status !== "disabled") {
+        const token = await createMagicToken({ clientUserId: u.id, ttlMinutes: MAGIC_LINK_TTL_MINUTES });
+        await sendMagicLinkLoginEmail({ to: u.email, name: u.name, magicToken: token })
+          .catch((e) => console.error("[portal] sendMagicLinkLoginEmail failed:", e));
+      }
+      res.json({ ok: true });
+    } catch (err: any) {
+      console.error("[portal] magic-link-request error:", err);
+      res.json({ ok: true });
     }
   });
 
@@ -6520,15 +6630,10 @@ ${urls}
     res.json(updated);
 
     // Notify client about health status change
-    if (updated.contactId) {
-      const [contact] = await db.select({ nombre: contacts.nombre }).from(contacts).where(eq(contacts.id, updated.contactId)).limit(1);
-      const baseUrl = process.env.BASE_URL || "https://im3systems.com";
-      const portalUrl = `${baseUrl}/portal/${updated.accessToken}`;
+    {
       const statusLabels: Record<string, string> = { on_track: "en línea", ahead: "adelantado", at_risk: "en riesgo", behind: "atrasado" };
       const statusLabel = statusLabels[healthStatus] || healthStatus;
-      const html = buildProjectNotificationEmail({
-        projectName: updated.name,
-        clientName: contact?.nombre || "Cliente",
+      notifyProjectClient(updated.id, `${healthStatus === "on_track" || healthStatus === "ahead" ? "✅" : "⚠️"} Tu proyecto está ${statusLabel}`, {
         title: "Actualización de estado",
         headerEmoji: healthStatus === "on_track" || healthStatus === "ahead" ? "✅" : "⚠️",
         headerColor: healthStatus === "on_track" ? "linear-gradient(135deg,#059669,#10B981)" :
@@ -6541,9 +6646,7 @@ ${urls}
           "Entra al portal para ver los detalles completos.",
         ],
         ctaText: "Ver mi proyecto →",
-        ctaUrl: portalUrl,
       });
-      notifyProjectClient(updated.id, `${healthStatus === "on_track" || healthStatus === "ahead" ? "✅" : "⚠️"} Tu proyecto está ${statusLabel}`, html);
     }
   });
 
@@ -6864,7 +6967,8 @@ ${urls}
   app.get("/api/admin/proposals", requireAuth, async (_req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
-      const allProposals = await db.select().from(proposals).orderBy(desc(proposals.createdAt));
+      // Excluir propuestas en la papelera (deletedAt no null)
+      const allProposals = await db.select().from(proposals).where(isNull(proposals.deletedAt)).orderBy(desc(proposals.createdAt));
       // Enrich with contact info
       const enriched = await Promise.all(allProposals.map(async (p) => {
         const [contact] = await db!.select({ nombre: contacts.nombre, empresa: contacts.empresa, email: contacts.email })
@@ -6875,6 +6979,54 @@ ${urls}
     } catch (err: any) {
       log(`Error listing proposals: ${err?.message}`);
       res.status(500).json({ error: "Error listando propuestas" });
+    }
+  });
+
+  // List proposals in trash (soft-deleted)
+  app.get("/api/admin/proposals/trash", requireAuth, async (_req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const trashed = await db.select().from(proposals)
+        .where(sql`${proposals.deletedAt} IS NOT NULL`)
+        .orderBy(desc(proposals.deletedAt));
+      const enriched = await Promise.all(trashed.map(async (p) => {
+        const [contact] = await db!.select({ nombre: contacts.nombre, empresa: contacts.empresa, email: contacts.email })
+          .from(contacts).where(eq(contacts.id, p.contactId)).limit(1);
+        return { ...p, contactName: contact?.nombre || "—", contactEmpresa: contact?.empresa || "—", contactEmail: contact?.email || "—" };
+      }));
+      res.json(enriched);
+    } catch (err: any) {
+      log(`Error listing trash: ${err?.message}`);
+      res.status(500).json({ error: "Error listando papelera" });
+    }
+  });
+
+  // Restore proposal from trash
+  app.post("/api/admin/proposals/:id/restore", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [restored] = await db.update(proposals)
+        .set({ deletedAt: null, updatedAt: new Date() })
+        .where(eq(proposals.id, req.params.id as string))
+        .returning();
+      if (!restored) return res.status(404).json({ error: "Propuesta no encontrada" });
+      res.json(restored);
+    } catch (err: any) {
+      log(`Error restoring proposal: ${err?.message}`);
+      res.status(500).json({ error: "Error restaurando propuesta" });
+    }
+  });
+
+  // Permanent delete (hard delete) — solo para propuestas ya en la papelera
+  app.delete("/api/admin/proposals/:id/permanent", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      await db.delete(proposalViews).where(eq(proposalViews.proposalId, req.params.id as string)).catch(() => {});
+      await db.delete(proposals).where(eq(proposals.id, req.params.id as string));
+      res.json({ success: true });
+    } catch (err: any) {
+      log(`Error permanently deleting proposal: ${err?.message}`);
+      res.status(500).json({ error: "Error eliminando propuesta" });
     }
   });
 
@@ -6937,12 +7089,16 @@ ${urls}
   });
 
   // Delete proposal
+  // Soft-delete: mueve a papelera (recuperable durante 30 días). Para borrado permanente usar /permanent.
   app.delete("/api/admin/proposals/:id", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
-      await db.delete(proposalViews).where(eq(proposalViews.proposalId, req.params.id as string)).catch(() => {});
-      await db.delete(proposals).where(eq(proposals.id, req.params.id as string));
-      res.json({ success: true });
+      const [deleted] = await db.update(proposals)
+        .set({ deletedAt: new Date() })
+        .where(eq(proposals.id, req.params.id as string))
+        .returning();
+      if (!deleted) return res.status(404).json({ error: "Propuesta no encontrada" });
+      res.json({ success: true, deletedAt: deleted.deletedAt });
     } catch (err: any) {
       log(`Error deleting proposal: ${err?.message}`);
       res.status(500).json({ error: "Error eliminando propuesta" });
