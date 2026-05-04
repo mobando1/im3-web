@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
-import { useParams, useLocation } from "wouter";
+import { useParams, useLocation, Link } from "wouter";
 import { useClientAuth } from "@/hooks/useClientAuth";
 import { Send, CheckCircle2, Circle, Clock, AlertCircle, ChevronDown, ChevronRight, ExternalLink, X, Zap, ArrowRight, FileText, Mic, Image, ClipboardCheck, FileSignature, FolderOpen, Download, Lightbulb, ThumbsUp, Plus, Diamond, File } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -306,6 +306,15 @@ export default function Portal() {
   const { data: sessions = [] } = useQuery<PortalSession[]>({ queryKey: [`${base}/sessions`], enabled: !!overview });
   const { data: ideas = [] } = useQuery<PortalIdea[]>({ queryKey: [`${base}/ideas`], enabled: !!overview });
 
+  // Analytics preview (only in auth mode, only if connected)
+  const { data: analyticsPreview } = useQuery<{
+    status: string;
+    totals: { sessions: number; users: number; pageviews: number } | null;
+  }>({
+    queryKey: [`/api/portal/projects/${params.projectId}/analytics`],
+    enabled: !!overview && isAuthMode,
+  });
+
   useEffect(() => {
     if (phases.length > 0) setExpandedPhases(new Set(phases.map(p => p.id)));
   }, [phases]);
@@ -455,6 +464,14 @@ export default function Portal() {
 
           {/* Section nav */}
           <div className="flex gap-1 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 pb-0">
+            {isAuthMode && (
+              <Link
+                href={`/portal/projects/${params.projectId}/analytics`}
+                className="px-3 py-2 text-sm font-medium border-b-2 whitespace-nowrap transition-colors border-transparent text-gray-400 hover:text-gray-700"
+              >
+                Analytics
+              </Link>
+            )}
             {sections.map(s => (
               <button
                 key={s}
@@ -496,6 +513,32 @@ export default function Portal() {
         {/* ── PULSO ── */}
         {activeSection === "Pulso" && (
           <div className="space-y-6">
+            {/* Analytics preview — solo visible si la conexión está activa */}
+            {isAuthMode && analyticsPreview?.status === "connected" && analyticsPreview.totals && (
+              <Link
+                href={`/portal/projects/${params.projectId}/analytics`}
+                className="block bg-gradient-to-br from-[#0F766E] to-[#2FA4A9] rounded-xl p-5 text-white hover:shadow-lg transition-shadow"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-xs font-semibold uppercase tracking-wider text-white/70">Analytics · últimos 30 días</span>
+                  <span className="text-xs text-white/80">Ver detalle →</span>
+                </div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div>
+                    <div className="text-2xl font-semibold">{analyticsPreview.totals.sessions.toLocaleString("es")}</div>
+                    <div className="text-xs text-white/70 mt-0.5">Sesiones</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-semibold">{analyticsPreview.totals.users.toLocaleString("es")}</div>
+                    <div className="text-xs text-white/70 mt-0.5">Usuarios</div>
+                  </div>
+                  <div>
+                    <div className="text-2xl font-semibold">{analyticsPreview.totals.pageviews.toLocaleString("es")}</div>
+                    <div className="text-xs text-white/70 mt-0.5">Páginas vistas</div>
+                  </div>
+                </div>
+              </Link>
+            )}
             {/* Current focus card */}
             {pulse?.currentFocus ? (
               <div className="bg-white rounded-xl border border-gray-200 p-5">

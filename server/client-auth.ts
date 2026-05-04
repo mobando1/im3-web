@@ -3,12 +3,15 @@ import { Strategy as LocalStrategy } from "passport-local";
 import { eq, sql } from "drizzle-orm";
 import type { RequestHandler } from "express";
 import { db } from "./db";
-import { clientUsers } from "@shared/schema";
+import { clientUsers, clientMagicTokens } from "@shared/schema";
 import { comparePasswords } from "./auth";
 import { sendEmail } from "./email-sender";
 import { buildProjectNotificationEmail } from "./email-ai";
 
 const BASE_URL = process.env.BASE_URL || "https://im3systems.com";
+
+// TTL para magic links generados desde notificaciones / login passwordless
+export const MAGIC_LINK_TTL_MINUTES = 30;
 
 /**
  * Registers a Passport strategy named "client-local" that authenticates
@@ -87,6 +90,57 @@ export async function sendInviteEmail(opts: {
     footerNote: "Si no esperabas este email, puedes ignorarlo.",
   });
   return sendEmail(opts.to, "Tu acceso al portal de IM3 Systems", html);
+}
+
+// ───────────────────────────────────────────────────────────────
+// Magic-link tokens — acceso passwordless single-use
+// ───────────────────────────────────────────────────────────────
+
+/** Crea un magic-link token en DB. Devuelve el token (UUID). */
+export async function createMagicToken(opts: {
+  clientUserId: string;
+  clientProjectId?: string | null;
+  ttlMinutes?: number;
+}): Promise<string> {
+  if (!db) throw new Error("DB not configured");
+  const expiresAt = new Date(Date.now() + (opts.ttlMinutes ?? MAGIC_LINK_TTL_MINUTES) * 60 * 1000);
+  const [row] = await db
+    .insert(clientMagicTokens)
+    .values({
+      clientUserId: opts.clientUserId,
+      clientProjectId: opts.clientProjectId ?? null,
+      expiresAt: expiresAt as any,
+    })
+    .returning();
+  return row.token;
+}
+
+/** Construye la URL absoluta del magic link a partir de un token. */
+export function magicLinkUrl(token: string): string {
+  return `${BASE_URL}/portal/magic/${encodeURIComponent(token)}`;
+}
+
+/** Email "envíame un link" disparado desde /portal/login. */
+export async function sendMagicLinkLoginEmail(opts: {
+  to: string;
+  name?: string | null;
+  magicToken: string;
+}) {
+  const link = magicLinkUrl(opts.magicToken);
+  const html = buildProjectNotificationEmail({
+    projectName: "Portal IM3",
+    clientName: opts.name || "cliente",
+    title: "Tu link de acceso",
+    headerEmoji: "🔐",
+    bodyLines: [
+      "Recibimos una solicitud para acceder al portal con un link directo.",
+      `Haz click abajo para entrar — el link es válido por <strong>${MAGIC_LINK_TTL_MINUTES} minutos</strong> y solo se puede usar una vez.`,
+    ],
+    ctaText: "Entrar al portal →",
+    ctaUrl: link,
+    footerNote: "Si no solicitaste este link, puedes ignorarlo de forma segura.",
+  });
+  return sendEmail(opts.to, "Tu link de acceso — Portal IM3", html);
 }
 
 export async function sendPasswordResetEmail(opts: {

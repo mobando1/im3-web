@@ -797,6 +797,48 @@ export const clientPasswordResets = pgTable("client_password_resets", {
 export type ClientPasswordReset = typeof clientPasswordResets.$inferSelect;
 export type InsertClientPasswordReset = typeof clientPasswordResets.$inferInsert;
 
+// ───────────────────────────────────────────────────────────────
+// Portal del Cliente — Analytics (Google Analytics 4)
+// ───────────────────────────────────────────────────────────────
+
+// Conexión 1:1 entre proyecto y propiedad GA4 del cliente.
+// El cliente es propietario del GA4; nuestro service account está agregado como Viewer.
+export const clientAnalyticsConnections = pgTable("client_analytics_connections", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientProjectId: varchar("client_project_id").notNull().unique(),
+  ga4PropertyId: varchar("ga4_property_id").notNull(), // solo el ID numérico, ej "535230812"
+  propertyTimezone: varchar("property_timezone", { length: 64 }), // ej "America/Bogota" — devuelto por GA en metadata
+  status: text("status").notNull().default("pending"), // pending | connected | error
+  lastSyncedAt: timestamp("last_synced_at"),
+  lastError: text("last_error"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type ClientAnalyticsConnection = typeof clientAnalyticsConnections.$inferSelect;
+export type InsertClientAnalyticsConnection = typeof clientAnalyticsConnections.$inferInsert;
+
+// Métricas agregadas por día — la fuente de verdad para el dashboard del portal.
+// El sync diario inserta una row por (project, date). Backfill al conectar pulla 30 días.
+export const clientAnalyticsDaily = pgTable("client_analytics_daily", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  clientProjectId: varchar("client_project_id").notNull(),
+  date: text("date").notNull(), // formato YYYY-MM-DD (zona horaria de la propiedad GA4)
+  sessions: integer("sessions").default(0).notNull(),
+  users: integer("users").default(0).notNull(),
+  newUsers: integer("new_users").default(0).notNull(),
+  pageviews: integer("pageviews").default(0).notNull(),
+  avgSessionDuration: numeric("avg_session_duration", { precision: 10, scale: 2 }).default("0").notNull(), // segundos
+  bounceRate: numeric("bounce_rate", { precision: 5, scale: 4 }).default("0").notNull(), // 0..1
+  topPages: json("top_pages").$type<Array<{ path: string; pageviews: number }>>().default([]),
+  topSources: json("top_sources").$type<Array<{ source: string; sessions: number }>>().default([]),
+  topCountries: json("top_countries").$type<Array<{ country: string; users: number }>>().default([]),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ClientAnalyticsDaily = typeof clientAnalyticsDaily.$inferSelect;
+export type InsertClientAnalyticsDaily = typeof clientAnalyticsDaily.$inferInsert;
+
 // Magic-link tokens — acceso passwordless desde notificaciones / "enviarme un link"
 // Single-use, TTL corto. El token se genera con gen_random_uuid() y se valida contra DB.
 export const clientMagicTokens = pgTable("client_magic_tokens", {

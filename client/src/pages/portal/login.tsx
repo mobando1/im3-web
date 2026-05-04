@@ -5,12 +5,31 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 
+const ERROR_LABELS: Record<string, string> = {
+  link_invalido: "Ese link no es válido. Pídele al equipo que te envíe uno nuevo.",
+  link_ya_usado: "Ese link ya fue usado. Pide uno nuevo abajo.",
+  link_expirado: "Ese link expiró. Pide uno nuevo abajo.",
+  cuenta_deshabilitada: "Tu cuenta está deshabilitada. Contacta al equipo de IM3.",
+  login_fallo: "No pudimos iniciar tu sesión. Intenta de nuevo.",
+  error_inesperado: "Ocurrió un error. Intenta de nuevo en un momento.",
+};
+
 export default function PortalLogin() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [mode, setMode] = useState<"magic" | "password">("magic");
+  const [magicSubmitted, setMagicSubmitted] = useState(false);
+  const [magicLoading, setMagicLoading] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
   const { login, isLoggingIn, loginError, isAuthenticated } = useClientAuth();
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get("error");
+    if (err && ERROR_LABELS[err]) setLinkError(ERROR_LABELS[err]);
+  }, []);
 
   useEffect(() => {
     if (isAuthenticated) navigate("/portal/projects");
@@ -18,11 +37,10 @@ export default function PortalLogin() {
 
   if (isAuthenticated) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       await login({ email: email.trim().toLowerCase(), password });
-      // After login, fetch projects to decide where to land
       const res = await fetch("/api/portal/projects", { credentials: "include" });
       if (res.ok) {
         const projects = (await res.json()) as Array<{ id: string }>;
@@ -35,6 +53,22 @@ export default function PortalLogin() {
       navigate("/portal/projects");
     } catch {
       // loginError will display
+    }
+  };
+
+  const handleMagicSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMagicLoading(true);
+    try {
+      await fetch("/api/portal/auth/magic-link-request", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email.trim().toLowerCase() }),
+      });
+      setMagicSubmitted(true);
+    } finally {
+      setMagicLoading(false);
     }
   };
 
@@ -60,59 +94,131 @@ export default function PortalLogin() {
         </div>
 
         <div className="rounded-xl border border-white/[0.06] bg-white/[0.03] backdrop-blur-sm p-8">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-1.5">
-              <label htmlFor="email" className="text-xs font-medium text-white/40 uppercase tracking-wider">
-                Email
-              </label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="tu@empresa.com"
-                className="h-11 bg-white/[0.04] border-white/[0.08] text-white placeholder:text-white/20 focus:border-[#2FA4A9]/50 focus:ring-[#2FA4A9]/20"
-                autoComplete="email"
-                required
-              />
+          {linkError && (
+            <div className="rounded-lg bg-amber-500/10 border border-amber-500/20 px-3 py-2 mb-5">
+              <p className="text-amber-300 text-sm">{linkError}</p>
             </div>
+          )}
 
-            <div className="space-y-1.5">
-              <label htmlFor="password" className="text-xs font-medium text-white/40 uppercase tracking-wider">
-                Contraseña
-              </label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                className="h-11 bg-white/[0.04] border-white/[0.08] text-white placeholder:text-white/20 focus:border-[#2FA4A9]/50 focus:ring-[#2FA4A9]/20"
-                autoComplete="current-password"
-                required
-              />
-            </div>
-
-            {loginError && (
-              <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2">
-                <p className="text-red-400 text-sm">{loginError.replace(/^\d+:\s*/, "")}</p>
+          {mode === "magic" ? (
+            magicSubmitted ? (
+              <div className="space-y-4 text-center">
+                <div className="text-3xl">📧</div>
+                <h2 className="text-white text-lg font-medium">Revisa tu correo</h2>
+                <p className="text-white/60 text-sm leading-relaxed">
+                  Si <strong className="text-white/80">{email}</strong> tiene acceso al portal, te enviamos un link para entrar. Es válido por 30 minutos.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => { setMagicSubmitted(false); setEmail(""); }}
+                  className="text-xs text-white/40 hover:text-[#2FA4A9] transition-colors"
+                >
+                  Usar otro correo
+                </button>
               </div>
-            )}
+            ) : (
+              <form onSubmit={handleMagicSubmit} className="space-y-5">
+                <div className="space-y-1.5">
+                  <label htmlFor="email" className="text-xs font-medium text-white/40 uppercase tracking-wider">
+                    Email
+                  </label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                    placeholder="tu@empresa.com"
+                    className="h-11 bg-white/[0.04] border-white/[0.08] text-white placeholder:text-white/20 focus:border-[#2FA4A9]/50 focus:ring-[#2FA4A9]/20"
+                    autoComplete="email"
+                    required
+                  />
+                </div>
 
-            <Button
-              type="submit"
-              disabled={isLoggingIn}
-              className="w-full h-11 bg-[#2FA4A9] hover:bg-[#2FA4A9]/90 text-white font-medium"
-            >
-              {isLoggingIn ? "Ingresando..." : "Ingresar"}
-            </Button>
+                <Button
+                  type="submit"
+                  disabled={magicLoading}
+                  className="w-full h-11 bg-[#2FA4A9] hover:bg-[#2FA4A9]/90 text-white font-medium"
+                >
+                  {magicLoading ? "Enviando..." : "Enviarme un link de acceso"}
+                </Button>
 
-            <div className="text-center pt-1">
-              <Link href="/portal/forgot-password" className="text-xs text-white/40 hover:text-[#2FA4A9] transition-colors">
-                Olvidé mi contraseña
-              </Link>
-            </div>
-          </form>
+                <p className="text-[11px] text-white/30 text-center leading-relaxed">
+                  Te enviamos un link por email. Sin contraseñas.
+                </p>
+
+                <div className="text-center pt-1 border-t border-white/[0.06]">
+                  <button
+                    type="button"
+                    onClick={() => setMode("password")}
+                    className="text-xs text-white/40 hover:text-[#2FA4A9] transition-colors mt-3"
+                  >
+                    Prefiero usar contraseña
+                  </button>
+                </div>
+              </form>
+            )
+          ) : (
+            <form onSubmit={handlePasswordSubmit} className="space-y-5">
+              <div className="space-y-1.5">
+                <label htmlFor="email" className="text-xs font-medium text-white/40 uppercase tracking-wider">
+                  Email
+                </label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="tu@empresa.com"
+                  className="h-11 bg-white/[0.04] border-white/[0.08] text-white placeholder:text-white/20 focus:border-[#2FA4A9]/50 focus:ring-[#2FA4A9]/20"
+                  autoComplete="email"
+                  required
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <label htmlFor="password" className="text-xs font-medium text-white/40 uppercase tracking-wider">
+                  Contraseña
+                </label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  className="h-11 bg-white/[0.04] border-white/[0.08] text-white placeholder:text-white/20 focus:border-[#2FA4A9]/50 focus:ring-[#2FA4A9]/20"
+                  autoComplete="current-password"
+                  required
+                />
+              </div>
+
+              {loginError && (
+                <div className="rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2">
+                  <p className="text-red-400 text-sm">{loginError.replace(/^\d+:\s*/, "")}</p>
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                disabled={isLoggingIn}
+                className="w-full h-11 bg-[#2FA4A9] hover:bg-[#2FA4A9]/90 text-white font-medium"
+              >
+                {isLoggingIn ? "Ingresando..." : "Ingresar"}
+              </Button>
+
+              <div className="flex justify-between items-center pt-1 border-t border-white/[0.06] mt-3">
+                <button
+                  type="button"
+                  onClick={() => setMode("magic")}
+                  className="text-xs text-white/40 hover:text-[#2FA4A9] transition-colors"
+                >
+                  ← Usar link por email
+                </button>
+                <Link href="/portal/forgot-password" className="text-xs text-white/40 hover:text-[#2FA4A9] transition-colors">
+                  Olvidé mi contraseña
+                </Link>
+              </div>
+            </form>
+          )}
         </div>
       </div>
     </div>

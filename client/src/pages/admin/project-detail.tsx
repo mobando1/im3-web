@@ -583,6 +583,9 @@ export default function AdminProjectDetail() {
       {/* Acceso del cliente — invitar con login + lista */}
       <ClientAccessSection projectId={project.id} />
 
+      {/* Analytics — conectar Google Analytics 4 */}
+      <AnalyticsSection projectId={project.id} />
+
       {/* Tabs — with icons */}
       <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
         {tabs.map(t => {
@@ -2276,6 +2279,212 @@ function ClientAccessSection({ projectId }: { projectId: string }) {
           </form>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// AnalyticsSection — conectar GA4 (cliente es propietario, IM3 lee)
+// ─────────────────────────────────────────────────────────────────
+
+type AnalyticsConnection = {
+  configured: boolean;
+  serviceAccountEmail: string | null;
+  connection: {
+    id: string;
+    ga4PropertyId: string;
+    propertyTimezone: string | null;
+    status: "pending" | "connected" | "error";
+    lastSyncedAt: string | null;
+    lastError: string | null;
+  } | null;
+};
+
+function AnalyticsSection({ projectId }: { projectId: string }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [propertyId, setPropertyId] = useState("");
+  const [showConnect, setShowConnect] = useState(false);
+
+  const { data, isLoading } = useQuery<AnalyticsConnection>({
+    queryKey: [`/api/admin/projects/${projectId}/analytics`],
+  });
+
+  const connectMut = useMutation({
+    mutationFn: async (ga4PropertyId: string) => {
+      const res = await apiRequest("POST", `/api/admin/projects/${projectId}/analytics/connect`, { ga4PropertyId });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Conectado", description: "Backfill de últimos 30 días corriendo en background." });
+      setShowConnect(false);
+      setPropertyId("");
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${projectId}/analytics`] });
+    },
+    onError: (err: any) => {
+      toast({ title: "No se pudo conectar", description: err?.message || "Verifica que el Property ID sea correcto y que el service account tenga permisos.", variant: "destructive" });
+    },
+  });
+
+  const testMut = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/projects/${projectId}/analytics/test`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Conexión OK" });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${projectId}/analytics`] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Test falló", description: err?.message || "Sin acceso a la propiedad", variant: "destructive" });
+    },
+  });
+
+  const syncMut = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/projects/${projectId}/analytics/sync-now`);
+      return res.json();
+    },
+    onSuccess: () => toast({ title: "Sync iniciado", description: "Verás los datos actualizados en unos segundos." }),
+  });
+
+  const disconnectMut = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("DELETE", `/api/admin/projects/${projectId}/analytics`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Desconectado" });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${projectId}/analytics`] });
+    },
+  });
+
+  const copyInstructions = () => {
+    const email = data?.serviceAccountEmail || "(service account email)";
+    const text = `Hola, para conectar tu Google Analytics al portal de IM3:
+
+1. Entra a analytics.google.com y selecciona tu propiedad
+2. Click en "Admin" (engranaje abajo izquierda)
+3. En la columna del medio, click "Property Access Management"
+4. Click el botón "+" arriba a la derecha → "Add users"
+5. Email a agregar: ${email}
+6. Roles: marca "Viewer" (no necesita más)
+7. Desmarca "Notify new users by email"
+8. Click "Add"
+
+Cuando lo hayas hecho, avísame y conecto tu GA4 al portal. ¡Gracias!`;
+    navigator.clipboard.writeText(text);
+    toast({ title: "Instrucciones copiadas", description: "Pegalas en WhatsApp/email al cliente." });
+  };
+
+  if (isLoading) return null;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <BarChart3 className="w-4 h-4 text-[#2FA4A9]" />
+          <h3 className="text-sm font-semibold text-gray-900">Analytics (Google Analytics 4)</h3>
+        </div>
+        {data?.connection?.status === "connected" && (
+          <span className="inline-flex items-center gap-1 text-xs text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> Conectado
+          </span>
+        )}
+        {data?.connection?.status === "error" && (
+          <span className="inline-flex items-center gap-1 text-xs text-rose-700 bg-rose-50 px-2 py-0.5 rounded-full">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-500" /> Error
+          </span>
+        )}
+      </div>
+
+      {!data?.configured && (
+        <p className="text-xs text-amber-600">Service account de Google no configurado en el servidor (revisar GOOGLE_SERVICE_ACCOUNT_EMAIL en .env).</p>
+      )}
+
+      {data?.configured && !data.connection && !showConnect && (
+        <div>
+          <p className="text-xs text-gray-500 mb-3">Conecta el GA4 del cliente para mostrar métricas en su portal. El cliente debe agregar nuestro service account como Viewer en su propiedad GA4.</p>
+          <Button size="sm" onClick={() => setShowConnect(true)} className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white">
+            Conectar GA4
+          </Button>
+        </div>
+      )}
+
+      {data?.configured && (showConnect || data.connection?.status === "error") && !data.connection?.status?.includes("connected") && (
+        <div className="space-y-4">
+          <div className="rounded-lg bg-gray-50 border border-gray-200 p-4">
+            <p className="text-xs font-medium text-gray-700 mb-2">📋 Pídele al cliente que haga estos 5 pasos en su Google Analytics:</p>
+            <ol className="list-decimal list-inside text-xs text-gray-600 space-y-1 mb-3">
+              <li>Entra a analytics.google.com → tu propiedad</li>
+              <li>Admin → Property Access Management</li>
+              <li>Click "+" → Add users</li>
+              <li>
+                Email: <code className="bg-white px-1.5 py-0.5 rounded border border-gray-200 text-[11px]">{data.serviceAccountEmail || "(no configurado)"}</code>
+              </li>
+              <li>Role: <strong>Viewer</strong> (suficiente). Click Add.</li>
+            </ol>
+            <Button size="sm" variant="outline" onClick={copyInstructions} className="text-xs">
+              <Copy className="w-3 h-3 mr-1.5" /> Copiar instrucciones para WhatsApp
+            </Button>
+          </div>
+
+          <div>
+            <Label htmlFor="ga4-property-id" className="text-xs">GA4 Property ID</Label>
+            <div className="flex gap-2 mt-1">
+              <Input
+                id="ga4-property-id"
+                placeholder="ej. 535230812"
+                value={propertyId || data.connection?.ga4PropertyId || ""}
+                onChange={(e) => setPropertyId(e.target.value)}
+                className="text-sm"
+              />
+              <Button
+                size="sm"
+                onClick={() => connectMut.mutate(propertyId || data.connection?.ga4PropertyId || "")}
+                disabled={connectMut.isPending || (!propertyId && !data.connection?.ga4PropertyId)}
+                className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white"
+              >
+                {connectMut.isPending ? "Probando..." : "Probar y conectar"}
+              </Button>
+            </div>
+            {data.connection?.lastError && (
+              <p className="text-xs text-rose-600 mt-2">{data.connection.lastError}</p>
+            )}
+            <p className="text-[11px] text-gray-400 mt-1">Solo el número, no incluyas "properties/". Lo encuentras en GA4 → Admin → Property Settings.</p>
+          </div>
+        </div>
+      )}
+
+      {data?.connection?.status === "connected" && (
+        <div className="space-y-3">
+          <div className="grid grid-cols-2 gap-3 text-xs">
+            <div>
+              <span className="text-gray-400">Property ID</span>
+              <div className="text-gray-900 font-mono">{data.connection.ga4PropertyId}</div>
+            </div>
+            <div>
+              <span className="text-gray-400">Zona horaria</span>
+              <div className="text-gray-900">{data.connection.propertyTimezone || "—"}</div>
+            </div>
+            <div className="col-span-2">
+              <span className="text-gray-400">Último sync</span>
+              <div className="text-gray-900">{data.connection.lastSyncedAt ? new Date(data.connection.lastSyncedAt).toLocaleString("es") : "Aún no se ha sincronizado"}</div>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            <Button size="sm" variant="outline" onClick={() => syncMut.mutate()} disabled={syncMut.isPending}>
+              <RefreshCw className="w-3 h-3 mr-1.5" /> {syncMut.isPending ? "Sincronizando..." : "Sync ahora"}
+            </Button>
+            <Button size="sm" variant="outline" onClick={() => testMut.mutate()} disabled={testMut.isPending}>
+              {testMut.isPending ? "Probando..." : "Probar conexión"}
+            </Button>
+            <Button size="sm" variant="ghost" onClick={() => disconnectMut.mutate()} disabled={disconnectMut.isPending} className="text-rose-600 hover:text-rose-700 hover:bg-rose-50">
+              Desconectar
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

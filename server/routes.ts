@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily } from "@shared/schema";
 import { AGENT_REGISTRY, AGENT_DOMAINS, findAgent } from "./agents/registry";
 import { runAgent } from "./agents/runner";
 import { syncGmailEmails, isGmailConfigured } from "./google-gmail";
@@ -25,6 +25,8 @@ import { syncDriveFilesToProject } from "./drive-file-sync";
 import { generateProposal, regenerateProposalSection, generateSectionOptions, applySectionOption } from "./proposal-ai";
 import crypto from "crypto";
 import { getIndustriaLabel } from "@shared/industrias";
+import { testConnection as testGAConnection, isGoogleAnalyticsConfigured } from "./google-analytics";
+import { backfillAnalytics } from "./agents/analytics-sync";
 
 type ProjectNotificationContent = {
   title: string;
@@ -5711,8 +5713,11 @@ ${urls}
 
       req.login({ ...user, kind: "client" }, (err) => {
         if (err) return loginRedirect("login_fallo");
-        const target = row.clientProjectId ? `/portal/projects/${row.clientProjectId}` : `/portal/projects`;
-        res.redirect(target);
+        // Soporte para ?next=/portal/projects/:id/analytics (deep-link desde emails)
+        const rawNext = typeof req.query.next === "string" ? req.query.next : "";
+        const safeNext = rawNext.startsWith("/portal/") ? rawNext : null;
+        const fallback = row.clientProjectId ? `/portal/projects/${row.clientProjectId}` : `/portal/projects`;
+        res.redirect(safeNext || fallback);
       });
     } catch (err: any) {
       log(`Magic-link consume error: ${err?.message || err}`);
@@ -5922,6 +5927,199 @@ ${urls}
       .set({ status: "disabled", updatedAt: sql`now()` })
       .where(eq(clientUsers.id, String(req.params.id)));
     res.json({ ok: true });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Portal Analytics — Admin (connect / test / sync / disconnect)
+  // ─────────────────────────────────────────────────────────────
+
+  // Get current analytics connection status for a project
+  app.get("/api/admin/projects/:id/analytics", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const [conn] = await db.select().from(clientAnalyticsConnections).where(eq(clientAnalyticsConnections.clientProjectId, String(req.params.id)));
+    res.json({
+      configured: isGoogleAnalyticsConfigured(),
+      serviceAccountEmail: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL || null,
+      connection: conn || null,
+    });
+  });
+
+  // Connect a GA4 property to this project. Tests connection, on success
+  // saves it and runs backfill (last 30 days) in the background.
+  app.post("/api/admin/projects/:id/analytics/connect", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    if (!isGoogleAnalyticsConfigured()) return res.status(500).json({ error: "Google Analytics no configurado en el servidor" });
+    try {
+      const projectId = String(req.params.id);
+      const ga4PropertyId = String(req.body?.ga4PropertyId || "").trim().replace(/^properties\//, "");
+      if (!/^\d+$/.test(ga4PropertyId)) return res.status(400).json({ error: "Property ID inválido — debe ser solo dígitos (ej. 535230812)" });
+
+      const [project] = await db.select({ id: clientProjects.id }).from(clientProjects).where(eq(clientProjects.id, projectId));
+      if (!project) return res.status(404).json({ error: "Proyecto no encontrado" });
+
+      const test = await testGAConnection(ga4PropertyId);
+      if (!test.ok) {
+        // Save anyway as `error` so el admin pueda volver a intentar
+        await db
+          .insert(clientAnalyticsConnections)
+          .values({ clientProjectId: projectId, ga4PropertyId, status: "error", lastError: test.error })
+          .onConflictDoUpdate({
+            target: clientAnalyticsConnections.clientProjectId,
+            set: { ga4PropertyId, status: "error", lastError: test.error, updatedAt: sql`now()` },
+          });
+        return res.status(400).json({ error: test.error, status: test.status });
+      }
+
+      const [conn] = await db
+        .insert(clientAnalyticsConnections)
+        .values({
+          clientProjectId: projectId,
+          ga4PropertyId,
+          propertyTimezone: test.timezone,
+          status: "connected",
+          lastError: null,
+        })
+        .onConflictDoUpdate({
+          target: clientAnalyticsConnections.clientProjectId,
+          set: {
+            ga4PropertyId,
+            propertyTimezone: test.timezone,
+            status: "connected",
+            lastError: null,
+            updatedAt: sql`now()`,
+          },
+        })
+        .returning();
+
+      // Backfill 30 días en background (no bloquea la respuesta)
+      runAgent("analytics-sync", () => backfillAnalytics(projectId, ga4PropertyId, test.timezone, 30), { triggeredBy: "manual" })
+        .catch((err) => log(`[analytics] backfill error: ${err}`));
+
+      res.json({ ok: true, connection: conn });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message || "Error conectando analytics" });
+    }
+  });
+
+  // Re-test connection (re-runs the verification query)
+  app.post("/api/admin/projects/:id/analytics/test", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const [conn] = await db.select().from(clientAnalyticsConnections).where(eq(clientAnalyticsConnections.clientProjectId, String(req.params.id)));
+    if (!conn) return res.status(404).json({ error: "No hay conexión guardada" });
+    const test = await testGAConnection(conn.ga4PropertyId);
+    if (!test.ok) {
+      await db.update(clientAnalyticsConnections)
+        .set({ status: "error", lastError: test.error, updatedAt: sql`now()` })
+        .where(eq(clientAnalyticsConnections.id, conn.id));
+      return res.status(400).json({ ok: false, error: test.error });
+    }
+    await db.update(clientAnalyticsConnections)
+      .set({ status: "connected", propertyTimezone: test.timezone, lastError: null, updatedAt: sql`now()` })
+      .where(eq(clientAnalyticsConnections.id, conn.id));
+    res.json({ ok: true, timezone: test.timezone });
+  });
+
+  // Manual sync trigger (útil después de conectar para no esperar al cron)
+  app.post("/api/admin/projects/:id/analytics/sync-now", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const [conn] = await db.select().from(clientAnalyticsConnections).where(eq(clientAnalyticsConnections.clientProjectId, String(req.params.id)));
+    if (!conn || conn.status !== "connected") return res.status(400).json({ error: "No hay conexión activa" });
+    runAgent("analytics-sync", () => backfillAnalytics(conn.clientProjectId, conn.ga4PropertyId, conn.propertyTimezone || "America/Bogota", 7), { triggeredBy: "manual" })
+      .catch((err) => log(`[analytics] manual sync error: ${err}`));
+    res.json({ ok: true });
+  });
+
+  // Disconnect (drops connection but keeps historical daily data)
+  app.delete("/api/admin/projects/:id/analytics", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    await db.delete(clientAnalyticsConnections).where(eq(clientAnalyticsConnections.clientProjectId, String(req.params.id)));
+    res.json({ ok: true });
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Portal Analytics — Cliente (read dashboard data)
+  // ─────────────────────────────────────────────────────────────
+
+  app.get("/api/portal/projects/:projectId/analytics", requireClient, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const userId = (req.user as any).id;
+    const projectId = String(req.params.projectId);
+
+    // Verifica que el usuario tenga acceso al proyecto
+    const [link] = await db
+      .select()
+      .from(clientUserProjects)
+      .where(and(eq(clientUserProjects.clientUserId, userId), eq(clientUserProjects.clientProjectId, projectId)));
+    if (!link) return res.status(403).json({ error: "Sin acceso a este proyecto" });
+
+    const [conn] = await db.select().from(clientAnalyticsConnections).where(eq(clientAnalyticsConnections.clientProjectId, projectId));
+    if (!conn || conn.status !== "connected") {
+      return res.json({ status: conn?.status || "not_configured", days: [], totals: null, prevTotals: null });
+    }
+
+    // Últimos 30 días + 30 anteriores para comparativa
+    const days60 = await db
+      .select()
+      .from(clientAnalyticsDaily)
+      .where(eq(clientAnalyticsDaily.clientProjectId, projectId))
+      .orderBy(desc(clientAnalyticsDaily.date))
+      .limit(60);
+
+    const sortedAsc = [...days60].sort((a, b) => a.date.localeCompare(b.date));
+    const last30 = sortedAsc.slice(-30);
+    const prev30 = sortedAsc.slice(-60, -30);
+
+    const totals = (rows: typeof days60) => {
+      if (rows.length === 0) return { sessions: 0, users: 0, newUsers: 0, pageviews: 0, avgSessionDuration: 0, bounceRate: 0 };
+      const sumInt = (k: "sessions" | "users" | "newUsers" | "pageviews") => rows.reduce((a, r) => a + (r[k] || 0), 0);
+      const avgNum = (k: "avgSessionDuration" | "bounceRate") => {
+        const vals = rows.map((r) => Number(r[k] || 0));
+        return vals.reduce((a, b) => a + b, 0) / vals.length;
+      };
+      return {
+        sessions: sumInt("sessions"),
+        users: sumInt("users"),
+        newUsers: sumInt("newUsers"),
+        pageviews: sumInt("pageviews"),
+        avgSessionDuration: avgNum("avgSessionDuration"),
+        bounceRate: avgNum("bounceRate"),
+      };
+    };
+
+    // Top agregados últimos 30 días
+    const aggregateTop = (key: "topPages" | "topSources" | "topCountries", labelField: string, valueField: string) => {
+      const map = new Map<string, number>();
+      for (const r of last30) {
+        const arr = (r[key] as Array<Record<string, any>>) || [];
+        for (const item of arr) {
+          const label = item[labelField] || "(sin datos)";
+          const val = Number(item[valueField] || 0);
+          map.set(label, (map.get(label) || 0) + val);
+        }
+      }
+      return Array.from(map.entries())
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 5)
+        .map(([label, value]) => ({ [labelField]: label, [valueField]: value }));
+    };
+
+    res.json({
+      status: "connected",
+      lastSyncedAt: conn.lastSyncedAt,
+      propertyTimezone: conn.propertyTimezone,
+      days: last30.map((r) => ({
+        date: r.date,
+        sessions: r.sessions,
+        users: r.users,
+        pageviews: r.pageviews,
+        bounceRate: Number(r.bounceRate),
+      })),
+      totals: totals(last30),
+      prevTotals: totals(prev30),
+      topPages: aggregateTop("topPages", "path", "pageviews"),
+      topSources: aggregateTop("topSources", "source", "sessions"),
+      topCountries: aggregateTop("topCountries", "country", "users"),
+    });
   });
 
   // ─────────────────────────────────────────────────────────────

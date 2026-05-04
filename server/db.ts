@@ -456,6 +456,41 @@ export async function runMigrations() {
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_client_magic_tokens_token" ON "client_magic_tokens" ("token");`).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_client_magic_tokens_user" ON "client_magic_tokens" ("client_user_id");`).catch(() => {});
 
+    // Portal Analytics — GA4 connections + daily metrics
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "client_analytics_connections" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "client_project_id" varchar NOT NULL UNIQUE,
+        "ga4_property_id" varchar NOT NULL,
+        "property_timezone" varchar(64),
+        "status" text NOT NULL DEFAULT 'pending',
+        "last_synced_at" timestamp,
+        "last_error" text,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "updated_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "client_analytics_daily" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "client_project_id" varchar NOT NULL,
+        "date" text NOT NULL,
+        "sessions" integer NOT NULL DEFAULT 0,
+        "users" integer NOT NULL DEFAULT 0,
+        "new_users" integer NOT NULL DEFAULT 0,
+        "pageviews" integer NOT NULL DEFAULT 0,
+        "avg_session_duration" numeric(10, 2) NOT NULL DEFAULT '0',
+        "bounce_rate" numeric(5, 4) NOT NULL DEFAULT '0',
+        "top_pages" json DEFAULT '[]'::json,
+        "top_sources" json DEFAULT '[]'::json,
+        "top_countries" json DEFAULT '[]'::json,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        UNIQUE ("client_project_id", "date")
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_analytics_daily_project_date" ON "client_analytics_daily" ("client_project_id", "date" DESC);`).catch(() => {});
+
     console.log("✓ Database tables and indexes ensured");
 
     // Ensure admin user exists with correct password

@@ -13,6 +13,8 @@ import { runErrorSupervisor } from "./agents/error-supervisor";
 import { runMeetingPrep } from "./agents/meeting-prep";
 import { runFollowupWriter } from "./agents/followup-writer";
 import { runCostReferenceFreshness } from "./agents/cost-reference-freshness";
+import { runAnalyticsSync } from "./agents/analytics-sync";
+import { runAnalyticsMonthlyReport } from "./agents/analytics-monthly-report";
 import { getIndustriaLabel } from "@shared/industrias";
 
 export { syncGmailEmails };
@@ -1296,6 +1298,16 @@ export function startEmailScheduler() {
   // Daily purge of trashed proposals older than 30 days (3 AM COT = 8:00 UTC)
   cron.schedule("0 8 * * *", async () => {
     await runAgent("proposal-trash-purge", purgeOldDeletedProposals).catch(err => log(`Cron error proposal purge: ${err}`));
+  }, { timezone: "America/Bogota" });
+
+  // Daily GA4 analytics sync at 6:00 AM Colombia time (11:00 UTC)
+  cron.schedule("0 11 * * *", async () => {
+    await runAgent("analytics-sync", runAnalyticsSync).catch(err => log(`Cron error analytics sync: ${err}`));
+  }, { timezone: "America/Bogota" });
+
+  // Monthly analytics report (día 1 de cada mes, 9 AM COT = 14:00 UTC)
+  cron.schedule("0 14 1 * *", async () => {
+    await runAgent("analytics-monthly-report", runAnalyticsMonthlyReport).catch(err => log(`Cron error analytics monthly: ${err}`));
   }, { timezone: "America/Bogota" });
 
   // Also run once at startup (after 10 seconds to let DB connect)

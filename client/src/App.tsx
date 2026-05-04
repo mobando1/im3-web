@@ -79,6 +79,7 @@ const PortalForgotPassword = lazy(() => import("@/pages/portal/forgot-password")
 const PortalResetPassword = lazy(() => import("@/pages/portal/reset-password"));
 const PortalAcceptInvite = lazy(() => import("@/pages/portal/accept-invite"));
 const PortalProjects = lazy(() => import("@/pages/portal/projects"));
+const PortalAnalytics = lazy(() => import("@/pages/portal/analytics"));
 const AdminLayout = lazy(() => import("@/pages/admin/layout"));
 
 function ProtectedAdmin({ children }: { children: React.ReactNode }) {
@@ -113,6 +114,7 @@ function Router() {
         <Route path="/portal/forgot-password" component={PortalForgotPassword} />
         <Route path="/portal/reset-password" component={PortalResetPassword} />
         <Route path="/portal/accept-invite" component={PortalAcceptInvite} />
+        <Route path="/portal/projects/:projectId/analytics" component={PortalAnalytics} />
         <Route path="/portal/projects/:projectId" component={Portal} />
         <Route path="/portal/projects" component={PortalProjects} />
         {/* Portal del cliente — link mágico legacy (sin auth) */}

@@ -16,6 +16,8 @@ import { runErrorSupervisor } from "./error-supervisor";
 import { runMeetingPrep } from "./meeting-prep";
 import { runFollowupWriter } from "./followup-writer";
 import { runCostReferenceFreshness } from "./cost-reference-freshness";
+import { runAnalyticsSync } from "./analytics-sync";
+import { runAnalyticsMonthlyReport } from "./analytics-monthly-report";
 
 export type AgentDomain =
   | "communication"
@@ -362,6 +364,30 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
     scheduleHuman: "diario 3:00 AM COT",
     criticality: "low",
     runnable: purgeOldDeletedProposals,
+  },
+
+  // ─── Portal Analytics ────────────────────────────────────────
+  {
+    name: "analytics-sync",
+    displayName: "Sync de Analytics (GA4)",
+    domain: "analysis",
+    description: "Pulla métricas diarias de GA4 para cada proyecto conectado (6 AM COT)",
+    trigger: "cron",
+    schedule: "0 11 * * *",
+    scheduleHuman: "diario 6:00 AM COT",
+    criticality: "normal",
+    runnable: runAnalyticsSync,
+  },
+  {
+    name: "analytics-monthly-report",
+    displayName: "Resumen Mensual de Analytics",
+    domain: "analysis",
+    description: "Email mensual al cliente con resumen del mes anterior + magic link al dashboard (día 1, 9 AM COT)",
+    trigger: "cron",
+    schedule: "0 14 1 * *",
+    scheduleHuman: "día 1 de cada mes, 9:00 AM COT",
+    criticality: "normal",
+    runnable: runAnalyticsMonthlyReport,
   },
 
   // ─── Contenido ───────────────────────────────────────────────
