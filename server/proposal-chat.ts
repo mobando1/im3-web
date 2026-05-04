@@ -119,6 +119,25 @@ function getClient(): Anthropic | null {
 const MODEL = "claude-sonnet-4-20250514";
 const MAX_HISTORY = 30;
 
+// Lock por proposalId — serializa mensajes concurrentes a la misma propuesta
+// para evitar race conditions donde 2 mensajes en paralelo cargan el mismo
+// snapshot y el segundo sobrescribe los cambios del primero.
+const proposalLocks = new Map<string, Promise<unknown>>();
+
+async function withProposalLock<T>(proposalId: string, fn: () => Promise<T>): Promise<T> {
+  const previous = proposalLocks.get(proposalId) ?? Promise.resolve();
+  const next = previous.catch(() => undefined).then(() => fn());
+  proposalLocks.set(proposalId, next);
+  try {
+    return await next;
+  } finally {
+    // Si este lock sigue siendo el último, limpiarlo
+    if (proposalLocks.get(proposalId) === next) {
+      proposalLocks.delete(proposalId);
+    }
+  }
+}
+
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
@@ -297,6 +316,18 @@ export async function runProposalChat(params: {
   assistantMessage: string;
   toolCalls: ToolCallSummary[];
 }> {
+  // Serializar mensajes concurrentes a la misma propuesta (evita race conditions)
+  return withProposalLock(params.proposalId, () => runProposalChatInner(params));
+}
+
+async function runProposalChatInner(params: {
+  proposalId: string;
+  userMessage: string;
+  attachments?: Attachment[];
+}): Promise<{
+  assistantMessage: string;
+  toolCalls: ToolCallSummary[];
+}> {
   if (!db) throw new Error("DB no disponible");
 
   const anthropic = getClient();
@@ -389,26 +420,21 @@ export async function runProposalChat(params: {
     log(`[proposal-chat] could not gather client context: ${(err as Error).message}`);
   }
 
-  const systemWithContext = `${SYSTEM_PROMPT_BASE}
-
-═══════════════════════════════════════════════════════
-ESTADO ACTUAL DE LA PROPUESTA (JSON)
-═══════════════════════════════════════════════════════
-
-Título: ${proposal.title}
-Status: ${proposal.status}
-Última actualización: ${proposal.updatedAt}
-
-SECCIONES:
-${proposalSnapshot}
-
-═══════════════════════════════════════════════════════
-CONTEXTO DEL CLIENTE (diagnóstico, emails, docs)
-═══════════════════════════════════════════════════════
-
-${clientContext.substring(0, 30000)}
-
-═══════════════════════════════════════════════════════
+  // System prompt particionado en bloques con cache_control:
+  // - Bloque 1 (cacheado): SYSTEM_PROMPT_BASE + SCHEMA_DOCS — totalmente estático.
+  // - Bloque 2 (cacheado): VOICE_GUIDE + COST_REFERENCE + HARDWARE_CATALOG + CASE_STUDIES — estático mientras los archivos no cambien.
+  // - Bloque 3 (cacheado por contactId): contexto del cliente — estable durante la sesión.
+  // - Bloque 4 (NO cacheado): snapshot de la propuesta — cambia con cada update_section.
+  // Cache TTL ~5 min de Anthropic. Espera 90% off en input tokens en mensajes seguidos.
+  const systemBlocks: Array<{ type: "text"; text: string; cache_control?: { type: "ephemeral" } }> = [
+    {
+      type: "text",
+      text: SYSTEM_PROMPT_BASE, // ya incluye SCHEMA_DOCS embebidos al final
+      cache_control: { type: "ephemeral" },
+    },
+    {
+      type: "text",
+      text: `═══════════════════════════════════════════════════════
 VOICE GUIDE (tono y estilo de IM3)
 ═══════════════════════════════════════════════════════
 
@@ -430,7 +456,32 @@ ${HARDWARE_CATALOG.substring(0, 6000)}
 CASE STUDIES (casos de éxito para citar cuando aplique)
 ═══════════════════════════════════════════════════════
 
-${CASE_STUDIES.substring(0, 6000)}`;
+${CASE_STUDIES.substring(0, 6000)}`,
+      cache_control: { type: "ephemeral" },
+    },
+    {
+      type: "text",
+      text: `═══════════════════════════════════════════════════════
+CONTEXTO DEL CLIENTE (diagnóstico, emails, docs)
+═══════════════════════════════════════════════════════
+
+${clientContext.substring(0, 30000)}`,
+      cache_control: { type: "ephemeral" },
+    },
+    {
+      type: "text",
+      text: `═══════════════════════════════════════════════════════
+ESTADO ACTUAL DE LA PROPUESTA (JSON)
+═══════════════════════════════════════════════════════
+
+Título: ${proposal.title}
+Status: ${proposal.status}
+Última actualización: ${proposal.updatedAt}
+
+SECCIONES:
+${proposalSnapshot}`,
+    },
+  ];
 
   const toolCalls: ToolCallSummary[] = [];
   let assistantText = "";
@@ -438,121 +489,124 @@ ${CASE_STUDIES.substring(0, 6000)}`;
   let iteration = 0;
   const MAX_ITERATIONS = 12; // permite cascadas grandes (audit + múltiples updates)
 
+  // Captura local de db para preservar non-null dentro de los closures
+  const dbRef = db;
+
+  // Helper: ejecuta una sola tool y devuelve el contenido del tool_result
+  const executeTool = async (toolName: string, toolInput: Record<string, unknown>): Promise<string> => {
+    if (toolName === "view_section") {
+      const sectionKey = toolInput.sectionKey as string;
+      const sectionData = currentSections[sectionKey];
+      return sectionData
+        ? JSON.stringify(sectionData, null, 2).substring(0, 8000)
+        : `(Sección "${sectionKey}" no existe o está vacía)`;
+    }
+    if (toolName === "audit_proposal") {
+      const allSections = Object.entries(currentSections)
+        .filter(([_, v]) => v !== null && v !== undefined)
+        .map(([k, v]) => `--- ${k} ---\n${JSON.stringify(v, null, 2).substring(0, 4000)}`)
+        .join("\n\n");
+      toolCalls.push({ tool: "audit_proposal", summary: "Auditando toda la propuesta" });
+      return `AUDIT — todas las secciones de la propuesta:\n\n${allSections}\n\nAhora analiza:\n1. Inconsistencias matemáticas (sumas, milestones vs amount, ROI vs recoveries)\n2. Incoherencias entre secciones (¿lo que dice tech está en solution? ¿el timeline cubre todos los módulos?)\n3. Mensajes vagos sin números concretos del cliente\n4. Voz fuera de tono\n5. Oportunidades para citar CASE_STUDIES o aplicar VOICE_GUIDE\n\nReporta hallazgos al usuario y propón fixes.`;
+    }
+    if (toolName === "list_drive_folder") {
+      const [contact] = await dbRef.select({ driveFolderId: contacts.driveFolderId, empresa: contacts.empresa })
+        .from(contacts).where(eq(contacts.id, proposal.contactId)).limit(1);
+      if (!contact?.driveFolderId) return "El cliente no tiene una carpeta de Drive asociada.";
+      try {
+        const files = await listFolderFilesRecursive(contact.driveFolderId, { maxFiles: 50 });
+        toolCalls.push({ tool: "list_drive_folder", summary: `Listé ${files.length} archivo(s) de Drive` });
+        if (files.length === 0) return `La carpeta de "${contact.empresa}" está vacía.`;
+        return `Archivos en la carpeta de "${contact.empresa}" (${files.length}):\n` +
+          files.map(f => `- ${f.name} [${f.mimeType}] (id: ${f.id}, modificado: ${f.modifiedTime})`).join("\n");
+      } catch (err) {
+        return `Error listando archivos: ${(err as Error).message}`;
+      }
+    }
+    if (toolName === "read_drive_file") {
+      const fileId = toolInput.fileId as string;
+      try {
+        const result = await readGoogleDriveContent(`https://drive.google.com/file/d/${fileId}/view`);
+        const content = result.content.substring(0, 20000);
+        toolCalls.push({ tool: "read_drive_file", summary: `Leí archivo de Drive (${result.content.length} chars)` });
+        return `Contenido del archivo (${result.mimeType}):\n\n${content}${result.content.length > 20000 ? "\n\n[...truncado, archivo más largo]" : ""}`;
+      } catch (err) {
+        return `Error leyendo archivo ${fileId}: ${(err as Error).message}`;
+      }
+    }
+    if (toolName === "update_section") {
+      const sectionKey = toolInput.sectionKey as string;
+      const newContent = toolInput.newContent as Record<string, unknown>;
+      const changeSummary = (toolInput.changeSummary as string) || "Sección actualizada";
+      const schema = SECTION_SCHEMAS[sectionKey];
+      if (!schema) {
+        return `ERROR: sectionKey "${sectionKey}" no es válido. Valores posibles: ${Object.keys(SECTION_SCHEMAS).join(", ")}`;
+      }
+      const parsed = schema.safeParse(newContent);
+      if (!parsed.success) {
+        const errors = parsed.error.errors.slice(0, 5).map(e => `- ${e.path.join(".") || "(root)"}: ${e.message}`).join("\n");
+        log(`[proposal-chat] Validation failed for "${sectionKey}": ${errors}`);
+        return `ERROR DE VALIDACIÓN — la sección "${sectionKey}" NO se guardó porque el formato no coincide con el schema. Revisa el schema en mi system prompt y reenvía con la estructura correcta.\n\nErrores:\n${errors}\n\nIMPORTANTE: Si el campo "features" debe ser array de strings, NO uses array de objetos. Si necesitas listar agentes IA, ponlos como strings descriptivos en features.`;
+      }
+      currentSections = { ...currentSections, [sectionKey]: parsed.data };
+      await dbRef.update(proposals)
+        .set({ sections: currentSections, updatedAt: new Date() })
+        .where(eq(proposals.id, params.proposalId));
+      toolCalls.push({ tool: "update_section", section: sectionKey, summary: changeSummary });
+      log(`[proposal-chat] Updated section "${sectionKey}" in proposal ${params.proposalId}: ${changeSummary}`);
+      return `Sección "${sectionKey}" actualizada y guardada exitosamente.`;
+    }
+    return `Tool "${toolName}" no reconocida.`;
+  };
+
   while (iteration < MAX_ITERATIONS) {
     iteration++;
 
     const response = await anthropic.messages.create({
       model: MODEL,
       max_tokens: 8192,
-      system: systemWithContext,
+      system: systemBlocks,
       tools: TOOLS,
       messages: claudeMessages,
     });
 
-    // Concatenar texto y procesar tool_use
+    // Recolectar TODOS los blocks (texto + tool_use) en UN solo assistant message
     const assistantContent: Anthropic.ContentBlockParam[] = [];
-    let hasToolUse = false;
+    const toolUseBlocks: Anthropic.ToolUseBlock[] = [];
 
     for (const block of response.content) {
       if (block.type === "text") {
         assistantText += (assistantText ? "\n\n" : "") + block.text;
         assistantContent.push({ type: "text", text: block.text });
       } else if (block.type === "tool_use") {
-        hasToolUse = true;
         assistantContent.push(block);
-
-        const toolName = block.name;
-        const toolInput = block.input as Record<string, unknown>;
-        let toolResultContent = "";
-
-        if (toolName === "view_section") {
-          const sectionKey = toolInput.sectionKey as string;
-          const sectionData = currentSections[sectionKey];
-          toolResultContent = sectionData
-            ? JSON.stringify(sectionData, null, 2).substring(0, 8000)
-            : `(Sección "${sectionKey}" no existe o está vacía)`;
-        } else if (toolName === "audit_proposal") {
-          // Devuelve un dump compacto de TODAS las secciones para que Claude las analice
-          const allSections = Object.entries(currentSections)
-            .filter(([_, v]) => v !== null && v !== undefined)
-            .map(([k, v]) => `--- ${k} ---\n${JSON.stringify(v, null, 2).substring(0, 4000)}`)
-            .join("\n\n");
-          toolResultContent = `AUDIT — todas las secciones de la propuesta:\n\n${allSections}\n\nAhora analiza:\n1. Inconsistencias matemáticas (sumas, milestones vs amount, ROI vs recoveries)\n2. Incoherencias entre secciones (¿lo que dice tech está en solution? ¿el timeline cubre todos los módulos?)\n3. Mensajes vagos sin números concretos del cliente\n4. Voz fuera de tono\n5. Oportunidades para citar CASE_STUDIES o aplicar VOICE_GUIDE\n\nReporta hallazgos al usuario y propón fixes.`;
-          toolCalls.push({ tool: "audit_proposal", summary: "Auditando toda la propuesta" });
-        } else if (toolName === "list_drive_folder") {
-          // Buscar driveFolderId del contacto asociado a la propuesta
-          const [contact] = await db.select({ driveFolderId: contacts.driveFolderId, empresa: contacts.empresa })
-            .from(contacts).where(eq(contacts.id, proposal.contactId)).limit(1);
-          if (!contact?.driveFolderId) {
-            toolResultContent = "El cliente no tiene una carpeta de Drive asociada.";
-          } else {
-            try {
-              const files = await listFolderFilesRecursive(contact.driveFolderId, { maxFiles: 50 });
-              if (files.length === 0) {
-                toolResultContent = `La carpeta de "${contact.empresa}" está vacía.`;
-              } else {
-                toolResultContent = `Archivos en la carpeta de "${contact.empresa}" (${files.length}):\n` +
-                  files.map(f => `- ${f.name} [${f.mimeType}] (id: ${f.id}, modificado: ${f.modifiedTime})`).join("\n");
-              }
-              toolCalls.push({ tool: "list_drive_folder", summary: `Listé ${files.length} archivo(s) de Drive` });
-            } catch (err) {
-              toolResultContent = `Error listando archivos: ${(err as Error).message}`;
-            }
-          }
-        } else if (toolName === "read_drive_file") {
-          const fileId = toolInput.fileId as string;
-          try {
-            const result = await readGoogleDriveContent(`https://drive.google.com/file/d/${fileId}/view`);
-            const content = result.content.substring(0, 20000);
-            toolResultContent = `Contenido del archivo (${result.mimeType}):\n\n${content}${result.content.length > 20000 ? "\n\n[...truncado, archivo más largo]" : ""}`;
-            toolCalls.push({ tool: "read_drive_file", summary: `Leí archivo de Drive (${result.content.length} chars)` });
-          } catch (err) {
-            toolResultContent = `Error leyendo archivo ${fileId}: ${(err as Error).message}`;
-          }
-        } else if (toolName === "update_section") {
-          const sectionKey = toolInput.sectionKey as string;
-          const newContent = toolInput.newContent as Record<string, unknown>;
-          const changeSummary = (toolInput.changeSummary as string) || "Sección actualizada";
-
-          // Validar contra el schema antes de persistir
-          const schema = SECTION_SCHEMAS[sectionKey];
-          if (!schema) {
-            toolResultContent = `ERROR: sectionKey "${sectionKey}" no es válido. Valores posibles: ${Object.keys(SECTION_SCHEMAS).join(", ")}`;
-          } else {
-            const parsed = schema.safeParse(newContent);
-            if (!parsed.success) {
-              const errors = parsed.error.errors.slice(0, 5).map(e => `- ${e.path.join(".") || "(root)"}: ${e.message}`).join("\n");
-              toolResultContent = `ERROR DE VALIDACIÓN — la sección "${sectionKey}" NO se guardó porque el formato no coincide con el schema. Revisa el schema en mi system prompt y reenvía con la estructura correcta.\n\nErrores:\n${errors}\n\nIMPORTANTE: Si el campo "features" debe ser array de strings, NO uses array de objetos. Si necesitas listar agentes IA, ponlos como strings descriptivos en features (ej: "Nómina Automática — calcula horas extras y aportes con un click").`;
-              log(`[proposal-chat] Validation failed for "${sectionKey}": ${errors}`);
-            } else {
-              // Aplicar cambio en memoria + persistir
-              currentSections = { ...currentSections, [sectionKey]: parsed.data };
-              await db.update(proposals)
-                .set({ sections: currentSections, updatedAt: new Date() })
-                .where(eq(proposals.id, params.proposalId));
-
-              toolCalls.push({ tool: "update_section", section: sectionKey, summary: changeSummary });
-              toolResultContent = `Sección "${sectionKey}" actualizada y guardada exitosamente.`;
-              log(`[proposal-chat] Updated section "${sectionKey}" in proposal ${params.proposalId}: ${changeSummary}`);
-            }
-          }
-        } else {
-          toolResultContent = `Tool "${toolName}" no reconocida.`;
-        }
-
-        // Agregar tool_result al contexto para siguiente iteración
-        claudeMessages.push({ role: "assistant", content: assistantContent });
-        claudeMessages.push({
-          role: "user",
-          content: [{ type: "tool_result", tool_use_id: block.id, content: toolResultContent }],
-        });
+        toolUseBlocks.push(block);
       }
     }
 
-    // Si no hubo tool use, terminamos
-    if (!hasToolUse) {
+    // Push del mensaje assistant ÚNICO con TODOS los blocks (texto + todos los tool_use)
+    if (assistantContent.length > 0) {
+      claudeMessages.push({ role: "assistant", content: assistantContent });
+    }
+
+    // Si no hubo tool use, terminamos (el modelo no necesita más iteraciones)
+    if (toolUseBlocks.length === 0) {
       break;
     }
+
+    // Ejecutar TODOS los tool_use en paralelo y juntar resultados en UN solo user message
+    const toolResults = await Promise.all(
+      toolUseBlocks.map(async (block) => {
+        const content = await executeTool(block.name, block.input as Record<string, unknown>);
+        return {
+          type: "tool_result" as const,
+          tool_use_id: block.id,
+          content,
+        };
+      })
+    );
+
+    claudeMessages.push({ role: "user", content: toolResults });
   }
 
   // Persistir respuesta del assistant
