@@ -1,8 +1,9 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "./db";
-import { proposals, proposalChatMessages } from "@shared/schema";
+import { proposals, proposalChatMessages, contacts } from "@shared/schema";
 import { eq, asc } from "drizzle-orm";
 import { log } from "./index";
+import { listFolderFilesRecursive, readGoogleDriveContent } from "./google-drive";
 
 let client: Anthropic | null = null;
 function getClient(): Anthropic | null {
@@ -20,6 +21,15 @@ type ChatMessage = {
 };
 
 type ToolCallSummary = { tool: string; section?: string; summary: string };
+
+type Attachment = {
+  name: string;
+  mime: string;
+  size: number;
+  buffer: Buffer;
+};
+
+type StoredAttachment = { name: string; mime: string; size: number };
 
 const TOOLS: Anthropic.Tool[] = [
   {
@@ -55,6 +65,25 @@ const TOOLS: Anthropic.Tool[] = [
       required: ["sectionKey"],
     },
   },
+  {
+    name: "list_drive_folder",
+    description: "Lista los archivos en la carpeta de Google Drive del cliente. Úsalo cuando el usuario pida revisar/leer documentos del cliente. Devuelve nombre, tipo y ID de cada archivo.",
+    input_schema: {
+      type: "object",
+      properties: {},
+    },
+  },
+  {
+    name: "read_drive_file",
+    description: "Lee el contenido completo de un archivo específico de la carpeta del cliente. Usa primero list_drive_folder para ver qué archivos hay, luego usa esta tool con el fileId del que quieras leer.",
+    input_schema: {
+      type: "object",
+      properties: {
+        fileId: { type: "string", description: "ID del archivo de Google Drive (obtenido de list_drive_folder)" },
+      },
+      required: ["fileId"],
+    },
+  },
 ];
 
 const SYSTEM_PROMPT = `Eres un asistente experto en propuestas comerciales para IM3 Systems, una consultoría de IA y automatización en Latinoamérica. Tu trabajo es ayudar al admin a refinar propuestas comerciales conversacionalmente.
@@ -85,6 +114,7 @@ REGLAS IMPORTANTES:
 export async function runProposalChat(params: {
   proposalId: string;
   userMessage: string;
+  attachments?: Attachment[];
 }): Promise<{
   assistantMessage: string;
   toolCalls: ToolCallSummary[];
@@ -105,11 +135,15 @@ export async function runProposalChat(params: {
     .orderBy(asc(proposalChatMessages.createdAt))
     .limit(MAX_HISTORY);
 
-  // Guardar mensaje del usuario
+  const attachments = params.attachments || [];
+  const storedAttachments: StoredAttachment[] = attachments.map(a => ({ name: a.name, mime: a.mime, size: a.size }));
+
+  // Guardar mensaje del usuario (con metadata de archivos adjuntos)
   await db.insert(proposalChatMessages).values({
     proposalId: params.proposalId,
     role: "user",
     content: params.userMessage,
+    attachments: storedAttachments.length > 0 ? storedAttachments : null,
   });
 
   // Construir mensajes para Claude
@@ -117,7 +151,54 @@ export async function runProposalChat(params: {
     role: h.role as "user" | "assistant",
     content: h.content,
   }));
-  claudeMessages.push({ role: "user", content: params.userMessage });
+
+  // Mensaje del usuario actual: combinar texto + archivos como content blocks
+  const currentUserContent: Anthropic.ContentBlockParam[] = [];
+  let textPrefix = "";
+
+  for (const att of attachments) {
+    const isImage = att.mime.startsWith("image/");
+    const isPdf = att.mime === "application/pdf";
+    const isText = att.mime.startsWith("text/") || att.mime === "application/json";
+
+    if (isImage) {
+      // Claude vision: image block
+      const supportedImageTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+      if (supportedImageTypes.includes(att.mime)) {
+        currentUserContent.push({
+          type: "image",
+          source: {
+            type: "base64",
+            media_type: att.mime as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+            data: att.buffer.toString("base64"),
+          },
+        });
+      } else {
+        textPrefix += `[Imagen "${att.name}" no soportada por el modelo: ${att.mime}]\n`;
+      }
+    } else if (isPdf) {
+      // Claude PDF support: document block
+      currentUserContent.push({
+        type: "document",
+        source: {
+          type: "base64",
+          media_type: "application/pdf",
+          data: att.buffer.toString("base64"),
+        },
+      } as unknown as Anthropic.ContentBlockParam);
+    } else if (isText) {
+      // Texto plano: incluir como prefijo del mensaje
+      const text = att.buffer.toString("utf-8").substring(0, 50000);
+      textPrefix += `\n--- ARCHIVO ADJUNTO: ${att.name} ---\n${text}\n--- FIN ${att.name} ---\n`;
+    } else {
+      textPrefix += `[Archivo "${att.name}" (${att.mime}) no soportado para análisis directo]\n`;
+    }
+  }
+
+  const finalUserText = (textPrefix ? textPrefix + "\n" : "") + params.userMessage;
+  currentUserContent.push({ type: "text", text: finalUserText });
+
+  claudeMessages.push({ role: "user", content: currentUserContent });
 
   // Contexto de la propuesta actual (snapshot completo)
   const proposalSnapshot = JSON.stringify(proposal.sections, null, 2).substring(0, 30000);
@@ -168,6 +249,36 @@ Status: ${proposal.status}`;
           toolResultContent = sectionData
             ? JSON.stringify(sectionData, null, 2).substring(0, 8000)
             : `(Sección "${sectionKey}" no existe o está vacía)`;
+        } else if (toolName === "list_drive_folder") {
+          // Buscar driveFolderId del contacto asociado a la propuesta
+          const [contact] = await db.select({ driveFolderId: contacts.driveFolderId, empresa: contacts.empresa })
+            .from(contacts).where(eq(contacts.id, proposal.contactId)).limit(1);
+          if (!contact?.driveFolderId) {
+            toolResultContent = "El cliente no tiene una carpeta de Drive asociada.";
+          } else {
+            try {
+              const files = await listFolderFilesRecursive(contact.driveFolderId, { maxFiles: 50 });
+              if (files.length === 0) {
+                toolResultContent = `La carpeta de "${contact.empresa}" está vacía.`;
+              } else {
+                toolResultContent = `Archivos en la carpeta de "${contact.empresa}" (${files.length}):\n` +
+                  files.map(f => `- ${f.name} [${f.mimeType}] (id: ${f.id}, modificado: ${f.modifiedTime})`).join("\n");
+              }
+              toolCalls.push({ tool: "list_drive_folder", summary: `Listé ${files.length} archivo(s) de Drive` });
+            } catch (err) {
+              toolResultContent = `Error listando archivos: ${(err as Error).message}`;
+            }
+          }
+        } else if (toolName === "read_drive_file") {
+          const fileId = toolInput.fileId as string;
+          try {
+            const result = await readGoogleDriveContent(`https://drive.google.com/file/d/${fileId}/view`);
+            const content = result.content.substring(0, 20000);
+            toolResultContent = `Contenido del archivo (${result.mimeType}):\n\n${content}${result.content.length > 20000 ? "\n\n[...truncado, archivo más largo]" : ""}`;
+            toolCalls.push({ tool: "read_drive_file", summary: `Leí archivo de Drive (${result.content.length} chars)` });
+          } catch (err) {
+            toolResultContent = `Error leyendo archivo ${fileId}: ${(err as Error).message}`;
+          }
         } else if (toolName === "update_section") {
           const sectionKey = toolInput.sectionKey as string;
           const newContent = toolInput.newContent as Record<string, unknown>;
@@ -220,6 +331,7 @@ export async function getProposalChatHistory(proposalId: string): Promise<Array<
   role: string;
   content: string;
   toolCalls: ToolCallSummary[] | null;
+  attachments: StoredAttachment[] | null;
   createdAt: Date;
 }>> {
   if (!db) return [];
@@ -232,6 +344,7 @@ export async function getProposalChatHistory(proposalId: string): Promise<Array<
     role: m.role,
     content: m.content,
     toolCalls: m.toolCalls,
+    attachments: m.attachments,
     createdAt: m.createdAt,
   }));
 }

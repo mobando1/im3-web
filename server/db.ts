@@ -400,6 +400,7 @@ export async function runMigrations() {
       );
     `).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_proposal_chat_proposal_id" ON "proposal_chat_messages" ("proposal_id", "created_at");`).catch(() => {});
+    await pool.query(`ALTER TABLE "proposal_chat_messages" ADD COLUMN IF NOT EXISTS "attachments" json;`).catch(() => {});
 
     // Portal de Clientes — Auth (login + reset + invite)
     await pool.query(`

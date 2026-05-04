@@ -866,6 +866,7 @@ export default function ProposalEditor() {
                 {editingSection === activeSection ? (
                   isNewFormat && hasTypedForm(activeSection) ? (
                     <SectionForm
+                      key={`${activeSection}-${proposal.updatedAt || ""}`}
                       sectionKey={activeSection}
                       data={(sections[activeSection] as Record<string, unknown>) ?? {}}
                       onSave={(updated) => {

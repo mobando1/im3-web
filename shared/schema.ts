@@ -655,6 +655,8 @@ export const proposalChatMessages = pgTable("proposal_chat_messages", {
   content: text("content").notNull(),
   // Si Claude usó tools, registra las modificaciones aplicadas (para mostrar al usuario)
   toolCalls: json("tool_calls").$type<Array<{ tool: string; section?: string; summary: string }>>(),
+  // Archivos adjuntos por el usuario en este mensaje (metadata, no el binario)
+  attachments: json("attachments").$type<Array<{ name: string; mime: string; size: number }>>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

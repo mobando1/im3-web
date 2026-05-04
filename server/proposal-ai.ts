@@ -3,7 +3,7 @@ import { db } from "./db";
 import { contacts, diagnostics, sentEmails, contactNotes, activityLog, aiInsightsCache, gmailEmails, contactFiles } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
 import { log } from "./index";
-import { readGoogleDriveContent, listFolderFilesRecursive } from "./google-drive";
+import { readGoogleDriveContent } from "./google-drive";
 import { getIndustriaLabel } from "@shared/industrias";
 import { proposalDataSchema, type ProposalData, type ProposalSectionKey, type ProposalSourcesReport } from "@shared/proposal-template/types";
 import { readFileSync } from "fs";
@@ -114,73 +114,40 @@ async function gatherContactContext(contactId: string): Promise<string> {
     ).join("\n")}`);
   }
 
-  // Contact documents/files — combina:
-  // 1) archivos en contactFiles (subidos vía CRM)
-  // 2) archivos directos en la carpeta de Drive del cliente (puestos manualmente)
+  // Contact documents/files — solo los explícitamente subidos vía CRM (contactFiles).
+  // Para incluir archivos directos del Drive, el admin debe usar el chat conversacional
+  // y pedirle a Claude que lea archivos específicos con list_drive_folder/read_drive_file.
   const docs = await db.select().from(contactFiles).where(eq(contactFiles.contactId, contactId));
-  const docParts: string[] = [];
-  const seenDriveFileIds = new Set<string>();
+  if (docs.length > 0) {
+    const docParts: string[] = [];
+    for (const d of docs) {
+      let content = d.content || "";
 
-  // 1. Procesar contactFiles (subidos vía CRM)
-  for (const d of docs) {
-    let content = d.content || "";
-    const isGoogleUrl = d.url && (d.url.includes("google.com") || d.url.includes("docs.google"));
-    if (isGoogleUrl) {
-      try {
-        const result = await readGoogleDriveContent(d.url);
-        if (result.content && result.content.length > 0) {
-          content = result.content;
-          await db.update(contactFiles).set({
-            content: result.content,
-            driveFileId: result.fileId,
-          }).where(eq(contactFiles.id, d.id));
-          log(`[Proposal] Drive auto-sync for "${d.name}": ${result.content.length} chars`);
-        }
-        if (result.fileId) seenDriveFileIds.add(result.fileId);
-      } catch (err) {
-        log(`[Proposal] Drive sync failed for "${d.name}": ${(err as Error).message}`);
-      }
-    }
-
-    if (content) {
-      docParts.push(`- [${d.type}] ${d.name}:\n  ${content}`);
-    } else {
-      docParts.push(`- [${d.type}] ${d.name} (sin contenido extraíble)`);
-    }
-  }
-
-  // 2. Escanear la carpeta de Drive del cliente (archivos puestos directamente, no vía CRM)
-  if (contact.driveFolderId) {
-    try {
-      const folderFiles = await listFolderFilesRecursive(contact.driveFolderId, { maxFiles: 30 });
-      log(`[Proposal] Drive folder scan: ${folderFiles.length} archivo(s) en carpeta de ${contact.empresa}`);
-
-      for (const f of folderFiles) {
-        // Saltar archivos ya procesados desde contactFiles
-        if (seenDriveFileIds.has(f.id)) continue;
-        // Saltar archivos del sistema (diagnóstico inicial, etc.)
-        if (f.name.startsWith("_temp_") || f.name.startsWith("_diagnostic_")) continue;
-
+      // Auto-sync from Google Drive if: no content yet, or re-sync to get latest version
+      const isGoogleUrl = d.url && (d.url.includes("google.com") || d.url.includes("docs.google"));
+      if (isGoogleUrl) {
         try {
-          const result = await readGoogleDriveContent(f.webViewLink || `https://drive.google.com/file/d/${f.id}/view`);
-          if (result.content && result.content.length > 50) {
-            docParts.push(`- [drive] ${f.name}:\n  ${result.content}`);
-            log(`[Proposal] Read folder file "${f.name}": ${result.content.length} chars`);
-          } else {
-            docParts.push(`- [drive] ${f.name} (sin contenido extraíble)`);
+          const result = await readGoogleDriveContent(d.url);
+          if (result.content && result.content.length > 0) {
+            content = result.content;
+            await db.update(contactFiles).set({
+              content: result.content,
+              driveFileId: result.fileId,
+            }).where(eq(contactFiles.id, d.id));
+            log(`[Proposal] Drive auto-sync for "${d.name}": ${result.content.length} chars`);
           }
         } catch (err) {
-          log(`[Proposal] Could not read folder file "${f.name}": ${(err as Error).message}`);
-          docParts.push(`- [drive] ${f.name} (error al leer)`);
+          log(`[Proposal] Drive sync failed for "${d.name}": ${(err as Error).message}`);
         }
       }
-    } catch (err) {
-      log(`[Proposal] Folder scan failed: ${(err as Error).message}`);
-    }
-  }
 
-  if (docParts.length > 0) {
-    parts.push(`DOCUMENTOS DEL CLIENTE (${docParts.length}):\n${docParts.join("\n")}`);
+      if (content) {
+        docParts.push(`- [${d.type}] ${d.name}:\n  ${content}`);
+      } else {
+        docParts.push(`- [${d.type}] ${d.name} (sin contenido extraíble)`);
+      }
+    }
+    parts.push(`DOCUMENTOS DEL CLIENTE (${docs.length}):\n${docParts.join("\n")}`);
   }
 
   // Activity log

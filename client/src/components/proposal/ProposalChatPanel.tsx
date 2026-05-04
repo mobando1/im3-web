@@ -1,19 +1,36 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { X, Send, Sparkles, Loader2, Check, Trash2 } from "lucide-react";
+import { X, Send, Sparkles, Loader2, Check, Trash2, Paperclip, FileText, Image as ImageIcon, FileType } from "lucide-react";
 
 type ToolCall = { tool: string; section?: string; summary: string };
+
+type Attachment = { name: string; mime: string; size: number };
 
 type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
   toolCalls: ToolCall[] | null;
+  attachments: Attachment[] | null;
   createdAt: string;
 };
+
+const MAX_FILES = 5;
+const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10 MB
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function getFileIcon(mime: string) {
+  if (mime.startsWith("image/")) return ImageIcon;
+  if (mime === "application/pdf") return FileType;
+  return FileText;
+}
 
 type Props = {
   proposalId: string;
@@ -47,10 +64,12 @@ const QUICK_SUGGESTIONS = [
 
 export function ProposalChatPanel({ proposalId, open, onClose }: Props) {
   const [input, setInput] = useState("");
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [streaming, setStreaming] = useState(false);
   const queryClient = useQueryClient();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const { data: messages = [], isLoading } = useQuery<ChatMessage[]>({
     queryKey: [`/api/admin/proposals/${proposalId}/chat`],
@@ -58,27 +77,66 @@ export function ProposalChatPanel({ proposalId, open, onClose }: Props) {
   });
 
   const sendMutation = useMutation({
-    mutationFn: async (message: string) => {
-      const res = await apiRequest("POST", `/api/admin/proposals/${proposalId}/chat`, { message });
+    mutationFn: async ({ message, files }: { message: string; files: File[] }) => {
+      const formData = new FormData();
+      formData.append("message", message);
+      for (const f of files) formData.append("files", f);
+
+      const res = await fetch(`/api/admin/proposals/${proposalId}/chat`, {
+        method: "POST",
+        body: formData,
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error || "Error en chat");
+      }
       return res.json();
     },
     onMutate: () => setStreaming(true),
     onSettled: () => setStreaming(false),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/proposals/${proposalId}/chat`] });
-      // Refetch the proposal so the editor sees the changes
       queryClient.invalidateQueries({ queryKey: [`/api/admin/proposals/${proposalId}`] });
     },
   });
 
   const clearMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("DELETE", `/api/admin/proposals/${proposalId}/chat`);
+      const res = await fetch(`/api/admin/proposals/${proposalId}/chat`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Error limpiando chat");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/proposals/${proposalId}/chat`] });
     },
   });
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []);
+    const valid = files.filter(f => {
+      if (f.size > MAX_FILE_SIZE) {
+        alert(`"${f.name}" excede el límite de 10 MB`);
+        return false;
+      }
+      return true;
+    });
+    setPendingFiles(prev => {
+      const combined = [...prev, ...valid];
+      if (combined.length > MAX_FILES) {
+        alert(`Máximo ${MAX_FILES} archivos por mensaje`);
+        return combined.slice(0, MAX_FILES);
+      }
+      return combined;
+    });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const removeFile = (idx: number) => {
+    setPendingFiles(prev => prev.filter((_, i) => i !== idx));
+  };
 
   useEffect(() => {
     if (open && messagesEndRef.current) {
@@ -94,9 +152,11 @@ export function ProposalChatPanel({ proposalId, open, onClose }: Props) {
 
   const handleSend = () => {
     const trimmed = input.trim();
-    if (!trimmed || streaming) return;
+    if ((!trimmed && pendingFiles.length === 0) || streaming) return;
     setInput("");
-    sendMutation.mutate(trimmed);
+    const files = pendingFiles;
+    setPendingFiles([]);
+    sendMutation.mutate({ message: trimmed, files });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -179,6 +239,22 @@ export function ProposalChatPanel({ proposalId, open, onClose }: Props) {
                     ? "bg-[#2FA4A9] text-white"
                     : "bg-white border border-gray-200 text-gray-800"
                 }`}>
+                  {m.attachments && m.attachments.length > 0 && (
+                    <div className="mb-2 space-y-1">
+                      {m.attachments.map((a, i) => {
+                        const Icon = getFileIcon(a.mime);
+                        return (
+                          <div key={i} className={`flex items-center gap-1.5 text-[11px] rounded px-2 py-1 ${
+                            m.role === "user" ? "bg-white/20 text-white" : "bg-gray-100 text-gray-700"
+                          }`}>
+                            <Icon className="w-3 h-3 shrink-0" />
+                            <span className="truncate">{a.name}</span>
+                            <span className="opacity-60">({formatFileSize(a.size)})</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                   <p className="text-sm whitespace-pre-wrap leading-relaxed">{m.content}</p>
                   {m.toolCalls && m.toolCalls.length > 0 && (
                     <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
@@ -213,27 +289,66 @@ export function ProposalChatPanel({ proposalId, open, onClose }: Props) {
 
         {/* Input */}
         <div className="border-t border-gray-200 p-3 bg-white">
+          {pendingFiles.length > 0 && (
+            <div className="mb-2 flex flex-wrap gap-1.5">
+              {pendingFiles.map((f, i) => {
+                const Icon = getFileIcon(f.type);
+                return (
+                  <div key={i} className="flex items-center gap-1.5 bg-purple-50 border border-purple-200 rounded-md px-2 py-1 text-[11px] text-purple-800">
+                    <Icon className="w-3 h-3 shrink-0" />
+                    <span className="truncate max-w-[140px]">{f.name}</span>
+                    <span className="opacity-60">({formatFileSize(f.size)})</span>
+                    <button
+                      onClick={() => removeFile(i)}
+                      className="ml-1 text-purple-400 hover:text-red-500"
+                      title="Quitar archivo"
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
           <div className="flex gap-2 items-end">
+            <input
+              ref={fileInputRef}
+              type="file"
+              multiple
+              accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,text/markdown,text/csv,application/json"
+              onChange={handleFileSelect}
+              className="hidden"
+            />
+            <Button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={streaming || pendingFiles.length >= MAX_FILES}
+              size="sm"
+              variant="outline"
+              className="h-auto py-2.5 px-2.5"
+              title="Adjuntar archivo (imágenes, PDF, texto)"
+            >
+              <Paperclip className="w-4 h-4" />
+            </Button>
             <Textarea
               ref={textareaRef}
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Escribe lo que quieres ajustar..."
+              placeholder="Escribe o adjunta archivos..."
               rows={2}
               disabled={streaming}
               className="flex-1 resize-none text-sm"
             />
             <Button
               onClick={handleSend}
-              disabled={!input.trim() || streaming}
+              disabled={(!input.trim() && pendingFiles.length === 0) || streaming}
               size="sm"
               className="bg-purple-600 hover:bg-purple-700 h-auto py-2.5"
             >
               {streaming ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
             </Button>
           </div>
-          <p className="text-[10px] text-gray-400 mt-1.5">⏎ enviar · ⇧⏎ nueva línea</p>
+          <p className="text-[10px] text-gray-400 mt-1.5">⏎ enviar · ⇧⏎ nueva línea · imágenes/PDFs hasta 10MB</p>
         </div>
       </div>
     </>

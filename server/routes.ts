@@ -7475,15 +7475,40 @@ ${urls}
     }
   });
 
-  app.post("/api/admin/proposals/:id/chat", requireAuth, async (req, res) => {
+  const chatUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024, files: 5 }, // 10MB por archivo, max 5 archivos
+  });
+
+  app.post("/api/admin/proposals/:id/chat", requireAuth, chatUpload.array("files", 5), async (req, res) => {
     const proposalId = req.params.id as string;
     const message = (req.body?.message as string || "").trim();
-    if (!message) return res.status(400).json({ error: "Mensaje requerido" });
+    const files = (req.files as Express.Multer.File[] | undefined) || [];
+
+    if (!message && files.length === 0) {
+      return res.status(400).json({ error: "Mensaje o archivo requerido" });
+    }
 
     try {
       const { runProposalChat } = await import("./proposal-chat");
       const { runAgent } = await import("./agents/runner");
-      const result = await runAgent("proposal-chat", () => runProposalChat({ proposalId, userMessage: message }), { triggeredBy: "manual" });
+
+      const attachments = files.map(f => ({
+        name: f.originalname,
+        mime: f.mimetype,
+        size: f.size,
+        buffer: f.buffer,
+      }));
+
+      const result = await runAgent(
+        "proposal-chat",
+        () => runProposalChat({
+          proposalId,
+          userMessage: message || "(sin texto, ver archivos adjuntos)",
+          attachments: attachments.length > 0 ? attachments : undefined,
+        }),
+        { triggeredBy: "manual" }
+      );
       res.json(result);
     } catch (err: any) {
       log(`Error in proposal chat: ${err?.message}`);
