@@ -276,6 +276,7 @@ export type Notification = typeof notifications.$inferSelect;
 export const appointments = pgTable("appointments", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   contactId: varchar("contact_id"),
+  clientProjectId: varchar("client_project_id"), // vincula reuniones recurrentes a un proyecto del portal del cliente
   title: text("title").notNull(),
   date: text("date").notNull(), // YYYY-MM-DD
   time: text("time").notNull(), // HH:MM or HH:MM AM/PM
@@ -287,7 +288,7 @@ export const appointments = pgTable("appointments", {
   completedAt: timestamp("completed_at"),
   recordingUrl: text("recording_url"),
   transcriptUrl: text("transcript_url"),
-  appointmentType: text("appointment_type").default("manual"), // initial | follow_up | manual
+  appointmentType: text("appointment_type").default("manual"), // initial | follow_up | manual | project_meeting
   parentAppointmentId: varchar("parent_appointment_id"),
   prepSentAt: timestamp("prep_sent_at"),
   followupDraftedAt: timestamp("followup_drafted_at"),

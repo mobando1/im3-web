@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { useClientAuth } from "@/hooks/useClientAuth";
-import { Send, CheckCircle2, Circle, Clock, AlertCircle, ChevronDown, ChevronRight, ExternalLink, X, Zap, ArrowRight, FileText, Mic, Image, ClipboardCheck, FileSignature, FolderOpen, Download, Lightbulb, ThumbsUp, Plus, Diamond, File, StickyNote } from "lucide-react";
+import { Send, CheckCircle2, Circle, Clock, AlertCircle, ChevronDown, ChevronRight, ExternalLink, X, Zap, ArrowRight, FileText, Mic, Image, ClipboardCheck, FileSignature, FolderOpen, Download, Lightbulb, ThumbsUp, Plus, Diamond, File, StickyNote, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -174,7 +174,7 @@ const DELIV_COLORS: Record<string, string> = {
   rejected: "bg-red-100 text-red-700",
 };
 
-const sections = ["Pulso", "Timeline", "Roadmap", "Entregas", "Documentos", "Sesiones", "Archivos", "Ideas", "Inversión", "Mensajes"];
+const sections = ["Pulso", "Timeline", "Roadmap", "Entregas", "Calendario", "Documentos", "Sesiones", "Archivos", "Ideas", "Reportes", "Inversión", "Mensajes"];
 
 // ── Helpers ──
 
@@ -287,6 +287,14 @@ export default function Portal() {
   const [showNoteForm, setShowNoteForm] = useState(false);
   const [noteText, setNoteText] = useState("");
   const [noteSignificant, setNoteSignificant] = useState(false);
+  // Feedback / reportes
+  const [showFeedbackForm, setShowFeedbackForm] = useState(false);
+  const [fbType, setFbType] = useState<"bug" | "request" | "improvement" | "question">("request");
+  const [fbTitle, setFbTitle] = useState("");
+  const [fbDesc, setFbDesc] = useState("");
+  const [fbPriority, setFbPriority] = useState<"low" | "normal" | "high" | "urgent">("normal");
+  const [fbAttachments, setFbAttachments] = useState<string[]>([""]);
+  const [fbReporter, setFbReporter] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Either /portal/:token (legacy magic link) or /portal/projects/:projectId (auth).
@@ -310,6 +318,37 @@ export default function Portal() {
   });
   const { data: sessions = [] } = useQuery<PortalSession[]>({ queryKey: [`${base}/sessions`], enabled: !!overview });
   const { data: ideas = [] } = useQuery<PortalIdea[]>({ queryKey: [`${base}/ideas`], enabled: !!overview });
+  const { data: feedbackItems = [] } = useQuery<Array<{
+    id: string;
+    type: string;
+    title: string;
+    description: string;
+    priority: string;
+    status: string;
+    attachmentUrls: string[];
+    reporterName: string | null;
+    adminResponse: string | null;
+    createdAt: string;
+    resolvedAt: string | null;
+  }>>({
+    queryKey: [`/api/portal/projects/${params.projectId}/feedback`],
+    enabled: !!overview && isAuthMode,
+  });
+
+  // Reuniones del proyecto (calendario)
+  const { data: meetings = [] } = useQuery<Array<{
+    id: string;
+    title: string;
+    date: string;
+    time: string;
+    duration: number;
+    notes: string | null;
+    meetLink: string | null;
+    status: string;
+  }>>({
+    queryKey: [`${base}/meetings`],
+    enabled: !!overview,
+  });
 
   // Analytics preview (only in auth mode, only if connected)
   const { data: analyticsPreview } = useQuery<{
@@ -392,6 +431,44 @@ export default function Portal() {
       await fetch(`${base}/ideas/${ideaId}/vote`, { method: "PATCH" });
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`${base}/ideas`] }); },
+  });
+
+  const createFeedbackMut = useMutation({
+    mutationFn: async (payload: { type: string; title: string; description: string; priority: string; attachmentUrls: string[]; reporterName: string | null }) => {
+      const res = await fetch(`/api/portal/projects/${params.projectId}/feedback`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error((await res.json())?.error || "Error");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/portal/projects/${params.projectId}/feedback`] });
+      setShowFeedbackForm(false);
+      setFbTitle(""); setFbDesc(""); setFbType("request"); setFbPriority("normal"); setFbAttachments([""]); setFbReporter("");
+    },
+  });
+
+  const uploadFeedbackFileMut = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch(`/api/portal/projects/${params.projectId}/feedback/upload`, {
+        method: "POST",
+        credentials: "include",
+        body: fd,
+      });
+      if (!res.ok) throw new Error((await res.json())?.error || "Upload falló");
+      return res.json() as Promise<{ url: string; name: string }>;
+    },
+    onSuccess: (data) => {
+      setFbAttachments(prev => {
+        const next = prev.filter(u => u.length > 0);
+        next.push(data.url);
+        return next.length > 0 ? next : [""];
+      });
+    },
   });
 
   const createQuickNoteMut = useMutation({
@@ -922,6 +999,141 @@ export default function Portal() {
           </div>
         )}
 
+        {/* ── CALENDARIO ── */}
+        {activeSection === "Calendario" && (() => {
+          const now = new Date();
+          const upcoming = meetings.filter(m => m.status === "scheduled" && new Date(`${m.date}T${m.time}:00`) >= now);
+          const past = meetings.filter(m => !(m.status === "scheduled" && new Date(`${m.date}T${m.time}:00`) >= now));
+          const next = upcoming.sort((a, b) => `${a.date}T${a.time}`.localeCompare(`${b.date}T${b.time}`))[0];
+
+          // Genera URL para que el cliente agregue a su Google Calendar
+          const buildCalendarUrl = (m: typeof meetings[number]) => {
+            const start = new Date(`${m.date}T${m.time}:00-05:00`); // Bogotá UTC-5
+            const end = new Date(start.getTime() + m.duration * 60_000);
+            const fmt = (d: Date) => d.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, "");
+            const params = new URLSearchParams({
+              action: "TEMPLATE",
+              text: m.title,
+              dates: `${fmt(start)}/${fmt(end)}`,
+              details: `${m.notes || `Reunión del proyecto ${overview.name}`}${m.meetLink ? `\n\nLink de Meet: ${m.meetLink}` : ""}`,
+              location: m.meetLink || "",
+            });
+            return `https://calendar.google.com/calendar/render?${params.toString()}`;
+          };
+
+          const countdown = (m: typeof meetings[number]) => {
+            const target = new Date(`${m.date}T${m.time}:00-05:00`);
+            const diffMs = target.getTime() - Date.now();
+            if (diffMs <= 0) return "Empezando ahora";
+            const hours = Math.floor(diffMs / 3_600_000);
+            const days = Math.floor(hours / 24);
+            if (days > 0) return `En ${days} día${days > 1 ? "s" : ""}`;
+            if (hours > 0) return `En ${hours}h`;
+            const minutes = Math.floor(diffMs / 60_000);
+            return `En ${minutes} min`;
+          };
+
+          return (
+            <div className="space-y-6">
+              <div>
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Calendario de reuniones</h2>
+                <p className="text-[11px] text-gray-400 mt-0.5">Próximas reuniones del proyecto y el historial. Puedes agregar cada reunión a tu propio calendario.</p>
+              </div>
+
+              {next && (
+                <div className="rounded-xl bg-gradient-to-br from-[#0F766E] to-[#2FA4A9] text-white p-5">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[11px] uppercase tracking-wider text-white/70 font-semibold">Próxima reunión</span>
+                    <span className="text-xs text-white/90 font-medium">{countdown(next)}</span>
+                  </div>
+                  <p className="text-lg font-semibold">{next.title}</p>
+                  <p className="text-sm text-white/80 mt-0.5">
+                    📅 {new Date(`${next.date}T${next.time}:00`).toLocaleDateString("es-CO", { weekday: "long", day: "numeric", month: "long" })}
+                    {" · "} 🕒 {next.time} · ⏱️ {next.duration} min
+                  </p>
+                  {next.notes && <p className="text-sm text-white/80 mt-2 italic">{next.notes}</p>}
+                  <div className="flex flex-wrap gap-2 mt-4">
+                    {next.meetLink && (
+                      <a
+                        href={next.meetLink}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white text-[#0F766E] text-sm font-medium hover:bg-white/90"
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        Unirse a Meet
+                      </a>
+                    )}
+                    <a
+                      href={buildCalendarUrl(next)}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg bg-white/15 text-white text-sm font-medium hover:bg-white/25 border border-white/20"
+                    >
+                      <CalendarDays className="w-3.5 h-3.5" />
+                      Agregar a mi calendario
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {upcoming.length > 1 && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Próximas</h3>
+                  <div className="space-y-2">
+                    {upcoming.slice(1).map(m => (
+                      <div key={m.id} className="bg-white rounded-xl border border-gray-200 p-4">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm font-medium text-gray-900">{m.title}</p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                              📅 {new Date(`${m.date}T${m.time}:00`).toLocaleDateString("es-CO", { day: "numeric", month: "long" })} · 🕒 {m.time} · ⏱️ {m.duration} min
+                            </p>
+                            {m.notes && <p className="text-xs text-gray-500 italic mt-1">{m.notes}</p>}
+                          </div>
+                          <a
+                            href={buildCalendarUrl(m)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[11px] text-[#2FA4A9] hover:underline shrink-0"
+                          >
+                            Agregar al calendario →
+                          </a>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {past.length > 0 && (
+                <div>
+                  <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">Anteriores</h3>
+                  <div className="space-y-1">
+                    {past.map(m => (
+                      <div key={m.id} className={`text-sm flex items-center justify-between gap-3 px-3 py-2 rounded-lg border ${m.status === "cancelled" ? "border-gray-100 bg-gray-50/50 text-gray-400" : "border-gray-100"}`}>
+                        <span className="truncate">{m.title}</span>
+                        <span className="text-xs text-gray-400 shrink-0">
+                          {new Date(`${m.date}T${m.time}:00`).toLocaleDateString("es-CO", { day: "numeric", month: "short" })}
+                          {m.status === "cancelled" && " · cancelada"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {meetings.length === 0 && (
+                <div className="text-center py-12">
+                  <CalendarDays className="w-8 h-8 text-gray-300 mx-auto mb-2" />
+                  <p className="text-sm text-gray-400">No hay reuniones agendadas todavía.</p>
+                  <p className="text-xs text-gray-300 mt-1">Cuando el equipo de IM3 agende una sesión contigo, aparecerá aquí con link de Meet y opción para agregar a tu calendario.</p>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* ── DOCUMENTOS ── */}
         {activeSection === "Documentos" && (() => {
           const FILE_ICONS: Record<string, typeof FileText> = {
@@ -1316,6 +1528,258 @@ export default function Portal() {
                   </div>
                 );
               })
+            )}
+          </div>
+        )}
+
+        {/* ── REPORTES ── */}
+        {activeSection === "Reportes" && (
+          <div className="space-y-4">
+            {/* Header con botón */}
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">Reportes y sugerencias</h2>
+                <p className="text-[11px] text-gray-400 mt-0.5">Reporta bugs, pide cambios o comparte ideas. Adjunta capturas, imágenes o videos para mayor claridad.</p>
+              </div>
+              <Button
+                size="sm"
+                className="bg-[#2FA4A9] hover:bg-[#238b8f] gap-1.5"
+                onClick={() => setShowFeedbackForm(!showFeedbackForm)}
+              >
+                <Plus className="w-4 h-4" />
+                Nuevo reporte
+              </Button>
+            </div>
+
+            {/* Form */}
+            {showFeedbackForm && (
+              <div className="bg-white rounded-xl border border-gray-200 p-5 space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">Tipo</label>
+                    <select
+                      value={fbType}
+                      onChange={(e) => setFbType(e.target.value as any)}
+                      className="mt-1 w-full h-9 rounded-lg border border-gray-200 bg-white text-sm px-2 focus:border-[#2FA4A9] focus:ring-1 focus:ring-[#2FA4A9] outline-none"
+                    >
+                      <option value="bug">🐛 Bug</option>
+                      <option value="request">✨ Cambio solicitado</option>
+                      <option value="improvement">💡 Mejora</option>
+                      <option value="question">❓ Pregunta</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">Prioridad</label>
+                    <select
+                      value={fbPriority}
+                      onChange={(e) => setFbPriority(e.target.value as any)}
+                      className="mt-1 w-full h-9 rounded-lg border border-gray-200 bg-white text-sm px-2 focus:border-[#2FA4A9] focus:ring-1 focus:ring-[#2FA4A9] outline-none"
+                    >
+                      <option value="low">Baja</option>
+                      <option value="normal">Normal</option>
+                      <option value="high">Alta</option>
+                      <option value="urgent">Urgente</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">Tu nombre (opcional)</label>
+                    <Input
+                      value={fbReporter}
+                      onChange={(e) => setFbReporter(e.target.value)}
+                      placeholder="Para identificar quién reportó"
+                      className="mt-1 h-9 text-sm"
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">Título</label>
+                  <Input
+                    value={fbTitle}
+                    onChange={(e) => setFbTitle(e.target.value)}
+                    placeholder="Resumen breve del reporte"
+                    className="mt-1 text-sm"
+                  />
+                </div>
+                <div>
+                  <label className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">Descripción</label>
+                  <Textarea
+                    value={fbDesc}
+                    onChange={(e) => setFbDesc(e.target.value)}
+                    placeholder="Cuéntanos qué pasa, qué esperabas, cómo reproducirlo..."
+                    rows={4}
+                    className="mt-1 text-sm"
+                  />
+                </div>
+
+                {/* Adjuntos */}
+                <div>
+                  <label className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">Adjuntos (capturas, imágenes, videos)</label>
+                  <label
+                    htmlFor="feedback-file-upload"
+                    className={`mt-1 flex flex-col items-center justify-center gap-2 border-2 border-dashed border-gray-200 rounded-lg p-6 cursor-pointer transition-colors hover:border-[#2FA4A9]/50 hover:bg-[#2FA4A9]/[0.02] ${uploadFeedbackFileMut.isPending ? "opacity-60 pointer-events-none" : ""}`}
+                  >
+                    <FolderOpen className="w-5 h-5 text-gray-400" />
+                    <p className="text-xs text-gray-500">
+                      {uploadFeedbackFileMut.isPending
+                        ? "Subiendo a Drive..."
+                        : "Click para subir archivo (imagen, video, PDF — hasta 50MB)"}
+                    </p>
+                    <input
+                      id="feedback-file-upload"
+                      type="file"
+                      className="hidden"
+                      accept="image/*,video/*,application/pdf,.doc,.docx,.xlsx"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) uploadFeedbackFileMut.mutate(file);
+                        e.target.value = "";
+                      }}
+                    />
+                  </label>
+                  <p className="text-[11px] text-gray-400 mt-2">O pega una URL externa (Drive, Loom, imgur, YouTube, etc):</p>
+                  {fbAttachments.map((url, i) => (
+                    <div key={i} className="flex gap-2 mt-1">
+                      <Input
+                        value={url}
+                        onChange={(e) => {
+                          const next = [...fbAttachments];
+                          next[i] = e.target.value;
+                          setFbAttachments(next);
+                        }}
+                        placeholder="https://..."
+                        className="text-sm h-8"
+                      />
+                      {fbAttachments.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => setFbAttachments(fbAttachments.filter((_, idx) => idx !== i))}
+                          className="text-gray-300 hover:text-rose-500 px-2"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  ))}
+                  {fbAttachments.length < 10 && (
+                    <button
+                      type="button"
+                      onClick={() => setFbAttachments([...fbAttachments, ""])}
+                      className="text-xs text-gray-400 hover:text-[#2FA4A9] mt-2 inline-flex items-center gap-1"
+                    >
+                      <Plus className="w-3 h-3" /> agregar otra URL
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex justify-end gap-2 pt-2 border-t border-gray-100">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setShowFeedbackForm(false);
+                      setFbTitle(""); setFbDesc(""); setFbType("request"); setFbPriority("normal"); setFbAttachments([""]); setFbReporter("");
+                    }}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="bg-[#2FA4A9] hover:bg-[#238b8f]"
+                    disabled={createFeedbackMut.isPending || fbTitle.trim().length < 3 || fbDesc.trim().length < 5}
+                    onClick={() =>
+                      createFeedbackMut.mutate({
+                        type: fbType,
+                        title: fbTitle.trim(),
+                        description: fbDesc.trim(),
+                        priority: fbPriority,
+                        attachmentUrls: fbAttachments.map(u => u.trim()).filter(Boolean),
+                        reporterName: fbReporter.trim() || null,
+                      })
+                    }
+                  >
+                    {createFeedbackMut.isPending ? "Enviando..." : "Enviar reporte"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {/* Lista */}
+            {feedbackItems.length === 0 ? (
+              <div className="text-center py-12">
+                <p className="text-sm text-gray-400">Aún no has reportado nada.</p>
+                <p className="text-xs text-gray-300 mt-1">Cualquier bug, idea o cambio que se te ocurra — registralo aquí y le damos seguimiento.</p>
+              </div>
+            ) : (
+              <div className="space-y-2">
+                {feedbackItems.map((fb) => {
+                  const TYPE_META: Record<string, { label: string; emoji: string; color: string }> = {
+                    bug: { label: "Bug", emoji: "🐛", color: "bg-rose-100 text-rose-700" },
+                    request: { label: "Cambio", emoji: "✨", color: "bg-blue-100 text-blue-700" },
+                    improvement: { label: "Mejora", emoji: "💡", color: "bg-amber-100 text-amber-700" },
+                    question: { label: "Pregunta", emoji: "❓", color: "bg-slate-100 text-slate-700" },
+                  };
+                  const STATUS_META: Record<string, { label: string; color: string }> = {
+                    open: { label: "Abierto", color: "bg-gray-100 text-gray-700" },
+                    triaged: { label: "Revisado", color: "bg-blue-100 text-blue-700" },
+                    in_progress: { label: "En progreso", color: "bg-amber-100 text-amber-700" },
+                    resolved: { label: "Resuelto", color: "bg-emerald-100 text-emerald-700" },
+                    wont_fix: { label: "No procede", color: "bg-slate-100 text-slate-600" },
+                  };
+                  const PRIORITY_META: Record<string, string> = {
+                    low: "text-gray-400", normal: "text-gray-500", high: "text-amber-600", urgent: "text-rose-600",
+                  };
+                  const tm = TYPE_META[fb.type] || TYPE_META.request;
+                  const sm = STATUS_META[fb.status] || STATUS_META.open;
+                  return (
+                    <details key={fb.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden group">
+                      <summary className="px-4 py-3 cursor-pointer flex items-start gap-3 hover:bg-gray-50">
+                        <span className="text-lg shrink-0 mt-0.5">{tm.emoji}</span>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <p className="text-sm font-medium text-gray-900 truncate">{fb.title}</p>
+                            <span className={`text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded ${sm.color}`}>{sm.label}</span>
+                            <span className={`text-[10px] uppercase tracking-wider font-semibold ${PRIORITY_META[fb.priority]}`}>{fb.priority}</span>
+                          </div>
+                          <p className="text-[11px] text-gray-400 mt-0.5">
+                            {new Date(fb.createdAt).toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" })}
+                            {fb.reporterName && ` · ${fb.reporterName}`}
+                            {fb.attachmentUrls.length > 0 && ` · ${fb.attachmentUrls.length} adjunto${fb.attachmentUrls.length > 1 ? "s" : ""}`}
+                          </p>
+                        </div>
+                        <ChevronDown className="w-4 h-4 text-gray-300 group-open:rotate-180 transition-transform shrink-0 mt-1" />
+                      </summary>
+                      <div className="px-4 pb-4 border-t border-gray-100 pt-3 space-y-3">
+                        <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{fb.description}</p>
+                        {fb.attachmentUrls.length > 0 && (
+                          <div>
+                            <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium mb-1.5">Adjuntos</p>
+                            <div className="flex flex-wrap gap-2">
+                              {fb.attachmentUrls.map((url, i) => (
+                                <a
+                                  key={i}
+                                  href={url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-gray-50 border border-gray-200 text-xs text-gray-700 hover:bg-[#2FA4A9]/[0.05] hover:border-[#2FA4A9]/30 hover:text-[#2FA4A9]"
+                                >
+                                  <ExternalLink className="w-3 h-3" />
+                                  Adjunto {i + 1}
+                                </a>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {fb.adminResponse && (
+                          <div className="bg-[#2FA4A9]/5 border-l-3 border-[#2FA4A9] rounded-r p-3">
+                            <p className="text-[11px] uppercase tracking-wider text-[#2FA4A9] font-semibold mb-1">Respuesta del equipo IM3</p>
+                            <p className="text-sm text-gray-700 whitespace-pre-wrap">{fb.adminResponse}</p>
+                          </div>
+                        )}
+                      </div>
+                    </details>
+                  );
+                })}
+              </div>
             )}
           </div>
         )}

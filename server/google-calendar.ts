@@ -187,6 +187,77 @@ export async function createCalendarEvent(
 }
 
 /**
+ * Crea un evento de Google Calendar para una reunión de proyecto recurrente
+ * (no es un diagnóstico). Genera Meet link y agrega al cliente como attendee.
+ * Más genérico que createCalendarEvent — toma title/description directos.
+ */
+export async function createProjectMeetingEvent(opts: {
+  title: string;
+  description?: string;
+  date: string; // YYYY-MM-DD
+  time: string; // HH:MM (24h) o HH:MM AM/PM
+  durationMinutes: number;
+  attendeeEmail?: string;
+  meetingId: string; // ID interno (appointment.id) para idempotencia
+}): Promise<{ meetLink: string; eventId: string } | null> {
+  const auth = getAuth();
+  if (!auth) {
+    log("[Calendar] Google auth not configured");
+    return null;
+  }
+  const calendar = google.calendar({ version: "v3", auth });
+  const startDate = parseDateTime(opts.date, opts.time);
+  const endDate = new Date(startDate);
+  endDate.setMinutes(endDate.getMinutes() + opts.durationMinutes);
+  const timeZone = "America/Bogota";
+
+  const event = await calendar.events.insert({
+    calendarId: "primary",
+    conferenceDataVersion: 1,
+    requestBody: {
+      summary: opts.title,
+      description: opts.description || "",
+      start: { dateTime: startDate.toISOString(), timeZone },
+      end: { dateTime: endDate.toISOString(), timeZone },
+      attendees: opts.attendeeEmail ? [{ email: opts.attendeeEmail }] : undefined,
+      conferenceData: {
+        createRequest: {
+          requestId: `im3-mtg-${opts.meetingId}`,
+          conferenceSolutionKey: { type: "hangoutsMeet" },
+        },
+      },
+      reminders: {
+        useDefault: false,
+        overrides: [
+          { method: "email", minutes: 60 },
+          { method: "popup", minutes: 15 },
+        ],
+      },
+    },
+  });
+
+  const eventId = event.data.id || "";
+  let meetLink = event.data.conferenceData?.entryPoints?.find((e) => e.entryPointType === "video")?.uri || "";
+
+  // Polling para Meet link si está pendiente
+  if ((!meetLink || event.data.conferenceData?.createRequest?.status?.statusCode === "pending") && eventId) {
+    const backoff = [1000, 2000, 4000];
+    for (let i = 0; i < 3; i++) {
+      await sleep(backoff[i]);
+      try {
+        const updated = await calendar.events.get({ calendarId: "primary", eventId });
+        const link = updated.data.conferenceData?.entryPoints?.find((e) => e.entryPointType === "video")?.uri || "";
+        if (link && link.includes("meet.google.com")) { meetLink = link; break; }
+      } catch (e) { /* continue */ }
+    }
+  }
+  if (meetLink && !meetLink.includes("meet.google.com")) meetLink = "";
+
+  log(`[Calendar] Reunión de proyecto creada: ${opts.title} — Meet: ${meetLink || "(sin link)"}`);
+  return { meetLink, eventId };
+}
+
+/**
  * Delete a Google Calendar event (used when canceling/rescheduling meetings).
  */
 export async function deleteCalendarEvent(eventId: string): Promise<boolean> {

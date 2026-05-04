@@ -593,6 +593,12 @@ export default function AdminProjectDetail() {
       {/* Analytics — conectar Google Analytics 4 */}
       <AnalyticsSection projectId={project.id} />
 
+      {/* Reportes / Sugerencias del cliente */}
+      <ProjectFeedbackSection projectId={project.id} />
+
+      {/* Calendario de reuniones del proyecto */}
+      <MeetingsSection projectId={project.id} />
+
       {/* Tabs — with icons */}
       <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
         {tabs.map(t => {
@@ -2490,6 +2496,371 @@ Cuando lo hayas hecho, avísame y conecto tu GA4 al portal. ¡Gracias!`;
               Desconectar
             </Button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ProjectFeedbackSection — triage de reportes del cliente
+// ─────────────────────────────────────────────────────────────────
+
+type FeedbackItem = {
+  id: string;
+  projectId: string;
+  type: string;
+  title: string;
+  description: string;
+  priority: string;
+  status: string;
+  attachmentUrls: string[];
+  createdBy: string | null;
+  reporterName: string | null;
+  adminResponse: string | null;
+  resolvedTaskId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  resolvedAt: string | null;
+};
+
+// ─────────────────────────────────────────────────────────────────
+// MeetingsSection — admin agenda reuniones recurrentes con cliente
+// ─────────────────────────────────────────────────────────────────
+
+type Meeting = {
+  id: string;
+  clientProjectId: string;
+  title: string;
+  date: string;
+  time: string;
+  duration: number;
+  notes: string | null;
+  meetLink: string | null;
+  googleCalendarEventId: string | null;
+  status: string;
+  appointmentType: string;
+};
+
+function MeetingsSection({ projectId }: { projectId: string }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [showForm, setShowForm] = useState(false);
+  const [title, setTitle] = useState("");
+  const [date, setDate] = useState("");
+  const [time, setTime] = useState("");
+  const [duration, setDuration] = useState(45);
+  const [notes, setNotes] = useState("");
+
+  const { data: meetings = [], isLoading } = useQuery<Meeting[]>({
+    queryKey: [`/api/admin/projects/${projectId}/meetings`],
+  });
+
+  const createMut = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/projects/${projectId}/meetings`, { title, date, time, duration, notes });
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Reunión agendada", description: "Se notificó al cliente con magic link al portal." });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${projectId}/meetings`] });
+      setShowForm(false);
+      setTitle(""); setDate(""); setTime(""); setDuration(45); setNotes("");
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err?.message || "No se pudo crear", variant: "destructive" });
+    },
+  });
+
+  const cancelMut = useMutation({
+    mutationFn: async (meetingId: string) => {
+      const res = await apiRequest("DELETE", `/api/admin/projects/${projectId}/meetings/${meetingId}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "Reunión cancelada" });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${projectId}/meetings`] });
+    },
+  });
+
+  if (isLoading) return null;
+
+  const upcoming = meetings.filter(m => m.status === "scheduled" && `${m.date} ${m.time}` >= new Date().toISOString().slice(0, 16));
+  const past = meetings.filter(m => !(m.status === "scheduled" && `${m.date} ${m.time}` >= new Date().toISOString().slice(0, 16)));
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <CalendarDays className="w-4 h-4 text-[#2FA4A9]" />
+          <h3 className="text-sm font-semibold text-gray-900">Reuniones del proyecto</h3>
+          {upcoming.length > 0 && (
+            <span className="text-[11px] font-semibold bg-emerald-100 text-emerald-700 px-2 py-0.5 rounded-full">
+              {upcoming.length} próxima{upcoming.length > 1 ? "s" : ""}
+            </span>
+          )}
+        </div>
+        <Button size="sm" onClick={() => setShowForm(!showForm)} className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white gap-1.5">
+          <Plus className="w-3.5 h-3.5" /> Nueva reunión
+        </Button>
+      </div>
+
+      {showForm && (
+        <div className="rounded-lg bg-gray-50 border border-gray-200 p-4 mb-4 space-y-3">
+          <div>
+            <Label className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">Título</Label>
+            <Input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ej. Revisión semanal de avance" className="mt-1 text-sm" />
+          </div>
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <Label className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">Fecha</Label>
+              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} className="mt-1 text-sm" />
+            </div>
+            <div>
+              <Label className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">Hora</Label>
+              <Input type="time" value={time} onChange={(e) => setTime(e.target.value)} className="mt-1 text-sm" />
+            </div>
+            <div>
+              <Label className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">Duración (min)</Label>
+              <Input type="number" min={15} max={180} value={duration} onChange={(e) => setDuration(parseInt(e.target.value, 10) || 45)} className="mt-1 text-sm" />
+            </div>
+          </div>
+          <div>
+            <Label className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">Notas (opcional)</Label>
+            <Textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Agenda de la reunión..." className="mt-1 text-sm" />
+          </div>
+          <div className="flex justify-end gap-2 pt-1">
+            <Button size="sm" variant="ghost" onClick={() => setShowForm(false)}>Cancelar</Button>
+            <Button
+              size="sm"
+              className="bg-[#2FA4A9] hover:bg-[#238b8f]"
+              onClick={() => createMut.mutate()}
+              disabled={createMut.isPending || !title || !date || !time}
+            >
+              {createMut.isPending ? "Creando..." : "Crear y notificar al cliente"}
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {meetings.length === 0 ? (
+        <p className="text-xs text-gray-400">No hay reuniones agendadas para este proyecto.</p>
+      ) : (
+        <div className="space-y-2">
+          {[...upcoming, ...past].map((m) => (
+            <div key={m.id} className={`border rounded-lg p-3 ${m.status === "cancelled" ? "border-gray-100 bg-gray-50/50 opacity-60" : "border-gray-200"}`}>
+              <div className="flex items-start justify-between gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900">{m.title}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    📅 {m.date} · 🕒 {m.time} · ⏱️ {m.duration} min
+                    {m.status === "cancelled" && " · ❌ Cancelada"}
+                  </p>
+                  {m.notes && <p className="text-xs text-gray-500 mt-1.5 italic">{m.notes}</p>}
+                  {m.meetLink && (
+                    <a href={m.meetLink} target="_blank" rel="noopener noreferrer" className="text-xs text-[#2FA4A9] hover:underline inline-flex items-center gap-1 mt-1.5">
+                      <ExternalLink className="w-3 h-3" />
+                      {m.meetLink}
+                    </a>
+                  )}
+                </div>
+                {m.status === "scheduled" && (
+                  <button
+                    onClick={() => { if (confirm("¿Cancelar esta reunión?")) cancelMut.mutate(m.id); }}
+                    className="text-gray-300 hover:text-rose-500 p-1"
+                    title="Cancelar reunión"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ProjectFeedbackSection({ projectId }: { projectId: string }) {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [responseDraft, setResponseDraft] = useState<Record<string, string>>({});
+
+  const { data: items = [], isLoading } = useQuery<FeedbackItem[]>({
+    queryKey: [`/api/admin/projects/${projectId}/feedback`],
+  });
+
+  const updateMut = useMutation({
+    mutationFn: async ({ id, body }: { id: string; body: Record<string, unknown> }) => {
+      const res = await apiRequest("PATCH", `/api/admin/projects/${projectId}/feedback/${id}`, body);
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${projectId}/feedback`] });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error", description: err?.message || "No se pudo actualizar", variant: "destructive" });
+    },
+  });
+
+  const TYPE_META: Record<string, { label: string; emoji: string }> = {
+    bug: { label: "Bug", emoji: "🐛" },
+    request: { label: "Cambio", emoji: "✨" },
+    improvement: { label: "Mejora", emoji: "💡" },
+    question: { label: "Pregunta", emoji: "❓" },
+  };
+  const STATUS_META: Record<string, { label: string; color: string }> = {
+    open: { label: "Abierto", color: "bg-gray-100 text-gray-700" },
+    triaged: { label: "Revisado", color: "bg-blue-100 text-blue-700" },
+    in_progress: { label: "En progreso", color: "bg-amber-100 text-amber-700" },
+    resolved: { label: "Resuelto", color: "bg-emerald-100 text-emerald-700" },
+    wont_fix: { label: "No procede", color: "bg-slate-100 text-slate-600" },
+  };
+
+  const openCount = items.filter(i => i.status === "open" || i.status === "triaged").length;
+
+  if (isLoading) return null;
+
+  return (
+    <div className="bg-white rounded-xl border border-gray-200 p-5 mb-6">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <MessageSquare className="w-4 h-4 text-[#2FA4A9]" />
+          <h3 className="text-sm font-semibold text-gray-900">Reportes y sugerencias del cliente</h3>
+        </div>
+        {openCount > 0 && (
+          <span className="text-[11px] font-semibold bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full">
+            {openCount} pendiente{openCount > 1 ? "s" : ""}
+          </span>
+        )}
+      </div>
+
+      {items.length === 0 ? (
+        <p className="text-xs text-gray-400">El cliente aún no ha reportado nada.</p>
+      ) : (
+        <div className="space-y-2">
+          {items.map((fb) => {
+            const tm = TYPE_META[fb.type] || TYPE_META.request;
+            const sm = STATUS_META[fb.status] || STATUS_META.open;
+            const isOpen = expandedId === fb.id;
+            return (
+              <div key={fb.id} className="border border-gray-100 rounded-lg overflow-hidden">
+                <button
+                  onClick={() => setExpandedId(isOpen ? null : fb.id)}
+                  className="w-full text-left px-3 py-2.5 flex items-start gap-3 hover:bg-gray-50"
+                >
+                  <span className="text-base shrink-0 mt-0.5">{tm.emoji}</span>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="text-sm font-medium text-gray-900 truncate">{fb.title}</p>
+                      <span className={`text-[10px] uppercase tracking-wider font-semibold px-1.5 py-0.5 rounded ${sm.color}`}>{sm.label}</span>
+                      <span className="text-[10px] uppercase tracking-wider font-semibold text-gray-400">{fb.priority}</span>
+                      {fb.resolvedTaskId && <span className="text-[10px] uppercase tracking-wider font-semibold text-emerald-600">→ task</span>}
+                    </div>
+                    <p className="text-[11px] text-gray-400 mt-0.5">
+                      {new Date(fb.createdAt).toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" })}
+                      {fb.reporterName && ` · ${fb.reporterName}`}
+                      {fb.attachmentUrls?.length > 0 && ` · ${fb.attachmentUrls.length} adjunto${fb.attachmentUrls.length > 1 ? "s" : ""}`}
+                    </p>
+                  </div>
+                  <ChevronDown className={`w-4 h-4 text-gray-300 shrink-0 mt-1 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                </button>
+                {isOpen && (
+                  <div className="px-3 pb-3 border-t border-gray-100 pt-3 space-y-3 bg-gray-50/40">
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap leading-relaxed">{fb.description}</p>
+
+                    {fb.attachmentUrls?.length > 0 && (
+                      <div>
+                        <p className="text-[11px] uppercase tracking-wider text-gray-400 font-medium mb-1.5">Adjuntos</p>
+                        <div className="flex flex-wrap gap-2">
+                          {fb.attachmentUrls.map((url, i) => (
+                            <a
+                              key={i}
+                              href={url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white border border-gray-200 text-xs text-gray-700 hover:bg-[#2FA4A9]/[0.05] hover:border-[#2FA4A9]/30 hover:text-[#2FA4A9]"
+                            >
+                              <ExternalLink className="w-3 h-3" />
+                              Adjunto {i + 1}
+                            </a>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <Label className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">Status</Label>
+                        <select
+                          value={fb.status}
+                          onChange={(e) => updateMut.mutate({ id: fb.id, body: { status: e.target.value } })}
+                          className="mt-1 w-full h-9 rounded-lg border border-gray-200 bg-white text-sm px-2 focus:border-[#2FA4A9] focus:ring-1 focus:ring-[#2FA4A9] outline-none"
+                        >
+                          <option value="open">Abierto</option>
+                          <option value="triaged">Revisado</option>
+                          <option value="in_progress">En progreso</option>
+                          <option value="resolved">Resuelto</option>
+                          <option value="wont_fix">No procede</option>
+                        </select>
+                      </div>
+                      <div>
+                        <Label className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">Prioridad</Label>
+                        <select
+                          value={fb.priority}
+                          onChange={(e) => updateMut.mutate({ id: fb.id, body: { priority: e.target.value } })}
+                          className="mt-1 w-full h-9 rounded-lg border border-gray-200 bg-white text-sm px-2 focus:border-[#2FA4A9] focus:ring-1 focus:ring-[#2FA4A9] outline-none"
+                        >
+                          <option value="low">Baja</option>
+                          <option value="normal">Normal</option>
+                          <option value="high">Alta</option>
+                          <option value="urgent">Urgente</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <div>
+                      <Label className="text-[11px] uppercase tracking-wider text-gray-400 font-medium">Respuesta al cliente</Label>
+                      <Textarea
+                        value={responseDraft[fb.id] ?? fb.adminResponse ?? ""}
+                        onChange={(e) => setResponseDraft({ ...responseDraft, [fb.id]: e.target.value })}
+                        rows={2}
+                        placeholder="Tu respuesta será visible para el cliente en el portal..."
+                        className="mt-1 text-sm"
+                      />
+                      <div className="flex justify-end mt-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => updateMut.mutate({ id: fb.id, body: { adminResponse: responseDraft[fb.id] ?? fb.adminResponse ?? "" } })}
+                          disabled={updateMut.isPending}
+                        >
+                          Guardar respuesta
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end gap-2 pt-2 border-t border-gray-200">
+                      {!fb.resolvedTaskId && (
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => updateMut.mutate({ id: fb.id, body: { convertToTask: true } })}
+                          disabled={updateMut.isPending}
+                          className="gap-1.5"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          Convertir en tarea
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

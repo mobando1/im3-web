@@ -10,7 +10,7 @@ import { generateBlogContent, improveBlogContent } from "./blog-ai";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive, uploadFileToDrive, createProjectFolder, readGoogleDriveContent, extractFolderIdFromUrl, findOrCreateClientFolder } from "./google-drive";
 import multer from "multer";
-import { createCalendarEvent, deleteCalendarEvent } from "./google-calendar";
+import { createCalendarEvent, deleteCalendarEvent, createProjectMeetingEvent } from "./google-calendar";
 import { isEmailConfigured, sendEmail, sendAdminNotification } from "./email-sender";
 import { generateEmailContent, buildMicroReminderEmail, build6hReminderEmail, buildFollowUpConfirmationEmail, buildNoShowEmail, generateDailyNewsDigest, generateContactInsight, generateWhatsAppMessage, generateNewsletterWelcome, generateMiniAudit, classifyWhatsAppIntent, generateWhatsAppAutoReply, buildWhatsAppNotificationEmail, buildProjectNotificationEmail, escapeHtml } from "./email-ai";
 import { parseFechaCita } from "./date-utils";
@@ -6245,6 +6245,47 @@ ${urls}
     }
   });
 
+  // Upload de archivo adjunto para feedback. Sube el archivo a la carpeta de
+  // Google Drive del proyecto y devuelve la URL pública para incluir en attachmentUrls.
+  const feedbackUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } });
+  app.post("/api/portal/projects/:projectId/feedback/upload", requireClientOrAdminPreview, feedbackUpload.single("file"), async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    if (!req.file) return res.status(400).json({ error: "No file uploaded" });
+    if (!isGoogleDriveConfigured()) return res.status(500).json({ error: "Google Drive no configurado" });
+    try {
+      const projectId = String(req.params.projectId);
+      const kind = (req.user as any)?.kind;
+      if (kind === "client") {
+        const userId = (req.user as any).id;
+        const [link] = await db.select().from(clientUserProjects)
+          .where(and(eq(clientUserProjects.clientUserId, userId), eq(clientUserProjects.clientProjectId, projectId)));
+        if (!link) return res.status(403).json({ error: "Sin acceso" });
+      }
+      const [project] = await db.select().from(clientProjects).where(eq(clientProjects.id, projectId));
+      if (!project) return res.status(404).json({ error: "Proyecto no encontrado" });
+
+      // Asegurar que el proyecto tenga carpeta de Drive
+      let folderId = project.driveFolderId;
+      if (!folderId) {
+        folderId = await createProjectFolder(project.name);
+        await db.update(clientProjects).set({ driveFolderId: folderId, updatedAt: new Date() }).where(eq(clientProjects.id, projectId));
+      }
+
+      const { webViewLink } = await uploadFileToDrive(
+        folderId,
+        `feedback-${Date.now()}-${req.file.originalname}`,
+        req.file.mimetype,
+        req.file.buffer,
+      );
+
+      res.json({ url: webViewLink, name: req.file.originalname, size: req.file.size, mimeType: req.file.mimetype });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      log(`feedback upload error: ${message}`);
+      res.status(500).json({ error: message });
+    }
+  });
+
   // Admin: listar reportes de un proyecto (ya cubierto por GET /api/portal/projects/:id/feedback con sesión admin,
   // pero exponemos también ruta /api/admin/projects/:id/feedback para consistencia con otros endpoints admin)
   app.get("/api/admin/projects/:id/feedback", requireAuth, async (req, res) => {
@@ -6313,6 +6354,130 @@ ${urls}
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: message });
     }
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Project Meetings — reuniones recurrentes del proyecto
+  // ─────────────────────────────────────────────────────────────
+
+  // Admin: listar reuniones de un proyecto (próximas + pasadas)
+  app.get("/api/admin/projects/:id/meetings", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const rows = await db.select().from(appointments)
+      .where(eq(appointments.clientProjectId, String(req.params.id)))
+      .orderBy(desc(appointments.date), desc(appointments.time));
+    res.json(rows);
+  });
+
+  // Admin: crear nueva reunión de proyecto (genera Meet link automáticamente)
+  app.post("/api/admin/projects/:id/meetings", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const projectId = String(req.params.id);
+      const title = String(req.body?.title || "").trim();
+      const date = String(req.body?.date || "").trim(); // YYYY-MM-DD
+      const time = String(req.body?.time || "").trim(); // HH:MM
+      const duration = Math.max(15, Math.min(180, parseInt(req.body?.duration ?? "45", 10) || 45));
+      const notes = req.body?.notes ? String(req.body.notes).trim() : null;
+      if (!title || !date || !time) return res.status(400).json({ error: "title, date y time son requeridos" });
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ error: "date debe ser YYYY-MM-DD" });
+
+      const [project] = await db.select().from(clientProjects).where(eq(clientProjects.id, projectId));
+      if (!project) return res.status(404).json({ error: "Proyecto no encontrado" });
+
+      // Encontrar email del cliente (vía contactId)
+      let attendeeEmail: string | undefined;
+      if (project.contactId) {
+        const [contact] = await db.select({ email: contacts.email }).from(contacts).where(eq(contacts.id, project.contactId)).limit(1);
+        if (contact?.email) attendeeEmail = contact.email;
+      }
+
+      // Insertar primero para obtener el ID y usarlo en createProjectMeetingEvent
+      const [appt] = await db.insert(appointments).values({
+        clientProjectId: projectId,
+        contactId: project.contactId,
+        title,
+        date,
+        time,
+        duration,
+        notes,
+        appointmentType: "project_meeting",
+        status: "scheduled",
+      }).returning();
+
+      // Crear evento en Google Calendar (no bloqueante: si falla, la reunión queda sin Meet link)
+      try {
+        const result = await createProjectMeetingEvent({
+          title,
+          description: notes || `Reunión del proyecto ${project.name}`,
+          date,
+          time,
+          durationMinutes: duration,
+          attendeeEmail,
+          meetingId: appt.id,
+        });
+        if (result) {
+          await db.update(appointments).set({
+            meetLink: result.meetLink || null,
+            googleCalendarEventId: result.eventId,
+          }).where(eq(appointments.id, appt.id));
+          appt.meetLink = result.meetLink || null;
+          appt.googleCalendarEventId = result.eventId;
+        }
+      } catch (calErr: any) {
+        log(`createProjectMeetingEvent error: ${calErr?.message || calErr}`);
+      }
+
+      // Notificar al cliente (notifyProjectClient) — usa el sistema híbrido magic-link existente
+      notifyProjectClient(projectId, `📅 Nueva reunión agendada: ${title}`, {
+        title: "Nueva reunión agendada",
+        headerEmoji: "📅",
+        bodyLines: [
+          `Te invitamos a una reunión del proyecto <strong>${project.name}</strong>.`,
+          `<strong>${title}</strong>`,
+          `📅 ${date} · 🕒 ${time} · ⏱️ ${duration} min`,
+          notes ? `<em>${notes}</em>` : "",
+          appt.meetLink ? `Link de Meet: <a href="${appt.meetLink}">${appt.meetLink}</a>` : "",
+        ].filter(Boolean) as string[],
+        ctaText: "Ver en mi portal →",
+      });
+
+      res.json(appt);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      log(`POST meetings error: ${message}`);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // Admin: cancelar reunión
+  app.delete("/api/admin/projects/:id/meetings/:meetingId", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const meetingId = String(req.params.meetingId);
+    const [appt] = await db.select().from(appointments).where(eq(appointments.id, meetingId));
+    if (!appt) return res.status(404).json({ error: "Reunión no encontrada" });
+    if (appt.googleCalendarEventId) {
+      await deleteCalendarEvent(appt.googleCalendarEventId).catch(() => {});
+    }
+    await db.update(appointments).set({ status: "cancelled" }).where(eq(appointments.id, meetingId));
+    res.json({ ok: true });
+  });
+
+  // Cliente / admin preview: listar reuniones del proyecto
+  app.get("/api/portal/projects/:projectId/meetings", requireClientOrAdminPreview, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const projectId = String(req.params.projectId);
+    const kind = (req.user as any)?.kind;
+    if (kind === "client") {
+      const userId = (req.user as any).id;
+      const [link] = await db.select().from(clientUserProjects)
+        .where(and(eq(clientUserProjects.clientUserId, userId), eq(clientUserProjects.clientProjectId, projectId)));
+      if (!link) return res.status(403).json({ error: "Sin acceso" });
+    }
+    const rows = await db.select().from(appointments)
+      .where(eq(appointments.clientProjectId, projectId))
+      .orderBy(desc(appointments.date), desc(appointments.time));
+    res.json(rows);
   });
 
   // ─────────────────────────────────────────────────────────────

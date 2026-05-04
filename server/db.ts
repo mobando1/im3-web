@@ -169,6 +169,10 @@ export async function runMigrations() {
     `).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_project_feedback_project_status" ON "project_feedback" ("project_id", "status");`).catch(() => {});
 
+    // Vincular appointments a proyectos del portal (reuniones de proyecto)
+    await pool.query(`ALTER TABLE "appointments" ADD COLUMN IF NOT EXISTS "client_project_id" varchar;`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_appointments_client_project" ON "appointments" ("client_project_id");`).catch(() => {});
+
     // Client projects tables
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "client_projects" (
