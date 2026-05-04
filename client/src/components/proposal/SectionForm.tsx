@@ -90,6 +90,32 @@ export function SectionForm({ sectionKey, data, onSave, onCancel, onDirtyChange,
     return () => onDirtyChange?.(false);
   }, [onDirtyChange]);
 
+  // Sincronizar data prop externa (cambios del chat IA) sin destruir el undo stack.
+  // Si el usuario tiene cambios sin guardar (isDirty), NO sobreescribe — respeta su trabajo.
+  // Si no hay cambios locales y data cambió afuera, actualiza present + agrega al past para
+  // que el usuario pueda Ctrl+Z y volver al estado anterior si quiere.
+  useEffect(() => {
+    const dataString = JSON.stringify(data);
+    if (dataString === originalRef.current) return; // no cambió externamente
+
+    if (isDirty) {
+      // No tocar — el usuario tiene cambios sin guardar.
+      // El indicador "● Sin guardar" + el conflicto se maneja al guardar.
+      return;
+    }
+
+    // Sin cambios locales pendientes: aceptar el nuevo data como present,
+    // y empujar el present anterior al past para preservar undo.
+    setHistory(h => ({
+      past: [...h.past, h.present].slice(-HISTORY_LIMIT),
+      present: structuredClone(data),
+      future: [],
+    }));
+    originalRef.current = dataString;
+    lastChangeRef.current = null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [JSON.stringify(data)]);
+
   const set = useCallback((key: string, value: unknown) => {
     setHistory(h => {
       const now = Date.now();

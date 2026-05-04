@@ -3,7 +3,8 @@ import { db } from "./db";
 import { proposals, proposalChatMessages, contacts } from "@shared/schema";
 import { eq, asc } from "drizzle-orm";
 import { log } from "./index";
-import { listFolderFilesRecursive, readGoogleDriveContent } from "./google-drive";
+import { listFolderFilesRecursive, readGoogleDriveContent, uploadFileToDrive, findOrCreateClientFolder } from "./google-drive";
+import { google } from "googleapis";
 import {
   proposalMetaSchema, heroSchema, summarySchema, problemSchema, solutionSchema,
   techSchema, timelineSchema, roiSchema, authoritySchema, pricingSchema,
@@ -138,6 +139,23 @@ async function withProposalLock<T>(proposalId: string, fn: () => Promise<T>): Pr
   }
 }
 
+// Cache del contexto del contacto (diagnóstico + emails + docs).
+// gatherContactContext hace ~7-8 queries + lee Drive — caro de recomputar
+// en cada mensaje. TTL 5 min, expira automáticamente.
+const contactContextCache = new Map<string, { context: string; expires: number }>();
+const CONTACT_CONTEXT_TTL_MS = 5 * 60 * 1000;
+
+async function getCachedContactContext(contactId: string): Promise<string> {
+  const now = Date.now();
+  const cached = contactContextCache.get(contactId);
+  if (cached && cached.expires > now) {
+    return cached.context;
+  }
+  const context = await gatherContactContext(contactId);
+  contactContextCache.set(contactId, { context, expires: now + CONTACT_CONTEXT_TTL_MS });
+  return context;
+}
+
 type ChatMessage = {
   role: "user" | "assistant";
   content: string;
@@ -152,7 +170,113 @@ type Attachment = {
   buffer: Buffer;
 };
 
-type StoredAttachment = { name: string; mime: string; size: number };
+type StoredAttachment = {
+  name: string;
+  mime: string;
+  size: number;
+  driveFileId?: string;
+  url?: string;
+};
+
+/**
+ * Re-fetcha un attachment de Drive para incluirlo en un mensaje de Claude.
+ * Para imágenes/PDFs descarga el binario y lo convierte a base64 block.
+ * Para texto extrae contenido como text block.
+ */
+async function fetchAttachmentForClaude(att: StoredAttachment): Promise<Anthropic.ContentBlockParam | null> {
+  if (!att.driveFileId) return null;
+  const auth = new google.auth.JWT({
+    email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+    key: (process.env.GOOGLE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
+    scopes: ["https://www.googleapis.com/auth/drive.readonly"],
+    subject: process.env.GOOGLE_DRIVE_IMPERSONATE || undefined,
+  });
+  const drive = google.drive({ version: "v3", auth });
+
+  const isImage = att.mime.startsWith("image/");
+  const isPdf = att.mime === "application/pdf";
+
+  if (isImage || isPdf) {
+    const res = await drive.files.get({ fileId: att.driveFileId, alt: "media" }, { responseType: "arraybuffer" });
+    const data = Buffer.from(res.data as ArrayBuffer).toString("base64");
+    if (isImage) {
+      const supported = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+      if (!supported.includes(att.mime)) return null;
+      return {
+        type: "image",
+        source: { type: "base64", media_type: att.mime as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data },
+      };
+    }
+    return {
+      type: "document",
+      source: { type: "base64", media_type: "application/pdf", data },
+    } as unknown as Anthropic.ContentBlockParam;
+  }
+  return null; // text/json se maneja en el content original
+}
+
+/**
+ * Sube los attachments a una subcarpeta "_chat-attachments" dentro de la carpeta
+ * del cliente. Devuelve metadata con driveFileId para poder re-leer en turnos siguientes.
+ * Si Drive no está configurado o falla, devuelve metadata sin driveFileId.
+ */
+async function persistAttachmentsToDrive(
+  attachments: Attachment[],
+  contactEmpresa: string,
+): Promise<StoredAttachment[]> {
+  if (attachments.length === 0) return [];
+
+  const result: StoredAttachment[] = [];
+  let subfolderId: string | null = null;
+
+  try {
+    const clientFolderId = await findOrCreateClientFolder(contactEmpresa);
+
+    // Crear subcarpeta "_chat-attachments" si no existe
+    const auth = new google.auth.JWT({
+      email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      key: (process.env.GOOGLE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
+      scopes: ["https://www.googleapis.com/auth/drive"],
+      subject: process.env.GOOGLE_DRIVE_IMPERSONATE || undefined,
+    });
+    const drive = google.drive({ version: "v3", auth });
+
+    const existing = await drive.files.list({
+      q: `'${clientFolderId}' in parents and name='_chat-attachments' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: "files(id)",
+    });
+
+    if (existing.data.files && existing.data.files.length > 0) {
+      subfolderId = existing.data.files[0].id || null;
+    } else {
+      const folder = await drive.files.create({
+        requestBody: { name: "_chat-attachments", mimeType: "application/vnd.google-apps.folder", parents: [clientFolderId] },
+        fields: "id",
+      });
+      subfolderId = folder.data.id || null;
+    }
+  } catch (err) {
+    log(`[proposal-chat] could not prepare Drive subfolder: ${(err as Error).message}`);
+  }
+
+  for (const att of attachments) {
+    const baseMeta = { name: att.name, mime: att.mime, size: att.size };
+    if (!subfolderId) {
+      result.push(baseMeta);
+      continue;
+    }
+    try {
+      const timestampedName = `${new Date().toISOString().substring(0, 10)}-${att.name}`;
+      const { fileId, webViewLink } = await uploadFileToDrive(subfolderId, timestampedName, att.mime, att.buffer);
+      result.push({ ...baseMeta, driveFileId: fileId, url: webViewLink });
+    } catch (err) {
+      log(`[proposal-chat] failed to upload "${att.name}" to Drive: ${(err as Error).message}`);
+      result.push(baseMeta);
+    }
+  }
+
+  return result;
+}
 
 const TOOLS: Anthropic.Tool[] = [
   {
@@ -345,7 +469,20 @@ async function runProposalChatInner(params: {
     .limit(MAX_HISTORY);
 
   const attachments = params.attachments || [];
-  const storedAttachments: StoredAttachment[] = attachments.map(a => ({ name: a.name, mime: a.mime, size: a.size }));
+
+  // Subir attachments a Drive (subcarpeta "_chat-attachments" del cliente).
+  // Esto persiste los archivos para poder re-leerlos en turnos siguientes,
+  // permitiendo a Claude recordar imágenes/PDFs que el usuario subió antes.
+  let storedAttachments: StoredAttachment[] = [];
+  if (attachments.length > 0) {
+    const [contact] = await db.select({ empresa: contacts.empresa })
+      .from(contacts).where(eq(contacts.id, proposal.contactId)).limit(1);
+    if (contact?.empresa) {
+      storedAttachments = await persistAttachmentsToDrive(attachments, contact.empresa);
+    } else {
+      storedAttachments = attachments.map(a => ({ name: a.name, mime: a.mime, size: a.size }));
+    }
+  }
 
   // Guardar mensaje del usuario (con metadata de archivos adjuntos)
   await db.insert(proposalChatMessages).values({
@@ -355,11 +492,35 @@ async function runProposalChatInner(params: {
     attachments: storedAttachments.length > 0 ? storedAttachments : null,
   });
 
-  // Construir mensajes para Claude
-  const claudeMessages: Anthropic.MessageParam[] = history.map(h => ({
-    role: h.role as "user" | "assistant",
-    content: h.content,
-  }));
+  // Construir mensajes para Claude. Re-incluye attachments de los últimos
+  // 3 mensajes del usuario que tengan archivos en Drive (para que Claude
+  // pueda referirse a imágenes/PDFs subidos antes en la conversación).
+  // Limitamos a 3 para no inflar el costo en chats largos.
+  const userMessagesWithAttachments = history.filter(h => h.role === "user" && h.attachments && h.attachments.length > 0).slice(-3);
+  const messageIdsToRefetch = new Set(userMessagesWithAttachments.map(m => m.id));
+
+  const claudeMessages: Anthropic.MessageParam[] = [];
+
+  for (const h of history) {
+    const role = h.role as "user" | "assistant";
+    if (role === "user" && messageIdsToRefetch.has(h.id) && h.attachments) {
+      // Re-leer attachments de Drive y armar content blocks
+      const blocks: Anthropic.ContentBlockParam[] = [];
+      for (const att of h.attachments) {
+        if (!att.driveFileId) continue;
+        try {
+          const fetched = await fetchAttachmentForClaude(att);
+          if (fetched) blocks.push(fetched);
+        } catch (err) {
+          log(`[proposal-chat] could not refetch attachment "${att.name}": ${(err as Error).message}`);
+        }
+      }
+      blocks.push({ type: "text", text: h.content });
+      claudeMessages.push({ role, content: blocks });
+    } else {
+      claudeMessages.push({ role, content: h.content });
+    }
+  }
 
   // Mensaje del usuario actual: combinar texto + archivos como content blocks
   const currentUserContent: Anthropic.ContentBlockParam[] = [];
@@ -412,10 +573,11 @@ async function runProposalChatInner(params: {
   // Contexto de la propuesta actual + cliente + referencias (mismo que usa el generador)
   const proposalSnapshot = JSON.stringify(proposal.sections, null, 2).substring(0, 30000);
 
-  // Cargar contexto del cliente (diagnóstico, emails, docs) — igual que el generador
+  // Cargar contexto del cliente (diagnóstico, emails, docs) — igual que el generador.
+  // Usa cache con TTL 5 min para no recalcular en cada mensaje del chat.
   let clientContext = "";
   try {
-    clientContext = await gatherContactContext(proposal.contactId);
+    clientContext = await getCachedContactContext(proposal.contactId);
   } catch (err) {
     log(`[proposal-chat] could not gather client context: ${(err as Error).message}`);
   }
