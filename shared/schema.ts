@@ -649,6 +649,33 @@ export const proposals = pgTable("proposals", {
 export type Proposal = typeof proposals.$inferSelect;
 export type InsertProposal = typeof proposals.$inferInsert;
 
+// Memoria global del chat de propuestas — hechos extraídos de TODAS las
+// conversaciones, cross-proposal y cross-client. Cada vez que el admin habla
+// con el chat de cualquier propuesta, un extractor saca insights ("cuando
+// el cliente es de logística, prefiere X", "no usamos Y nunca", etc.) y los
+// guarda aquí. Se inyectan como contexto en TODOS los chats futuros.
+export const chatGlobalMemory = pgTable("chat_global_memory", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  // Categoría: "preference" (ej. "preferimos Drizzle"), "constraint" (ej. "no usamos Firebase"),
+  // "pattern" (ej. "para logística, módulos de asistencia siempre primero"),
+  // "person" (ej. "Carlos prefiere comunicación directa"),
+  // "client_history" (ej. "APP Logistics aceptó timeline de 16 sem"), "other".
+  category: text("category").notNull(),
+  // Texto natural del aprendizaje (1-2 oraciones). Es lo que se inyecta al prompt.
+  fact: text("fact").notNull(),
+  // 0-100. Sube cuando se reitera, baja cuando contradice.
+  confidence: integer("confidence").default(50).notNull(),
+  // De qué propuesta(s) y mensaje(s) salió este hecho — auditoría.
+  sourceProposalIds: json("source_proposal_ids").$type<string[]>().default([]),
+  // Cuántas veces se ha mencionado/reiterado en distintos chats.
+  reinforcedCount: integer("reinforced_count").default(1).notNull(),
+  lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ChatGlobalMemory = typeof chatGlobalMemory.$inferSelect;
+export type InsertChatGlobalMemory = typeof chatGlobalMemory.$inferInsert;
+
 // Preferencias y aprendizajes de la organización (memoria entre propuestas).
 // Después de cada propuesta cerrada (accepted/rejected), un agente extrae
 // lecciones: stack preferido, rangos de precios que funcionan, frases que
@@ -859,6 +886,30 @@ export const clientPasswordResets = pgTable("client_password_resets", {
 
 export type ClientPasswordReset = typeof clientPasswordResets.$inferSelect;
 export type InsertClientPasswordReset = typeof clientPasswordResets.$inferInsert;
+
+// Reportes / sugerencias del cliente — bugs, cambios solicitados, ideas con attachments
+// Se diferencia de project_messages (chat) y project_ideas (suggestions con voto)
+// porque permite triage formal (status, priority) + adjuntos + conversión a task.
+export const projectFeedback = pgTable("project_feedback", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull(),
+  type: text("type").notNull(), // bug | request | improvement | question
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  priority: text("priority").default("normal").notNull(), // low | normal | high | urgent
+  status: text("status").default("open").notNull(), // open | triaged | in_progress | resolved | wont_fix
+  attachmentUrls: json("attachment_urls").$type<string[]>().default([]),
+  createdBy: text("created_by"), // "client" | "admin"
+  reporterName: text("reporter_name"), // nombre opcional para identificar quién reportó
+  adminResponse: text("admin_response"),
+  resolvedTaskId: varchar("resolved_task_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  resolvedAt: timestamp("resolved_at"),
+});
+
+export type ProjectFeedback = typeof projectFeedback.$inferSelect;
+export type InsertProjectFeedback = typeof projectFeedback.$inferInsert;
 
 // ───────────────────────────────────────────────────────────────
 // Portal del Cliente — Analytics (Google Analytics 4)

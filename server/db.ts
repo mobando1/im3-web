@@ -147,6 +147,28 @@ export async function runMigrations() {
     // Project type — distingue proyectos de cliente (scope fijo) vs internos (evolutivos)
     await pool.query(`ALTER TABLE "client_projects" ADD COLUMN IF NOT EXISTS "project_type" text DEFAULT 'client' NOT NULL;`).catch(() => {});
 
+    // Project feedback — bugs/cambios/sugerencias del cliente con attachments
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "project_feedback" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "project_id" varchar NOT NULL,
+        "type" text NOT NULL,
+        "title" text NOT NULL,
+        "description" text NOT NULL,
+        "priority" text NOT NULL DEFAULT 'normal',
+        "status" text NOT NULL DEFAULT 'open',
+        "attachment_urls" json DEFAULT '[]'::json,
+        "created_by" text,
+        "reporter_name" text,
+        "admin_response" text,
+        "resolved_task_id" varchar,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "updated_at" timestamp DEFAULT now() NOT NULL,
+        "resolved_at" timestamp
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_project_feedback_project_status" ON "project_feedback" ("project_id", "status");`).catch(() => {});
+
     // Client projects tables
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "client_projects" (
@@ -390,6 +412,22 @@ export async function runMigrations() {
     // Proposals: soft-delete (papelera con retención de 30 días)
     await pool.query(`ALTER TABLE "proposals" ADD COLUMN IF NOT EXISTS "deleted_at" timestamp;`).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_proposals_deleted_at" ON "proposals" ("deleted_at");`).catch(() => {});
+
+    // Chat global memory — hechos cross-proposal/cross-client del chat
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "chat_global_memory" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "category" text NOT NULL,
+        "fact" text NOT NULL,
+        "confidence" integer DEFAULT 50 NOT NULL,
+        "source_proposal_ids" json DEFAULT '[]'::json,
+        "reinforced_count" integer DEFAULT 1 NOT NULL,
+        "last_seen_at" timestamp DEFAULT now() NOT NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_chat_memory_category" ON "chat_global_memory" ("category", "confidence" DESC);`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_chat_memory_last_seen" ON "chat_global_memory" ("last_seen_at" DESC);`).catch(() => {});
 
     // Org preferences — memoria entre propuestas (Sprint 6.1)
     await pool.query(`

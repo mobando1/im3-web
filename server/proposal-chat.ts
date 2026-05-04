@@ -15,6 +15,7 @@ import { VOICE_GUIDE, COST_REFERENCE, HARDWARE_CATALOG, CASE_STUDIES, gatherCont
 import { runAllValidators, formatIssuesAsText } from "./proposal-validators";
 import { validateSemanticChange } from "./proposal-semantic-validator";
 import { getOrgPreferencesContext } from "./org-preferences";
+import { getGlobalMemoryContext, extractFactsFromTurn } from "./chat-memory";
 
 const SECTION_SCHEMAS: Record<string, ZodSchema> = {
   meta: proposalMetaSchema,
@@ -613,6 +614,14 @@ async function runProposalChatInner(params: {
     log(`[proposal-chat] could not load org preferences: ${(err as Error).message}`);
   }
 
+  // Cargar memoria global del chat (hechos cross-proposal/cross-client)
+  let globalMemoryContext = "";
+  try {
+    globalMemoryContext = await getGlobalMemoryContext();
+  } catch (err) {
+    log(`[proposal-chat] could not load global memory: ${(err as Error).message}`);
+  }
+
   // System prompt particionado en bloques con cache_control:
   // - Bloque 1 (cacheado): SYSTEM_PROMPT_BASE + SCHEMA_DOCS — totalmente estático.
   // - Bloque 2 (cacheado): VOICE_GUIDE + COST_REFERENCE + HARDWARE_CATALOG + CASE_STUDIES — estático mientras los archivos no cambien.
@@ -654,7 +663,7 @@ ${CASE_STUDIES.substring(0, 6000)}`,
     },
     {
       type: "text",
-      text: `${orgContext ? orgContext + "\n\n" : ""}═══════════════════════════════════════════════════════
+      text: `${globalMemoryContext ? globalMemoryContext + "\n\n" : ""}${orgContext ? orgContext + "\n\n" : ""}═══════════════════════════════════════════════════════
 CONTEXTO DEL CLIENTE (diagnóstico, emails, docs)
 ═══════════════════════════════════════════════════════
 
@@ -922,6 +931,16 @@ Presenta este resumen al usuario y espera confirmación. Cuando confirme, vuelve
     content: finalText,
     toolCalls: toolCalls.length > 0 ? toolCalls : null,
   });
+
+  // Extraer hechos generalizables del turno hacia la memoria global.
+  // Corre en background (fire-and-forget) — no bloqueamos la respuesta del chat.
+  extractFactsFromTurn({
+    proposalId: params.proposalId,
+    userMessage: params.userMessage,
+    assistantMessage: finalText,
+    contactCompany: contactEmpresaForValidator,
+    contactName: contactNameForValidator,
+  }).catch(err => log(`[proposal-chat] memory extraction error: ${(err as Error).message}`));
 
   return { assistantMessage: finalText, toolCalls };
 }

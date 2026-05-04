@@ -286,6 +286,9 @@ export default function ProposalEditor() {
   const [aiInstruction, setAiInstruction] = useState("");
   const [aiOptions, setAiOptions] = useState<Array<{ label: string; description: string; section: unknown }> | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [confirmSendOpen, setConfirmSendOpen] = useState(false);
+  const [confirmRegenOpen, setConfirmRegenOpen] = useState(false);
+  const [confirmText, setConfirmText] = useState("");
 
   const { data: proposal, isLoading } = useQuery<any>({
     queryKey: [`/api/admin/proposals/${id}`],
@@ -547,7 +550,16 @@ export default function ProposalEditor() {
         <Button
           variant="outline"
           size="sm"
-          onClick={() => generateMut.mutate()}
+          onClick={() => {
+            // Si NO hay secciones todavía, generar directo (no es destructivo)
+            if (!hasSections) {
+              generateMut.mutate();
+              return;
+            }
+            // Re-generar SÍ es destructivo: borra todas las secciones existentes
+            setConfirmText("");
+            setConfirmRegenOpen(true);
+          }}
           disabled={generateMut.isPending}
           className="gap-1.5"
         >
@@ -583,7 +595,10 @@ export default function ProposalEditor() {
         {hasSections && proposal.status === "draft" && (
           <Button
             size="sm"
-            onClick={() => sendMut.mutate()}
+            onClick={() => {
+              setConfirmText("");
+              setConfirmSendOpen(true);
+            }}
             disabled={sendMut.isPending}
             className="bg-[#2FA4A9] hover:bg-[#238b8f] gap-1.5"
           >
@@ -1066,6 +1081,98 @@ export default function ProposalEditor() {
               className="bg-red-600 hover:bg-red-700"
             >
               Descartar cambios
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirmar envío al cliente — acción irreversible visible al cliente */}
+      <AlertDialog open={confirmSendOpen} onOpenChange={setConfirmSendOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-[#2FA4A9]">
+              <Send className="w-5 h-5" /> Enviar propuesta al cliente
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-gray-600">
+                <p>
+                  Esta acción <strong>envía un email al cliente</strong> con el link de la propuesta.
+                  El cliente la verá inmediatamente. <strong>No es deshacible.</strong>
+                </p>
+                <div className="bg-gray-50 border border-gray-200 rounded-md p-3 space-y-1">
+                  <p><strong>Cliente:</strong> {proposal?.contactName} <span className="text-gray-400">— {proposal?.contactEmpresa}</span></p>
+                  <p><strong>Email:</strong> {proposal?.contactEmail}</p>
+                  <p><strong>Propuesta:</strong> {proposal?.title}</p>
+                </div>
+                <p className="text-xs text-gray-500">
+                  Para confirmar, escribe <code className="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-[11px]">ENVIAR</code> abajo:
+                </p>
+                <Input
+                  value={confirmText}
+                  onChange={e => setConfirmText(e.target.value)}
+                  placeholder="ENVIAR"
+                  autoFocus
+                  className="font-mono"
+                />
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={confirmText.trim().toUpperCase() !== "ENVIAR"}
+              onClick={() => {
+                sendMut.mutate();
+                setConfirmSendOpen(false);
+              }}
+              className="bg-[#2FA4A9] hover:bg-[#238b8f] disabled:opacity-50"
+            >
+              <Send className="w-4 h-4 mr-1.5" /> Enviar al cliente
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirmar re-generar con IA — borra todas las secciones existentes */}
+      <AlertDialog open={confirmRegenOpen} onOpenChange={setConfirmRegenOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-amber-700">
+              <Sparkles className="w-5 h-5" /> Re-generar propuesta con IA
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-gray-600">
+                <p>
+                  Esta acción <strong>borra TODAS las secciones actuales</strong> y genera una propuesta nueva
+                  desde cero con IA. Los cambios manuales y los del chat se perderán.
+                </p>
+                <p className="text-amber-700 bg-amber-50 border border-amber-200 rounded-md p-2 text-xs">
+                  💡 Si solo quieres ajustar partes, mejor usa el botón "Asistente IA" o "Modificar con IA" por sección.
+                </p>
+                <p className="text-xs text-gray-500">
+                  Para confirmar, escribe <code className="bg-gray-100 px-1.5 py-0.5 rounded font-mono text-[11px]">REGENERAR</code> abajo:
+                </p>
+                <Input
+                  value={confirmText}
+                  onChange={e => setConfirmText(e.target.value)}
+                  placeholder="REGENERAR"
+                  autoFocus
+                  className="font-mono"
+                />
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={confirmText.trim().toUpperCase() !== "REGENERAR"}
+              onClick={() => {
+                generateMut.mutate();
+                setConfirmRegenOpen(false);
+              }}
+              className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50"
+            >
+              <Sparkles className="w-4 h-4 mr-1.5" /> Re-generar
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback } from "@shared/schema";
 import { AGENT_REGISTRY, AGENT_DOMAINS, findAgent } from "./agents/registry";
 import { runAgent } from "./agents/runner";
 import { syncGmailEmails, isGmailConfigured } from "./google-gmail";
@@ -5791,9 +5791,14 @@ ${urls}
   // so all existing token-based handlers below work for authenticated clients too.
   // Excludes "/api/portal/projects" (no id) which is handled by the list endpoint above.
   // Acepta sesión de cliente vinculado al proyecto, O sesión de admin (preview mode).
+  // Skip endpoints que tienen handlers explícitos abajo (analytics, feedback) — esos hacen su propia auth.
+  const BRIDGE_SKIP_TAILS = new Set(["/analytics", "/feedback"]);
   app.use(async (req, res, next) => {
     const m = req.url.match(/^\/api\/portal\/projects\/([^/?]+)(\/.*)?(\?.*)?$/);
     if (!m) return next();
+    const tail = m[2] || "";
+    // Si la cola coincide con un endpoint con handler explícito, dejar que pase
+    if (BRIDGE_SKIP_TAILS.has(tail)) return next();
     if (!req.isAuthenticated()) {
       return res.status(401).json({ error: "No autorizado" });
     }
@@ -5816,7 +5821,6 @@ ${urls}
       .from(clientProjects)
       .where(eq(clientProjects.id, projectId));
     if (!project) return res.status(404).json({ error: "Proyecto no encontrado" });
-    const tail = m[2] || "";
     const qs = m[3] || "";
     req.url = `/api/portal/${project.accessToken}${tail}${qs}`;
     next();
@@ -6152,6 +6156,163 @@ ${urls}
   app.get("/api/admin/projects/:id/analytics-data", requireAuth, async (req, res) => {
     const data = await buildAnalyticsResponse(String(req.params.id));
     res.json(data);
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Project Feedback — bugs/cambios/sugerencias del cliente
+  // ─────────────────────────────────────────────────────────────
+
+  // Cliente o admin (preview): listar reportes del proyecto
+  app.get("/api/portal/projects/:projectId/feedback", requireClientOrAdminPreview, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const projectId = String(req.params.projectId);
+    const kind = (req.user as any)?.kind;
+    if (kind === "client") {
+      const userId = (req.user as any).id;
+      const [link] = await db.select().from(clientUserProjects)
+        .where(and(eq(clientUserProjects.clientUserId, userId), eq(clientUserProjects.clientProjectId, projectId)));
+      if (!link) return res.status(403).json({ error: "Sin acceso" });
+    }
+    const rows = await db.select().from(projectFeedback)
+      .where(eq(projectFeedback.projectId, projectId))
+      .orderBy(desc(projectFeedback.createdAt));
+    res.json(rows);
+  });
+
+  // Cliente o admin (preview): crear reporte
+  app.post("/api/portal/projects/:projectId/feedback", requireClientOrAdminPreview, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const projectId = String(req.params.projectId);
+      const kind = (req.user as any)?.kind;
+      if (kind === "client") {
+        const userId = (req.user as any).id;
+        const [link] = await db.select().from(clientUserProjects)
+          .where(and(eq(clientUserProjects.clientUserId, userId), eq(clientUserProjects.clientProjectId, projectId)));
+        if (!link) return res.status(403).json({ error: "Sin acceso" });
+      }
+      const title = String(req.body?.title || "").trim();
+      const description = String(req.body?.description || "").trim();
+      const type = String(req.body?.type || "request").trim();
+      const priority = String(req.body?.priority || "normal").trim();
+      const attachmentUrls: string[] = Array.isArray(req.body?.attachmentUrls) ? req.body.attachmentUrls.filter((u: any) => typeof u === "string" && u.length > 0).slice(0, 10) : [];
+      const reporterName = req.body?.reporterName ? String(req.body.reporterName).trim() : null;
+      if (!title || title.length < 3) return res.status(400).json({ error: "El título es muy corto" });
+      if (!description || description.length < 5) return res.status(400).json({ error: "La descripción es muy corta" });
+      if (!["bug", "request", "improvement", "question"].includes(type)) return res.status(400).json({ error: "Tipo inválido" });
+      if (!["low", "normal", "high", "urgent"].includes(priority)) return res.status(400).json({ error: "Prioridad inválida" });
+
+      const [row] = await db.insert(projectFeedback).values({
+        projectId,
+        type,
+        title: title.slice(0, 200),
+        description: description.slice(0, 5000),
+        priority,
+        attachmentUrls,
+        createdBy: kind === "admin" ? "admin" : "client",
+        reporterName,
+      }).returning();
+
+      // Notificar al admin de IM3 que hay un reporte nuevo del cliente
+      if (kind === "client") {
+        const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+        const typeLabel = ({ bug: "🐛 Bug", request: "✨ Cambio", improvement: "💡 Mejora", question: "❓ Pregunta" } as Record<string, string>)[type] || type;
+        sendAdminNotification({
+          subject: `${typeLabel}: ${title.slice(0, 100)}`,
+          fallbackType: "client_feedback",
+          fallbackTitle: `Nuevo reporte del cliente: ${title.slice(0, 80)}`,
+          fallbackDescription: description.slice(0, 200),
+          html: `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+            <div style="background:#0F172A;padding:20px 28px;border-radius:8px 8px 0 0">
+              <h1 style="color:#fff;font-size:18px;margin:0">${typeLabel} — Reporte del cliente</h1>
+            </div>
+            <div style="padding:28px;border:1px solid #e5e5e5;border-top:none;border-radius:0 0 8px 8px">
+              <p style="font-size:14px;margin:0 0 8px"><strong>${title}</strong></p>
+              <p style="font-size:13px;color:#666;margin:0 0 16px">Prioridad: ${priority}${reporterName ? ` · Por: ${reporterName}` : ""}</p>
+              <div style="background:#f8fafc;border-left:3px solid #2FA4A9;padding:12px 16px;border-radius:4px;font-size:14px;line-height:1.5;white-space:pre-wrap">${description.replace(/</g, "&lt;").slice(0, 1500)}</div>
+              ${attachmentUrls.length > 0 ? `<p style="font-size:13px;color:#666;margin:16px 0 8px"><strong>${attachmentUrls.length} adjunto${attachmentUrls.length > 1 ? "s" : ""}:</strong></p><ul style="margin:0 0 16px;padding-left:20px;font-size:13px">${attachmentUrls.slice(0, 5).map(u => `<li><a href="${u}" style="color:#2FA4A9">${u}</a></li>`).join("")}</ul>` : ""}
+              <div style="margin-top:20px">
+                <a href="${baseUrl}/admin/projects/${projectId}" style="display:inline-block;background:#2FA4A9;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Ver en CRM →</a>
+              </div>
+            </div>
+          </div>`,
+        });
+      }
+      res.json(row);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // Admin: listar reportes de un proyecto (ya cubierto por GET /api/portal/projects/:id/feedback con sesión admin,
+  // pero exponemos también ruta /api/admin/projects/:id/feedback para consistencia con otros endpoints admin)
+  app.get("/api/admin/projects/:id/feedback", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const rows = await db.select().from(projectFeedback)
+      .where(eq(projectFeedback.projectId, String(req.params.id)))
+      .orderBy(desc(projectFeedback.createdAt));
+    res.json(rows);
+  });
+
+  // Admin: actualizar reporte (status, priority, response, convert to task)
+  app.patch("/api/admin/projects/:id/feedback/:feedbackId", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const projectId = String(req.params.id);
+      const feedbackId = String(req.params.feedbackId);
+      const updates: Record<string, unknown> = { updatedAt: sql`now()` };
+      if (req.body?.status && ["open", "triaged", "in_progress", "resolved", "wont_fix"].includes(req.body.status)) {
+        updates.status = req.body.status;
+        if (req.body.status === "resolved" || req.body.status === "wont_fix") updates.resolvedAt = sql`now()`;
+      }
+      if (req.body?.priority && ["low", "normal", "high", "urgent"].includes(req.body.priority)) {
+        updates.priority = req.body.priority;
+      }
+      if (typeof req.body?.adminResponse === "string") {
+        updates.adminResponse = String(req.body.adminResponse).slice(0, 5000);
+      }
+
+      const [updated] = await db.update(projectFeedback)
+        .set(updates)
+        .where(and(eq(projectFeedback.id, feedbackId), eq(projectFeedback.projectId, projectId)))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Reporte no encontrado" });
+
+      // Convert to task: crea task vinculada y guarda referencia
+      if (req.body?.convertToTask === true && !updated.resolvedTaskId) {
+        // Necesita una phase — usar la primera fase activa, o crear una "Cambios solicitados"
+        let [phase] = await db.select().from(projectPhases)
+          .where(eq(projectPhases.projectId, projectId))
+          .orderBy(asc(projectPhases.orderIndex))
+          .limit(1);
+        if (!phase) {
+          [phase] = await db.insert(projectPhases).values({
+            projectId,
+            name: "Cambios solicitados",
+            status: "in_progress",
+            orderIndex: 99,
+          }).returning();
+        }
+        const [task] = await db.insert(projectTasks).values({
+          phaseId: phase.id,
+          projectId,
+          title: updated.title,
+          description: updated.description,
+          clientFacingTitle: updated.title,
+          status: "pending",
+          priority: updated.priority === "urgent" ? "high" : updated.priority,
+        }).returning();
+        await db.update(projectFeedback).set({ resolvedTaskId: task.id, status: "in_progress", updatedAt: sql`now()` })
+          .where(eq(projectFeedback.id, feedbackId));
+        return res.json({ ...updated, resolvedTaskId: task.id, status: "in_progress" });
+      }
+
+      res.json(updated);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
   });
 
   // ─────────────────────────────────────────────────────────────
@@ -7676,6 +7837,33 @@ ${urls}
     } catch (err: any) {
       log(`Error listing snapshots: ${err?.message}`);
       res.status(500).json({ error: "Error listando snapshots" });
+    }
+  });
+
+  // Memoria global del chat — listar / borrar hechos
+  app.get("/api/admin/chat-memory", requireAuth, async (_req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { chatGlobalMemory } = await import("@shared/schema");
+      const facts = await db.select().from(chatGlobalMemory)
+        .orderBy(desc(chatGlobalMemory.lastSeenAt))
+        .limit(200);
+      res.json(facts);
+    } catch (err: any) {
+      log(`Error listing chat memory: ${err?.message}`);
+      res.status(500).json({ error: "Error" });
+    }
+  });
+
+  app.delete("/api/admin/chat-memory/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { chatGlobalMemory } = await import("@shared/schema");
+      await db.delete(chatGlobalMemory).where(eq(chatGlobalMemory.id, req.params.id as string));
+      res.json({ success: true });
+    } catch (err: any) {
+      log(`Error deleting chat memory: ${err?.message}`);
+      res.status(500).json({ error: "Error" });
     }
   });
 
