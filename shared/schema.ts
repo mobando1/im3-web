@@ -132,9 +132,10 @@ export type EmailTemplate = typeof emailTemplates.$inferSelect;
 export type InsertEmailTemplate = typeof emailTemplates.$inferInsert;
 
 // Sent emails (tracking every email sent)
+// contactId is nullable: admin notifications (template_id="admin-notification") may not be tied to a contact
 export const sentEmails = pgTable("sent_emails", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  contactId: varchar("contact_id").notNull(),
+  contactId: varchar("contact_id"),
   templateId: varchar("template_id").notNull(),
   subject: text("subject"),
   body: text("body"),

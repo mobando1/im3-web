@@ -164,13 +164,11 @@ GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_WEBHOOK_SECRET
 
 # Stripe (opcional, aún no activo)
 STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_STARTER, STRIPE_PRICE_PRO, STRIPE_PRICE_TEAM
-
-# GHL webhook (opcional)
-GHL_WEBHOOK_URL
 ```
 
 ## Contexto Adicional
-- **Problema actual identificado (2026-04-14)**: `createCalendarEvent` falla silenciosamente en producción — 0 de 7 diagnósticos probados tienen Meet link ni Calendar event. El flujo de diagnóstico, emails, contact creation, deals, tasks y notificaciones funciona correctamente. Hipótesis: Google Calendar API no habilitada en el proyecto de Google Cloud o domain-wide delegation no autorizada para el scope de Calendar.
+- **Calendar/Meet (2026-05-04)**: el bug histórico de `createCalendarEvent` parece resuelto — el último diagnóstico (Abril 14) sí generó Meet link y Calendar event correctamente. Validar con un diagnóstico de prueba si surge duda.
+- **GHL/GoHighLevel removido (2026-05-04)**: ya no usamos GHL. Cualquier referencia residual en migraciones históricas (`migrations/meta/*`) o columna `diagnostics.sent_to_ghl` es legacy inerte. No reintroducir.
 - **Dev local en macOS**: `npm run dev` falla con `ENOTSUP` por `reusePort: true` en `server/index.ts:131`. Workaround: setear `PORT=3000` + eliminar `reusePort` temporalmente, o correr con Docker.
 - **El dashboard `/admin/agents` es la fuente de verdad operativa**: después de deployar Fase 1 del sistema de agentes, cualquier falla de cualquier agente queda visible ahí con `errorMessage` + `errorStack`.
 - **Otro producto del usuario**: Acta (`acta.im3systems.com`) — app separada de grabación de reuniones. No confundir con este proyecto.

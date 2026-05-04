@@ -141,6 +141,8 @@ export async function runMigrations() {
 
     // Sent emails extra columns
     await pool.query(`ALTER TABLE "sent_emails" ADD COLUMN IF NOT EXISTS "opened_at" timestamp;`).catch(() => {});
+    // Allow contactId to be null for admin notifications not tied to a specific contact
+    await pool.query(`ALTER TABLE "sent_emails" ALTER COLUMN "contact_id" DROP NOT NULL;`).catch(() => {});
 
     // Client projects tables
     await pool.query(`

@@ -11,7 +11,7 @@ import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive, uploadFileToDrive, createProjectFolder, readGoogleDriveContent, extractFolderIdFromUrl, findOrCreateClientFolder } from "./google-drive";
 import multer from "multer";
 import { createCalendarEvent, deleteCalendarEvent } from "./google-calendar";
-import { isEmailConfigured, sendEmail } from "./email-sender";
+import { isEmailConfigured, sendEmail, sendAdminNotification } from "./email-sender";
 import { generateEmailContent, buildMicroReminderEmail, build6hReminderEmail, buildFollowUpConfirmationEmail, buildNoShowEmail, generateDailyNewsDigest, generateContactInsight, generateWhatsAppMessage, generateNewsletterWelcome, generateMiniAudit, classifyWhatsAppIntent, generateWhatsAppAutoReply, buildWhatsAppNotificationEmail, buildProjectNotificationEmail, escapeHtml } from "./email-ai";
 import { parseFechaCita } from "./date-utils";
 import { requireAuth, hashPassword } from "./auth";
@@ -433,7 +433,7 @@ export async function registerRoutes(
         log(`Diagnóstico guardado en DB: ${inserted.id}`);
       } catch (err) {
         console.error("Error guardando en DB:", err);
-        // Continue — still respond success and try GHL
+        // Continue — still respond success
       }
     } else {
       console.log("Datos del diagnóstico (sin DB):", JSON.stringify(data, null, 2));
@@ -452,37 +452,6 @@ export async function registerRoutes(
         })
         .catch((err: unknown) => {
           log(`Error creando Google Drive: ${err}`);
-        });
-    }
-
-    // Send contact data to GHL webhook (non-blocking)
-    const GHL_WEBHOOK_URL = process.env.GHL_WEBHOOK_URL;
-    if (GHL_WEBHOOK_URL) {
-      fetch(GHL_WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          empresa: data.empresa,
-          participante: data.participante,
-          industria: getIndustriaLabel(data.industria) + (data.industria === "otro" && data.industriaOtro ? ` (${data.industriaOtro})` : ""),
-          industriaCode: data.industria,
-          empleados: data.empleados,
-          fechaCita: data.fechaCita,
-          horaCita: data.horaCita,
-          presupuesto: data.presupuesto,
-        }),
-      })
-        .then(() => {
-          log(`GHL webhook enviado: ${data.empresa}`);
-          if (db && insertedId) {
-            db.update(diagnostics)
-              .set({ sentToGhl: true })
-              .where(eq(diagnostics.id, insertedId))
-              .catch((err: unknown) => log(`Error updating GHL status: ${err}`));
-          }
-        })
-        .catch((err: unknown) => {
-          log(`Error webhook GHL: ${err}`);
         });
     }
 
@@ -552,12 +521,14 @@ export async function registerRoutes(
                 contactId: contact.id,
               });
 
-              const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
               const baseUrl = process.env.BASE_URL || "https://im3systems.com";
-              sendEmail(
-                adminEmail,
-                `🔥 Conversión: suscriptor de newsletter agendó cita — ${data.participante}`,
-                `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+              sendAdminNotification({
+                subject: `🔥 Conversión: suscriptor de newsletter agendó cita — ${data.participante}`,
+                contactId: contact.id,
+                fallbackType: "lead_converted",
+                fallbackTitle: "Conversión newsletter → diagnóstico",
+                fallbackDescription: `${data.participante} de ${data.empresa} (${data.email})`,
+                html: `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
                   <div style="background:#B45309;padding:20px 28px;border-radius:8px 8px 0 0">
                     <h1 style="color:#fff;font-size:18px;margin:0">🔥 Conversión Newsletter → Auditoría</h1>
                   </div>
@@ -574,8 +545,8 @@ export async function registerRoutes(
                       <a href="${baseUrl}/admin/contacts/${contact.id}" style="display:inline-block;background:#B45309;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Ver en CRM →</a>
                     </div>
                   </div>
-                </div>`
-              ).catch((err) => log(`Error sending newsletter conversion alert: ${err}`));
+                </div>`,
+              });
             }
           } else {
             // Create new contact
@@ -796,13 +767,15 @@ export async function registerRoutes(
               log(`Error programando emails: ${emailErr}`);
             }
 
-            // Send email notification to admin
-            const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
+            // Send email notification to admin (con tracking + fallback persistente)
             const baseUrl = process.env.BASE_URL || "https://im3systems.com";
-            sendEmail(
-              adminEmail,
-              `🔔 Nuevo lead: ${data.participante} de ${data.empresa}`,
-              `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+            sendAdminNotification({
+              subject: `🔔 Nuevo lead: ${data.participante} de ${data.empresa}`,
+              contactId: contact.id,
+              fallbackType: "new_lead",
+              fallbackTitle: "Nuevo lead — falló envío de email",
+              fallbackDescription: `${data.participante} de ${data.empresa} (${data.email})`,
+              html: `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
                 <div style="background:#0F172A;padding:20px 28px;border-radius:8px 8px 0 0">
                   <h1 style="color:#fff;font-size:18px;margin:0">Nuevo Lead en IM3 CRM</h1>
                 </div>
@@ -820,8 +793,8 @@ export async function registerRoutes(
                     <a href="${baseUrl}/admin/contacts/${contact.id}" style="display:inline-block;background:#3B82F6;color:#fff;padding:10px 20px;border-radius:6px;text-decoration:none;font-size:14px;font-weight:600">Ver en CRM →</a>
                   </div>
                 </div>
-              </div>`
-            ).catch((err) => log(`Error sending admin notification: ${err}`));
+              </div>`,
+            });
           }
 
           // Schedule WhatsApp messages (independent of email config)
@@ -973,8 +946,8 @@ export async function registerRoutes(
 
         log(`Email webhook: ${event.type} para ${messageId}`);
 
-        // Log activity for engagement events
-        if (updatedEmail) {
+        // Log activity for engagement events (skip admin notification rows)
+        if (updatedEmail && updatedEmail.contactId) {
           const eventTypeMap: Record<string, string> = { opened: "email_opened", clicked: "email_clicked", bounced: "email_bounced" };
           const eventDescMap: Record<string, string> = { opened: "abrió un email", clicked: "hizo click en un email", bounced: "email rebotó" };
           logActivity(updatedEmail.contactId, eventTypeMap[newStatus] || newStatus, eventDescMap[newStatus] || newStatus, { emailId: updatedEmail.id, subject: updatedEmail.subject });
@@ -989,8 +962,8 @@ export async function registerRoutes(
             }).catch(() => {});
           }
 
-          // Email admin for bounces/complaints
-          if (newStatus === "bounced") {
+          // Email admin for bounces/complaints (skip admin-notification rows)
+          if (newStatus === "bounced" && updatedEmail.contactId) {
             const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
             const eventLabel = event.type === "email.complained" ? "Complaint" : "Bounce";
             // Get contact email for the notification
@@ -1017,8 +990,8 @@ export async function registerRoutes(
           }
         }
 
-        // Recalculate lead score on engagement events
-        if (updatedEmail && (newStatus === "opened" || newStatus === "clicked")) {
+        // Recalculate lead score on engagement events (skip si es admin notification sin contacto)
+        if (updatedEmail && updatedEmail.contactId && (newStatus === "opened" || newStatus === "clicked")) {
           try {
             const [contact] = await db.select().from(contacts).where(eq(contacts.id, updatedEmail.contactId));
             if (contact) {
@@ -1438,12 +1411,14 @@ export async function registerRoutes(
           log(`Error sending newsletter welcome: ${err}`);
         });
 
-        // Notify admin about new subscriber (non-blocking)
-        const adminEmail = process.env.ADMIN_EMAIL || "info@im3systems.com";
-        sendEmail(
-          adminEmail,
-          `📬 Nueva suscripción newsletter: ${email}`,
-          `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
+        // Notify admin about new subscriber (con tracking + fallback persistente)
+        sendAdminNotification({
+          subject: `📬 Nueva suscripción newsletter: ${email}`,
+          contactId,
+          fallbackType: "newsletter_subscribed",
+          fallbackTitle: "Nueva suscripción newsletter — falló envío de email",
+          fallbackDescription: `${email} se suscribió al newsletter`,
+          html: `<div style="max-width:600px;margin:0 auto;font-family:sans-serif;color:#1a1a1a">
             <div style="background:#0F172A;padding:20px 28px;border-radius:8px 8px 0 0">
               <h1 style="color:#fff;font-size:18px;margin:0">Nueva Suscripción Newsletter</h1>
             </div>
@@ -1451,8 +1426,8 @@ export async function registerRoutes(
               <p style="font-size:14px;line-height:1.6;margin:0 0 16px"><strong>${email}</strong> se suscribió al newsletter de IM3 Systems.</p>
               <p style="font-size:13px;color:#666;margin:0">Se creó un contacto en el CRM automáticamente.</p>
             </div>
-          </div>`
-        ).catch((err) => log(`Error sending admin newsletter notification: ${err}`));
+          </div>`,
+        });
       }
 
       res.json({ success: true, alreadySubscribed, contactCreated: !!contactId });
@@ -1714,13 +1689,15 @@ export async function registerRoutes(
       const contactMap: Record<string, { nombre: string; id: string }> = {};
       for (const c of allContacts) contactMap[c.id] = { nombre: c.nombre, id: c.id };
 
-      const recentActivity = recentEmails.map(e => ({
-        type: e.status === "sent" ? "email_sent" : "email_opened",
-        contactName: contactMap[e.contactId]?.nombre || "Unknown",
-        contactId: e.contactId,
-        detail: templateMap[e.templateId] || "unknown",
-        timestamp: e.sentAt ? e.sentAt.toISOString() : "",
-      }));
+      const recentActivity = recentEmails
+        .filter(e => !!e.contactId)
+        .map(e => ({
+          type: e.status === "sent" ? "email_sent" : "email_opened",
+          contactName: contactMap[e.contactId!]?.nombre || "Unknown",
+          contactId: e.contactId!,
+          detail: templateMap[e.templateId] || "unknown",
+          timestamp: e.sentAt ? e.sentAt.toISOString() : "",
+        }));
 
       // Pending tasks count
       let pendingTasks = 0;
@@ -1836,10 +1813,11 @@ export async function registerRoutes(
     try {
       const allContacts = await db.select().from(contacts).orderBy(desc(contacts.createdAt));
 
-      // Get email counts for all contacts
+      // Get email counts for all contacts (skip rows sin contact, e.g. admin-notification)
       const allEmails = await db.select().from(sentEmails);
       const emailCounts: Record<string, { sent: number; opened: number }> = {};
       for (const e of allEmails) {
+        if (!e.contactId) continue;
         if (!emailCounts[e.contactId]) emailCounts[e.contactId] = { sent: 0, opened: 0 };
         if (e.status === "sent" || e.status === "opened" || e.status === "clicked") emailCounts[e.contactId].sent++;
         if (e.status === "opened" || e.status === "clicked") emailCounts[e.contactId].opened++;
@@ -1894,10 +1872,11 @@ export async function registerRoutes(
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
       const contactList = await db.select().from(contacts).where(whereClause).orderBy(desc(contacts.createdAt));
 
-      // Get email counts
+      // Get email counts (skip rows sin contact, e.g. admin-notification)
       const allEmails = await db.select().from(sentEmails);
       const emailCounts: Record<string, { sent: number; opened: number }> = {};
       for (const e of allEmails) {
+        if (!e.contactId) continue;
         if (!emailCounts[e.contactId]) emailCounts[e.contactId] = { sent: 0, opened: 0 };
         if (e.status === "sent" || e.status === "opened" || e.status === "clicked") emailCounts[e.contactId].sent++;
         if (e.status === "opened" || e.status === "clicked") emailCounts[e.contactId].opened++;
@@ -1993,6 +1972,7 @@ export async function registerRoutes(
           .where(sql`${sentEmails.contactId} IN (${sql.join(contactIds.map(id => sql`${id}`), sql`, `)})`);
 
         for (const e of emails) {
+          if (!e.contactId) continue;
           if (!emailCounts[e.contactId]) emailCounts[e.contactId] = { sent: 0, opened: 0 };
           if (e.status === "sent" || e.status === "opened" || e.status === "clicked") emailCounts[e.contactId].sent++;
           if (e.status === "opened" || e.status === "clicked") emailCounts[e.contactId].opened++;
@@ -2355,6 +2335,7 @@ export async function registerRoutes(
       const [template] = await db.select().from(emailTemplates).where(eq(emailTemplates.id, email.templateId));
       if (!template) return res.status(404).json({ error: "Template no encontrado" });
 
+      if (!email.contactId) return res.status(400).json({ error: "Este email no está vinculado a un contacto (probable admin notification)" });
       const [contact] = await db.select().from(contacts).where(eq(contacts.id, email.contactId));
       if (!contact) return res.status(404).json({ error: "Contacto no encontrado" });
 

@@ -32,7 +32,7 @@ Schema file: `shared/schema.ts`
 | Table | Purpose | Key Fields |
 |-------|---------|------------|
 | `users` | Admin auth | id, username, password (scrypt hash) |
-| `diagnostics` | Full diagnostic form (30+ fields) | id, fechaCita, horaCita, empresa, industria, participante, email, telefono, objetivos[], herramientas, nivelTech, presupuesto, meetLink, meetingStatus, googleDriveUrl, sentToGhl, createdAt |
+| `diagnostics` | Full diagnostic form (30+ fields) | id, fechaCita, horaCita, empresa, industria, participante, email, telefono, objetivos[], herramientas, nivelTech, presupuesto, meetLink, meetingStatus, googleDriveUrl, createdAt |
 | `contacts` | CRM contacts (normalized from diagnostics) | id, diagnosticId, email, nombre, empresa, telefono, status (lead/contacted/scheduled/converted), substatus, tags[], leadScore, optedOut, createdAt |
 
 ### Communication Tables
@@ -150,27 +150,24 @@ Form Submit
   ├─ 2. ASYNC → createDiagnosticInDrive() → Google Drive folder + sheet
   │         └─ updates diagnostics.googleDriveUrl
   │
-  ├─ 3. ASYNC → GHL webhook (if GHL_WEBHOOK_URL set)
-  │         └─ updates diagnostics.sentToGhl = true
-  │
-  ├─ 4. ASYNC → createCalendarEvent() → Google Calendar + Meet link
+  ├─ 3. ASYNC → createCalendarEvent() → Google Calendar + Meet link
   │         └─ updates diagnostics.meetLink
   │
-  ├─ 5. INSERT → contacts table (linked via diagnosticId)
+  ├─ 4. INSERT → contacts table (linked via diagnosticId)
   │
-  ├─ 6. calculateLeadScore() → updates contacts.leadScore
+  ├─ 5. calculateLeadScore() → updates contacts.leadScore
   │
-  ├─ 7. INSERT → 2 tasks (review diagnostic + post-meeting follow-up)
+  ├─ 6. INSERT → 2 tasks (review diagnostic + post-meeting follow-up)
   │
-  ├─ 8. INSERT → notification (type: "new_lead")
+  ├─ 7. INSERT → notification (type: "new_lead")
   │
-  ├─ 9. INSERT → 7 sent_emails records (with calculated scheduledFor times)
+  ├─ 8. INSERT → 7 sent_emails records (with calculated scheduledFor times)
   │
-  ├─ 10. INSERT → 4 whatsapp_messages records (with calculated scheduledFor times)
+  ├─ 9. INSERT → 4 whatsapp_messages records (with calculated scheduledFor times)
   │
-  ├─ 11. UPDATE → abandonedLeads.converted = true (if email existed)
+  ├─ 10. UPDATE → abandonedLeads.converted = true (if email existed)
   │
-  └─ 12. INSERT → activityLog entries for all actions
+  └─ 11. INSERT → activityLog entries for all actions
 ```
 
 ### Email Sequence Timing
@@ -275,7 +272,6 @@ SESSION_SECRET=<session encryption key>
 ADMIN_USERNAME=<CRM login>
 ADMIN_PASSWORD=<CRM password>
 BASE_URL=https://im3systems.com
-GHL_WEBHOOK_URL=<GoHighLevel webhook (optional)>
 ```
 
 ---

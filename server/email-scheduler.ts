@@ -45,6 +45,11 @@ export async function processEmailQueue() {
 
     for (const email of pendingEmails) {
       try {
+        // Admin notifications no tienen contacto — no deberían aparecer aquí, pero guard.
+        if (!email.contactId) {
+          await db.update(sentEmails).set({ status: "failed" }).where(eq(sentEmails.id, email.id));
+          continue;
+        }
         // Get contact
         const [contact] = await db
           .select()
@@ -542,9 +547,10 @@ export async function updateContactSubstatuses() {
     const allEmails = await db.select().from(sentEmails)
       .where(inArray(sentEmails.contactId, contactIds));
 
-    // Group emails by contactId in memory
+    // Group emails by contactId in memory (skip admin-notification rows sin contacto)
     const emailsByContact = new Map<string, (typeof allEmails)[number][]>();
     for (const email of allEmails) {
+      if (!email.contactId) continue;
       const existing = emailsByContact.get(email.contactId) || [];
       existing.push(email);
       emailsByContact.set(email.contactId, existing);
