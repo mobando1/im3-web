@@ -13,6 +13,7 @@ import {
 import type { ZodSchema } from "zod";
 import { VOICE_GUIDE, COST_REFERENCE, HARDWARE_CATALOG, CASE_STUDIES, gatherContactContext } from "./proposal-ai";
 import { runAllValidators, formatIssuesAsText } from "./proposal-validators";
+import { validateSemanticChange } from "./proposal-semantic-validator";
 
 const SECTION_SCHEMAS: Record<string, ZodSchema> = {
   meta: proposalMetaSchema,
@@ -282,7 +283,7 @@ async function persistAttachmentsToDrive(
 const TOOLS: Anthropic.Tool[] = [
   {
     name: "update_section",
-    description: "Reescribe o modifica una sección de la propuesta con nuevo contenido. Úsalo cuando el usuario pida cambiar texto, ajustar tono, agregar detalle, o reescribir una sección entera.",
+    description: "Reescribe o modifica una sección de la propuesta con nuevo contenido. Para cambios pequeños/aislados (1-2 secciones), usa mode='apply' directamente. Para cascadas grandes (3+ secciones afectadas), PRIMERO llama todas con mode='preview' para mostrar al usuario qué vas a cambiar, y solo después de confirmación llama con mode='apply'.",
     input_schema: {
       type: "object",
       properties: {
@@ -297,6 +298,11 @@ const TOOLS: Anthropic.Tool[] = [
         changeSummary: {
           type: "string",
           description: "Resumen breve (1 oración) de QUÉ cambiaste, en español. Para mostrar al usuario.",
+        },
+        mode: {
+          type: "string",
+          enum: ["preview", "apply"],
+          description: "preview = solo simular y devolver diff (no guarda). apply = guardar de verdad. Default: apply.",
         },
       },
       required: ["sectionKey", "newContent", "changeSummary"],
@@ -482,15 +488,19 @@ async function runProposalChatInner(params: {
 
   const attachments = params.attachments || [];
 
+  // Cargar info del contacto una sola vez (para attachments + validador semántico)
+  const [contactRow] = await db.select({ nombre: contacts.nombre, empresa: contacts.empresa })
+    .from(contacts).where(eq(contacts.id, proposal.contactId)).limit(1);
+  const contactNameForValidator = contactRow?.nombre || "(desconocido)";
+  const contactEmpresaForValidator = contactRow?.empresa || "(desconocida)";
+
   // Subir attachments a Drive (subcarpeta "_chat-attachments" del cliente).
   // Esto persiste los archivos para poder re-leerlos en turnos siguientes,
   // permitiendo a Claude recordar imágenes/PDFs que el usuario subió antes.
   let storedAttachments: StoredAttachment[] = [];
   if (attachments.length > 0) {
-    const [contact] = await db.select({ empresa: contacts.empresa })
-      .from(contacts).where(eq(contacts.id, proposal.contactId)).limit(1);
-    if (contact?.empresa) {
-      storedAttachments = await persistAttachmentsToDrive(attachments, contact.empresa);
+    if (contactRow?.empresa) {
+      storedAttachments = await persistAttachmentsToDrive(attachments, contactRow.empresa);
     } else {
       storedAttachments = attachments.map(a => ({ name: a.name, mime: a.mime, size: a.size }));
     }
@@ -752,6 +762,7 @@ INSTRUCCIONES:
       const sectionKey = toolInput.sectionKey as string;
       const newContent = toolInput.newContent as Record<string, unknown>;
       const changeSummary = (toolInput.changeSummary as string) || "Sección actualizada";
+      const mode = (toolInput.mode as "preview" | "apply" | undefined) ?? "apply";
       const schema = SECTION_SCHEMAS[sectionKey];
       if (!schema) {
         return `ERROR: sectionKey "${sectionKey}" no es válido. Valores posibles: ${Object.keys(SECTION_SCHEMAS).join(", ")}`;
@@ -762,6 +773,46 @@ INSTRUCCIONES:
         log(`[proposal-chat] Validation failed for "${sectionKey}": ${errors}`);
         return `ERROR DE VALIDACIÓN — la sección "${sectionKey}" NO se guardó porque el formato no coincide con el schema. Revisa el schema en mi system prompt y reenvía con la estructura correcta.\n\nErrores:\n${errors}\n\nIMPORTANTE: Si el campo "features" debe ser array de strings, NO uses array de objetos. Si necesitas listar agentes IA, ponlos como strings descriptivos en features.`;
       }
+      // Modo preview: NO guarda, solo devuelve diff a Claude para que lo presente al usuario
+      if (mode === "preview") {
+        const before = currentSections[sectionKey];
+        const beforeStr = before ? JSON.stringify(before, null, 2).substring(0, 3000) : "(vacío)";
+        const afterStr = JSON.stringify(parsed.data, null, 2).substring(0, 3000);
+        toolCalls.push({ tool: "update_section", section: sectionKey, summary: `[PREVIEW] ${changeSummary}` });
+        return `MODO PREVIEW — el cambio NO fue guardado.
+
+Sección: ${sectionKey}
+Resumen: ${changeSummary}
+
+ANTES:
+${beforeStr}
+
+DESPUÉS (propuesto):
+${afterStr}
+
+Presenta este resumen al usuario y espera confirmación. Cuando confirme, vuelve a llamar update_section con mode="apply" para guardar de verdad.`;
+      }
+
+      // Validación semántica con Haiku (rápido + barato) — detecta inconsistencias
+      // factuales (nombre cliente equivocado, fechas inconsistentes, datos inventados)
+      try {
+        const semanticIssues = await validateSemanticChange({
+          sectionKey,
+          newContent: parsed.data as Record<string, unknown>,
+          contactName: contactNameForValidator,
+          contactCompany: contactEmpresaForValidator,
+          clientContextSummary: clientContext.substring(0, 5000),
+        });
+        const errors = semanticIssues.filter(i => i.severity === "error");
+        if (errors.length > 0) {
+          const errMsg = errors.map(e => `- ${e.field || "(general)"}: ${e.message}`).join("\n");
+          log(`[proposal-chat] Semantic validation rejected "${sectionKey}": ${errMsg}`);
+          return `RECHAZADO POR VALIDACIÓN SEMÁNTICA — el contenido tiene inconsistencias factuales:\n${errMsg}\n\nRevisa el contexto del cliente y reenvía con datos correctos.`;
+        }
+      } catch (semErr) {
+        log(`[proposal-chat] semantic validator failed (continuing): ${(semErr as Error).message}`);
+      }
+
       // Snapshot ANTES del cambio para permitir undo desde la UI del chat
       try {
         await dbRef.insert(proposalSnapshots).values({
