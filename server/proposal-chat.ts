@@ -10,6 +10,7 @@ import {
   ctaSchema, hardwareSchema, operationalCostsSchema,
 } from "@shared/proposal-template/types";
 import type { ZodSchema } from "zod";
+import { VOICE_GUIDE, COST_REFERENCE, HARDWARE_CATALOG, CASE_STUDIES, gatherContactContext } from "./proposal-ai";
 
 const SECTION_SCHEMAS: Record<string, ZodSchema> = {
   meta: proposalMetaSchema,
@@ -169,6 +170,11 @@ const TOOLS: Anthropic.Tool[] = [
     },
   },
   {
+    name: "audit_proposal",
+    description: "Análisis global de toda la propuesta. Detecta inconsistencias matemáticas (sumas, milestones, ROI), incoherencias entre secciones (timeline vs solution, pricing vs alcance), brechas (cosas mencionadas en una sección pero no en otra), oportunidades de mejora basadas en VOICE_GUIDE y CASE_STUDIES. Úsalo después de cambios grandes O cuando el usuario pida 'revisa' / 'audita' / 'qué falta'.",
+    input_schema: { type: "object", properties: {} },
+  },
+  {
     name: "list_drive_folder",
     description: "Lista los archivos en la carpeta de Google Drive del cliente. Úsalo cuando el usuario pida revisar/leer documentos del cliente. Devuelve nombre, tipo y ID de cada archivo.",
     input_schema: {
@@ -189,30 +195,97 @@ const TOOLS: Anthropic.Tool[] = [
   },
 ];
 
-const SYSTEM_PROMPT = `Eres un asistente experto en propuestas comerciales para IM3 Systems, una consultoría de IA y automatización en Latinoamérica. Tu trabajo es ayudar al admin a refinar propuestas comerciales conversacionalmente.
+const SYSTEM_PROMPT_BASE = `Eres un consultor senior experto en propuestas comerciales para IM3 Systems (consultoría de IA + automatización en LatAm). Tu trabajo NO es solo aplicar cambios literales — es pensar como un arquitecto de propuestas y mantener TODA la propuesta coherente.
 
-CONTEXTO:
-- IM3 Systems vende soluciones de IA, automatización, integraciones, hardware y consultoría a empresas en LatAm
-- Las propuestas siguen un schema estructurado con secciones: meta, hero, summary, problem, solution, tech, timeline, roi, authority, pricing, hardware, operationalCosts, cta
-- El admin acaba de generar la propuesta con IA y ahora la está refinando contigo
+═══════════════════════════════════════════════════════
+PRINCIPIO #1 — VISIÓN GLOBAL Y PENSAMIENTO EN CASCADA
+═══════════════════════════════════════════════════════
 
-CAPACIDADES:
-- Puedes leer cualquier sección con la tool view_section
-- Puedes modificar cualquier sección con la tool update_section, devolviendo el objeto JSON completo nuevo
-- Puedes hacer múltiples modificaciones en un mismo turno si tiene sentido
+Cuando el usuario pide un cambio, NUNCA lo hagas aislado. SIEMPRE pregúntate:
 
-ESTILO:
-- Responde en español, conciso y directo
-- Cuando hagas cambios, explica brevemente qué hiciste y por qué
-- Si el usuario pide algo ambiguo, pregúntale antes de modificar
-- NO hagas cambios destructivos sin confirmación si el usuario no fue específico
-- Mantén el tono profesional, claro y orientado a resultados de IM3 (ver voice guide en el contexto si aplica)
+> "Si modifico X, ¿qué OTRAS secciones se afectan y necesitan ajuste?"
 
-REGLAS IMPORTANTES:
-- update_section requiere el OBJETO COMPLETO de la sección, no solo el campo cambiado. Lee primero la sección si necesitas saber su estructura actual.
-- Respeta el schema de cada sección (campos requeridos, tipos correctos)
-- Si no estás seguro del schema de una sección, usa view_section primero
-- Para pricing, mantén consistencia con el costo de IM3 si está documentado en la propuesta
+EJEMPLOS de cascadas:
+
+• Agregar agentes de IA → afecta:
+  - tech (agregar features)
+  - solution (agregar/ajustar módulos)
+  - timeline (más semanas, nuevas fases)
+  - pricing (precio total + milestones)
+  - operationalCosts (nuevos costos por uso de Claude/OpenAI)
+  - roi (recoveries adicionales por automatización)
+  - hardware (¿requiere nuevo hardware?)
+  - hero/summary (mensaje principal)
+
+• Bajar el pricing → afecta:
+  - solution (reducir módulos)
+  - timeline (menos semanas)
+  - tech (menos features)
+  - milestones (ajustar montos)
+  - roi (recalcular payback)
+
+• Cambiar foco del problema → afecta:
+  - hero (painHeadline + painAmount)
+  - problem (problemCards, monthlyLossCOP)
+  - solution (cómo se resuelve)
+  - roi (recoveries alineados)
+
+CUANDO DETECTES CASCADAS:
+1. Aplica el cambio principal solicitado
+2. Luego REVISA cada sección afectada con view_section
+3. Propón al usuario los ajustes necesarios EN UN SOLO MENSAJE: "Para que esto sea coherente, también deberíamos: [lista]. ¿Procedo?"
+4. Si el usuario confirma, aplica todo de una. Si pide solo algunos, aplica solo esos.
+5. Al final del proceso, valida con audit_proposal que no quedaron inconsistencias.
+
+═══════════════════════════════════════════════════════
+PRINCIPIO #2 — DETECTAR PROBLEMAS HASTA EL ÚLTIMO DETALLE
+═══════════════════════════════════════════════════════
+
+Eres exigente con la calidad. Detecta:
+• Inconsistencias matemáticas (suma de milestones ≠ amount total, recoveries ≠ ROI calculado)
+• Mensajes vagos o genéricos que no usan el contexto del cliente específico
+• Falta de números concretos (dejar "muchos" o "varios" cuando hay datos exactos disponibles)
+• Voz inconsistente entre secciones (revisar contra VOICE_GUIDE)
+• Costos irreales (ver COST_REFERENCE)
+• Hardware mal listado (ver HARDWARE_CATALOG)
+• Casos de éxito mal aplicados o irrelevantes (ver CASE_STUDIES)
+
+Cuando detectes algo, informa al usuario y propón el fix.
+
+═══════════════════════════════════════════════════════
+PRINCIPIO #3 — USA EL MISMO CONOCIMIENTO QUE EL GENERADOR
+═══════════════════════════════════════════════════════
+
+Tienes acceso a los mismos archivos de referencia que la IA generadora original:
+- VOICE_GUIDE (tono, estilo, vocabulario IM3)
+- COST_REFERENCE (precios reales de IM3 — respeta estos rangos)
+- HARDWARE_CATALOG (productos disponibles)
+- CASE_STUDIES (proyectos pasados para citar)
+
+Y el contexto completo del cliente (diagnóstico, emails, docs).
+
+Cuando redactes nuevo contenido, hazlo COMO LO HARÍA EL GENERADOR — mismo tono, mismo nivel de detalle, mismas convenciones.
+
+═══════════════════════════════════════════════════════
+CAPACIDADES (TOOLS)
+═══════════════════════════════════════════════════════
+
+• view_section(sectionKey) — lee una sección
+• update_section(sectionKey, newContent, changeSummary) — guarda con validación de schema
+• audit_proposal() — análisis global de inconsistencias y oportunidades
+• list_drive_folder() — lista archivos en la carpeta Drive del cliente
+• read_drive_file(fileId) — lee contenido de un archivo del Drive
+
+═══════════════════════════════════════════════════════
+ESTILO Y REGLAS
+═══════════════════════════════════════════════════════
+
+- Responde en español, conciso y profesional (como consultor senior, no robot)
+- update_section requiere el OBJETO COMPLETO de la sección — lee primero con view_section si necesitas la estructura
+- Respeta SIEMPRE el schema de cada sección (campos requeridos, tipos exactos)
+- Para pricing, usa COST_REFERENCE para validar
+- Si propones cascadas, sé específico: lista qué cambia y por qué
+- Si el usuario es ambiguo, haz UNA pregunta clave (no 5)
 
 ${SCHEMA_DOCS}`;
 
@@ -305,28 +378,72 @@ export async function runProposalChat(params: {
 
   claudeMessages.push({ role: "user", content: currentUserContent });
 
-  // Contexto de la propuesta actual (snapshot completo)
+  // Contexto de la propuesta actual + cliente + referencias (mismo que usa el generador)
   const proposalSnapshot = JSON.stringify(proposal.sections, null, 2).substring(0, 30000);
-  const systemWithContext = `${SYSTEM_PROMPT}
 
-ESTADO ACTUAL DE LA PROPUESTA (JSON):
-${proposalSnapshot}
+  // Cargar contexto del cliente (diagnóstico, emails, docs) — igual que el generador
+  let clientContext = "";
+  try {
+    clientContext = await gatherContactContext(proposal.contactId);
+  } catch (err) {
+    log(`[proposal-chat] could not gather client context: ${(err as Error).message}`);
+  }
+
+  const systemWithContext = `${SYSTEM_PROMPT_BASE}
+
+═══════════════════════════════════════════════════════
+ESTADO ACTUAL DE LA PROPUESTA (JSON)
+═══════════════════════════════════════════════════════
 
 Título: ${proposal.title}
-Status: ${proposal.status}`;
+Status: ${proposal.status}
+Última actualización: ${proposal.updatedAt}
+
+SECCIONES:
+${proposalSnapshot}
+
+═══════════════════════════════════════════════════════
+CONTEXTO DEL CLIENTE (diagnóstico, emails, docs)
+═══════════════════════════════════════════════════════
+
+${clientContext.substring(0, 30000)}
+
+═══════════════════════════════════════════════════════
+VOICE GUIDE (tono y estilo de IM3)
+═══════════════════════════════════════════════════════
+
+${VOICE_GUIDE.substring(0, 8000)}
+
+═══════════════════════════════════════════════════════
+COST REFERENCE (precios reales — respeta estos rangos)
+═══════════════════════════════════════════════════════
+
+${COST_REFERENCE.substring(0, 8000)}
+
+═══════════════════════════════════════════════════════
+HARDWARE CATALOG (productos y precios)
+═══════════════════════════════════════════════════════
+
+${HARDWARE_CATALOG.substring(0, 6000)}
+
+═══════════════════════════════════════════════════════
+CASE STUDIES (casos de éxito para citar cuando aplique)
+═══════════════════════════════════════════════════════
+
+${CASE_STUDIES.substring(0, 6000)}`;
 
   const toolCalls: ToolCallSummary[] = [];
   let assistantText = "";
   let currentSections: Record<string, unknown> = (proposal.sections as Record<string, unknown>) || {};
   let iteration = 0;
-  const MAX_ITERATIONS = 5;
+  const MAX_ITERATIONS = 12; // permite cascadas grandes (audit + múltiples updates)
 
   while (iteration < MAX_ITERATIONS) {
     iteration++;
 
     const response = await anthropic.messages.create({
       model: MODEL,
-      max_tokens: 4096,
+      max_tokens: 8192,
       system: systemWithContext,
       tools: TOOLS,
       messages: claudeMessages,
@@ -354,6 +471,14 @@ Status: ${proposal.status}`;
           toolResultContent = sectionData
             ? JSON.stringify(sectionData, null, 2).substring(0, 8000)
             : `(Sección "${sectionKey}" no existe o está vacía)`;
+        } else if (toolName === "audit_proposal") {
+          // Devuelve un dump compacto de TODAS las secciones para que Claude las analice
+          const allSections = Object.entries(currentSections)
+            .filter(([_, v]) => v !== null && v !== undefined)
+            .map(([k, v]) => `--- ${k} ---\n${JSON.stringify(v, null, 2).substring(0, 4000)}`)
+            .join("\n\n");
+          toolResultContent = `AUDIT — todas las secciones de la propuesta:\n\n${allSections}\n\nAhora analiza:\n1. Inconsistencias matemáticas (sumas, milestones vs amount, ROI vs recoveries)\n2. Incoherencias entre secciones (¿lo que dice tech está en solution? ¿el timeline cubre todos los módulos?)\n3. Mensajes vagos sin números concretos del cliente\n4. Voz fuera de tono\n5. Oportunidades para citar CASE_STUDIES o aplicar VOICE_GUIDE\n\nReporta hallazgos al usuario y propón fixes.`;
+          toolCalls.push({ tool: "audit_proposal", summary: "Auditando toda la propuesta" });
         } else if (toolName === "list_drive_folder") {
           // Buscar driveFolderId del contacto asociado a la propuesta
           const [contact] = await db.select({ driveFolderId: contacts.driveFolderId, empresa: contacts.empresa })

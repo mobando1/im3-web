@@ -9,11 +9,12 @@ import { proposalDataSchema, type ProposalData, type ProposalSectionKey, type Pr
 import { readFileSync } from "fs";
 import { resolve } from "path";
 
-// Load voice guide, cost reference, hardware catalog and case studies once at module load
-let VOICE_GUIDE = "";
-let COST_REFERENCE = "";
-let HARDWARE_CATALOG = "";
-let CASE_STUDIES = "";
+// Load voice guide, cost reference, hardware catalog and case studies once at module load.
+// Exportados para que proposal-chat.ts use los mismos referentes que el generador.
+export let VOICE_GUIDE = "";
+export let COST_REFERENCE = "";
+export let HARDWARE_CATALOG = "";
+export let CASE_STUDIES = "";
 try {
   VOICE_GUIDE = readFileSync(resolve(process.cwd(), "shared/proposal-voice-guide.md"), "utf-8");
 } catch (err) {
@@ -46,7 +47,7 @@ function getClient(): Anthropic | null {
 /**
  * Gather ALL available context for a contact to feed to the proposal AI.
  */
-async function gatherContactContext(contactId: string): Promise<string> {
+export async function gatherContactContext(contactId: string): Promise<string> {
   if (!db) return "";
 
   const parts: string[] = [];
