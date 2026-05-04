@@ -775,3 +775,60 @@ export async function findOrCreateClientFolder(empresa: string): Promise<string>
   log(`[Drive] Carpeta nueva creada: "${empresa}" → ${folder.data.id}`);
   return folder.data.id!;
 }
+
+/**
+ * Lista todos los archivos dentro de una carpeta de Drive (incluye subcarpetas, recursivo).
+ * Útil para que la generación de propuestas vea archivos puestos directamente en la carpeta
+ * del cliente (no solo los subidos vía CRM).
+ */
+export async function listFolderFilesRecursive(
+  folderId: string,
+  options: { maxFiles?: number; skipNames?: string[] } = {}
+): Promise<Array<{ id: string; name: string; mimeType: string; webViewLink: string; modifiedTime: string }>> {
+  const auth = getAuth();
+  if (!auth) return [];
+
+  const drive = google.drive({ version: "v3", auth });
+  const maxFiles = options.maxFiles ?? 50;
+  const skipNames = options.skipNames ?? [];
+
+  const allFiles: Array<{ id: string; name: string; mimeType: string; webViewLink: string; modifiedTime: string }> = [];
+  const foldersToScan: string[] = [folderId];
+  const scannedFolders = new Set<string>();
+
+  while (foldersToScan.length > 0 && allFiles.length < maxFiles) {
+    const currentFolder = foldersToScan.shift()!;
+    if (scannedFolders.has(currentFolder)) continue;
+    scannedFolders.add(currentFolder);
+
+    try {
+      const res = await drive.files.list({
+        q: `'${currentFolder}' in parents and trashed=false`,
+        fields: "files(id, name, mimeType, webViewLink, modifiedTime)",
+        pageSize: 100,
+      });
+
+      for (const f of res.data.files || []) {
+        if (!f.id || !f.name) continue;
+        if (skipNames.includes(f.name)) continue;
+
+        if (f.mimeType === "application/vnd.google-apps.folder") {
+          foldersToScan.push(f.id);
+        } else {
+          allFiles.push({
+            id: f.id,
+            name: f.name,
+            mimeType: f.mimeType || "",
+            webViewLink: f.webViewLink || "",
+            modifiedTime: f.modifiedTime || "",
+          });
+          if (allFiles.length >= maxFiles) break;
+        }
+      }
+    } catch (err) {
+      log(`[Drive] Error listing folder ${currentFolder}: ${(err as Error).message}`);
+    }
+  }
+
+  return allFiles;
+}
