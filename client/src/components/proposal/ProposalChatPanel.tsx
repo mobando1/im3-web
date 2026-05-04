@@ -66,8 +66,6 @@ export function ProposalChatPanel({ proposalId, open, onClose }: Props) {
   const [input, setInput] = useState("");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [streaming, setStreaming] = useState(false);
-  const [streamingText, setStreamingText] = useState("");
-  const [streamingTools, setStreamingTools] = useState<ToolCall[]>([]);
   const queryClient = useQueryClient();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -84,92 +82,29 @@ export function ProposalChatPanel({ proposalId, open, onClose }: Props) {
       formData.append("message", message);
       for (const f of files) formData.append("files", f);
 
-      const res = await fetch(`/api/admin/proposals/${proposalId}/chat/stream`, {
+      // Usamos el endpoint NO-streaming. El streaming SSE tenía problemas
+      // de buffering con el proxy en producción. La invalidación de queries
+      // hace que el chat refresque automáticamente al recibir la respuesta.
+      const res = await fetch(`/api/admin/proposals/${proposalId}/chat`, {
         method: "POST",
         body: formData,
         credentials: "include",
       });
-      if (!res.ok || !res.body) {
+      if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "Error en chat");
       }
-
-      // Lectura SSE con timeout — si el proxy buffea y nunca llega "done",
-      // a los 90s sin eventos bailamos out: invalidamos queries (así el user
-      // ve la respuesta que sí se guardó server-side) y resolvemos limpio.
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let buffer = "";
-      const STALL_TIMEOUT_MS = 90_000;
-
-      const processBuffer = () => {
-        const lines = buffer.split("\n\n");
-        buffer = lines.pop() || "";
-        for (const line of lines) {
-          if (!line.startsWith("data: ")) continue;
-          const data = line.slice(6).trim();
-          if (!data) continue;
-          try {
-            const event = JSON.parse(data);
-            if (event.type === "text_delta") {
-              setStreamingText(prev => prev + event.text);
-            } else if (event.type === "tool_call") {
-              setStreamingTools(prev => [...prev, { tool: event.toolName, section: event.section, summary: event.summary }]);
-            } else if (event.type === "error") {
-              throw new Error(event.error);
-            } else if (event.type === "done") {
-              return { done: true, payload: { assistantMessage: event.assistantMessage, toolCalls: event.toolCalls } };
-            }
-          } catch (e: any) {
-            if (e?.message && /^Error/.test(e.message)) throw e;
-            // ignorar parse errors
-          }
-        }
-        return { done: false };
-      };
-
-      while (true) {
-        const readPromise = reader.read();
-        const timeoutPromise = new Promise<{ value: undefined; done: true; timedOut: true }>(resolve =>
-          setTimeout(() => resolve({ value: undefined, done: true, timedOut: true }), STALL_TIMEOUT_MS)
-        );
-        const result = await Promise.race([readPromise, timeoutPromise]) as { value?: Uint8Array; done: boolean; timedOut?: boolean };
-
-        if (result.timedOut) {
-          // Stream colgado — el server probablemente sí terminó. Cancela la lectura.
-          reader.cancel().catch(() => {});
-          break;
-        }
-        if (result.done) break;
-        if (!result.value) continue;
-        buffer += decoder.decode(result.value, { stream: true });
-        const r = processBuffer();
-        if (r.done && r.payload) return r.payload;
-      }
-
-      // Procesar lo que pueda quedar en buffer (por si "done" llegó sin \n\n final)
-      if (buffer.trim()) {
-        buffer += "\n\n";
-        const r = processBuffer();
-        if (r.done && r.payload) return r.payload;
-      }
-      // Si llegamos aquí: stream terminó sin "done" claro. Confiar en invalidación.
-      return { assistantMessage: "", toolCalls: [] };
+      return res.json() as Promise<{ assistantMessage: string; toolCalls: Array<{ tool: string; section?: string; summary: string }> }>;
     },
-    onMutate: () => {
-      setStreaming(true);
-      setStreamingText("");
-      setStreamingTools([]);
-    },
-    onSettled: () => {
-      setStreaming(false);
-      setStreamingText("");
-      setStreamingTools([]);
-    },
+    onMutate: () => setStreaming(true),
+    onSettled: () => setStreaming(false),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/proposals/${proposalId}/chat`] });
       queryClient.invalidateQueries({ queryKey: [`/api/admin/proposals/${proposalId}`] });
       queryClient.invalidateQueries({ queryKey: [`/api/admin/proposals/${proposalId}/snapshots`] });
+    },
+    onError: (err: Error) => {
+      alert(`Error en chat: ${err.message}`);
     },
   });
 
@@ -446,28 +381,9 @@ export function ProposalChatPanel({ proposalId, open, onClose }: Props) {
           )}
           {streaming && (
             <div className="flex justify-start">
-              <div className="max-w-[85%] bg-white border border-gray-200 rounded-2xl px-4 py-2.5">
-                {streamingText ? (
-                  <p className="text-sm whitespace-pre-wrap leading-relaxed text-gray-800">{streamingText}<span className="inline-block w-1.5 h-3.5 bg-purple-400 ml-0.5 animate-pulse" /></p>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-500" />
-                    <span className="text-xs text-gray-500">Pensando...</span>
-                  </div>
-                )}
-                {streamingTools.length > 0 && (
-                  <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
-                    {streamingTools.map((tc, i) => (
-                      <div key={i} className="flex items-start gap-1.5 text-[11px] text-emerald-700 bg-emerald-50 rounded px-2 py-1">
-                        <Check className="w-3 h-3 mt-0.5 shrink-0" />
-                        <div>
-                          {tc.section && <span className="font-medium">{SECTION_LABELS[tc.section] || tc.section}: </span>}
-                          <span>{tc.summary}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
+              <div className="bg-white border border-gray-200 rounded-2xl px-4 py-2.5 flex items-center gap-2">
+                <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-500" />
+                <span className="text-xs text-gray-500">Pensando... (puede tardar 30-60s en cascadas grandes)</span>
               </div>
             </div>
           )}
