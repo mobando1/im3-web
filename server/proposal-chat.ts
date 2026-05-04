@@ -4,6 +4,109 @@ import { proposals, proposalChatMessages, contacts } from "@shared/schema";
 import { eq, asc } from "drizzle-orm";
 import { log } from "./index";
 import { listFolderFilesRecursive, readGoogleDriveContent } from "./google-drive";
+import {
+  proposalMetaSchema, heroSchema, summarySchema, problemSchema, solutionSchema,
+  techSchema, timelineSchema, roiSchema, authoritySchema, pricingSchema,
+  ctaSchema, hardwareSchema, operationalCostsSchema,
+} from "@shared/proposal-template/types";
+import type { ZodSchema } from "zod";
+
+const SECTION_SCHEMAS: Record<string, ZodSchema> = {
+  meta: proposalMetaSchema,
+  hero: heroSchema,
+  summary: summarySchema,
+  problem: problemSchema,
+  solution: solutionSchema,
+  tech: techSchema,
+  timeline: timelineSchema,
+  roi: roiSchema,
+  authority: authoritySchema,
+  pricing: pricingSchema,
+  cta: ctaSchema,
+  hardware: hardwareSchema,
+  operationalCosts: operationalCostsSchema,
+};
+
+const SCHEMA_DOCS = `
+SCHEMAS DE CADA SECCIÓN — RESPETA ESTAS ESTRUCTURAS EXACTAS al usar update_section:
+
+meta: { clientName: string, contactName: string, proposalDate: string, validUntil: string, industry: string }
+
+hero: { painHeadline: string, painAmount: string, subtitle: string, diagnosisRef: string }
+
+summary: { commitmentQuote?: string, paragraphs: string[] (≥1), stats?: [{label, value}] }
+
+problem: {
+  intro: string,
+  monthlyLossCOP?: number,
+  counterDescription?: string,
+  calculationBreakdown?: string,
+  problemCards: [{icon, title, description}] (≥1)
+}
+
+solution: {
+  heading: string,
+  intro: string,
+  modules: [{number, title, description, solves}] (≥1)
+}
+
+tech: {
+  heading: string,
+  intro: string,
+  features: string[] (≥1)  ← ARRAY DE STRINGS SIMPLES, NO OBJETOS
+  optionalFeatures?: string[],
+  stack: string
+}
+⚠️ Si el usuario pide listar "agentes IA", "13 agentes", etc., debes hacerlo como
+strings descriptivos en features, ej: "Agente de Nómina Automática — calcula horas extras y aportes con un click".
+NO inventes campos como "agents:[{...}]" — el renderer no los muestra.
+
+timeline: { heading: string, phases: [{number, title, durationWeeks, items: string[], outcome?: string}] (≥1) }
+
+roi: {
+  heading: string,
+  recoveries: [{amount, currency, label}] (≥1),
+  comparison: { withoutLabel, withoutAmount, withoutWeight (0-100), investmentLabel, investmentAmount, investmentWeight (0-100), caption },
+  heroTitle: string, heroDescription: string, roiPercent: string, paybackMonths: string
+}
+
+authority: {
+  heading: string,
+  intro: string,
+  stats: [{num, label}] (≥1),
+  differentiators: [{icon, title, description}] (≥1)
+}
+
+pricing: {
+  label: string, amount: string, amountPrefix: string, amountSuffix: string,
+  priceFootnote: string, scarcityMessage: string,
+  milestones: [{step (int), name, desc, amount}] (≥1),
+  includes: string[] (≥1),
+  optionalIncludes?: string[]
+}
+
+cta: {
+  heading: string, painHighlight: string, description: string,
+  acceptLabel: string, fallbackCtaLabel: string, deadlineMessage: string,
+  guarantees: string[]
+}
+
+hardware: {
+  heading: string, intro: string,
+  items: [{name, description, quantity (int), unitPriceUSD, totalPriceUSD, notes?, paidBy: "cliente-compra"|"im3-incluye"|"im3-asesora"}] (≥1),
+  subtotalUSD: string, recommendationNote?: string, disclaimer: string
+}
+
+operationalCosts: {
+  heading: string|null, intro: string|null,
+  groups?: [{name, billingModel: "fixed"|"passthrough"|"passthrough-with-cap"|"client-direct", description?, monthlyFee?, markup?, categories: [{name, items: [{service, cost, note?}]}]}],
+  monthlyRangeLow: string|null, monthlyRangeHigh: string|null, annualEstimate: string|null,
+  managedServicesUpsell?: string, disclaimer: string
+}
+
+REGLA DE ORO: si el usuario pide listar muchos elementos (agentes, módulos, etc.), revisa
+QUÉ sección está pidiendo. Si es tech → features (strings). Si es solution → modules (objetos).
+Si es timeline → phases. Cada sección tiene su propia estructura — no mezclar.`;
 
 let client: Anthropic | null = null;
 function getClient(): Anthropic | null {
@@ -109,7 +212,9 @@ REGLAS IMPORTANTES:
 - update_section requiere el OBJETO COMPLETO de la sección, no solo el campo cambiado. Lee primero la sección si necesitas saber su estructura actual.
 - Respeta el schema de cada sección (campos requeridos, tipos correctos)
 - Si no estás seguro del schema de una sección, usa view_section primero
-- Para pricing, mantén consistencia con el costo de IM3 si está documentado en la propuesta`;
+- Para pricing, mantén consistencia con el costo de IM3 si está documentado en la propuesta
+
+${SCHEMA_DOCS}`;
 
 export async function runProposalChat(params: {
   proposalId: string;
@@ -284,17 +389,28 @@ Status: ${proposal.status}`;
           const newContent = toolInput.newContent as Record<string, unknown>;
           const changeSummary = (toolInput.changeSummary as string) || "Sección actualizada";
 
-          // Aplicar cambio en memoria
-          currentSections = { ...currentSections, [sectionKey]: newContent };
+          // Validar contra el schema antes de persistir
+          const schema = SECTION_SCHEMAS[sectionKey];
+          if (!schema) {
+            toolResultContent = `ERROR: sectionKey "${sectionKey}" no es válido. Valores posibles: ${Object.keys(SECTION_SCHEMAS).join(", ")}`;
+          } else {
+            const parsed = schema.safeParse(newContent);
+            if (!parsed.success) {
+              const errors = parsed.error.errors.slice(0, 5).map(e => `- ${e.path.join(".") || "(root)"}: ${e.message}`).join("\n");
+              toolResultContent = `ERROR DE VALIDACIÓN — la sección "${sectionKey}" NO se guardó porque el formato no coincide con el schema. Revisa el schema en mi system prompt y reenvía con la estructura correcta.\n\nErrores:\n${errors}\n\nIMPORTANTE: Si el campo "features" debe ser array de strings, NO uses array de objetos. Si necesitas listar agentes IA, ponlos como strings descriptivos en features (ej: "Nómina Automática — calcula horas extras y aportes con un click").`;
+              log(`[proposal-chat] Validation failed for "${sectionKey}": ${errors}`);
+            } else {
+              // Aplicar cambio en memoria + persistir
+              currentSections = { ...currentSections, [sectionKey]: parsed.data };
+              await db.update(proposals)
+                .set({ sections: currentSections, updatedAt: new Date() })
+                .where(eq(proposals.id, params.proposalId));
 
-          // Persistir en DB
-          await db.update(proposals)
-            .set({ sections: currentSections, updatedAt: new Date() })
-            .where(eq(proposals.id, params.proposalId));
-
-          toolCalls.push({ tool: "update_section", section: sectionKey, summary: changeSummary });
-          toolResultContent = `Sección "${sectionKey}" actualizada exitosamente.`;
-          log(`[proposal-chat] Updated section "${sectionKey}" in proposal ${params.proposalId}: ${changeSummary}`);
+              toolCalls.push({ tool: "update_section", section: sectionKey, summary: changeSummary });
+              toolResultContent = `Sección "${sectionKey}" actualizada y guardada exitosamente.`;
+              log(`[proposal-chat] Updated section "${sectionKey}" in proposal ${params.proposalId}: ${changeSummary}`);
+            }
+          }
         } else {
           toolResultContent = `Tool "${toolName}" no reconocida.`;
         }
