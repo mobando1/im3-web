@@ -6,7 +6,6 @@ import { ArrowLeft, Copy, ExternalLink, Plus, Trash2, Send, Clock, CheckCircle2,
 import { format, parseISO, differenceInDays, startOfMonth, endOfMonth, eachDayOfInterval, eachMonthOfInterval, isSameDay, isSameMonth, addMonths, subMonths, isWithinInterval } from "date-fns";
 import { es } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
-import { LineChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -521,11 +520,18 @@ export default function AdminProjectDetail() {
           {project.contactName && <p className="text-sm text-gray-500 mt-0.5">{project.contactName}</p>}
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={copyPortalLink} className="p-2 rounded-lg text-gray-400 hover:text-[#2FA4A9] hover:bg-[#2FA4A9]/10 transition-colors" title="Copiar link portal">
+          <button onClick={copyPortalLink} className="p-2 rounded-lg text-gray-400 hover:text-[#2FA4A9] hover:bg-[#2FA4A9]/10 transition-colors" title="Copiar link portal del cliente (legacy)">
             <Copy className="w-4 h-4" />
           </button>
-          <a href={`/portal/${project.accessToken}`} target="_blank" rel="noopener noreferrer" className="p-2 rounded-lg text-gray-400 hover:text-[#2FA4A9] hover:bg-[#2FA4A9]/10 transition-colors" title="Abrir portal">
-            <ExternalLink className="w-4 h-4" />
+          <a
+            href={`/portal/projects/${project.id}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#2FA4A9] text-white text-sm font-medium hover:bg-[#238b8f] transition-colors"
+            title="Abre el portal completo como lo ve el cliente (con tab Analytics)"
+          >
+            <ExternalLink className="w-3.5 h-3.5" />
+            Ver como cliente
           </a>
         </div>
       </div>
@@ -2484,117 +2490,7 @@ Cuando lo hayas hecho, avísame y conecto tu GA4 al portal. ¡Gracias!`;
               Desconectar
             </Button>
           </div>
-
-          {/* Vista previa de las métricas (igual que ve el cliente) */}
-          <AnalyticsAdminPreview projectId={projectId} />
         </div>
-      )}
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────
-// AnalyticsAdminPreview — KPIs + chart como lo ve el cliente
-// (admin puede previsualizar sin necesidad de ser client_user)
-// ─────────────────────────────────────────────────────────────────
-
-type AnalyticsData = {
-  status: "connected" | "pending" | "error" | "not_configured";
-  lastSyncedAt: string | null;
-  propertyTimezone: string | null;
-  days: Array<{ date: string; sessions: number; users: number; pageviews: number; bounceRate: number }>;
-  totals: { sessions: number; users: number; newUsers: number; pageviews: number; avgSessionDuration: number; bounceRate: number } | null;
-  prevTotals: { sessions: number; users: number; newUsers: number; pageviews: number; avgSessionDuration: number; bounceRate: number } | null;
-  topPages?: Array<{ path: string; pageviews: number }>;
-  topSources?: Array<{ source: string; sessions: number }>;
-  topCountries?: Array<{ country: string; users: number }>;
-};
-
-function AnalyticsAdminPreview({ projectId }: { projectId: string }) {
-  const { data, isLoading } = useQuery<AnalyticsData>({
-    queryKey: [`/api/admin/projects/${projectId}/analytics-data`],
-  });
-
-  if (isLoading) return <div className="text-xs text-gray-400 mt-4">Cargando métricas...</div>;
-  if (!data || data.status !== "connected") return null;
-  if (!data.totals || data.days.length === 0) {
-    return (
-      <div className="mt-4 rounded-lg border border-gray-200 bg-gray-50 p-4 text-center">
-        <p className="text-xs text-gray-600">Aún no hay datos sincronizados. Dale "Sync ahora" para traer los últimos días.</p>
-      </div>
-    );
-  }
-
-  const delta = (curr: number, prev: number) => prev === 0 ? null : Math.round(((curr - prev) / prev) * 100);
-  const deltaSessions = delta(data.totals.sessions, data.prevTotals?.sessions || 0);
-  const deltaUsers = delta(data.totals.users, data.prevTotals?.users || 0);
-  const deltaPageviews = delta(data.totals.pageviews, data.prevTotals?.pageviews || 0);
-
-  return (
-    <div className="mt-4 rounded-lg border border-gray-200 bg-white p-4 space-y-4">
-      <div className="flex items-center justify-between">
-        <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-500">Vista previa — lo que ve el cliente</h4>
-        <span className="text-[11px] text-gray-400">Últimos 30 días</span>
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <PreviewKpi label="Sesiones" value={data.totals.sessions.toLocaleString("es")} delta={deltaSessions} />
-        <PreviewKpi label="Usuarios" value={data.totals.users.toLocaleString("es")} delta={deltaUsers} />
-        <PreviewKpi label="Páginas vistas" value={data.totals.pageviews.toLocaleString("es")} delta={deltaPageviews} />
-        <PreviewKpi label="Tasa de rebote" value={`${Math.round(data.totals.bounceRate * 100)}%`} delta={null} />
-      </div>
-
-      {data.days.length > 0 && (
-        <div className="h-32">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data.days}>
-              <XAxis dataKey="date" tick={{ fontSize: 10, fill: "#94A3B8" }} tickFormatter={(d: string) => d.slice(5)} />
-              <YAxis tick={{ fontSize: 10, fill: "#94A3B8" }} />
-              <Tooltip contentStyle={{ borderRadius: 6, border: "1px solid #e2e8f0", fontSize: 11 }} />
-              <Line type="monotone" dataKey="sessions" stroke="#2FA4A9" strokeWidth={2} dot={false} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
-        <PreviewTopList title="Top páginas" rows={data.topPages || []} labelKey="path" valueKey="pageviews" />
-        <PreviewTopList title="Fuentes" rows={data.topSources || []} labelKey="source" valueKey="sessions" />
-        <PreviewTopList title="Países" rows={data.topCountries || []} labelKey="country" valueKey="users" />
-      </div>
-    </div>
-  );
-}
-
-function PreviewKpi({ label, value, delta }: { label: string; value: string; delta: number | null }) {
-  return (
-    <div className="rounded-md bg-gray-50 border border-gray-100 p-3">
-      <div className="text-[10px] uppercase tracking-wider text-gray-400 font-medium">{label}</div>
-      <div className="text-lg font-semibold text-gray-900 mt-1">{value}</div>
-      {delta !== null && (
-        <div className={`text-[10px] mt-0.5 ${delta > 0 ? "text-emerald-600" : delta < 0 ? "text-rose-500" : "text-gray-400"}`}>
-          {delta > 0 ? "+" : ""}{delta}% vs período anterior
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PreviewTopList({ title, rows, labelKey, valueKey }: { title: string; rows: Array<Record<string, any>>; labelKey: string; valueKey: string }) {
-  return (
-    <div className="rounded-md bg-gray-50 border border-gray-100 p-3">
-      <div className="text-[10px] uppercase tracking-wider text-gray-400 font-medium mb-2">{title}</div>
-      {rows.length === 0 ? (
-        <p className="text-[11px] text-gray-400">Sin datos</p>
-      ) : (
-        <ul className="space-y-1">
-          {rows.slice(0, 5).map((r, i) => (
-            <li key={i} className="flex items-center justify-between gap-2 text-[11px]">
-              <span className="text-gray-700 truncate" title={r[labelKey]}>{r[labelKey]}</span>
-              <span className="text-gray-500 font-medium tabular-nums">{Number(r[valueKey]).toLocaleString("es")}</span>
-            </li>
-          ))}
-        </ul>
       )}
     </div>
   );

@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest, getQueryFn } from "@/lib/queryClient";
 
-type ClientUser = { id: string; email: string; name: string | null };
+type ClientUser = { id: string; email: string; name: string | null; isAdminPreview?: boolean };
 
 export function useClientAuth() {
   const queryClient = useQueryClient();
@@ -37,6 +37,7 @@ export function useClientAuth() {
     user: user ?? null,
     isLoading,
     isAuthenticated: !!user,
+    isAdminPreview: !!user?.isAdminPreview,
     login: loginMutation.mutateAsync,
     logout: logoutMutation.mutateAsync,
     loginError: loginMutation.error?.message,

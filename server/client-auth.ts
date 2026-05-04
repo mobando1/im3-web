@@ -60,6 +60,20 @@ export const requireClient: RequestHandler = (req, res, next) => {
   next();
 };
 
+/**
+ * Middleware: requiere sesión autenticada (cliente o admin).
+ * Permite que el admin previsualice cualquier portal del cliente sin necesidad
+ * de logueo doble, manteniendo el aislamiento estricto del modo cliente puro.
+ */
+export const requireClientOrAdminPreview: RequestHandler = (req, res, next) => {
+  if (!req.isAuthenticated()) return res.status(401).json({ error: "No autorizado" });
+  const kind = (req.user as any)?.kind;
+  if (kind !== "client" && kind !== "admin") {
+    return res.status(401).json({ error: "No autorizado" });
+  }
+  next();
+};
+
 /** Public-safe shape returned to frontend. */
 export function publicClientUser(u: any) {
   return { id: u.id, email: u.email, name: u.name ?? null };

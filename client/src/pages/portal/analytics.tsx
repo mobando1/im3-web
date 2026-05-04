@@ -82,7 +82,7 @@ function KpiCard({
 
 export default function PortalAnalytics() {
   const { projectId } = useParams<{ projectId: string }>();
-  const { isAuthenticated, isLoading: authLoading } = useClientAuth();
+  const { isAuthenticated, isLoading: authLoading, isAdminPreview } = useClientAuth();
 
   const { data, isLoading, error } = useQuery<AnalyticsData>({
     queryKey: [`/api/portal/projects/${projectId}/analytics`],
@@ -98,6 +98,13 @@ export default function PortalAnalytics() {
 
   return (
     <div className="min-h-screen bg-slate-50">
+      {isAdminPreview && (
+        <div className="bg-amber-100 border-b border-amber-300 px-4 py-2 text-center text-xs text-amber-900">
+          <strong>Vista previa de admin</strong> — estás viendo el portal como lo ve el cliente.
+          {" "}
+          <a href="/admin/projects" className="underline hover:text-amber-700">Volver al admin</a>
+        </div>
+      )}
       <div className="max-w-6xl mx-auto px-4 sm:px-6 py-6">
         <Link href={`/portal/projects/${projectId}`} className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-[#2FA4A9] mb-6">
           <ArrowLeft className="w-4 h-4" />

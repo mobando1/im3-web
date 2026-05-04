@@ -253,7 +253,7 @@ function ActivityItem({ entry }: { entry: ActivityEntry }) {
 export default function Portal() {
   const params = useParams<{ token?: string; projectId?: string }>();
   const isAuthMode = !!params.projectId;
-  const { isAuthenticated, isLoading: authLoading } = useClientAuth();
+  const { isAuthenticated, isLoading: authLoading, isAdminPreview } = useClientAuth();
   const [, navigate] = useLocation();
 
   // Auth mode: redirect to login if not authenticated
@@ -431,6 +431,14 @@ export default function Portal() {
 
   return (
     <div className="min-h-screen bg-gray-50">
+      {/* Banner de admin preview — solo cuando un admin está viendo el portal del cliente */}
+      {isAdminPreview && (
+        <div className="bg-amber-100 border-b border-amber-300 px-4 py-2 text-center text-xs text-amber-900 sticky top-0 z-50">
+          <strong>Vista previa de admin</strong> — estás viendo el portal como lo ve el cliente.
+          {" "}
+          <a href="/admin/projects" className="underline hover:text-amber-700">Volver al admin</a>
+        </div>
+      )}
       {/* ── HEADER + HEALTH BANNER ── */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-40">
         <div className="max-w-3xl mx-auto px-4 sm:px-6">

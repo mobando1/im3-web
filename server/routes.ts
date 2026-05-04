@@ -15,7 +15,7 @@ import { isEmailConfigured, sendEmail, sendAdminNotification } from "./email-sen
 import { generateEmailContent, buildMicroReminderEmail, build6hReminderEmail, buildFollowUpConfirmationEmail, buildNoShowEmail, generateDailyNewsDigest, generateContactInsight, generateWhatsAppMessage, generateNewsletterWelcome, generateMiniAudit, classifyWhatsAppIntent, generateWhatsAppAutoReply, buildWhatsAppNotificationEmail, buildProjectNotificationEmail, escapeHtml } from "./email-ai";
 import { parseFechaCita } from "./date-utils";
 import { requireAuth, hashPassword } from "./auth";
-import { requireClient, publicClientUser, sendInviteEmail, sendPasswordResetEmail, createMagicToken, magicLinkUrl, sendMagicLinkLoginEmail, MAGIC_LINK_TTL_MINUTES } from "./client-auth";
+import { requireClient, requireClientOrAdminPreview, publicClientUser, sendInviteEmail, sendPasswordResetEmail, createMagicToken, magicLinkUrl, sendMagicLinkLoginEmail, MAGIC_LINK_TTL_MINUTES } from "./client-auth";
 import { calculateLeadScore } from "./lead-scoring";
 import { isWhatsAppConfigured, calculateWhatsAppSchedule, WHATSAPP_SEQUENCE, sendWhatsAppText } from "./whatsapp";
 import passport from "passport";
@@ -5538,12 +5538,22 @@ ${urls}
     req.logout(() => res.json({ ok: true }));
   });
 
-  // Current user
+  // Current user (acepta cliente o admin en modo preview)
   app.get("/api/portal/auth/me", (req, res) => {
-    if (!req.isAuthenticated() || (req.user as any)?.kind !== "client") {
-      return res.status(401).json({ error: "No autorizado" });
+    if (!req.isAuthenticated()) return res.status(401).json({ error: "No autorizado" });
+    const kind = (req.user as any)?.kind;
+    if (kind === "client") return res.json(publicClientUser(req.user));
+    if (kind === "admin") {
+      // Admin previewing the portal — return a synthetic client-shaped object
+      // con flag isAdminPreview para que el frontend pueda mostrar banner.
+      return res.json({
+        id: (req.user as any).id,
+        email: (req.user as any).username || "admin@im3systems.com",
+        name: "Admin (vista previa)",
+        isAdminPreview: true,
+      });
     }
-    res.json(publicClientUser(req.user));
+    return res.status(401).json({ error: "No autorizado" });
   });
 
   // Accept invite — sets password, creates/links client_user, auto-login
@@ -5741,8 +5751,25 @@ ${urls}
     res.json({ email: invite.email, projectName });
   });
 
-  // List projects accessible to the logged-in client (for selector)
-  app.get("/api/portal/projects", requireClient, async (req, res) => {
+  // List projects accessible to the logged-in user.
+  // Cliente: solo proyectos donde está vinculado.
+  // Admin (preview): todos los proyectos.
+  app.get("/api/portal/projects", requireClientOrAdminPreview, async (req, res) => {
+    const kind = (req.user as any)?.kind;
+    if (kind === "admin") {
+      const all = await db!
+        .select({
+          id: clientProjects.id,
+          name: clientProjects.name,
+          description: clientProjects.description,
+          status: clientProjects.status,
+          startDate: clientProjects.startDate,
+          estimatedEndDate: clientProjects.estimatedEndDate,
+          healthStatus: clientProjects.healthStatus,
+        })
+        .from(clientProjects);
+      return res.json(all);
+    }
     const userId = (req.user as any).id;
     const links = await db!
       .select({
@@ -5763,19 +5790,27 @@ ${urls}
   // Bridge: rewrite /api/portal/projects/:projectId(/*) → /api/portal/:accessToken(/*)
   // so all existing token-based handlers below work for authenticated clients too.
   // Excludes "/api/portal/projects" (no id) which is handled by the list endpoint above.
+  // Acepta sesión de cliente vinculado al proyecto, O sesión de admin (preview mode).
   app.use(async (req, res, next) => {
     const m = req.url.match(/^\/api\/portal\/projects\/([^/?]+)(\/.*)?(\?.*)?$/);
     if (!m) return next();
-    if (!req.isAuthenticated() || (req.user as any)?.kind !== "client") {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ error: "No autorizado" });
+    }
+    const kind = (req.user as any)?.kind;
+    if (kind !== "client" && kind !== "admin") {
       return res.status(401).json({ error: "No autorizado" });
     }
     const projectId = m[1];
-    const userId = (req.user as any).id;
-    const [link] = await db!
-      .select()
-      .from(clientUserProjects)
-      .where(and(eq(clientUserProjects.clientUserId, userId), eq(clientUserProjects.clientProjectId, projectId)));
-    if (!link) return res.status(403).json({ error: "No tienes acceso a este proyecto" });
+    // Cliente: verificar vinculación. Admin: skip — puede ver cualquier proyecto.
+    if (kind === "client") {
+      const userId = (req.user as any).id;
+      const [link] = await db!
+        .select()
+        .from(clientUserProjects)
+        .where(and(eq(clientUserProjects.clientUserId, userId), eq(clientUserProjects.clientProjectId, projectId)));
+      if (!link) return res.status(403).json({ error: "No tienes acceso a este proyecto" });
+    }
     const [project] = await db!
       .select({ accessToken: clientProjects.accessToken })
       .from(clientProjects)
@@ -6093,17 +6128,21 @@ ${urls}
     };
   }
 
-  // Cliente — requiere sesión client_user vinculada al proyecto
-  app.get("/api/portal/projects/:projectId/analytics", requireClient, async (req, res) => {
+  // Acepta cliente vinculado o admin (preview)
+  app.get("/api/portal/projects/:projectId/analytics", requireClientOrAdminPreview, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
-    const userId = (req.user as any).id;
     const projectId = String(req.params.projectId);
+    const kind = (req.user as any)?.kind;
 
-    const [link] = await db
-      .select()
-      .from(clientUserProjects)
-      .where(and(eq(clientUserProjects.clientUserId, userId), eq(clientUserProjects.clientProjectId, projectId)));
-    if (!link) return res.status(403).json({ error: "Sin acceso a este proyecto" });
+    if (kind === "client") {
+      const userId = (req.user as any).id;
+      const [link] = await db
+        .select()
+        .from(clientUserProjects)
+        .where(and(eq(clientUserProjects.clientUserId, userId), eq(clientUserProjects.clientProjectId, projectId)));
+      if (!link) return res.status(403).json({ error: "Sin acceso a este proyecto" });
+    }
+    // Admin: skip — puede ver cualquier proyecto
 
     const data = await buildAnalyticsResponse(projectId);
     res.json(data);
