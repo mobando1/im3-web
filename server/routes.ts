@@ -7932,19 +7932,35 @@ ${urls}
       return res.status(400).json({ error: "Mensaje o archivo requerido" });
     }
 
-    // Setup SSE headers
+    // Setup SSE headers — desactivar todo tipo de buffering posible
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
-    res.setHeader("X-Accel-Buffering", "no");
+    res.setHeader("X-Accel-Buffering", "no"); // nginx
+    res.setHeader("Content-Encoding", "identity"); // disable compression
     res.flushHeaders?.();
 
+    // Helper para enviar eventos con flush explícito
     const sendEvent = (event: { type: string; [key: string]: any }) => {
       res.write(`data: ${JSON.stringify(event)}\n\n`);
+      // Forzar flush si hay middleware de compression que lo agrega
+      const r = res as any;
+      if (typeof r.flush === "function") r.flush();
     };
 
+    // Heartbeat cada 15s — mantiene viva la conexión a través de proxies
+    // (Railway, nginx, Cloudflare) que pueden cortar conexiones idle largas.
+    const heartbeat = setInterval(() => {
+      if (!res.writableEnded) {
+        res.write(`: heartbeat ${Date.now()}\n\n`);
+        const r = res as any;
+        if (typeof r.flush === "function") r.flush();
+      }
+    }, 15_000);
+
     let closed = false;
-    req.on("close", () => { closed = true; });
+    req.on("close", () => { closed = true; clearInterval(heartbeat); });
+    res.on("close", () => { clearInterval(heartbeat); });
 
     try {
       const { runProposalChat } = await import("./proposal-chat");
@@ -7971,14 +7987,21 @@ ${urls}
         { triggeredBy: "manual" }
       );
 
+      clearInterval(heartbeat);
+
       if (!closed) {
         sendEvent({ type: "done", assistantMessage: result.assistantMessage, toolCalls: result.toolCalls });
+        // Pequeño delay para que el flush del done event llegue antes de cerrar.
+        // Previene que el cliente reciba el end sin haber procesado el done.
+        await new Promise(resolve => setTimeout(resolve, 50));
         res.end();
       }
     } catch (err: any) {
+      clearInterval(heartbeat);
       log(`Error in proposal chat stream: ${err?.message}`);
       if (!closed) {
         sendEvent({ type: "error", error: err?.message || "Error en chat" });
+        await new Promise(resolve => setTimeout(resolve, 50));
         res.end();
       }
     }

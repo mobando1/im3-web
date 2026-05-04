@@ -94,18 +94,17 @@ export function ProposalChatPanel({ proposalId, open, onClose }: Props) {
         throw new Error(err.error || "Error en chat");
       }
 
-      // Lectura SSE
+      // Lectura SSE con timeout — si el proxy buffea y nunca llega "done",
+      // a los 90s sin eventos bailamos out: invalidamos queries (así el user
+      // ve la respuesta que sí se guardó server-side) y resolvemos limpio.
       const reader = res.body.getReader();
       const decoder = new TextDecoder();
       let buffer = "";
+      const STALL_TIMEOUT_MS = 90_000;
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
+      const processBuffer = () => {
         const lines = buffer.split("\n\n");
         buffer = lines.pop() || "";
-
         for (const line of lines) {
           if (!line.startsWith("data: ")) continue;
           const data = line.slice(6).trim();
@@ -119,13 +118,42 @@ export function ProposalChatPanel({ proposalId, open, onClose }: Props) {
             } else if (event.type === "error") {
               throw new Error(event.error);
             } else if (event.type === "done") {
-              return { assistantMessage: event.assistantMessage, toolCalls: event.toolCalls };
+              return { done: true, payload: { assistantMessage: event.assistantMessage, toolCalls: event.toolCalls } };
             }
-          } catch (e) {
-            // Ignorar líneas no parseables
+          } catch (e: any) {
+            if (e?.message && /^Error/.test(e.message)) throw e;
+            // ignorar parse errors
           }
         }
+        return { done: false };
+      };
+
+      while (true) {
+        const readPromise = reader.read();
+        const timeoutPromise = new Promise<{ value: undefined; done: true; timedOut: true }>(resolve =>
+          setTimeout(() => resolve({ value: undefined, done: true, timedOut: true }), STALL_TIMEOUT_MS)
+        );
+        const result = await Promise.race([readPromise, timeoutPromise]) as { value?: Uint8Array; done: boolean; timedOut?: boolean };
+
+        if (result.timedOut) {
+          // Stream colgado — el server probablemente sí terminó. Cancela la lectura.
+          reader.cancel().catch(() => {});
+          break;
+        }
+        if (result.done) break;
+        if (!result.value) continue;
+        buffer += decoder.decode(result.value, { stream: true });
+        const r = processBuffer();
+        if (r.done && r.payload) return r.payload;
       }
+
+      // Procesar lo que pueda quedar en buffer (por si "done" llegó sin \n\n final)
+      if (buffer.trim()) {
+        buffer += "\n\n";
+        const r = processBuffer();
+        if (r.done && r.payload) return r.payload;
+      }
+      // Si llegamos aquí: stream terminó sin "done" claro. Confiar en invalidación.
       return { assistantMessage: "", toolCalls: [] };
     },
     onMutate: () => {
