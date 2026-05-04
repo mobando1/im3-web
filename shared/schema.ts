@@ -649,6 +649,25 @@ export const proposals = pgTable("proposals", {
 export type Proposal = typeof proposals.$inferSelect;
 export type InsertProposal = typeof proposals.$inferInsert;
 
+// Preferencias y aprendizajes de la organización (memoria entre propuestas).
+// Después de cada propuesta cerrada (accepted/rejected), un agente extrae
+// lecciones: stack preferido, rangos de precios que funcionan, frases que
+// el cliente apreció. Se inyectan como contexto en el chat y generador.
+export const orgPreferences = pgTable("org_preferences", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: text("key").notNull(), // ej. "preferred_stack", "winning_price_range_smb"
+  value: text("value").notNull(),
+  source: text("source").notNull(), // "explicit" (admin la fijó) | "inferred" (extraída de propuestas)
+  confidence: integer("confidence").default(50).notNull(), // 0-100
+  // De qué propuesta(s) salió esta preferencia (para auditoría)
+  derivedFromProposalIds: json("derived_from_proposal_ids").$type<string[]>().default([]),
+  notes: text("notes"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type OrgPreference = typeof orgPreferences.$inferSelect;
+export type InsertOrgPreference = typeof orgPreferences.$inferInsert;
+
 // Snapshots de propuesta antes de cada cambio del chat — permite undo del chat
 export const proposalSnapshots = pgTable("proposal_snapshots", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

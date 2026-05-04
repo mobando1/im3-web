@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { X, Send, Sparkles, Loader2, Check, Trash2, Paperclip, FileText, Image as ImageIcon, FileType, Undo2 } from "lucide-react";
+import { X, Send, Sparkles, Loader2, Check, Trash2, Paperclip, FileText, Image as ImageIcon, FileType, Undo2, Mic, MicOff } from "lucide-react";
 
 type ToolCall = { tool: string; section?: string; summary: string };
 
@@ -181,6 +181,62 @@ export function ProposalChatPanel({ proposalId, open, onClose }: Props) {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/proposals/${proposalId}/snapshots`] });
     },
   });
+
+  // ── Voice input (Whisper) ──
+  const [isRecording, setIsRecording] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mr = new MediaRecorder(stream, { mimeType: MediaRecorder.isTypeSupported("audio/webm") ? "audio/webm" : "" });
+      mediaRecorderRef.current = mr;
+      audioChunksRef.current = [];
+      mr.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const audioBlob = new Blob(audioChunksRef.current, { type: mr.mimeType || "audio/webm" });
+        if (audioBlob.size === 0) return;
+        setIsTranscribing(true);
+        try {
+          const fd = new FormData();
+          fd.append("audio", audioBlob, "voice.webm");
+          const resp = await fetch("/api/admin/transcribe", {
+            method: "POST",
+            body: fd,
+            credentials: "include",
+          });
+          if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            alert(err.error || "Error transcribiendo");
+            return;
+          }
+          const data = await resp.json() as { text?: string };
+          if (data.text) {
+            setInput(prev => (prev ? prev + " " : "") + data.text);
+            textareaRef.current?.focus();
+          }
+        } catch (err) {
+          alert("Error transcribiendo: " + (err as Error).message);
+        } finally {
+          setIsTranscribing(false);
+        }
+      };
+      mr.start();
+      setIsRecording(true);
+    } catch (err) {
+      alert("No se pudo acceder al micrófono: " + (err as Error).message);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.stop();
+    }
+    setIsRecording(false);
+  };
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
@@ -431,6 +487,16 @@ export function ProposalChatPanel({ proposalId, open, onClose }: Props) {
               title="Adjuntar archivo (imágenes, PDF, texto)"
             >
               <Paperclip className="w-4 h-4" />
+            </Button>
+            <Button
+              onClick={isRecording ? stopRecording : startRecording}
+              disabled={streaming || isTranscribing}
+              size="sm"
+              variant="outline"
+              className={`h-auto py-2.5 px-2.5 ${isRecording ? "bg-red-50 border-red-300 text-red-600" : ""}`}
+              title={isRecording ? "Detener grabación" : "Grabar voz (Whisper)"}
+            >
+              {isTranscribing ? <Loader2 className="w-4 h-4 animate-spin" /> : isRecording ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </Button>
             <Textarea
               ref={textareaRef}

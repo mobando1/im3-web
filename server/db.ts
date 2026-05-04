@@ -391,6 +391,21 @@ export async function runMigrations() {
     await pool.query(`ALTER TABLE "proposals" ADD COLUMN IF NOT EXISTS "deleted_at" timestamp;`).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_proposals_deleted_at" ON "proposals" ("deleted_at");`).catch(() => {});
 
+    // Org preferences — memoria entre propuestas (Sprint 6.1)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "org_preferences" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "key" text NOT NULL,
+        "value" text NOT NULL,
+        "source" text NOT NULL,
+        "confidence" integer DEFAULT 50 NOT NULL,
+        "derived_from_proposal_ids" json DEFAULT '[]'::json,
+        "notes" text,
+        "updated_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_org_preferences_key" ON "org_preferences" ("key");`).catch(() => {});
+
     // Snapshots de propuesta para undo del chat
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "proposal_snapshots" (

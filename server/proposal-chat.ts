@@ -14,6 +14,7 @@ import type { ZodSchema } from "zod";
 import { VOICE_GUIDE, COST_REFERENCE, HARDWARE_CATALOG, CASE_STUDIES, gatherContactContext } from "./proposal-ai";
 import { runAllValidators, formatIssuesAsText } from "./proposal-validators";
 import { validateSemanticChange } from "./proposal-semantic-validator";
+import { getOrgPreferencesContext } from "./org-preferences";
 
 const SECTION_SCHEMAS: Record<string, ZodSchema> = {
   meta: proposalMetaSchema,
@@ -604,6 +605,14 @@ async function runProposalChatInner(params: {
     log(`[proposal-chat] could not gather client context: ${(err as Error).message}`);
   }
 
+  // Cargar preferencias de la organización (memoria de propuestas anteriores)
+  let orgContext = "";
+  try {
+    orgContext = await getOrgPreferencesContext();
+  } catch (err) {
+    log(`[proposal-chat] could not load org preferences: ${(err as Error).message}`);
+  }
+
   // System prompt particionado en bloques con cache_control:
   // - Bloque 1 (cacheado): SYSTEM_PROMPT_BASE + SCHEMA_DOCS — totalmente estático.
   // - Bloque 2 (cacheado): VOICE_GUIDE + COST_REFERENCE + HARDWARE_CATALOG + CASE_STUDIES — estático mientras los archivos no cambien.
@@ -645,7 +654,7 @@ ${CASE_STUDIES.substring(0, 6000)}`,
     },
     {
       type: "text",
-      text: `═══════════════════════════════════════════════════════
+      text: `${orgContext ? orgContext + "\n\n" : ""}═══════════════════════════════════════════════════════
 CONTEXTO DEL CLIENTE (diagnóstico, emails, docs)
 ═══════════════════════════════════════════════════════
 

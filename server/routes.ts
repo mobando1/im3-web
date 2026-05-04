@@ -7665,6 +7665,46 @@ ${urls}
     }
   });
 
+  // Voice transcription endpoint para el chat (OpenAI Whisper)
+  // Recibe un blob de audio (webm, mp3, mp4, wav), devuelve { text }
+  app.post("/api/admin/transcribe", requireAuth, chatUpload.single("audio"), async (req, res) => {
+    if (!process.env.OPENAI_API_KEY) {
+      return res.status(503).json({ error: "OpenAI API key no configurada" });
+    }
+    if (!req.file) {
+      return res.status(400).json({ error: "Archivo de audio requerido (campo 'audio')" });
+    }
+
+    try {
+      // FormData para Whisper API
+      const formData = new FormData();
+      const blob = new Blob([req.file.buffer], { type: req.file.mimetype });
+      formData.append("file", blob, req.file.originalname || "audio.webm");
+      formData.append("model", "whisper-1");
+      formData.append("language", "es"); // hint en español, Whisper detecta otros igual
+
+      const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${process.env.OPENAI_API_KEY}`,
+        },
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        log(`[transcribe] Whisper API error: ${response.status} ${errorText}`);
+        return res.status(502).json({ error: "Error en Whisper API" });
+      }
+
+      const result = await response.json() as { text?: string };
+      res.json({ text: result.text || "" });
+    } catch (err: any) {
+      log(`Error transcribing: ${err?.message}`);
+      res.status(500).json({ error: "Error transcribiendo audio" });
+    }
+  });
+
   app.post("/api/admin/proposals/:id/snapshots/:snapshotId/restore", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {

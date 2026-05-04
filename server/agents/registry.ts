@@ -373,6 +373,16 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
     criticality: "low",
     runnable: purgeOldDeletedProposals,
   },
+  {
+    name: "org-preferences-extractor",
+    displayName: "Memoria de Propuestas",
+    domain: "ai",
+    description: "Extrae lecciones de propuestas cerradas (accepted/rejected) y las guarda como preferencias org. Alimenta el chat y el generador con patrones aprendidos.",
+    trigger: "cron",
+    schedule: "30 8 * * *",
+    scheduleHuman: "diario 3:30 AM COT",
+    criticality: "low",
+  },
 
   // ─── Portal Analytics ────────────────────────────────────────
   {

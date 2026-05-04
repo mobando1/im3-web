@@ -1306,6 +1306,17 @@ export function startEmailScheduler() {
     await runAgent("proposal-trash-purge", purgeOldDeletedProposals).catch(err => log(`Cron error proposal purge: ${err}`));
   }, { timezone: "America/Bogota" });
 
+  // Daily org preferences extractor (3:30 AM COT = 8:30 UTC) — extrae lecciones
+  // de propuestas cerradas la última semana para alimentar la memoria del chat/generador
+  cron.schedule("30 8 * * *", async () => {
+    try {
+      const { runOrgPreferencesExtractor } = await import("./org-preferences");
+      await runAgent("org-preferences-extractor", runOrgPreferencesExtractor).catch(err => log(`Cron error org prefs: ${err}`));
+    } catch (err: any) {
+      log(`Could not run org preferences extractor: ${err?.message}`);
+    }
+  }, { timezone: "America/Bogota" });
+
   // Daily GA4 analytics sync at 6:00 AM Colombia time (11:00 UTC)
   cron.schedule("0 11 * * *", async () => {
     await runAgent("analytics-sync", runAnalyticsSync).catch(err => log(`Cron error analytics sync: ${err}`));
