@@ -388,6 +388,8 @@ export const clientProjects = pgTable("client_projects", {
   totalBudget: integer("total_budget"), // in USD
   currency: varchar("currency", { length: 3 }).default("USD"),
   accessToken: varchar("access_token").default(sql`gen_random_uuid()`).notNull().unique(),
+  // Project type — distingue scope fijo (cliente) vs evolutivo (interno IM3)
+  projectType: text("project_type").default("client").notNull(), // client | internal
   // Health & AI tracking
   healthStatus: text("health_status").default("on_track"), // on_track | at_risk | behind | ahead
   healthNote: text("health_note"),

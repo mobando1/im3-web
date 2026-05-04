@@ -16,6 +16,7 @@ type Project = {
   name: string;
   description: string | null;
   status: string;
+  projectType?: "client" | "internal";
   contactId: string | null;
   contactName: string | null;
   startDate: string | null;
@@ -226,7 +227,12 @@ export default function AdminProjects() {
                       className="bg-white rounded-xl border border-gray-200 p-4 cursor-pointer hover:shadow-md transition-shadow space-y-3"
                     >
                       <div>
-                        <p className="font-medium text-gray-900 text-sm">{p.name}</p>
+                        <div className="flex items-center gap-2">
+                          <p className="font-medium text-gray-900 text-sm">{p.name}</p>
+                          {p.projectType === "internal" && (
+                            <span className="text-[9px] uppercase tracking-wider font-semibold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">Interno</span>
+                          )}
+                        </div>
                         {p.contactName && <p className="text-xs text-gray-400 mt-0.5">{p.contactName}</p>}
                       </div>
                       <div className="flex items-center gap-2">

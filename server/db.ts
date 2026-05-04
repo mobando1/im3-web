@@ -144,6 +144,9 @@ export async function runMigrations() {
     // Allow contactId to be null for admin notifications not tied to a specific contact
     await pool.query(`ALTER TABLE "sent_emails" ALTER COLUMN "contact_id" DROP NOT NULL;`).catch(() => {});
 
+    // Project type — distingue proyectos de cliente (scope fijo) vs internos (evolutivos)
+    await pool.query(`ALTER TABLE "client_projects" ADD COLUMN IF NOT EXISTS "project_type" text DEFAULT 'client' NOT NULL;`).catch(() => {});
+
     // Client projects tables
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "client_projects" (

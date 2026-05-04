@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
 import { useParams, useLocation, Link } from "wouter";
 import { useClientAuth } from "@/hooks/useClientAuth";
-import { Send, CheckCircle2, Circle, Clock, AlertCircle, ChevronDown, ChevronRight, ExternalLink, X, Zap, ArrowRight, FileText, Mic, Image, ClipboardCheck, FileSignature, FolderOpen, Download, Lightbulb, ThumbsUp, Plus, Diamond, File } from "lucide-react";
+import { Send, CheckCircle2, Circle, Clock, AlertCircle, ChevronDown, ChevronRight, ExternalLink, X, Zap, ArrowRight, FileText, Mic, Image, ClipboardCheck, FileSignature, FolderOpen, Download, Lightbulb, ThumbsUp, Plus, Diamond, File, StickyNote } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -13,6 +13,7 @@ type PortalOverview = {
   name: string;
   description: string | null;
   status: string;
+  projectType?: "client" | "internal";
   startDate: string | null;
   estimatedEndDate: string | null;
   contactName: string | null;
@@ -282,6 +283,10 @@ export default function Portal() {
   const [showIdeaForm, setShowIdeaForm] = useState(false);
   const [ideaTitle, setIdeaTitle] = useState("");
   const [ideaDesc, setIdeaDesc] = useState("");
+  // Quick note (proyectos internos)
+  const [showNoteForm, setShowNoteForm] = useState(false);
+  const [noteText, setNoteText] = useState("");
+  const [noteSignificant, setNoteSignificant] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // Either /portal/:token (legacy magic link) or /portal/projects/:projectId (auth).
@@ -387,6 +392,23 @@ export default function Portal() {
       await fetch(`${base}/ideas/${ideaId}/vote`, { method: "PATCH" });
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: [`${base}/ideas`] }); },
+  });
+
+  const createQuickNoteMut = useMutation({
+    mutationFn: async ({ text, isSignificant }: { text: string; isSignificant: boolean }) => {
+      await fetch(`${base}/quick-note`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, isSignificant }),
+      });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`${base}/activity`] });
+      queryClient.invalidateQueries({ queryKey: [`${base}/pulse`] });
+      setShowNoteForm(false);
+      setNoteText("");
+      setNoteSignificant(false);
+    },
   });
 
   // Loading & error states
@@ -521,6 +543,52 @@ export default function Portal() {
         {/* ── PULSO ── */}
         {activeSection === "Pulso" && (
           <div className="space-y-6">
+            {/* Nota rápida — solo proyectos internos */}
+            {overview.projectType === "internal" && (
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                {!showNoteForm ? (
+                  <button
+                    onClick={() => setShowNoteForm(true)}
+                    className="w-full flex items-center gap-3 text-left text-sm text-gray-500 hover:text-[#2FA4A9] transition-colors"
+                  >
+                    <StickyNote className="w-4 h-4 shrink-0" />
+                    <span>Capturar una decisión, idea o avance del día...</span>
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <StickyNote className="w-4 h-4 text-[#2FA4A9]" />
+                      <span className="text-xs font-semibold uppercase tracking-wider text-gray-500">Nota rápida</span>
+                    </div>
+                    <Textarea
+                      value={noteText}
+                      onChange={(e) => setNoteText(e.target.value)}
+                      placeholder="Ej: 'Decidimos usar magic-link híbrido en vez de password puro porque la fricción mata adopción.'"
+                      rows={3}
+                      autoFocus
+                      className="text-sm"
+                    />
+                    <div className="flex items-center justify-between gap-3">
+                      <label className="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
+                        <input type="checkbox" checked={noteSignificant} onChange={(e) => setNoteSignificant(e.target.checked)} className="rounded" />
+                        Marcar como hito importante
+                      </label>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="ghost" onClick={() => { setShowNoteForm(false); setNoteText(""); setNoteSignificant(false); }}>Cancelar</Button>
+                        <Button
+                          size="sm"
+                          disabled={createQuickNoteMut.isPending || noteText.trim().length < 3}
+                          onClick={() => createQuickNoteMut.mutate({ text: noteText.trim(), isSignificant: noteSignificant })}
+                          className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white"
+                        >
+                          {createQuickNoteMut.isPending ? "Guardando..." : "Guardar"}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
             {/* Analytics preview — solo visible si la conexión está activa */}
             {isAuthMode && analyticsPreview?.status === "connected" && analyticsPreview.totals && (
               <Link

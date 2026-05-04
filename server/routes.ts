@@ -6187,6 +6187,7 @@ ${urls}
       name: project.name,
       description: project.description,
       status: project.status,
+      projectType: project.projectType || "client",
       startDate: project.startDate,
       estimatedEndDate: project.estimatedEndDate,
       contactName,
@@ -6511,6 +6512,37 @@ ${urls}
         ...req.body,
       }).returning();
       res.json(idea);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // Quick note — solo válido para proyectos internos (projectType=internal).
+  // Captura una entrada en project_activity_entries para journaling de desarrollo.
+  app.post("/api/portal/:token/quick-note", async (req, res) => {
+    try {
+      const project = await getProjectByToken(req.params.token as string);
+      if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+      if ((project.projectType || "client") !== "internal") {
+        return res.status(403).json({ error: "Las notas rápidas solo aplican a proyectos internos" });
+      }
+      const text = String(req.body?.text || "").trim();
+      const category = String(req.body?.category || "feature").trim();
+      const isSignificant = req.body?.isSignificant === true;
+      if (!text || text.length < 3) return res.status(400).json({ error: "El texto es muy corto" });
+      if (text.length > 2000) return res.status(400).json({ error: "El texto excede 2000 caracteres" });
+
+      const [entry] = await db!.insert(projectActivityEntries).values({
+        projectId: project.id,
+        source: "manual",
+        summaryLevel1: text.slice(0, 200),
+        summaryLevel2: text.length > 200 ? text : null,
+        category,
+        aiGenerated: false,
+        isSignificant,
+      }).returning();
+      res.json(entry);
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ error: message });
