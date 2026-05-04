@@ -152,12 +152,11 @@ export async function generateWeeklySummary(projectId: string): Promise<string |
 
   const recentActivities = activities.filter(a => new Date(a.createdAt) >= oneWeekAgo);
 
-  if (recentActivities.length === 0) return null;
-
-  // Get tasks for progress context
+  // Get tasks for progress context (también nos da fallback cuando no hay activity entries)
   const allTasks = await db.select().from(projectTasks).where(eq(projectTasks.projectId, projectId));
   const completedTasks = allTasks.filter(t => t.status === "completed").length;
   const progress = allTasks.length > 0 ? Math.round((completedTasks / allTasks.length) * 100) : 0;
+  const tasksCompletedThisWeek = allTasks.filter(t => t.completedAt && new Date(t.completedAt) >= oneWeekAgo);
 
   // Get hours this week
   const timeLogs = await db.select().from(projectTimeLog)
@@ -165,21 +164,42 @@ export async function generateWeeklySummary(projectId: string): Promise<string |
   const weeklyHours = timeLogs
     .filter(t => new Date(t.date) >= oneWeekAgo)
     .reduce((sum, t) => sum + parseFloat(String(t.hours)), 0);
+  const weeklyTimeLogEntries = timeLogs.filter(t => new Date(t.date) >= oneWeekAgo);
 
-  const activitySummary = recentActivities
-    .map(a => `- [${a.category}] ${a.summaryLevel1}`)
-    .join("\n");
+  // Si no hay actividades AI ni tareas completadas ni horas registradas → no hay nada que reportar
+  if (recentActivities.length === 0 && tasksCompletedThisWeek.length === 0 && weeklyTimeLogEntries.length === 0) {
+    return null;
+  }
+
+  const activitySummary = recentActivities.length > 0
+    ? recentActivities.map(a => `- [${a.category}] ${a.summaryLevel1}`).join("\n")
+    : "(sin entradas auto-generadas esta semana)";
+
+  const tasksSummary = tasksCompletedThisWeek.length > 0
+    ? tasksCompletedThisWeek.map(t => `- ${t.clientFacingTitle || t.title}`).join("\n")
+    : "(ninguna tarea cerrada esta semana)";
+
+  const timeLogSummary = weeklyTimeLogEntries.length > 0
+    ? weeklyTimeLogEntries.slice(0, 10).map(t => `- ${t.date}: ${t.hours}h ${t.description ? `— ${t.description}` : ""}`).join("\n")
+    : "(sin entradas de tiempo)";
 
   const prompt = `Genera un resumen semanal breve y profesional para el cliente del proyecto "${project.name}".
 
 Progreso actual: ${progress}%
 Horas invertidas esta semana: ${weeklyHours.toFixed(1)}h
+Tareas cerradas esta semana: ${tasksCompletedThisWeek.length}
 
-Actividades de esta semana:
+Tareas completadas:
+${tasksSummary}
+
+Entradas de actividad (commits/decisiones):
 ${activitySummary}
 
+Time log de la semana:
+${timeLogSummary}
+
 Escribe un resumen de 4-6 líneas en español latinoamericano, tono profesional pero cercano. Incluye:
-1. Qué se logró esta semana (2-3 puntos principales)
+1. Qué se logró esta semana (2-3 puntos principales — combina tareas + actividades + time log)
 2. En qué se enfocará la próxima semana
 3. Si hay algo pendiente de revisión del cliente
 

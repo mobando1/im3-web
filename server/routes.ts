@@ -6964,22 +6964,36 @@ ${urls}
 
   // Admin: generate weekly summary manually
   app.post("/api/admin/projects/:id/weekly-summary", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ message: "DB no configurada" });
     const id = req.params.id as string;
-    const summary = await generateWeeklySummary(id);
-    if (!summary) return res.status(400).json({ message: "No se pudo generar el resumen" });
+    try {
+      const [project] = await db.select().from(clientProjects).where(eq(clientProjects.id, id));
+      if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
-    // Post as system message
-    await db!.insert(projectMessages).values({
-      projectId: id,
-      senderType: "team",
-      senderName: "Resumen semanal",
-      content: summary,
-    });
+      const summary = await generateWeeklySummary(id);
+      if (!summary) {
+        return res.status(400).json({
+          message: "No hay actividad esta semana para resumir. Registra tareas completadas, time logs o espera a que el análisis de commits corra (6 AM Bogotá diario).",
+        });
+      }
 
-    // Update last summary timestamp
-    await db!.update(clientProjects).set({ lastWeeklySummaryAt: new Date() }).where(eq(clientProjects.id, id));
+      // Post as system message
+      await db.insert(projectMessages).values({
+        projectId: id,
+        senderType: "team",
+        senderName: "Resumen semanal",
+        content: summary,
+      });
 
-    res.json({ message: "Resumen semanal generado", summary });
+      // Update last summary timestamp
+      await db.update(clientProjects).set({ lastWeeklySummaryAt: new Date() }).where(eq(clientProjects.id, id));
+
+      res.json({ message: "Resumen semanal generado", summary });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      log(`weekly-summary error: ${message}`);
+      res.status(500).json({ message: `Error generando resumen: ${message}` });
+    }
   });
 
   // Admin: get activity entries for a project
