@@ -7560,6 +7560,64 @@ ${urls}
     }
   });
 
+  // Snapshots de propuesta (undo del chat)
+  app.get("/api/admin/proposals/:id/snapshots", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { proposalSnapshots } = await import("@shared/schema");
+      const snaps = await db.select({
+        id: proposalSnapshots.id,
+        changeSummary: proposalSnapshots.changeSummary,
+        sectionKey: proposalSnapshots.sectionKey,
+        createdAt: proposalSnapshots.createdAt,
+      }).from(proposalSnapshots)
+        .where(eq(proposalSnapshots.proposalId, req.params.id as string))
+        .orderBy(desc(proposalSnapshots.createdAt))
+        .limit(20);
+      res.json(snaps);
+    } catch (err: any) {
+      log(`Error listing snapshots: ${err?.message}`);
+      res.status(500).json({ error: "Error listando snapshots" });
+    }
+  });
+
+  app.post("/api/admin/proposals/:id/snapshots/:snapshotId/restore", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { proposalSnapshots } = await import("@shared/schema");
+      const proposalId = req.params.id as string;
+      const snapshotId = req.params.snapshotId as string;
+
+      const [snap] = await db.select().from(proposalSnapshots)
+        .where(eq(proposalSnapshots.id, snapshotId))
+        .limit(1);
+      if (!snap || snap.proposalId !== proposalId) {
+        return res.status(404).json({ error: "Snapshot no encontrado" });
+      }
+
+      // Snapshot del estado actual antes de restaurar (para volver hacia adelante)
+      const [currentProp] = await db.select({ sections: proposals.sections })
+        .from(proposals).where(eq(proposals.id, proposalId)).limit(1);
+      if (currentProp?.sections) {
+        await db.insert(proposalSnapshots).values({
+          proposalId,
+          sections: currentProp.sections,
+          changeSummary: `[Auto-snapshot antes de restaurar]`,
+          sectionKey: null,
+        }).catch(() => {});
+      }
+
+      await db.update(proposals)
+        .set({ sections: snap.sections, updatedAt: new Date() })
+        .where(eq(proposals.id, proposalId));
+
+      res.json({ success: true, restoredFrom: snap.createdAt });
+    } catch (err: any) {
+      log(`Error restoring snapshot: ${err?.message}`);
+      res.status(500).json({ error: "Error restaurando snapshot" });
+    }
+  });
+
   app.post("/api/admin/proposals/:id/send", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {

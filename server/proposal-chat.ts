@@ -1,6 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "./db";
-import { proposals, proposalChatMessages, contacts } from "@shared/schema";
+import { proposals, proposalChatMessages, proposalSnapshots, contacts } from "@shared/schema";
 import { eq, asc } from "drizzle-orm";
 import { log } from "./index";
 import { listFolderFilesRecursive, readGoogleDriveContent, uploadFileToDrive, findOrCreateClientFolder } from "./google-drive";
@@ -12,6 +12,7 @@ import {
 } from "@shared/proposal-template/types";
 import type { ZodSchema } from "zod";
 import { VOICE_GUIDE, COST_REFERENCE, HARDWARE_CATALOG, CASE_STUDIES, gatherContactContext } from "./proposal-ai";
+import { runAllValidators, formatIssuesAsText } from "./proposal-validators";
 
 const SECTION_SCHEMAS: Record<string, ZodSchema> = {
   meta: proposalMetaSchema,
@@ -664,12 +665,45 @@ ${proposalSnapshot}`,
         : `(Sección "${sectionKey}" no existe o está vacía)`;
     }
     if (toolName === "audit_proposal") {
+      // 1. Validators matemáticos en código (deterministas, no Claude)
+      const mathIssues = runAllValidators(currentSections);
+      const mathReport = formatIssuesAsText(mathIssues);
+
+      // 2. Dump de secciones para análisis cualitativo de Claude
       const allSections = Object.entries(currentSections)
         .filter(([_, v]) => v !== null && v !== undefined)
         .map(([k, v]) => `--- ${k} ---\n${JSON.stringify(v, null, 2).substring(0, 4000)}`)
         .join("\n\n");
-      toolCalls.push({ tool: "audit_proposal", summary: "Auditando toda la propuesta" });
-      return `AUDIT — todas las secciones de la propuesta:\n\n${allSections}\n\nAhora analiza:\n1. Inconsistencias matemáticas (sumas, milestones vs amount, ROI vs recoveries)\n2. Incoherencias entre secciones (¿lo que dice tech está en solution? ¿el timeline cubre todos los módulos?)\n3. Mensajes vagos sin números concretos del cliente\n4. Voz fuera de tono\n5. Oportunidades para citar CASE_STUDIES o aplicar VOICE_GUIDE\n\nReporta hallazgos al usuario y propón fixes.`;
+
+      toolCalls.push({
+        tool: "audit_proposal",
+        summary: mathIssues.length > 0
+          ? `Auditando — ${mathIssues.length} inconsistencia(s) matemática(s) detectada(s)`
+          : "Auditando — sin inconsistencias matemáticas",
+      });
+
+      return `AUDIT REPORT
+
+═══════════════════════════════
+1. VALIDACIÓN MATEMÁTICA (código, no Claude)
+═══════════════════════════════
+${mathReport}
+
+═══════════════════════════════
+2. ANÁLISIS CUALITATIVO (te toca a ti)
+═══════════════════════════════
+Estado de las secciones:
+
+${allSections}
+
+INSTRUCCIONES:
+- Si hubo inconsistencias matemáticas arriba (🔴 o 🟡), proponlas como fixes concretos al usuario.
+- Analiza ahora las cosas que el código no puede ver:
+  * Incoherencias entre secciones (lo de tech aparece en solution? timeline cubre todos los módulos?)
+  * Mensajes vagos sin números concretos del cliente (revisa el contexto del cliente arriba)
+  * Voz fuera del VOICE_GUIDE
+  * Oportunidades para citar CASE_STUDIES relevantes
+- Reporta hallazgos al usuario en una lista clara y propón los fixes en el siguiente turno (o aplícalos directamente con update_section si son obvios).`;
     }
     if (toolName === "list_drive_folder") {
       const [contact] = await dbRef.select({ driveFolderId: contacts.driveFolderId, empresa: contacts.empresa })
@@ -710,6 +744,18 @@ ${proposalSnapshot}`,
         log(`[proposal-chat] Validation failed for "${sectionKey}": ${errors}`);
         return `ERROR DE VALIDACIÓN — la sección "${sectionKey}" NO se guardó porque el formato no coincide con el schema. Revisa el schema en mi system prompt y reenvía con la estructura correcta.\n\nErrores:\n${errors}\n\nIMPORTANTE: Si el campo "features" debe ser array de strings, NO uses array de objetos. Si necesitas listar agentes IA, ponlos como strings descriptivos en features.`;
       }
+      // Snapshot ANTES del cambio para permitir undo desde la UI del chat
+      try {
+        await dbRef.insert(proposalSnapshots).values({
+          proposalId: params.proposalId,
+          sections: currentSections,
+          changeSummary,
+          sectionKey,
+        });
+      } catch (snapErr) {
+        log(`[proposal-chat] could not snapshot before update: ${(snapErr as Error).message}`);
+      }
+
       currentSections = { ...currentSections, [sectionKey]: parsed.data };
       await dbRef.update(proposals)
         .set({ sections: currentSections, updatedAt: new Date() })

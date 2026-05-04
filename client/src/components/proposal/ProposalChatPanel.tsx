@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { X, Send, Sparkles, Loader2, Check, Trash2, Paperclip, FileText, Image as ImageIcon, FileType } from "lucide-react";
+import { X, Send, Sparkles, Loader2, Check, Trash2, Paperclip, FileText, Image as ImageIcon, FileType, Undo2 } from "lucide-react";
 
 type ToolCall = { tool: string; section?: string; summary: string };
 
@@ -114,6 +114,30 @@ export function ProposalChatPanel({ proposalId, open, onClose }: Props) {
     },
   });
 
+  const { data: snapshots = [] } = useQuery<Array<{
+    id: string;
+    changeSummary: string | null;
+    sectionKey: string | null;
+    createdAt: string;
+  }>>({
+    queryKey: [`/api/admin/proposals/${proposalId}/snapshots`],
+    enabled: open,
+  });
+
+  const undoMutation = useMutation({
+    mutationFn: async (snapshotId: string) => {
+      const res = await fetch(`/api/admin/proposals/${proposalId}/snapshots/${snapshotId}/restore`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Error restaurando");
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/proposals/${proposalId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/proposals/${proposalId}/snapshots`] });
+    },
+  });
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files || []);
     const valid = files.filter(f => {
@@ -188,6 +212,22 @@ export function ProposalChatPanel({ proposalId, open, onClose }: Props) {
             </div>
           </div>
           <div className="flex gap-1">
+            {snapshots.length > 0 && (
+              <button
+                onClick={() => {
+                  const last = snapshots[0];
+                  const summary = last.changeSummary || "último cambio";
+                  if (confirm(`¿Deshacer el último cambio del chat?\n"${summary}"`)) {
+                    undoMutation.mutate(last.id);
+                  }
+                }}
+                disabled={undoMutation.isPending}
+                className="p-1.5 rounded-md text-gray-400 hover:text-amber-600 hover:bg-amber-50 transition-colors disabled:opacity-50"
+                title="Deshacer último cambio del chat"
+              >
+                <Undo2 className="w-4 h-4" />
+              </button>
+            )}
             {messages.length > 0 && (
               <button
                 onClick={() => { if (confirm("¿Limpiar todo el chat?")) clearMutation.mutate(); }}

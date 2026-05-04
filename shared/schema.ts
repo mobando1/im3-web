@@ -649,6 +649,24 @@ export const proposals = pgTable("proposals", {
 export type Proposal = typeof proposals.$inferSelect;
 export type InsertProposal = typeof proposals.$inferInsert;
 
+// Snapshots de propuesta antes de cada cambio del chat — permite undo del chat
+export const proposalSnapshots = pgTable("proposal_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  proposalId: varchar("proposal_id").notNull(),
+  // Snapshot completo del campo `sections` antes del cambio
+  sections: json("sections").$type<Record<string, unknown>>().notNull(),
+  // Mensaje del chat que disparó este cambio (para mostrar "deshacer este cambio del chat")
+  triggeredByMessageId: varchar("triggered_by_message_id"),
+  // Resumen humano del cambio aplicado (de toolCall.summary)
+  changeSummary: text("change_summary"),
+  // Sección que se modificó (si fue update_section específico)
+  sectionKey: text("section_key"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ProposalSnapshot = typeof proposalSnapshots.$inferSelect;
+export type InsertProposalSnapshot = typeof proposalSnapshots.$inferInsert;
+
 // Chat de refinamiento por propuesta (Fase 1: assistant para ajustar secciones)
 export const proposalChatMessages = pgTable("proposal_chat_messages", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
