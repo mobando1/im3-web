@@ -6018,27 +6018,18 @@ ${urls}
   });
 
   // ─────────────────────────────────────────────────────────────
-  // Portal Analytics — Cliente (read dashboard data)
+  // Portal Analytics — read dashboard data (cliente + admin preview)
   // ─────────────────────────────────────────────────────────────
 
-  app.get("/api/portal/projects/:projectId/analytics", requireClient, async (req, res) => {
-    if (!db) return res.status(500).json({ error: "DB not configured" });
-    const userId = (req.user as any).id;
-    const projectId = String(req.params.projectId);
-
-    // Verifica que el usuario tenga acceso al proyecto
-    const [link] = await db
-      .select()
-      .from(clientUserProjects)
-      .where(and(eq(clientUserProjects.clientUserId, userId), eq(clientUserProjects.clientProjectId, projectId)));
-    if (!link) return res.status(403).json({ error: "Sin acceso a este proyecto" });
+  /** Shared helper: builds the analytics dashboard response for a project. */
+  async function buildAnalyticsResponse(projectId: string) {
+    if (!db) return { status: "not_configured", days: [], totals: null, prevTotals: null };
 
     const [conn] = await db.select().from(clientAnalyticsConnections).where(eq(clientAnalyticsConnections.clientProjectId, projectId));
     if (!conn || conn.status !== "connected") {
-      return res.json({ status: conn?.status || "not_configured", days: [], totals: null, prevTotals: null });
+      return { status: conn?.status || "not_configured", days: [], totals: null, prevTotals: null };
     }
 
-    // Últimos 30 días + 30 anteriores para comparativa
     const days60 = await db
       .select()
       .from(clientAnalyticsDaily)
@@ -6067,7 +6058,6 @@ ${urls}
       };
     };
 
-    // Top agregados últimos 30 días
     const aggregateTop = (key: "topPages" | "topSources" | "topCountries", labelField: string, valueField: string) => {
       const map = new Map<string, number>();
       for (const r of last30) {
@@ -6084,8 +6074,8 @@ ${urls}
         .map(([label, value]) => ({ [labelField]: label, [valueField]: value }));
     };
 
-    res.json({
-      status: "connected",
+    return {
+      status: "connected" as const,
       lastSyncedAt: conn.lastSyncedAt,
       propertyTimezone: conn.propertyTimezone,
       days: last30.map((r) => ({
@@ -6100,7 +6090,29 @@ ${urls}
       topPages: aggregateTop("topPages", "path", "pageviews"),
       topSources: aggregateTop("topSources", "source", "sessions"),
       topCountries: aggregateTop("topCountries", "country", "users"),
-    });
+    };
+  }
+
+  // Cliente — requiere sesión client_user vinculada al proyecto
+  app.get("/api/portal/projects/:projectId/analytics", requireClient, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const userId = (req.user as any).id;
+    const projectId = String(req.params.projectId);
+
+    const [link] = await db
+      .select()
+      .from(clientUserProjects)
+      .where(and(eq(clientUserProjects.clientUserId, userId), eq(clientUserProjects.clientProjectId, projectId)));
+    if (!link) return res.status(403).json({ error: "Sin acceso a este proyecto" });
+
+    const data = await buildAnalyticsResponse(projectId);
+    res.json(data);
+  });
+
+  // Admin preview — mismo shape, sin necesidad de ser client_user
+  app.get("/api/admin/projects/:id/analytics-data", requireAuth, async (req, res) => {
+    const data = await buildAnalyticsResponse(String(req.params.id));
+    res.json(data);
   });
 
   // ─────────────────────────────────────────────────────────────
