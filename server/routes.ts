@@ -7463,6 +7463,46 @@ ${urls}
   });
 
   // Send proposal (change status + send email)
+  // Proposal chat — Fase 1: asistente conversacional para refinar propuestas
+  app.get("/api/admin/proposals/:id/chat", requireAuth, async (req, res) => {
+    try {
+      const { getProposalChatHistory } = await import("./proposal-chat");
+      const history = await getProposalChatHistory(req.params.id as string);
+      res.json(history);
+    } catch (err: any) {
+      log(`Error fetching chat history: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo historial" });
+    }
+  });
+
+  app.post("/api/admin/proposals/:id/chat", requireAuth, async (req, res) => {
+    const proposalId = req.params.id as string;
+    const message = (req.body?.message as string || "").trim();
+    if (!message) return res.status(400).json({ error: "Mensaje requerido" });
+
+    try {
+      const { runProposalChat } = await import("./proposal-chat");
+      const { runAgent } = await import("./agents/runner");
+      const result = await runAgent("proposal-chat", () => runProposalChat({ proposalId, userMessage: message }), { triggeredBy: "manual" });
+      res.json(result);
+    } catch (err: any) {
+      log(`Error in proposal chat: ${err?.message}`);
+      res.status(500).json({ error: err?.message || "Error en chat" });
+    }
+  });
+
+  app.delete("/api/admin/proposals/:id/chat", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { proposalChatMessages } = await import("@shared/schema");
+      await db.delete(proposalChatMessages).where(eq(proposalChatMessages.proposalId, req.params.id as string));
+      res.json({ success: true });
+    } catch (err: any) {
+      log(`Error clearing chat: ${err?.message}`);
+      res.status(500).json({ error: "Error limpiando chat" });
+    }
+  });
+
   app.post("/api/admin/proposals/:id/send", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {

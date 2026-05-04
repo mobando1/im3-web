@@ -388,6 +388,19 @@ export async function runMigrations() {
     await pool.query(`ALTER TABLE "proposals" ADD COLUMN IF NOT EXISTS "deleted_at" timestamp;`).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_proposals_deleted_at" ON "proposals" ("deleted_at");`).catch(() => {});
 
+    // Proposal chat messages — Fase 1 del asistente conversacional
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "proposal_chat_messages" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "proposal_id" varchar NOT NULL,
+        "role" text NOT NULL,
+        "content" text NOT NULL,
+        "tool_calls" json,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_proposal_chat_proposal_id" ON "proposal_chat_messages" ("proposal_id", "created_at");`).catch(() => {});
+
     // Portal de Clientes — Auth (login + reset + invite)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "client_users" (

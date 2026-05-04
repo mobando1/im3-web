@@ -2,8 +2,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Copy, ExternalLink, Send, Sparkles, Save, Eye, FolderKanban, FileSearch, X, Wand2, Check, RotateCcw, Trash2 } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Send, Sparkles, Save, Eye, FolderKanban, FileSearch, X, Wand2, Check, RotateCcw, Trash2, MessageCircle } from "lucide-react";
 import { SectionForm, hasTypedForm } from "@/components/proposal/SectionForm";
+import { ProposalChatPanel } from "@/components/proposal/ProposalChatPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -284,6 +285,7 @@ export default function ProposalEditor() {
   const [aiModifySection, setAiModifySection] = useState<string | null>(null);
   const [aiInstruction, setAiInstruction] = useState("");
   const [aiOptions, setAiOptions] = useState<Array<{ label: string; description: string; section: unknown }> | null>(null);
+  const [chatOpen, setChatOpen] = useState(false);
 
   const { data: proposal, isLoading } = useQuery<any>({
     queryKey: [`/api/admin/proposals/${id}`],
@@ -552,6 +554,16 @@ export default function ProposalEditor() {
           <Sparkles className="w-4 h-4" />
           {generateMut.isPending ? "Generando..." : hasSections ? "Re-generar con IA" : "Generar con IA"}
         </Button>
+        {hasSections && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 border-purple-200 text-purple-700 hover:bg-purple-50"
+            onClick={() => setChatOpen(true)}
+          >
+            <MessageCircle className="w-4 h-4" /> Asistente IA
+          </Button>
+        )}
         {hasSections && (
           <a
             href={`/proposal/${proposal.accessToken}`}
@@ -1058,6 +1070,14 @@ export default function ProposalEditor() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {hasSections && proposal && (
+        <ProposalChatPanel
+          proposalId={proposal.id}
+          open={chatOpen}
+          onClose={() => setChatOpen(false)}
+        />
+      )}
     </div>
   );
 }

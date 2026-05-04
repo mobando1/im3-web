@@ -151,6 +151,14 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
     criticality: "normal",
   },
   {
+    name: "proposal-chat",
+    displayName: "Asistente Conversacional de Propuestas",
+    domain: "ai",
+    description: "Refina propuestas conversacionalmente con Claude Sonnet 4 + tool use para editar secciones",
+    trigger: "manual",
+    criticality: "normal",
+  },
+  {
     name: "cost-reference-freshness",
     displayName: "Verificador de Frescura de Precios",
     domain: "analysis",

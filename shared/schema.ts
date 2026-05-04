@@ -647,6 +647,20 @@ export const proposals = pgTable("proposals", {
 export type Proposal = typeof proposals.$inferSelect;
 export type InsertProposal = typeof proposals.$inferInsert;
 
+// Chat de refinamiento por propuesta (Fase 1: assistant para ajustar secciones)
+export const proposalChatMessages = pgTable("proposal_chat_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  proposalId: varchar("proposal_id").notNull(),
+  role: text("role").notNull(), // "user" | "assistant"
+  content: text("content").notNull(),
+  // Si Claude usó tools, registra las modificaciones aplicadas (para mostrar al usuario)
+  toolCalls: json("tool_calls").$type<Array<{ tool: string; section?: string; summary: string }>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ProposalChatMessage = typeof proposalChatMessages.$inferSelect;
+export type InsertProposalChatMessage = typeof proposalChatMessages.$inferInsert;
+
 export const proposalViews = pgTable("proposal_views", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   proposalId: varchar("proposal_id").notNull(),
