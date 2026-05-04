@@ -66,6 +66,8 @@ export function ProposalChatPanel({ proposalId, open, onClose }: Props) {
   const [input, setInput] = useState("");
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [streaming, setStreaming] = useState(false);
+  const [streamingText, setStreamingText] = useState("");
+  const [streamingTools, setStreamingTools] = useState<ToolCall[]>([]);
   const queryClient = useQueryClient();
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -82,22 +84,64 @@ export function ProposalChatPanel({ proposalId, open, onClose }: Props) {
       formData.append("message", message);
       for (const f of files) formData.append("files", f);
 
-      const res = await fetch(`/api/admin/proposals/${proposalId}/chat`, {
+      const res = await fetch(`/api/admin/proposals/${proposalId}/chat/stream`, {
         method: "POST",
         body: formData,
         credentials: "include",
       });
-      if (!res.ok) {
+      if (!res.ok || !res.body) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error || "Error en chat");
       }
-      return res.json();
+
+      // Lectura SSE
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split("\n\n");
+        buffer = lines.pop() || "";
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue;
+          const data = line.slice(6).trim();
+          if (!data) continue;
+          try {
+            const event = JSON.parse(data);
+            if (event.type === "text_delta") {
+              setStreamingText(prev => prev + event.text);
+            } else if (event.type === "tool_call") {
+              setStreamingTools(prev => [...prev, { tool: event.toolName, section: event.section, summary: event.summary }]);
+            } else if (event.type === "error") {
+              throw new Error(event.error);
+            } else if (event.type === "done") {
+              return { assistantMessage: event.assistantMessage, toolCalls: event.toolCalls };
+            }
+          } catch (e) {
+            // Ignorar líneas no parseables
+          }
+        }
+      }
+      return { assistantMessage: "", toolCalls: [] };
     },
-    onMutate: () => setStreaming(true),
-    onSettled: () => setStreaming(false),
+    onMutate: () => {
+      setStreaming(true);
+      setStreamingText("");
+      setStreamingTools([]);
+    },
+    onSettled: () => {
+      setStreaming(false);
+      setStreamingText("");
+      setStreamingTools([]);
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: [`/api/admin/proposals/${proposalId}/chat`] });
       queryClient.invalidateQueries({ queryKey: [`/api/admin/proposals/${proposalId}`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/proposals/${proposalId}/snapshots`] });
     },
   });
 
@@ -318,9 +362,28 @@ export function ProposalChatPanel({ proposalId, open, onClose }: Props) {
           )}
           {streaming && (
             <div className="flex justify-start">
-              <div className="bg-white border border-gray-200 rounded-2xl px-4 py-2.5 flex items-center gap-2">
-                <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-500" />
-                <span className="text-xs text-gray-500">Pensando...</span>
+              <div className="max-w-[85%] bg-white border border-gray-200 rounded-2xl px-4 py-2.5">
+                {streamingText ? (
+                  <p className="text-sm whitespace-pre-wrap leading-relaxed text-gray-800">{streamingText}<span className="inline-block w-1.5 h-3.5 bg-purple-400 ml-0.5 animate-pulse" /></p>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin text-purple-500" />
+                    <span className="text-xs text-gray-500">Pensando...</span>
+                  </div>
+                )}
+                {streamingTools.length > 0 && (
+                  <div className="mt-2 pt-2 border-t border-gray-100 space-y-1">
+                    {streamingTools.map((tc, i) => (
+                      <div key={i} className="flex items-start gap-1.5 text-[11px] text-emerald-700 bg-emerald-50 rounded px-2 py-1">
+                        <Check className="w-3 h-3 mt-0.5 shrink-0" />
+                        <div>
+                          {tc.section && <span className="font-medium">{SECTION_LABELS[tc.section] || tc.section}: </span>}
+                          <span>{tc.summary}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           )}

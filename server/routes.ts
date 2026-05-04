@@ -7113,6 +7113,33 @@ ${urls}
 
   // Upload file to Drive + save in projectFiles
   const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 50 * 1024 * 1024 } }); // 50MB max
+  const chatUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: 10 * 1024 * 1024, files: 5 }, // 10MB/archivo, max 5
+  });
+
+  // Rate limit del chat de propuestas: 50 mensajes por hora por usuario admin
+  // Sliding window simple en memoria — para producción multi-instancia usar Redis.
+  const CHAT_RATE_LIMIT = 50;
+  const CHAT_RATE_WINDOW_MS = 60 * 60 * 1000;
+  const chatRateLog = new Map<string, number[]>();
+
+  const chatRateLimiter = (req: any, res: any, next: any) => {
+    const userId = (req.user as { id?: string } | undefined)?.id || req.ip || "anon";
+    const now = Date.now();
+    const cutoff = now - CHAT_RATE_WINDOW_MS;
+    const stamps = (chatRateLog.get(userId) || []).filter(t => t > cutoff);
+    if (stamps.length >= CHAT_RATE_LIMIT) {
+      const retryAfter = Math.ceil((stamps[0] + CHAT_RATE_WINDOW_MS - now) / 1000);
+      res.setHeader("Retry-After", retryAfter.toString());
+      return res.status(429).json({
+        error: `Rate limit excedido (${CHAT_RATE_LIMIT} mensajes/hora). Reintenta en ${Math.ceil(retryAfter / 60)} min.`,
+      });
+    }
+    stamps.push(now);
+    chatRateLog.set(userId, stamps);
+    next();
+  };
 
   app.post("/api/admin/projects/:id/upload", requireAuth, upload.single("file"), async (req, res) => {
     const projectId = req.params.id as string;
@@ -7507,12 +7534,7 @@ ${urls}
     }
   });
 
-  const chatUpload = multer({
-    storage: multer.memoryStorage(),
-    limits: { fileSize: 10 * 1024 * 1024, files: 5 }, // 10MB por archivo, max 5 archivos
-  });
-
-  app.post("/api/admin/proposals/:id/chat", requireAuth, chatUpload.array("files", 5), async (req, res) => {
+  app.post("/api/admin/proposals/:id/chat", requireAuth, chatRateLimiter, chatUpload.array("files", 5), async (req, res) => {
     const proposalId = req.params.id as string;
     const message = (req.body?.message as string || "").trim();
     const files = (req.files as Express.Multer.File[] | undefined) || [];
@@ -7557,6 +7579,68 @@ ${urls}
     } catch (err: any) {
       log(`Error clearing chat: ${err?.message}`);
       res.status(500).json({ error: "Error limpiando chat" });
+    }
+  });
+
+  // Streaming endpoint (SSE) para el chat — emite text_delta + tool_call en vivo
+  app.post("/api/admin/proposals/:id/chat/stream", requireAuth, chatRateLimiter, chatUpload.array("files", 5), async (req, res) => {
+    const proposalId = req.params.id as string;
+    const message = (req.body?.message as string || "").trim();
+    const files = (req.files as Express.Multer.File[] | undefined) || [];
+
+    if (!message && files.length === 0) {
+      return res.status(400).json({ error: "Mensaje o archivo requerido" });
+    }
+
+    // Setup SSE headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.setHeader("X-Accel-Buffering", "no");
+    res.flushHeaders?.();
+
+    const sendEvent = (event: { type: string; [key: string]: any }) => {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    };
+
+    let closed = false;
+    req.on("close", () => { closed = true; });
+
+    try {
+      const { runProposalChat } = await import("./proposal-chat");
+      const { runAgent } = await import("./agents/runner");
+
+      const attachments = files.map(f => ({
+        name: f.originalname,
+        mime: f.mimetype,
+        size: f.size,
+        buffer: f.buffer,
+      }));
+
+      const result = await runAgent(
+        "proposal-chat",
+        () => runProposalChat({
+          proposalId,
+          userMessage: message || "(sin texto, ver archivos adjuntos)",
+          attachments: attachments.length > 0 ? attachments : undefined,
+          onEvent: (ev) => {
+            if (closed) return;
+            sendEvent(ev);
+          },
+        }),
+        { triggeredBy: "manual" }
+      );
+
+      if (!closed) {
+        sendEvent({ type: "done", assistantMessage: result.assistantMessage, toolCalls: result.toolCalls });
+        res.end();
+      }
+    } catch (err: any) {
+      log(`Error in proposal chat stream: ${err?.message}`);
+      if (!closed) {
+        sendEvent({ type: "error", error: err?.message || "Error en chat" });
+        res.end();
+      }
     }
   });
 

@@ -433,10 +433,20 @@ ESTILO Y REGLAS
 
 ${SCHEMA_DOCS}`;
 
+export type StreamEvent =
+  | { type: "text_delta"; text: string }
+  | { type: "tool_call"; toolName: string; section?: string; summary: string }
+  | { type: "tool_error"; toolName: string; error: string }
+  | { type: "done"; assistantMessage: string; toolCalls: ToolCallSummary[] }
+  | { type: "error"; error: string };
+
+export type StreamCallback = (event: StreamEvent) => void;
+
 export async function runProposalChat(params: {
   proposalId: string;
   userMessage: string;
   attachments?: Attachment[];
+  onEvent?: StreamCallback;
 }): Promise<{
   assistantMessage: string;
   toolCalls: ToolCallSummary[];
@@ -449,6 +459,7 @@ async function runProposalChatInner(params: {
   proposalId: string;
   userMessage: string;
   attachments?: Attachment[];
+  onEvent?: StreamCallback;
 }): Promise<{
   assistantMessage: string;
   toolCalls: ToolCallSummary[];
@@ -721,13 +732,20 @@ INSTRUCCIONES:
     }
     if (toolName === "read_drive_file") {
       const fileId = toolInput.fileId as string;
+      // Timeout de 30s — un PDF lento no puede colgar todo el turno del chat
+      const READ_TIMEOUT_MS = 30000;
       try {
-        const result = await readGoogleDriveContent(`https://drive.google.com/file/d/${fileId}/view`);
+        const result = await Promise.race([
+          readGoogleDriveContent(`https://drive.google.com/file/d/${fileId}/view`),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error(`Timeout: la lectura tardó más de ${READ_TIMEOUT_MS / 1000}s`)), READ_TIMEOUT_MS)
+          ),
+        ]);
         const content = result.content.substring(0, 20000);
         toolCalls.push({ tool: "read_drive_file", summary: `Leí archivo de Drive (${result.content.length} chars)` });
         return `Contenido del archivo (${result.mimeType}):\n\n${content}${result.content.length > 20000 ? "\n\n[...truncado, archivo más largo]" : ""}`;
       } catch (err) {
-        return `Error leyendo archivo ${fileId}: ${(err as Error).message}`;
+        return `Error leyendo archivo ${fileId}: ${(err as Error).message}. Sugerencia: si es PDF muy largo, podría no extraer texto vía OCR.`;
       }
     }
     if (toolName === "update_section") {
@@ -770,13 +788,23 @@ INSTRUCCIONES:
   while (iteration < MAX_ITERATIONS) {
     iteration++;
 
-    const response = await anthropic.messages.create({
+    // Usamos messages.stream para emitir text_delta en tiempo real al cliente.
+    // Al final del stream tomamos el final message completo para procesar tool_use.
+    const stream = anthropic.messages.stream({
       model: MODEL,
       max_tokens: 8192,
       system: systemBlocks,
       tools: TOOLS,
       messages: claudeMessages,
     });
+
+    if (params.onEvent) {
+      stream.on("text", (textChunk) => {
+        params.onEvent!({ type: "text_delta", text: textChunk });
+      });
+    }
+
+    const response = await stream.finalMessage();
 
     // Recolectar TODOS los blocks (texto + tool_use) en UN solo assistant message
     const assistantContent: Anthropic.ContentBlockParam[] = [];
@@ -803,6 +831,7 @@ INSTRUCCIONES:
     }
 
     // Ejecutar TODOS los tool_use en paralelo y juntar resultados en UN solo user message
+    const toolCallsBeforeBatch = toolCalls.length;
     const toolResults = await Promise.all(
       toolUseBlocks.map(async (block) => {
         const content = await executeTool(block.name, block.input as Record<string, unknown>);
@@ -813,6 +842,14 @@ INSTRUCCIONES:
         };
       })
     );
+
+    // Emitir eventos para los tool calls que se agregaron en este batch
+    if (params.onEvent) {
+      for (let i = toolCallsBeforeBatch; i < toolCalls.length; i++) {
+        const tc = toolCalls[i];
+        params.onEvent({ type: "tool_call", toolName: tc.tool, section: tc.section, summary: tc.summary });
+      }
+    }
 
     claudeMessages.push({ role: "user", content: toolResults });
   }
