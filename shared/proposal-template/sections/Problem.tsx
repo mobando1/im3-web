@@ -5,9 +5,10 @@ import { useCostCounter } from "../hooks/useCostCounter";
 type Props = {
   data: ProblemData;
   interactive: boolean;
+  sectionLabel?: string;
 };
 
-export function Problem({ data, interactive }: Props) {
+export function Problem({ data, interactive, sectionLabel }: Props) {
   const wrapRef = useRef<HTMLDivElement>(null);
   const counterRef = useRef<HTMLDivElement>(null);
   const meterRef = useRef<HTMLDivElement>(null);
@@ -24,7 +25,7 @@ export function Problem({ data, interactive }: Props) {
   return (
     <section className="pt-problem-section">
       <div className="pt-container">
-        <div className="pt-section-label">El Problema</div>
+        <div className="pt-section-label">{sectionLabel || "El Problema"}</div>
         <h2 className="pt-problem-heading pt-reveal" dangerouslySetInnerHTML={{ __html: data.intro }} />
 
         {showCounter && (

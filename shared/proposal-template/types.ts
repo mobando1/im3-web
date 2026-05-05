@@ -220,7 +220,8 @@ export const operationalCostsSchema = z.object({
 });
 
 // Secciones obligatorias: meta, hero, solution, pricing, cta — el resto son opcionales
-// y pueden eliminarse desde el editor si no aplican o no hay datos
+// y pueden eliminarse desde el editor si no aplican o no hay datos.
+// `sectionTitles` permite renombrar el header de cualquier sección (override del label por defecto).
 export const proposalDataSchema = z.object({
   meta: proposalMetaSchema,
   hero: heroSchema,
@@ -236,6 +237,7 @@ export const proposalDataSchema = z.object({
   hardware: hardwareSchema.optional(),
   operationalCosts: operationalCostsSchema.optional(),
   cta: ctaSchema,
+  sectionTitles: z.record(z.string()).optional(),
 });
 
 export type ProposalData = z.infer<typeof proposalDataSchema>;
@@ -260,3 +262,61 @@ export type OperationalCostGroup = z.infer<typeof operationalCostGroupSchema>;
 export type ProposalSectionKey = keyof ProposalData;
 
 export type ProposalSourcesReport = Partial<Record<ProposalSectionKey, string[]>>;
+
+// ───────────────────────────────────────────────────────────────
+// Proposal Brief — material de soporte detallado post-reunión
+// Estructura completamente diferente a ProposalData: por módulo
+// se profundiza en problema/funcionamiento/contexto/ejemplos.
+// ───────────────────────────────────────────────────────────────
+
+export const briefModuleSchema = z.object({
+  // Referencia al módulo equivalente en la propuesta inicial (slug). Permite vincular ambos.
+  key: z.string(),
+  title: z.string(),
+  // Qué problema concreto del cliente resuelve este módulo
+  problemSolved: z.string(),
+  // Cómo funciona técnicamente, en lenguaje accesible
+  howItWorks: z.string(),
+  // De qué momento o tema de la reunión surgió este requerimiento
+  meetingContext: z.string(),
+  // Por qué esta solución y no otra (alternativas descartadas, criterio)
+  whyThisChoice: z.string(),
+  // Qué pasaría si NO se hace este módulo (costo de oportunidad)
+  withoutThis: z.string(),
+  // Ejemplos concretos de uso
+  examples: z.array(z.string()),
+  // Detalles técnicos opcionales para mayor profundidad (stack, integraciones, etc.)
+  technicalDetails: z.string().optional(),
+});
+
+export const briefFAQSchema = z.object({
+  question: z.string(),
+  answer: z.string(),
+});
+
+export const briefGlossaryTermSchema = z.object({
+  term: z.string(),
+  definition: z.string(),
+});
+
+export const briefIntroSchema = z.object({
+  // Contexto: por qué existe este documento (complemento a la propuesta inicial)
+  context: z.string(),
+  // Cómo leer el documento (estructura, qué esperar)
+  howToRead: z.string(),
+});
+
+export const proposalBriefDataSchema = z.object({
+  intro: briefIntroSchema,
+  modules: z.array(briefModuleSchema).min(1),
+  faqs: z.array(briefFAQSchema).optional(),
+  glossary: z.array(briefGlossaryTermSchema).optional(),
+});
+
+export type BriefModule = z.infer<typeof briefModuleSchema>;
+export type BriefFAQ = z.infer<typeof briefFAQSchema>;
+export type BriefGlossaryTerm = z.infer<typeof briefGlossaryTermSchema>;
+export type BriefIntro = z.infer<typeof briefIntroSchema>;
+export type ProposalBriefData = z.infer<typeof proposalBriefDataSchema>;
+
+export type ProposalBriefSourcesReport = Partial<Record<"intro" | "modules" | "faqs" | "glossary", string[]>>;

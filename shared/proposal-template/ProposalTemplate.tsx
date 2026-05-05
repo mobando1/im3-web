@@ -79,7 +79,7 @@ export function ProposalTemplate({
       {data.problem && (
         <>
           <div className="pt-divider" />
-          <Problem data={data.problem} interactive={interactive} />
+          <Problem data={data.problem} interactive={interactive} sectionLabel={data.sectionTitles?.problem} />
         </>
       )}
       <div className="pt-divider" />

@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Copy, ExternalLink, Send, Sparkles, Save, Eye, FolderKanban, FileSearch, X, Wand2, Check, RotateCcw, Trash2, MessageCircle } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Send, Sparkles, Save, Eye, FolderKanban, FileSearch, X, Wand2, Check, RotateCcw, Trash2, MessageCircle, BookOpen, Pencil } from "lucide-react";
 import { SectionForm, hasTypedForm } from "@/components/proposal/SectionForm";
 import { ProposalChatPanel } from "@/components/proposal/ProposalChatPanel";
 import { Button } from "@/components/ui/button";
@@ -264,6 +264,8 @@ export default function ProposalEditor() {
   const queryClient = useQueryClient();
   const [activeSection, setActiveSection] = useState("resumen");
   const [editingSection, setEditingSection] = useState<string | null>(null);
+  const [editingTitleSection, setEditingTitleSection] = useState<string | null>(null);
+  const [titleDraft, setTitleDraft] = useState("");
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [pendingNav, setPendingNav] = useState<null | (() => void)>(null);
 
@@ -482,6 +484,42 @@ export default function ProposalEditor() {
   const SECTION_LABELS = isNewFormat ? SECTION_LABELS_NEW : SECTION_LABELS_LEGACY;
   const SECTION_ORDER = sectionOrderForHooks;
 
+  // Título efectivo de la sección — usa override en sectionTitles si existe, sino label por defecto
+  const sectionTitleOverrides: Record<string, string> = (sections as any).sectionTitles || {};
+  const getSectionTitle = (key: string): string => sectionTitleOverrides[key] || SECTION_LABELS[key] || key;
+
+  const startEditTitle = (key: string) => {
+    setEditingTitleSection(key);
+    setTitleDraft(getSectionTitle(key));
+  };
+
+  const saveSectionTitle = () => {
+    if (!editingTitleSection) return;
+    const trimmed = titleDraft.trim();
+    if (trimmed.length === 0) {
+      toast({ title: "El título no puede estar vacío", variant: "destructive" });
+      return;
+    }
+    const currentTitles = sectionTitleOverrides;
+    const defaultLabel = SECTION_LABELS[editingTitleSection] || editingTitleSection;
+    const nextTitles = { ...currentTitles };
+    if (trimmed === defaultLabel) {
+      // Si volvió al default, quitar el override para mantener el JSON limpio
+      delete nextTitles[editingTitleSection];
+    } else {
+      nextTitles[editingTitleSection] = trimmed;
+    }
+    const updated = { ...sections, sectionTitles: nextTitles };
+    updateMut.mutate({ sections: updated });
+    setEditingTitleSection(null);
+    setTitleDraft("");
+  };
+
+  const cancelEditTitle = () => {
+    setEditingTitleSection(null);
+    setTitleDraft("");
+  };
+
   const saveSection = () => {
     if (!editingSection) return;
     let value: unknown = editContent;
@@ -574,6 +612,17 @@ export default function ProposalEditor() {
             onClick={() => setChatOpen(true)}
           >
             <MessageCircle className="w-4 h-4" /> Asistente IA
+          </Button>
+        )}
+        {hasSections && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 border-amber-200 text-amber-800 hover:bg-amber-50"
+            onClick={() => navigate(`/admin/proposals/${id}/brief`)}
+            title="Brief técnico detallado — material de soporte post-reunión"
+          >
+            <BookOpen className="w-4 h-4" /> Brief técnico
           </Button>
         )}
         {hasSections && (
@@ -746,7 +795,7 @@ export default function ProposalEditor() {
           <div className="space-y-2">
             {Object.entries(proposal.aiSourcesReport as Record<string, string[]>).map(([section, sources]) => (
               <div key={section} className="bg-white rounded-md p-3 border border-amber-100">
-                <p className="text-xs font-medium text-gray-700 mb-1">{SECTION_LABELS[section] || section}</p>
+                <p className="text-xs font-medium text-gray-700 mb-1">{getSectionTitle(section)}</p>
                 <ul className="space-y-0.5">
                   {(sources || []).map((source: string, i: number) => (
                     <li key={i} className="text-[11px] text-gray-500 flex items-start gap-1.5">
@@ -792,7 +841,7 @@ export default function ProposalEditor() {
                           : "text-gray-600 hover:bg-gray-100"
                     }`}
                   >
-                    {SECTION_LABELS[key]}
+                    {getSectionTitle(key)}
                     {isDeleted && <span className="text-amber-500 ml-1 no-underline" title="Eliminada">⊘</span>}
                     {isEmpty && <span className="text-gray-300 ml-1">—</span>}
                   </button>
@@ -837,8 +886,38 @@ export default function ProposalEditor() {
               </div>
             ) : (
               <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-lg font-bold text-gray-900">{SECTION_LABELS[activeSection]}</h2>
+                <div className="flex items-center justify-between gap-3">
+                  {editingTitleSection === activeSection ? (
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <Input
+                        value={titleDraft}
+                        onChange={(e) => setTitleDraft(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") { e.preventDefault(); saveSectionTitle(); }
+                          if (e.key === "Escape") { e.preventDefault(); cancelEditTitle(); }
+                        }}
+                        autoFocus
+                        className="text-lg font-bold h-9"
+                        placeholder="Nombre de la sección"
+                      />
+                      <Button size="sm" onClick={saveSectionTitle} className="bg-[#2FA4A9] hover:bg-[#238b8f]">
+                        <Check className="w-3.5 h-3.5" />
+                      </Button>
+                      <Button size="sm" variant="ghost" onClick={cancelEditTitle}>
+                        <X className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => startEditTitle(activeSection)}
+                      className="group inline-flex items-center gap-2 text-left"
+                      title="Editar nombre de la sección"
+                    >
+                      <h2 className="text-lg font-bold text-gray-900">{getSectionTitle(activeSection)}</h2>
+                      <Pencil className="w-3.5 h-3.5 text-gray-300 group-hover:text-[#2FA4A9] transition-colors" />
+                    </button>
+                  )}
                   <div className="flex gap-2 items-center">
                     {/* Eliminar SECCIÓN COMPLETA — siempre visible para secciones eliminables */}
                     {isNewFormat && DELETABLE_SECTIONS_NEW.has(activeSection) && sections[activeSection] && (
@@ -962,7 +1041,7 @@ export default function ProposalEditor() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Wand2 className="w-5 h-5 text-purple-600" />
-              Modificar con IA: {aiModifySection ? SECTION_LABELS[aiModifySection] : ""}
+              Modificar con IA: {aiModifySection ? getSectionTitle(aiModifySection) : ""}
             </DialogTitle>
             <DialogDescription>
               Explica qué quieres cambiar y por qué. Claude genera 3 opciones diferentes para que elijas.
