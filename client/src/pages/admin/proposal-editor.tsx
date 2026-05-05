@@ -911,11 +911,14 @@ export default function ProposalEditor() {
                     <button
                       type="button"
                       onClick={() => startEditTitle(activeSection)}
-                      className="group inline-flex items-center gap-2 text-left"
-                      title="Editar nombre de la sección"
+                      className="group inline-flex items-center gap-2 text-left cursor-pointer rounded-md px-2 py-1 -mx-2 hover:bg-[#2FA4A9]/5 transition-colors"
+                      title="Click para editar el nombre de la sección"
                     >
-                      <h2 className="text-lg font-bold text-gray-900">{getSectionTitle(activeSection)}</h2>
-                      <Pencil className="w-3.5 h-3.5 text-gray-300 group-hover:text-[#2FA4A9] transition-colors" />
+                      <h2 className="text-lg font-bold text-gray-900 group-hover:text-[#2FA4A9] transition-colors">{getSectionTitle(activeSection)}</h2>
+                      <span className="inline-flex items-center gap-1 text-[11px] text-[#2FA4A9] font-medium px-1.5 py-0.5 rounded bg-[#2FA4A9]/10 border border-[#2FA4A9]/20">
+                        <Pencil className="w-3 h-3" />
+                        renombrar
+                      </span>
                     </button>
                   )}
                   <div className="flex gap-2 items-center">
