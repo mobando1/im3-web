@@ -1053,7 +1053,17 @@ export async function autoAnalyzeProjectCommits() {
 
   try {
     const { analyzeCommitsForProject } = await import("./project-ai");
-    const { projectActivityEntries } = await import("@shared/schema");
+    const { projectActivityEntries, users } = await import("@shared/schema");
+    const { isNotNull } = await import("drizzle-orm");
+
+    // Pull any admin's stored OAuth token. Cron has no req.user, so we fall
+    // back to whichever admin connected GitHub. OAuth tokens reach private
+    // repos that the global PAT can't see.
+    const [adminWithOAuth] = await db.select({ token: users.githubAccessToken })
+      .from(users)
+      .where(isNotNull(users.githubAccessToken))
+      .limit(1);
+    const fallbackToken = adminWithOAuth?.token || process.env.GITHUB_TOKEN || "";
 
     // Get projects with AI tracking enabled and a GitHub repo configured
     const projects = await db.select().from(clientProjects)
@@ -1072,11 +1082,12 @@ export async function autoAnalyzeProjectCommits() {
       try {
         const repoPath = project.githubRepoUrl.replace("https://github.com/", "").replace(/\/$/, "");
         const ghHeaders: Record<string, string> = { "Accept": "application/vnd.github.v3+json", "User-Agent": "IM3-Systems-CRM" };
-        if (process.env.GITHUB_TOKEN) ghHeaders["Authorization"] = `Bearer ${process.env.GITHUB_TOKEN}`;
+        if (fallbackToken) ghHeaders["Authorization"] = `Bearer ${fallbackToken}`;
 
-        const ghRes = await fetch(`https://api.github.com/repos/${repoPath}/commits?per_page=10&since=${new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()}`, { headers: ghHeaders });
+        const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+        const ghRes = await fetch(`https://api.github.com/repos/${repoPath}/commits?per_page=30&since=${sinceIso}`, { headers: ghHeaders });
         if (!ghRes.ok) {
-          log(`Auto-analyze: GitHub API error ${ghRes.status} for ${repoPath}`);
+          log(`Auto-analyze: GitHub API error ${ghRes.status} for ${repoPath} (token: ${adminWithOAuth?.token ? "OAuth" : process.env.GITHUB_TOKEN ? "PAT" : "anonymous"})`);
           continue;
         }
 

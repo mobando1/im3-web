@@ -7798,13 +7798,19 @@ Responde SOLO con un JSON válido, sin markdown:
     if (!project.githubRepoUrl) return res.status(400).json({ message: "No hay repositorio de GitHub configurado" });
 
     try {
-      // Fetch last 20 commits from GitHub API (supports private repos with GITHUB_TOKEN)
+      // Prefer the admin's OAuth token (covers their private repos), fall back
+      // to GITHUB_TOKEN PAT (limited to public/explicitly granted repos).
+      const adminUser = req.user as { githubAccessToken?: string } | undefined;
+      const token = adminUser?.githubAccessToken || process.env.GITHUB_TOKEN || "";
+      const tokenSource = adminUser?.githubAccessToken ? "OAuth" : process.env.GITHUB_TOKEN ? "PAT" : "anonymous";
+
+      // Fetch last 20 commits from GitHub API
       const repoPath = project.githubRepoUrl.replace("https://github.com/", "").replace(/\/$/, "");
       const ghHeaders: Record<string, string> = { "Accept": "application/vnd.github.v3+json", "User-Agent": "IM3-Systems-CRM" };
-      if (process.env.GITHUB_TOKEN) ghHeaders["Authorization"] = `Bearer ${process.env.GITHUB_TOKEN}`;
+      if (token) ghHeaders["Authorization"] = `Bearer ${token}`;
       const ghRes = await fetch(`https://api.github.com/repos/${repoPath}/commits?per_page=20`, { headers: ghHeaders });
 
-      if (!ghRes.ok) return res.status(400).json({ message: `GitHub API error: ${ghRes.status}` });
+      if (!ghRes.ok) return res.status(400).json({ message: `GitHub API error ${ghRes.status} (token: ${tokenSource}). Si el repo es privado, reconecta GitHub desde el panel.` });
 
       const ghCommits = await ghRes.json() as Array<{ sha: string; commit: { message: string; author: { date: string } }; files?: Array<{ filename: string }> }>;
 

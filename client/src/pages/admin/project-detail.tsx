@@ -1729,9 +1729,14 @@ export default function AdminProjectDetail() {
                       variant="outline"
                       onClick={() => analyzeCommitsMut.mutate()}
                       disabled={analyzeCommitsMut.isPending}
+                      className={`group border-gray-300 hover:border-[#2FA4A9] hover:bg-[#2FA4A9]/5 hover:text-[#2FA4A9] hover:shadow-sm active:scale-[0.97] transition-all ${analyzeCommitsMut.isPending ? "border-[#2FA4A9] bg-[#2FA4A9]/5 text-[#2FA4A9] ring-2 ring-[#2FA4A9]/20 animate-pulse" : ""}`}
                     >
-                      <Bot className="w-3.5 h-3.5 mr-1.5" />
-                      {analyzeCommitsMut.isPending ? "Analizando..." : "Analizar commits"}
+                      {analyzeCommitsMut.isPending ? (
+                        <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                      ) : (
+                        <Bot className="w-3.5 h-3.5 mr-1.5 group-hover:rotate-6 transition-transform" />
+                      )}
+                      {analyzeCommitsMut.isPending ? "Analizando commits..." : "Analizar commits"}
                     </Button>
                   )}
                   <Button
@@ -1739,16 +1744,21 @@ export default function AdminProjectDetail() {
                     variant="outline"
                     onClick={() => generateWeeklySummaryMut.mutate()}
                     disabled={generateWeeklySummaryMut.isPending}
+                    className={`group border-gray-300 hover:border-violet-500 hover:bg-violet-50 hover:text-violet-700 hover:shadow-sm active:scale-[0.97] transition-all ${generateWeeklySummaryMut.isPending ? "border-violet-500 bg-violet-50 text-violet-700 ring-2 ring-violet-200 animate-pulse" : ""}`}
                   >
-                    <Sparkles className="w-3.5 h-3.5 mr-1.5" />
-                    {generateWeeklySummaryMut.isPending ? "Generando..." : "Resumen semanal"}
+                    {generateWeeklySummaryMut.isPending ? (
+                      <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                    ) : (
+                      <Sparkles className="w-3.5 h-3.5 mr-1.5 group-hover:scale-110 transition-transform" />
+                    )}
+                    {generateWeeklySummaryMut.isPending ? "Generando resumen..." : "Resumen semanal"}
                   </Button>
                   <Button
                     size="sm"
-                    className="bg-[#2FA4A9] hover:bg-[#238b8f]"
                     onClick={() => setShowManualActivity(true)}
+                    className="group bg-[#2FA4A9] hover:bg-[#238b8f] hover:shadow-md active:scale-[0.97] transition-all"
                   >
-                    <Plus className="w-3.5 h-3.5 mr-1.5" />
+                    <Plus className="w-3.5 h-3.5 mr-1.5 group-hover:rotate-90 transition-transform" />
                     Registrar actividad
                   </Button>
                 </div>
