@@ -308,6 +308,8 @@ type PhaseSpec = {
   currentStatus?: "pending" | "in_progress" | "completed";
   completionPercent?: number;
   evidence?: string;
+  description?: string;
+  keyOutcomes?: string[];
 };
 
 /**
@@ -361,19 +363,24 @@ export async function generateProjectArtifacts(
       const designPrompt = `Brief del proyecto:\n${brief}${repoContext ? `\n\nContexto del repositorio:\n${repoContext}` : ""}`;
       const designRes = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 2000,
+        max_tokens: 4000,
         system: `${IM3_PROJECT_CONTEXT}
 
 ---
 
 Eres un project manager senior de IM3 Systems diseñando el plan de un proyecto. Sigue las reglas de IM3 arriba al pie de la letra.
 
-Diseña entre 3 y 6 fases secuenciales. Cada fase debe tener un nombre concreto al dominio del cliente, una duración realista en semanas (2-4 típicamente), y 2-4 entregables verificables.${hasRepo ? `
+Diseña entre 3 y 6 fases secuenciales. Cada fase debe tener:
+- "name": nombre concreto al dominio del cliente (no genérico).
+- "weeks": duración realista en semanas (2-4 típicamente).
+- "description": 2 a 4 frases explicando QUÉ se hace en esta fase, PARA QUÉ sirve, y cuál es la entrega principal. Pensado para que un empresario no técnico entienda. NO genérico — específico al brief y al dominio.
+- "keyOutcomes": array de 3 a 5 strings cortos (máx 100 chars cada uno), concretos y verificables, describiendo los logros de la fase. Tipo bullet point. Ejemplos: "Schema multi-tenant con RLS por organización validado", "Webhook Meta verificado y enrutando mensajes al bot correcto".
+- "deliverables": 2 a 4 entregables verificables (similar a keyOutcomes pero pensados como cosas que el cliente revisa/aprueba).${hasRepo ? `
 
 IMPORTANTE — el repo ya tiene avance:
 Te pasé contexto real del repositorio (README, manifest, estructura de archivos, endpoints detectados, schema de DB y los últimos 30 commits). Tu trabajo es deducir qué fases ya están hechas y cuáles faltan. NO seas conservador: si la evidencia del repo muestra que algo ya existe, márcalo como hecho.
 
-Para CADA fase devuelve OBLIGATORIAMENTE estos tres campos:
+Para CADA fase devuelve ADEMÁS estos tres campos:
 
 1. "completionPercent": entero 0-100. Qué porcentaje de la fase ya está implementado en el repo.
    - 100 = todo lo central de la fase ya existe en código y commits
@@ -395,7 +402,16 @@ REGLAS DURAS:
 
 Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato:
 [
-  { "name": "Nombre de la fase", "weeks": 3, "deliverables": ["Entregable 1", "Entregable 2"]${hasRepo ? `, "completionPercent": 0, "currentStatus": "pending", "evidence": ""` : ""} }
+  {
+    "name": "Nombre de la fase",
+    "weeks": 3,
+    "description": "Frase 1. Frase 2. Frase 3.",
+    "keyOutcomes": ["Logro concreto 1", "Logro concreto 2", "Logro concreto 3"],
+    "deliverables": ["Entregable 1", "Entregable 2"]${hasRepo ? `,
+    "completionPercent": 0,
+    "currentStatus": "pending",
+    "evidence": ""` : ""}
+  }
 ]`,
         messages: [{ role: "user", content: designPrompt }],
       });
@@ -414,6 +430,10 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato:
         const derivedStatus = completionPercent !== undefined ? deriveStatusFromPercent(completionPercent) : undefined;
         const finalStatus = derivedStatus ?? explicitStatus;
         const evidence = typeof p.evidence === "string" ? p.evidence.trim().slice(0, 200) : undefined;
+        const description = typeof p.description === "string" ? p.description.trim().slice(0, 800) : undefined;
+        const keyOutcomes = Array.isArray(p.keyOutcomes)
+          ? p.keyOutcomes.map(String).map(s => s.trim()).filter(s => s.length > 0).slice(0, 6)
+          : undefined;
         return {
           name: String(p.name || "Fase").slice(0, 200),
           weeks: Math.max(1, Math.min(20, Number(p.weeks) || 2)),
@@ -421,6 +441,8 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato:
           currentStatus: finalStatus,
           completionPercent,
           evidence,
+          description,
+          keyOutcomes,
         };
       });
     } catch (err) {
@@ -440,14 +462,23 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato:
     const phaseStatus = p.currentStatus || "pending";
     const isCompleted = phaseStatus === "completed";
 
-    const evidenceNote = p.evidence && phaseStatus !== "pending"
-      ? `Evidencia (auto-detectada del repo): ${p.evidence}`
-      : null;
+    // Compose a rich phase description: narrative + bullet outcomes + evidence
+    // (when AI recognized work in the repo). Each block is separated by a blank
+    // line so the EditableText in the UI keeps it readable and editable.
+    const descParts: string[] = [];
+    if (p.description) descParts.push(p.description);
+    if (p.keyOutcomes && p.keyOutcomes.length > 0) {
+      descParts.push(p.keyOutcomes.map(o => `• ${o}`).join("\n"));
+    }
+    if (p.evidence && phaseStatus !== "pending") {
+      descParts.push(`Evidencia (auto-detectada del repo): ${p.evidence}`);
+    }
+    const fullDescription = descParts.length > 0 ? descParts.join("\n\n") : null;
 
     const [phase] = await database.insert(projectPhases).values({
       projectId,
       name: p.name,
-      description: evidenceNote,
+      description: fullDescription,
       orderIndex: i,
       status: phaseStatus,
       startDate: currentDate,
@@ -486,15 +517,33 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato:
   let totalTasks = 0;
   if (anthropic && insertedPhases.length > 0) {
     try {
+      // taskContext intentionally NO LONGER includes the full repoContext.
+      // The first call already used it to assign currentStatus + evidence per
+      // phase; passing it again here just eats the token budget and made
+      // Sonnet truncate the JSON response (silent fallback to "Completar Fase X").
+      // Instead we pass a compact summary: phase name + status + evidence.
       const taskContext = `
-Brief: ${brief}
-${repoContext ? `\nContexto del repositorio:\n${repoContext}\n` : ""}
-Fases: ${phaseSpecs.map((p, i) => `${i + 1}. ${p.name} (${p.weeks} semanas)`).join(", ")}
+Brief del proyecto:
+${brief.slice(0, 800)}
+
+Fases ya diseñadas (con su estado y descripción):
+${phaseSpecs.map((p, i) => {
+  const statusBits: string[] = [];
+  if (p.currentStatus) statusBits.push(p.currentStatus);
+  if (p.completionPercent !== undefined) statusBits.push(`${p.completionPercent}%`);
+  const statusStr = statusBits.length > 0 ? ` [${statusBits.join(" ")}]` : "";
+  const desc = p.description ? `\n   Descripción: ${p.description.slice(0, 400)}` : "";
+  const ev = p.evidence ? `\n   Evidencia del repo: ${p.evidence}` : "";
+  const outcomes = p.keyOutcomes && p.keyOutcomes.length > 0
+    ? `\n   Logros: ${p.keyOutcomes.slice(0, 4).join(" · ")}`
+    : "";
+  return `${i + 1}. ${p.name}${statusStr} (${p.weeks} semanas)${desc}${outcomes}${ev}`;
+}).join("\n\n")}
 `.trim();
 
       const response = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 6000,
+        max_tokens: 12000,
         system: `${IM3_PROJECT_CONTEXT}
 
 ---
@@ -536,9 +585,24 @@ Reglas estrictas:
       log(`generateProjectArtifacts: Sonnet returned tasks for ${phaseTasks.length} phases`);
 
       const now = new Date();
+      // skippedCount makes the silent-skip visible in Railway logs. If Sonnet
+      // returns objects without phaseIndex, we used to discard them silently
+      // and end with 0 real tasks; now it's loud.
+      let skippedCount = 0;
       for (const pt of phaseTasks) {
+        if (typeof pt.phaseIndex !== "number" || !Number.isInteger(pt.phaseIndex)) {
+          skippedCount++;
+          continue;
+        }
         const phase = insertedPhases[pt.phaseIndex];
-        if (!phase) continue;
+        if (!phase) {
+          skippedCount++;
+          continue;
+        }
+        if (!Array.isArray(pt.tasks) || pt.tasks.length === 0) {
+          skippedCount++;
+          continue;
+        }
         const phaseIsCompleted = phase.phaseStatus === "completed";
         const phaseIsInProgress = phase.phaseStatus === "in_progress";
 
@@ -573,22 +637,53 @@ Reglas estrictas:
           totalTasks++;
         }
       }
+      if (skippedCount > 0) {
+        log(`generateProjectArtifacts: skipped ${skippedCount} task entries with bad/missing phaseIndex or empty tasks`);
+      }
+      // If we ended up with too few tasks per phase, the AI response was probably
+      // truncated. Log a warning so it's diagnosable in production without grepping.
+      if (totalTasks < insertedPhases.length * 2) {
+        log(`generateProjectArtifacts: warning — only ${totalTasks} tasks for ${insertedPhases.length} phases (expected at least ${insertedPhases.length * 4})`);
+      }
     } catch (err) {
       log(`AI task generation failed, creating basic tasks: ${err}`);
       const now = new Date();
+      // Skeleton: kickoff → core → tests → demo. Useful even if AI fails entirely
+      // — gives the user an editable structure rather than a single "Complete X"
+      // bullet that has to be replaced manually.
       for (const phase of insertedPhases) {
         const phaseIsCompleted = phase.phaseStatus === "completed";
-        await database.insert(projectTasks).values({
-          phaseId: phase.id,
-          projectId,
-          title: `Completar ${phase.spec.name}`,
-          priority: "high",
-          status: phaseIsCompleted ? "completed" : "pending",
-          isMilestone: true,
-          dueDate: phase.endDate,
-          completedAt: phaseIsCompleted ? now : null,
-        });
-        totalTasks++;
+        const phaseIsInProgress = phase.phaseStatus === "in_progress";
+        const percent = phase.spec.completionPercent ?? (phaseIsCompleted ? 100 : phaseIsInProgress ? 50 : 0);
+        const phaseDays = Math.max(1, Math.round((phase.endDate.getTime() - phase.startDate.getTime()) / (24 * 60 * 60 * 1000)));
+        const fallbackTasks: Array<{ title: string; priority: string; isMilestone: boolean }> = [
+          { title: `Definir alcance y kickoff de ${phase.spec.name}`,                 priority: "high",   isMilestone: false },
+          { title: `Implementar core de ${phase.spec.name}`,                           priority: "high",   isMilestone: false },
+          { title: `Pruebas y validación de ${phase.spec.name}`,                       priority: "medium", isMilestone: false },
+          { title: `Demo y entrega de ${phase.spec.name}`,                             priority: "high",   isMilestone: true  },
+        ];
+        const tasksToComplete = phaseIsCompleted
+          ? fallbackTasks.length
+          : phaseIsInProgress
+            ? Math.min(fallbackTasks.length, Math.floor((fallbackTasks.length * percent) / 100))
+            : 0;
+        for (let j = 0; j < fallbackTasks.length; j++) {
+          const t = fallbackTasks[j];
+          const taskDueDate = new Date(phase.startDate.getTime() + ((j + 1) / fallbackTasks.length) * phaseDays * 24 * 60 * 60 * 1000);
+          const taskIsDone = j < tasksToComplete;
+          await database.insert(projectTasks).values({
+            phaseId: phase.id,
+            projectId,
+            title: t.title,
+            clientFacingTitle: t.title,
+            priority: t.priority,
+            isMilestone: t.isMilestone,
+            status: taskIsDone ? "completed" : "pending",
+            dueDate: taskDueDate,
+            completedAt: taskIsDone ? now : null,
+          });
+          totalTasks++;
+        }
       }
     }
   }
