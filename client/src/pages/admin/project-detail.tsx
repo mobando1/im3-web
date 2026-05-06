@@ -966,6 +966,19 @@ export default function AdminProjectDetail() {
     onSuccess: invalidateIdeas,
   });
 
+  // ── Drag-and-drop sensors ──
+  // - PointerSensor with distance 8: regular click doesn't trigger drag
+  // - TouchSensor with delay 250ms: tap-to-edit still works on mobile, long-press starts drag
+  // - KeyboardSensor: accessibility (Space + arrows)
+  // MUST be declared before any conditional return below to satisfy Rules of Hooks
+  // (otherwise the hook count differs between the loading render and the loaded
+  // render → React error #310).
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
   if (isLoading || !project) {
     return <div className="text-center py-20 text-gray-400">Cargando proyecto...</div>;
   }
@@ -988,16 +1001,6 @@ export default function AdminProjectDetail() {
     navigator.clipboard.writeText(`${window.location.origin}/portal/${project.accessToken}`);
     toast({ title: "Link copiado" });
   };
-
-  // ── Drag-and-drop sensors ──
-  // - PointerSensor with distance 8: regular click doesn't trigger drag
-  // - TouchSensor with delay 250ms: tap-to-edit still works on mobile, long-press starts drag
-  // - KeyboardSensor: accessibility (Space + arrows)
-  const dndSensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
-  );
 
   const handlePhaseDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
