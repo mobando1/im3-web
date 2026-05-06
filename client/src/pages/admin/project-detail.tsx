@@ -157,22 +157,22 @@ const TAB_ICONS: Record<string, typeof Circle> = {
 
 const tabs = ["Roadmap", "Actividad", "Timeline", "Calendario", "Entregas", "Horas", "Sesiones", "Archivos", "Ideas", "Mensajes", "Config"];
 
-const ACTIVITY_CATEGORY_LABELS: Record<string, string> = {
-  feature: "Nueva funcionalidad",
-  bugfix: "Bug fix",
-  improvement: "Mejora",
-  infrastructure: "Infraestructura",
-  meeting: "Reunión",
-  milestone: "Hito",
-};
-
-const ACTIVITY_CATEGORY_COLORS: Record<string, string> = {
-  feature: "bg-emerald-100 text-emerald-700",
-  bugfix: "bg-red-100 text-red-700",
-  improvement: "bg-blue-100 text-blue-700",
-  infrastructure: "bg-purple-100 text-purple-700",
-  meeting: "bg-amber-100 text-amber-700",
-  milestone: "bg-pink-100 text-pink-700",
+// Single source of truth for category metadata.
+// avatarBg = solid color for the fixed-width avatar (keeps title baselines aligned).
+// dotBg + textColor = tinted variants for the meta row underneath each title.
+const ACTIVITY_CATEGORY_META: Record<string, {
+  icon: typeof Circle;
+  label: string;
+  avatarBg: string;
+  textColor: string;
+  dotBg: string;
+}> = {
+  feature:        { icon: Sparkles,    label: "Nueva funcionalidad", avatarBg: "bg-emerald-500", textColor: "text-emerald-700", dotBg: "bg-emerald-500" },
+  bugfix:         { icon: AlertCircle, label: "Bug fix",             avatarBg: "bg-red-500",     textColor: "text-red-700",     dotBg: "bg-red-500"     },
+  improvement:    { icon: TrendingUp,  label: "Mejora",              avatarBg: "bg-blue-500",    textColor: "text-blue-700",    dotBg: "bg-blue-500"    },
+  infrastructure: { icon: Building2,   label: "Infraestructura",     avatarBg: "bg-purple-500",  textColor: "text-purple-700",  dotBg: "bg-purple-500"  },
+  meeting:        { icon: Users,       label: "Reunión",             avatarBg: "bg-amber-500",   textColor: "text-amber-700",   dotBg: "bg-amber-500"   },
+  milestone:      { icon: Diamond,     label: "Hito",                avatarBg: "bg-pink-500",    textColor: "text-pink-700",    dotBg: "bg-pink-500"    },
 };
 
 const ACTIVITY_SOURCE_META: Record<string, { label: string; icon: typeof Circle; color: string }> = {
@@ -1781,14 +1781,18 @@ export default function AdminProjectDetail() {
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
                 {filterChips.map(chip => {
                   const active = activityFilter === chip.key;
+                  const categoryDot = ACTIVITY_CATEGORY_META[chip.key]?.dotBg;
                   return (
                     <button
                       key={chip.key}
                       onClick={() => setActivityFilter(chip.key)}
                       className={`text-xs px-2.5 py-1 rounded-full font-medium transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
-                        active ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                        active ? "bg-gray-900 text-white shadow-sm" : "bg-gray-100 text-gray-600 hover:bg-gray-200 hover:text-gray-800"
                       }`}
                     >
+                      {categoryDot && (
+                        <span className={`w-1.5 h-1.5 rounded-full ${categoryDot} ${active ? "ring-2 ring-white/30" : ""}`} />
+                      )}
                       <span>{chip.label}</span>
                       {chip.count !== undefined && (
                         <span className={`text-[10px] tabular-nums ${active ? "text-gray-300" : "text-gray-400"}`}>{chip.count}</span>
@@ -1858,13 +1862,15 @@ export default function AdminProjectDetail() {
                           const showFullDetail = showLevel3.has(entry.id);
                           const sourceMeta = ACTIVITY_SOURCE_META[entry.source] || ACTIVITY_SOURCE_META.system;
                           const SourceIcon = sourceMeta.icon;
+                          const categoryMeta = ACTIVITY_CATEGORY_META[entry.category] || ACTIVITY_CATEGORY_META.feature;
+                          const CategoryIcon = categoryMeta.icon;
                           return (
                             <div
                               key={entry.id}
-                              className={`bg-white rounded-xl border ${entry.isSignificant ? "border-[#2FA4A9]/40 shadow-sm" : "border-gray-200"} overflow-hidden group`}
+                              className={`bg-white rounded-xl border ${entry.isSignificant ? "border-[#2FA4A9]/40 shadow-sm" : "border-gray-200"} overflow-hidden group transition-all hover:shadow-sm`}
                             >
                               <div
-                                className="flex items-start gap-3 p-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                                className="flex items-start gap-3 p-3 cursor-pointer hover:bg-gray-50/60 transition-colors"
                                 onClick={() => {
                                   setExpandedActivity(prev => {
                                     const next = new Set(prev);
@@ -1873,30 +1879,45 @@ export default function AdminProjectDetail() {
                                   });
                                 }}
                               >
-                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 mt-0.5 ${ACTIVITY_CATEGORY_COLORS[entry.category] || "bg-gray-100 text-gray-600"}`}>
-                                  {ACTIVITY_CATEGORY_LABELS[entry.category] || entry.category}
-                                </span>
+                                {/* Fixed-width avatar — guarantees every title starts on the same vertical line */}
+                                <div className={`w-9 h-9 rounded-lg ${categoryMeta.avatarBg} flex items-center justify-center shrink-0 shadow-sm`}>
+                                  <CategoryIcon className="w-4 h-4 text-white" />
+                                </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-sm text-gray-800 leading-snug">{entry.summaryLevel1}</p>
-                                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-                                    <span className={`inline-flex items-center gap-1 text-[10px] ${sourceMeta.color}`}>
+                                  <p className="text-sm text-gray-900 leading-snug font-medium">{entry.summaryLevel1}</p>
+                                  <div className="flex items-center gap-x-2 gap-y-1 mt-1.5 flex-wrap text-[11px] text-gray-500">
+                                    <span className={`inline-flex items-center gap-1.5 ${categoryMeta.textColor} font-medium`}>
+                                      <span className={`w-1.5 h-1.5 rounded-full ${categoryMeta.dotBg}`} />
+                                      {categoryMeta.label}
+                                    </span>
+                                    <span className="text-gray-300">·</span>
+                                    <span className={`inline-flex items-center gap-1 ${sourceMeta.color}`}>
                                       <SourceIcon className="w-3 h-3" />
                                       {sourceMeta.label}
                                     </span>
                                     {entry.aiGenerated && (
-                                      <span className="inline-flex items-center gap-1 text-[10px] text-purple-600">
-                                        <Bot className="w-3 h-3" /> IA
-                                      </span>
+                                      <>
+                                        <span className="text-gray-300">·</span>
+                                        <span className="inline-flex items-center gap-1 text-purple-600">
+                                          <Bot className="w-3 h-3" /> IA
+                                        </span>
+                                      </>
                                     )}
                                     {entry.isSignificant && (
-                                      <span className="text-[10px] text-[#2FA4A9] font-medium">★ Significativo</span>
+                                      <>
+                                        <span className="text-gray-300">·</span>
+                                        <span className="text-[#2FA4A9] font-medium">★ Significativo</span>
+                                      </>
                                     )}
                                     {entry.commitShas && entry.commitShas.length > 0 && (
-                                      <span className="text-[10px] text-gray-400">
-                                        {entry.commitShas.length} commit{entry.commitShas.length !== 1 ? "s" : ""}
-                                      </span>
+                                      <>
+                                        <span className="text-gray-300">·</span>
+                                        <span className="text-gray-400">
+                                          {entry.commitShas.length} commit{entry.commitShas.length !== 1 ? "s" : ""}
+                                        </span>
+                                      </>
                                     )}
-                                    <span className="text-[10px] text-gray-400 ml-auto">{timeAgoEs(entry.createdAt)}</span>
+                                    <span className="text-gray-400 ml-auto whitespace-nowrap">{timeAgoEs(entry.createdAt)}</span>
                                   </div>
                                 </div>
                                 <button
