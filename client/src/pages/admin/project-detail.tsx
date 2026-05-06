@@ -1834,17 +1834,75 @@ export default function AdminProjectDetail() {
               {activityLoading ? (
                 <p className="text-center text-sm text-gray-400 py-12">Cargando bitácora...</p>
               ) : grouped.length === 0 ? (
+                // Empty state contextual — sugiere la accion correcta segun
+                // el estado del proyecto (sin repo / repo conectado sin entradas / filtro activo).
                 <div className="bg-white rounded-xl border border-gray-200 border-dashed py-16 px-6 text-center">
                   <History className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                  <p className="text-sm font-medium text-gray-600 mb-1">Sin actividad registrada todavía</p>
-                  <p className="text-xs text-gray-400 mb-4 max-w-sm mx-auto">
-                    Cuando hagas commits al repo conectado, el cron diario los analizará y aparecerán aquí.
-                    También puedes registrar cambios de diseño, decisiones o reuniones manualmente.
-                  </p>
-                  <Button size="sm" className="bg-[#2FA4A9] hover:bg-[#238b8f]" onClick={() => setShowManualActivity(true)}>
-                    <Plus className="w-3.5 h-3.5 mr-1.5" />
-                    Registrar primera entrada
-                  </Button>
+                  {activityFilter !== "all" ? (
+                    <>
+                      <p className="text-sm font-medium text-gray-600 mb-1">Sin entradas para este filtro</p>
+                      <p className="text-xs text-gray-400 mb-4 max-w-sm mx-auto">
+                        Cambia o limpia el filtro para ver toda la actividad del proyecto.
+                      </p>
+                      <Button size="sm" variant="outline" onClick={() => setActivityFilter("all")}>
+                        Mostrar todo
+                      </Button>
+                    </>
+                  ) : !project.githubRepoUrl ? (
+                    <>
+                      <p className="text-sm font-medium text-gray-600 mb-1">Conecta un repo para análisis automático</p>
+                      <p className="text-xs text-gray-400 mb-4 max-w-sm mx-auto">
+                        Vincula un repositorio de GitHub en Config y el cron diario analizará tus commits con IA. Mientras tanto puedes registrar actividad manual.
+                      </p>
+                      <div className="flex items-center gap-2 justify-center flex-wrap">
+                        <Button size="sm" variant="outline" onClick={() => setActiveTab("Config")}>
+                          <Github className="w-3.5 h-3.5 mr-1.5" />
+                          Conectar GitHub
+                        </Button>
+                        <Button size="sm" className="bg-[#2FA4A9] hover:bg-[#238b8f]" onClick={() => setShowManualActivity(true)}>
+                          <Plus className="w-3.5 h-3.5 mr-1.5" />
+                          Registrar manual
+                        </Button>
+                      </div>
+                    </>
+                  ) : !project.aiTrackingEnabled ? (
+                    <>
+                      <p className="text-sm font-medium text-gray-600 mb-1">El análisis automático está apagado</p>
+                      <p className="text-xs text-gray-400 mb-4 max-w-sm mx-auto">
+                        Activa "AI tracking" en Config para que el cron diario analice los commits del repo conectado.
+                      </p>
+                      <Button size="sm" variant="outline" onClick={() => setActiveTab("Config")}>
+                        Ir a Config
+                      </Button>
+                    </>
+                  ) : (
+                    <>
+                      <p className="text-sm font-medium text-gray-600 mb-1">Sin actividad analizada todavía</p>
+                      <p className="text-xs text-gray-400 mb-4 max-w-sm mx-auto">
+                        El cron corre cada día a las 6 AM Bogotá. Si no quieres esperar, click "Analizar commits" para procesar los últimos 20 ahora, o registra actividad manual (decisiones, reuniones).
+                      </p>
+                      <div className="flex items-center gap-2 justify-center flex-wrap">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => analyzeCommitsMut.mutate()}
+                          disabled={analyzeCommitsMut.isPending}
+                          className="hover:border-[#2FA4A9] hover:text-[#2FA4A9] hover:bg-[#2FA4A9]/5"
+                        >
+                          {analyzeCommitsMut.isPending ? (
+                            <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                          ) : (
+                            <Bot className="w-3.5 h-3.5 mr-1.5" />
+                          )}
+                          {analyzeCommitsMut.isPending ? "Analizando..." : "Analizar commits ahora"}
+                        </Button>
+                        <Button size="sm" className="bg-[#2FA4A9] hover:bg-[#238b8f]" onClick={() => setShowManualActivity(true)}>
+                          <Plus className="w-3.5 h-3.5 mr-1.5" />
+                          Registrar manual
+                        </Button>
+                      </div>
+                    </>
+                  )}
                 </div>
               ) : (
                 <div className="space-y-6">
@@ -1856,7 +1914,16 @@ export default function AdminProjectDetail() {
                           <span className="ml-2 text-[10px] font-normal text-gray-400 normal-case">{entries.length} entrada(s)</span>
                         </p>
                       </div>
-                      <div className="space-y-2">
+                      {/* relative + absolute line gives the timeline-rail vibe of Linear/Stripe.
+                          The line lives at left:30px (matches avatar center: 12 padding + 18 half of 36).
+                          Avatars are bg-color and overlap the line, masking it at each row. */}
+                      <div className="space-y-2 relative">
+                        {entries.length > 1 && (
+                          <div
+                            className="absolute left-[30px] top-6 bottom-6 w-px bg-gradient-to-b from-gray-200 via-gray-200 to-transparent pointer-events-none"
+                            aria-hidden="true"
+                          />
+                        )}
                         {entries.map(entry => {
                           const isExpanded = expandedActivity.has(entry.id);
                           const showFullDetail = showLevel3.has(entry.id);
@@ -1867,8 +1934,13 @@ export default function AdminProjectDetail() {
                           return (
                             <div
                               key={entry.id}
-                              className={`bg-white rounded-xl border ${entry.isSignificant ? "border-[#2FA4A9]/40 shadow-sm" : "border-gray-200"} overflow-hidden group transition-all hover:shadow-sm`}
+                              className={`relative bg-white rounded-xl border ${entry.isSignificant ? "border-[#2FA4A9]/40 shadow-sm" : "border-gray-200"} overflow-hidden group transition-all hover:shadow-sm`}
                             >
+                              {entry.isSignificant && (
+                                // Solid teal rail on the left edge — much more scannable
+                                // than the subtle border alone when skimming the feed.
+                                <div className="absolute left-0 top-0 bottom-0 w-1 bg-[#2FA4A9]" aria-hidden="true" />
+                              )}
                               <div
                                 className="flex items-start gap-3 p-3 cursor-pointer hover:bg-gray-50/60 transition-colors"
                                 onClick={() => {
@@ -1885,8 +1957,8 @@ export default function AdminProjectDetail() {
                                 </div>
                                 <div className="flex-1 min-w-0">
                                   <p className="text-sm text-gray-900 leading-snug font-medium">{entry.summaryLevel1}</p>
-                                  <div className="flex items-center gap-x-2 gap-y-1 mt-1.5 flex-wrap text-[11px] text-gray-500">
-                                    <span className={`inline-flex items-center gap-1.5 ${categoryMeta.textColor} font-medium`}>
+                                  <div className="flex items-center gap-x-2 gap-y-1 mt-1.5 flex-wrap text-xs text-gray-500">
+                                    <span className={`inline-flex items-center gap-1.5 ${categoryMeta.textColor} font-semibold`}>
                                       <span className={`w-1.5 h-1.5 rounded-full ${categoryMeta.dotBg}`} />
                                       {categoryMeta.label}
                                     </span>
