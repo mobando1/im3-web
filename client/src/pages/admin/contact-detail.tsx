@@ -717,7 +717,6 @@ export default function ContactDetailPage() {
   });
   const [waNewMessage, setWaNewMessage] = useState("");
 
-  const [expandedProposal, setExpandedProposal] = useState<string | null>(null);
 
   // Appointments (unified meetings)
   const { data: contactAppointments = [] } = useQuery<AppointmentItem[]>({
@@ -2786,7 +2785,6 @@ export default function ContactDetailPage() {
             </Card>
           ) : (
             contactProposals.map(prop => {
-              const isExpanded = expandedProposal === prop.id;
               const statusColors: Record<string, string> = {
                 draft: "bg-gray-50 text-gray-600 border-gray-200",
                 sent: "bg-blue-50 text-blue-600 border-blue-200",
@@ -2801,7 +2799,7 @@ export default function ContactDetailPage() {
               return (
                 <Card key={prop.id} className="bg-white border-gray-200 shadow-sm">
                   <CardHeader className="pb-3">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-3">
                       <div className="flex items-center gap-2 flex-1 min-w-0">
                         <FileSignature className="w-4 h-4 text-[#2FA4A9] shrink-0" />
                         <CardTitle className="text-sm font-medium text-gray-900 truncate">{prop.title}</CardTitle>
@@ -2810,12 +2808,12 @@ export default function ContactDetailPage() {
                         </Badge>
                       </div>
                       <div className="flex items-center gap-2 shrink-0">
-                        <button onClick={() => setExpandedProposal(isExpanded ? null : prop.id)} className="text-gray-400 hover:text-gray-700 transition-colors p-1">
-                          {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-                        </button>
-                        <button onClick={() => navigate(`/admin/proposals/${prop.id}`)} className="text-gray-400 hover:text-[#2FA4A9] transition-colors p-1" title="Editar propuesta">
-                          <ExternalLink className="w-3.5 h-3.5" />
-                        </button>
+                        <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs gap-1" onClick={() => window.open(`/proposal/${prop.accessToken}`, "_blank")}>
+                          <Eye className="w-3.5 h-3.5" /> Ver
+                        </Button>
+                        <Button variant="outline" size="sm" className="h-7 px-2.5 text-xs gap-1 text-[#2FA4A9] border-[#2FA4A9]/30 hover:bg-[#2FA4A9]/5 hover:text-[#2FA4A9]" onClick={() => navigate(`/admin/proposals/${prop.id}`)}>
+                          <Pencil className="w-3.5 h-3.5" /> Editar
+                        </Button>
                       </div>
                     </div>
                     <div className="flex items-center gap-3 mt-1.5 text-[11px] text-gray-400">
@@ -2826,51 +2824,6 @@ export default function ContactDetailPage() {
                       {prop.pricing?.total && <span className="font-medium text-gray-600">${prop.pricing.total.toLocaleString()} {prop.pricing.currency || "USD"}</span>}
                     </div>
                   </CardHeader>
-                  {isExpanded && (
-                    <CardContent className="space-y-4 border-t border-gray-100 pt-4">
-                      {/* Pricing */}
-                      {prop.pricing?.total && (
-                        <div className="p-3 rounded-lg bg-[#2FA4A9]/5 border border-[#2FA4A9]/20">
-                          <p className="text-lg font-bold text-[#2FA4A9]">${prop.pricing.total.toLocaleString()} {prop.pricing.currency || "USD"}</p>
-                          {prop.pricing.includes && prop.pricing.includes.length > 0 && (
-                            <ul className="mt-2 space-y-1">
-                              {prop.pricing.includes.map((item, i) => (
-                                <li key={i} className="text-xs text-gray-600 flex items-center gap-1.5">
-                                  <Check className="w-3 h-3 text-[#2FA4A9] shrink-0" /> {item}
-                                </li>
-                              ))}
-                            </ul>
-                          )}
-                        </div>
-                      )}
-                      {/* Timeline */}
-                      {prop.timelineData?.phases && prop.timelineData.phases.length > 0 && (
-                        <div>
-                          <p className="text-xs text-gray-500 font-medium mb-2">Timeline ({prop.timelineData.totalWeeks} semanas)</p>
-                          <div className="space-y-2">
-                            {prop.timelineData.phases.map((phase, i) => (
-                              <div key={i} className="flex items-center gap-3">
-                                <div className="w-6 h-6 rounded-full bg-[#2FA4A9]/10 flex items-center justify-center shrink-0">
-                                  <span className="text-[10px] font-bold text-[#2FA4A9]">{i + 1}</span>
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <p className="text-xs font-medium text-gray-700">{phase.name}</p>
-                                  <p className="text-[10px] text-gray-400">{phase.weeks} semanas</p>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {/* Sections preview */}
-                      {prop.sections?.resumen && (
-                        <div>
-                          <p className="text-xs text-gray-500 font-medium mb-1">Resumen Ejecutivo</p>
-                          <div className="text-xs text-gray-600 prose prose-sm max-w-none" dangerouslySetInnerHTML={{ __html: prop.sections.resumen }} />
-                        </div>
-                      )}
-                    </CardContent>
-                  )}
                 </Card>
               );
             })
