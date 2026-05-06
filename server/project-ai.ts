@@ -48,6 +48,101 @@ function parseAIJson<T>(text: string, label: string): T | null {
 type ValidationResult = { ok: true } | { ok: false; feedback: string };
 
 /**
+ * Veredicto del juez semántico. Va más allá de la estructura: examina
+ * coherencia, cobertura del brief, orden lógico, especificidad y
+ * credibilidad de los datos auto-detectados del repo.
+ *
+ * - blocker: rompe la entrega del proyecto si se queda así. Bloquea aceptación.
+ * - warning: mejora obvia pero el plan sigue siendo usable. NO bloquea.
+ * - nit: detalle menor. NO bloquea, solo informa.
+ */
+export type JudgeIssueSeverity = "blocker" | "warning" | "nit";
+
+export type JudgeIssue = {
+  severity: JudgeIssueSeverity;
+  faseIndex: number | null; // 0-based, null si es global
+  issue: string;             // qué está mal
+  fix: string;               // qué cambiar (accionable)
+};
+
+export type JudgeVerdict = {
+  ok: boolean;       // false si hay 1+ blockers
+  score: number;     // 1-10, calidad subjetiva del plan
+  issues: JudgeIssue[];
+  summary: string;   // una frase con el veredicto
+};
+
+/**
+ * Llama a Sonnet como juez/revisor: le pasa el contexto + el output a
+ * revisar y le pide un veredicto JSON estructurado. Si la respuesta del
+ * juez no se puede parsear, retorna `null` (caller decide si tratar como
+ * "ok" o reintentar). NUNCA tira excepción — un juez que falle no debe
+ * bloquear la generación.
+ */
+async function callJudge(opts: {
+  client: Anthropic;
+  systemPrompt: string;
+  userMessage: string;
+  label: string;
+  maxTokens?: number;
+}): Promise<JudgeVerdict | null> {
+  const { client, systemPrompt, userMessage, label } = opts;
+  const maxTokens = opts.maxTokens ?? 2000;
+
+  try {
+    const response = await client.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: maxTokens,
+      system: systemPrompt,
+      messages: [{ role: "user", content: userMessage }],
+    });
+    const text = response.content?.[0]?.type === "text" ? response.content[0].text : "";
+    const parsed = parseAIJson<JudgeVerdict>(text, label);
+    if (!parsed || typeof parsed !== "object") {
+      log(`${label}: judge response unparseable, treating as approved (raw first 400ch): ${text.slice(0, 400)}`);
+      return null;
+    }
+    // Sanitize/coerce: el juez a veces emite ok como string "true" o score como string
+    const ok = parsed.ok === true || (parsed.ok as unknown) === "true";
+    const score = typeof parsed.score === "number" ? Math.max(1, Math.min(10, Math.round(parsed.score))) : 5;
+    const issues: JudgeIssue[] = Array.isArray(parsed.issues) ? parsed.issues
+      .filter(i => i && typeof i === "object" && typeof i.issue === "string")
+      .map(i => ({
+        severity: (i.severity === "blocker" || i.severity === "warning" || i.severity === "nit") ? i.severity : "warning",
+        faseIndex: typeof i.faseIndex === "number" && Number.isInteger(i.faseIndex) ? i.faseIndex : null,
+        issue: String(i.issue).slice(0, 400),
+        fix: typeof i.fix === "string" ? String(i.fix).slice(0, 400) : "",
+      }))
+      .slice(0, 20) : [];
+    const summary = typeof parsed.summary === "string" ? parsed.summary.slice(0, 300) : "(sin resumen)";
+
+    // Recompute ok desde issues por seguridad: si hay >=1 blocker, NO ok.
+    const hasBlocker = issues.some(i => i.severity === "blocker");
+    const finalOk = ok && !hasBlocker;
+
+    return { ok: finalOk, score, issues, summary };
+  } catch (err) {
+    log(`${label}: judge call threw: ${err}. Treating as approved to avoid blocking.`);
+    return null;
+  }
+}
+
+/**
+ * Convierte issues del juez en un mensaje de feedback accionable que el
+ * generador entiende en el siguiente intento. Solo incluye blockers y
+ * warnings (los nits no bloquean ni se reintentan).
+ */
+function judgeIssuesToFeedback(verdict: JudgeVerdict): string {
+  const actionable = verdict.issues.filter(i => i.severity === "blocker" || i.severity === "warning");
+  if (actionable.length === 0) return verdict.summary;
+  const lines = actionable.map((i, n) => {
+    const where = i.faseIndex !== null ? ` (fase ${i.faseIndex + 1})` : "";
+    return `${n + 1}. [${i.severity.toUpperCase()}]${where} ${i.issue}${i.fix ? ` → ${i.fix}` : ""}`;
+  });
+  return `El revisor semántico encontró estos problemas:\n${lines.join("\n")}\n\nCorrige específicamente estos puntos.`;
+}
+
+/**
  * Mini-agente loop: llama a Sonnet, parsea, valida estructura. Si falla,
  * inyecta el feedback puntual al system prompt y reintenta hasta `maxRetries`
  * veces. Esto convierte la generación AI de un one-shot frágil (cualquier
@@ -66,13 +161,24 @@ async function callSonnetWithRetry<T>(opts: {
   userMessage: string;
   parser: (text: string) => T | null;
   validator: (parsed: T) => ValidationResult;
+  /**
+   * Validador semántico opcional. Se ejecuta DESPUÉS de pasar la
+   * validación estructural (en orden: parse → estructura → semántica).
+   * Si retorna null, se asume aprobación (juez no disponible/falló).
+   * Si retorna verdict con ok=false, sus issues se inyectan al system
+   * prompt como feedback accionable y se reintenta.
+   */
+  semanticValidator?: (parsed: T) => Promise<JudgeVerdict | null>;
   label: string;
   maxRetries?: number;
-}): Promise<T | null> {
-  const { client, model, maxTokens, baseSystem, userMessage, parser, validator, label } = opts;
+}): Promise<{ result: T | null; verdict: JudgeVerdict | null }> {
+  const { client, model, maxTokens, baseSystem, userMessage, parser, validator, semanticValidator, label } = opts;
   const maxRetries = opts.maxRetries ?? 2;
 
   let lastFeedback: string | null = null;
+  let lastVerdict: JudgeVerdict | null = null;
+  let lastValidParsed: T | null = null;
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     const system = lastFeedback
       ? `${baseSystem}\n\n---\nINTENTO ANTERIOR FALLÓ — corrige esto:\n${lastFeedback}\n\nResponde de nuevo cumpliendo EXACTAMENTE el formato pedido.`
@@ -89,22 +195,59 @@ async function callSonnetWithRetry<T>(opts: {
         continue;
       }
 
+      // Etapa 1: validación estructural (cheap, deterministic)
       const validation = validator(parsed);
-      if (validation.ok) {
-        if (attempt > 0) log(`${label}: succeeded on retry attempt ${attempt + 1}`);
-        return parsed;
+      if (!validation.ok) {
+        lastFeedback = validation.feedback;
+        log(`${label}: attempt ${attempt + 1}/${maxRetries + 1} structural validation failed: ${validation.feedback}`);
+        continue;
       }
 
-      lastFeedback = validation.feedback;
-      log(`${label}: attempt ${attempt + 1}/${maxRetries + 1} validation failed: ${validation.feedback}`);
+      // Etapa 2: validación semántica (opcional, cuesta una llamada extra)
+      if (semanticValidator) {
+        const verdict = await semanticValidator(parsed);
+        // verdict null = juez falló o respuesta inválida → no bloquear, treat as ok.
+        if (verdict) {
+          // Loguea SIEMPRE el veredicto completo para que sea diagnosticable.
+          log(`${label}: judge verdict — ok=${verdict.ok}, score=${verdict.score}/10, issues=${verdict.issues.length}, summary="${verdict.summary}"`);
+          if (verdict.issues.length > 0) {
+            for (const issue of verdict.issues) {
+              const where = issue.faseIndex !== null ? ` [fase ${issue.faseIndex + 1}]` : "";
+              log(`${label}:   • ${issue.severity}${where}: ${issue.issue}${issue.fix ? ` (fix: ${issue.fix})` : ""}`);
+            }
+          }
+          lastVerdict = verdict;
+          lastValidParsed = parsed;
+
+          if (!verdict.ok) {
+            // Hay blockers → reintentar con feedback semántico.
+            lastFeedback = judgeIssuesToFeedback(verdict);
+            log(`${label}: attempt ${attempt + 1}/${maxRetries + 1} semantic validation failed (${verdict.issues.filter(i => i.severity === "blocker").length} blockers)`);
+            continue;
+          }
+        } else {
+          log(`${label}: judge unavailable, accepting structural-valid output as-is`);
+        }
+      }
+
+      // Pasó todo (o no hay juez). Éxito.
+      if (attempt > 0) log(`${label}: succeeded on retry attempt ${attempt + 1}`);
+      return { result: parsed, verdict: lastVerdict };
     } catch (err) {
       lastFeedback = `Error de API en intento previo: ${err instanceof Error ? err.message : String(err)}. Asegúrate de devolver JSON válido.`;
       log(`${label}: attempt ${attempt + 1} threw: ${err}`);
     }
   }
 
-  log(`${label}: all ${maxRetries + 1} attempts exhausted, returning null`);
-  return null;
+  // Agotamos los reintentos. Si tenemos un parsed válido estructuralmente del
+  // último intento (aunque el juez lo bloqueó), lo devolvemos como mejor esfuerzo.
+  // Mejor un plan con warnings que ningún plan.
+  if (lastValidParsed) {
+    log(`${label}: all ${maxRetries + 1} attempts exhausted; returning best-effort result with judge issues`);
+    return { result: lastValidParsed, verdict: lastVerdict };
+  }
+  log(`${label}: all ${maxRetries + 1} attempts exhausted, no valid result`);
+  return { result: null, verdict: lastVerdict };
 }
 
 /**
@@ -193,6 +336,164 @@ function validatePhaseTasks(parsed: unknown, expectedPhaseCount: number): Valida
     }
   }
   return { ok: true };
+}
+
+/**
+ * Juez semántico para el plan de fases. Revisa coherencia, cobertura,
+ * orden lógico, especificidad, y credibilidad de los completionPercent
+ * cuando hay repo. Devuelve verdict estructurado con issues clasificados
+ * por severidad. Diseñado para ser un "PM senior revisando un plan
+ * recién armado" — pragmático, no pedante.
+ */
+export async function judgePhaseDesign(
+  client: Anthropic,
+  parsed: PhaseSpec[],
+  brief: string,
+  repoContext: string,
+): Promise<JudgeVerdict | null> {
+  const hasRepo = !!repoContext;
+  // Resumimos el repoContext para no inflar tokens — solo la cabeza, hasta 3KB.
+  const repoSummary = repoContext ? repoContext.slice(0, 3000) : "";
+  const phasesJson = JSON.stringify(parsed.map((p, i) => ({
+    index: i,
+    name: p.name,
+    weeks: p.weeks,
+    description: p.description,
+    keyOutcomes: p.keyOutcomes,
+    deliverables: p.deliverables,
+    currentStatus: p.currentStatus,
+    completionPercent: p.completionPercent,
+    evidence: p.evidence,
+  })), null, 2);
+
+  const systemPrompt = `Eres un project manager senior de IM3 Systems revisando un plan de fases recién generado por otro PM. Tu objetivo: detectar problemas que afectarían la entrega real del proyecto. NO eres pedante — solo marcas issues con impacto.
+
+Revisa estos 7 aspectos del plan:
+
+1. COBERTURA del brief — ¿cada cosa importante mencionada en el brief tiene una fase asignada? Si el brief habla de "WhatsApp + RAG + multi-tenant" y hay una fase para WhatsApp + una para multi-tenant pero RAG no aparece en ninguna fase, eso es un BLOCKER.
+
+2. ORDEN lógico — ¿están en orden de ejecución correcto? "Deploy a producción" no puede venir antes de "Implementación core". "QA" no antes de algo que probar. Una violación clara de orden es WARNING (no blocker, se puede reordenar manual).
+
+3. DUPLICACIÓN — ¿dos fases hablando del mismo tema con mínima diferencia? Marca como WARNING. Si la duplicación es severa (50%+ overlap), BLOCKER.
+
+4. COHERENCIA INTERNA — ¿la description, los keyOutcomes y los deliverables de una fase hablan de la misma cosa? Si la description dice "implementar auth" pero los deliverables son sobre billing, BLOCKER.
+
+5. ESPECIFICIDAD — ¿son específicas al dominio del cliente o son fases genéricas tipo "Fase 1: Discovery", "Fase 2: Implementación", "Fase 3: Testing" que aplican a cualquier proyecto? Genéricas = WARNING.
+
+${hasRepo ? `6. CREDIBILIDAD de completionPercent — para fases marcadas con completionPercent > 0, ¿el evidence cita realmente algo del repo que justifique ese %? Si dice "100% completed" con evidence vago tipo "el repo tiene commits recientes", BLOCKER (el % es inventado). Si el evidence es preciso (cita archivos/funciones reales), OK.
+
+` : ""}${hasRepo ? "7" : "6"}. DURACIÓN — ¿la suma de semanas es razonable para el alcance descrito? Un proyecto enorme en 4 semanas o uno pequeño en 30 semanas = WARNING.
+
+Responde SOLO con JSON válido, sin markdown:
+{
+  "ok": boolean,
+  "score": número 1-10,
+  "issues": [
+    {
+      "severity": "blocker" | "warning" | "nit",
+      "faseIndex": número 0-based o null si es global,
+      "issue": "descripción concisa del problema (máx 140 chars)",
+      "fix": "qué cambiar específicamente (máx 140 chars)"
+    }
+  ],
+  "summary": "una frase con tu veredicto general"
+}
+
+Reglas duras:
+- ok=true SOLO si NO hay blockers. Warnings y nits no bloquean.
+- ok=false si hay 1+ blockers (cosas que romperían la entrega).
+- Si el plan está bien, devuelve issues:[] y summary:"Plan sólido, listo para ejecutar."
+- NO inventes problemas. Si no hay nada serio, dilo.`;
+
+  const userMessage = `Brief original:
+${brief.slice(0, 2000)}
+
+${hasRepo ? `Contexto del repositorio (resumen):\n${repoSummary}\n\n` : ""}Plan de fases generado a revisar:
+${phasesJson}`;
+
+  return callJudge({
+    client,
+    systemPrompt,
+    userMessage,
+    label: "judge-phases",
+    maxTokens: 2500,
+  });
+}
+
+/**
+ * Juez semántico para las tareas generadas por fase. Revisa que las
+ * tareas cubran los keyOutcomes de su fase, sean específicas al dominio,
+ * tengan kickoff al inicio + milestone al final, y no haya duplicación.
+ */
+export async function judgePhaseTasks(
+  client: Anthropic,
+  parsed: Array<{ phaseIndex: number; tasks: Array<{ title: string; priority: string; isMilestone?: boolean; clientFacingTitle?: string }> }>,
+  phaseSpecs: PhaseSpec[],
+  brief: string,
+): Promise<JudgeVerdict | null> {
+  // Construimos un view simple: para cada fase, sus keyOutcomes esperados + las tareas generadas.
+  const phasesWithTasks = phaseSpecs.map((p, i) => {
+    const pt = parsed.find(x => x.phaseIndex === i);
+    return {
+      faseIndex: i,
+      faseName: p.name,
+      faseDescription: p.description,
+      keyOutcomes: p.keyOutcomes || [],
+      tasks: pt?.tasks.map(t => ({
+        title: t.title,
+        priority: t.priority,
+        isMilestone: !!t.isMilestone,
+      })) || [],
+    };
+  });
+
+  const systemPrompt = `Eres un project manager senior de IM3 Systems revisando las tareas asignadas a cada fase de un proyecto. Tu objetivo: detectar tareas genéricas, faltantes o mal balanceadas.
+
+Revisa estos 5 aspectos de las tareas dentro de cada fase:
+
+1. COBERTURA de keyOutcomes — los keyOutcomes de una fase son los logros prometidos. ¿Las tareas cubren cada keyOutcome? Si un keyOutcome dice "Webhook Meta verificado y enrutando mensajes" pero no hay tarea específica de webhook → BLOCKER en esa fase.
+
+2. ESPECIFICIDAD — las tareas deben ser específicas al dominio. "Implementar lógica core", "Hacer testing", "Documentar todo" son GENÉRICAS = WARNING. Buenas: "Implementar webhook receiver Meta Cloud API en /api/whatsapp/webhook", "Configurar verificación HMAC de Meta".
+
+3. KICKOFF + MILESTONE — la primera tarea debe ser kickoff/planeación de la fase. La última debe ser un milestone (entrega principal de la fase). Si falta cualquiera = WARNING.
+
+4. DUPLICACIÓN — dos tareas dentro de la misma fase haciendo lo mismo = WARNING.
+
+5. BALANCE — entre 4 y 8 tareas por fase. <4 muy poco, >10 demasiado granular. Salirse del rango = WARNING.
+
+Responde SOLO con JSON válido, sin markdown:
+{
+  "ok": boolean,
+  "score": número 1-10,
+  "issues": [
+    {
+      "severity": "blocker" | "warning" | "nit",
+      "faseIndex": número 0-based o null si es global,
+      "issue": "descripción concisa (máx 140 chars)",
+      "fix": "qué cambiar (máx 140 chars)"
+    }
+  ],
+  "summary": "frase resumen"
+}
+
+Reglas:
+- ok=true SOLO si NO hay blockers.
+- Si todo está bien, issues:[] y summary positivo.
+- NO inventes problemas.`;
+
+  const userMessage = `Brief del proyecto:
+${brief.slice(0, 1500)}
+
+Fases con sus tareas generadas (en JSON):
+${JSON.stringify(phasesWithTasks, null, 2)}`;
+
+  return callJudge({
+    client,
+    systemPrompt,
+    userMessage,
+    label: "judge-tasks",
+    maxTokens: 2500,
+  });
 }
 
 type CommitInfo = {
@@ -451,7 +752,7 @@ export async function calculateProjectHealth(projectId: string): Promise<{
   return { healthStatus, healthNote };
 }
 
-type PhaseSpec = {
+export type PhaseSpec = {
   name: string;
   weeks: number;
   deliverables?: string[];
@@ -561,7 +862,7 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato:
   }
 ]`;
 
-      const parsed = await callSonnetWithRetry<PhaseSpec[]>({
+      const { result: parsed, verdict: phasesVerdict } = await callSonnetWithRetry<PhaseSpec[]>({
         client: anthropic,
         model: "claude-sonnet-4-6",
         maxTokens: 4000,
@@ -569,11 +870,15 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato:
         userMessage: designPrompt,
         parser: (text) => parseAIJson<PhaseSpec[]>(text, "design-phases-fresh"),
         validator: (p) => validatePhaseSpecs(p, hasRepo),
+        semanticValidator: (p) => judgePhaseDesign(anthropic, p, brief, repoContext),
         label: "design-phases-fresh",
         maxRetries: 2,
       });
 
       if (!parsed || !Array.isArray(parsed) || parsed.length === 0) throw new Error("AI returned empty phases after retries");
+      if (phasesVerdict) {
+        log(`design-phases-fresh: final verdict — score=${phasesVerdict.score}/10, ${phasesVerdict.issues.length} issues`);
+      }
       phaseSpecs = parsed.map(p => {
         const cs = p.currentStatus;
         const explicitStatus = cs === "completed" || cs === "in_progress" || cs === "pending" ? cs : undefined;
@@ -728,7 +1033,7 @@ Reglas estrictas:
         tasks: Array<{ title: string; priority: string; isMilestone?: boolean; clientFacingTitle?: string }>;
       }>;
 
-      const phaseTasks = await callSonnetWithRetry<PhaseTasksPayload>({
+      const { result: phaseTasks, verdict: tasksVerdict } = await callSonnetWithRetry<PhaseTasksPayload>({
         client: anthropic,
         model: "claude-sonnet-4-6",
         maxTokens: 12000,
@@ -736,12 +1041,16 @@ Reglas estrictas:
         userMessage: `Genera tareas para este proyecto:\n\n${taskContext}`,
         parser: (text) => parseAIJson<PhaseTasksPayload>(text, "tasks-fresh"),
         validator: (p) => validatePhaseTasks(p, insertedPhases.length),
+        semanticValidator: (p) => judgePhaseTasks(anthropic, p, phaseSpecs, brief),
         label: "tasks-fresh",
         maxRetries: 2,
       });
 
       if (!phaseTasks || !Array.isArray(phaseTasks) || phaseTasks.length === 0) {
         throw new Error("AI returned empty or invalid tasks payload after retries");
+      }
+      if (tasksVerdict) {
+        log(`tasks-fresh: final verdict — score=${tasksVerdict.score}/10, ${tasksVerdict.issues.length} issues`);
       }
       log(`generateProjectArtifacts: Sonnet returned tasks for ${phaseTasks.length} phases (validated)`);
 
