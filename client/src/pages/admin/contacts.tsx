@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
@@ -118,6 +118,16 @@ export default function Contacts() {
   const { toast } = useToast();
   const [showNewContact, setShowNewContact] = useState(false);
   const [newContactForm, setNewContactForm] = useState({ nombre: "", empresa: "", email: "", telefono: "", status: "contacted", nota: "" });
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("new") === "true") {
+      setShowNewContact(true);
+      params.delete("new");
+      const cleanQs = params.toString();
+      window.history.replaceState({}, "", window.location.pathname + (cleanQs ? `?${cleanQs}` : ""));
+    }
+  }, []);
 
   const createContactMut = useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
