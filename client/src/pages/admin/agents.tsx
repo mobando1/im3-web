@@ -15,12 +15,9 @@ import {
   Calendar,
   Hand,
   ChevronRight,
-  Zap,
   Brain,
-  RefreshCcw,
-  FolderGit2,
-  FileText,
-  LineChart,
+  Cog,
+  Plug,
 } from "lucide-react";
 
 type AgentHealth = "healthy" | "warning" | "error" | "idle";
@@ -36,10 +33,12 @@ type AgentRun = {
   triggeredBy: string;
 };
 
+type AgentKind = "ai" | "automation" | "integration" | "webhook";
+
 type Agent = {
   name: string;
   displayName: string;
-  domain: string;
+  kind: AgentKind;
   description: string;
   trigger: "cron" | "webhook" | "manual";
   schedule?: string;
@@ -51,11 +50,11 @@ type Agent = {
   stats: { last10Success: number; last10Error: number; last10Total: number };
 };
 
-type DomainInfo = { label: string; description: string };
+type KindInfo = { label: string; description: string };
 
 type AgentsResponse = {
   agents: Agent[];
-  domains: Record<string, DomainInfo>;
+  kinds: Record<AgentKind, KindInfo>;
   summary: { total: number; healthy: number; warning: number; error: number; idle: number };
 };
 
@@ -64,13 +63,18 @@ type RunsResponse = {
   runs: Array<AgentRun & { errorStack: string | null; metadata: Record<string, unknown> | null; agentName: string }>;
 };
 
-const domainIcons: Record<string, typeof Zap> = {
-  communication: Zap,
+const kindIcons: Record<AgentKind, typeof Brain> = {
   ai: Brain,
-  sync: RefreshCcw,
-  projects: FolderGit2,
-  content: FileText,
-  analysis: LineChart,
+  automation: Cog,
+  integration: Plug,
+  webhook: Webhook,
+};
+
+const kindNoun: Record<AgentKind, string> = {
+  ai: "agentes",
+  automation: "automatizaciones",
+  integration: "integraciones",
+  webhook: "webhooks",
 };
 
 const triggerIcons = {
@@ -128,26 +132,30 @@ export default function AgentsPage() {
     return (
       <div className="py-12 text-center text-gray-400">
         <Activity className="w-8 h-8 mx-auto mb-3 animate-pulse" />
-        <p className="text-sm">Cargando agentes…</p>
+        <p className="text-sm">Cargando sistema…</p>
       </div>
     );
   }
 
-  const agentsByDomain: Record<string, Agent[]> = {};
+  const agentsByKind: Record<AgentKind, Agent[]> = {
+    ai: [],
+    automation: [],
+    integration: [],
+    webhook: [],
+  };
   for (const agent of data.agents) {
-    if (!agentsByDomain[agent.domain]) agentsByDomain[agent.domain] = [];
-    agentsByDomain[agent.domain].push(agent);
+    agentsByKind[agent.kind]?.push(agent);
   }
 
-  const domainOrder = ["communication", "ai", "sync", "projects", "analysis", "content"];
+  const kindOrder: AgentKind[] = ["ai", "automation", "integration", "webhook"];
 
   return (
     <div className="space-y-6 pt-4">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Agentes</h1>
+        <h1 className="text-2xl font-semibold text-gray-900">Sistema</h1>
         <p className="text-sm text-gray-500 mt-1">
-          Todos los servicios, cron jobs, webhooks y automatizaciones del sistema.
+          Agentes IA, automatizaciones, integraciones y webhooks del CRM.
         </p>
       </div>
 
@@ -179,28 +187,28 @@ export default function AgentsPage() {
         />
       </div>
 
-      {/* Domain sections */}
-      {domainOrder
-        .filter((d) => agentsByDomain[d]?.length)
-        .map((domain) => {
-          const info = data.domains[domain];
-          const DomainIcon = domainIcons[domain] ?? Activity;
+      {/* Kind sections */}
+      {kindOrder
+        .filter((k) => agentsByKind[k].length)
+        .map((kind) => {
+          const info = data.kinds[kind];
+          const KindIcon = kindIcons[kind];
           return (
-            <div key={domain}>
+            <div key={kind}>
               <div className="flex items-baseline gap-3 mb-3">
                 <div className="flex items-center gap-2">
-                  <DomainIcon className="w-4 h-4 text-gray-400" />
+                  <KindIcon className="w-4 h-4 text-gray-400" />
                   <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-                    {info?.label ?? domain}
+                    {info?.label ?? kind}
                   </h2>
                 </div>
                 <span className="text-xs text-gray-400">{info?.description}</span>
                 <span className="text-xs text-gray-400 ml-auto">
-                  {agentsByDomain[domain].length} agentes
+                  {agentsByKind[kind].length} {kindNoun[kind]}
                 </span>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                {agentsByDomain[domain].map((agent) => (
+                {agentsByKind[kind].map((agent) => (
                   <AgentCard
                     key={agent.name}
                     agent={agent}

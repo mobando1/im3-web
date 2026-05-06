@@ -10,7 +10,7 @@ import NotFound from "@/pages/not-found";
 
 class ErrorBoundary extends Component<
   { children: ReactNode },
-  { hasError: boolean }
+  { hasError: boolean; errorMessage: string }
 > {
   state = { hasError: false, errorMessage: "" };
   static getDerivedStateFromError(error: Error) {
@@ -67,6 +67,8 @@ const AdminAuditoriaDetail = lazy(() => import("@/pages/admin/auditoria-detail")
 const AdminSessions = lazy(() => import("@/pages/admin/sessions"));
 const AdminProposals = lazy(() => import("@/pages/admin/proposals-list"));
 const AdminProposalEditor = lazy(() => import("@/pages/admin/proposal-editor"));
+const AdminProposalBriefEditor = lazy(() => import("@/pages/admin/proposal-brief-editor"));
+const ProposalBriefView = lazy(() => import("@/pages/proposal-brief"));
 const AdminBlog = lazy(() => import("@/pages/admin/blog"));
 const AdminBlogEditor = lazy(() => import("@/pages/admin/blog-editor"));
 const AdminAgents = lazy(() => import("@/pages/admin/agents"));
@@ -110,6 +112,7 @@ function Router() {
         <Route path="/confirmed" component={Confirmed} />
         <Route path="/reschedule/:contactId" component={Reschedule} />
         <Route path="/proposal/:token" component={ProposalView} />
+        <Route path="/brief/:token" component={ProposalBriefView} />
         {/* Portal del cliente — auth (login + multi-proyecto) */}
         <Route path="/portal/login" component={PortalLogin} />
         <Route path="/portal/forgot-password" component={PortalForgotPassword} />
@@ -185,6 +188,13 @@ function Router() {
           <ProtectedAdmin>
             <AdminAuditorias />
           </ProtectedAdmin>
+        </Route>
+        <Route path="/admin/proposals/:id/brief">
+          {() => (
+            <ProtectedAdmin>
+              <AdminProposalBriefEditor />
+            </ProtectedAdmin>
+          )}
         </Route>
         <Route path="/admin/proposals/:id">
           {() => (

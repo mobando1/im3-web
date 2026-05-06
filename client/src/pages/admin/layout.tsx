@@ -17,7 +17,7 @@ const navItems = [
   { label: "Blog", path: "/admin/blog", icon: BookOpen },
   { label: "Tareas", path: "/admin/tasks", icon: CheckSquare, showBadge: true },
   { label: "Calendario", path: "/admin/calendar", icon: CalendarDays },
-  { label: "Agentes", path: "/admin/agents", icon: Activity },
+  { label: "Sistema", path: "/admin/agents", icon: Activity },
   { label: "Herramientas", path: "/admin/tools", icon: Wrench },
   { label: "Plantillas", path: "/admin/templates", icon: FileText },
 ];

@@ -27,6 +27,14 @@ type Proposal = {
   acceptedAt: string | null;
   createdAt: string;
   deletedAt: string | null;
+  briefStatus: "not_generated" | "draft" | "ready" | "sent" | null;
+};
+
+const BRIEF_BADGE: Record<string, { label: string; cls: string; title: string }> = {
+  not_generated: { label: "Brief: —", cls: "bg-gray-50 text-gray-400", title: "Brief técnico no generado aún" },
+  draft: { label: "Brief: ⏳", cls: "bg-amber-50 text-amber-700", title: "Brief en borrador (no enviado)" },
+  ready: { label: "Brief: ✓", cls: "bg-emerald-50 text-emerald-700", title: "Brief listo para enviar" },
+  sent: { label: "Brief: ✉", cls: "bg-[#2FA4A9]/10 text-[#2FA4A9]", title: "Brief enviado al cliente" },
 };
 
 const TRASH_RETENTION_DAYS = 30;
@@ -210,9 +218,19 @@ export default function AdminProposals() {
                       <p className="text-xs text-gray-400">{p.contactEmpresa}</p>
                     </td>
                     <td className="px-5 py-4">
-                      <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[p.status]}`}>
-                        {STATUS_LABELS[p.status] || p.status}
-                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[p.status]}`}>
+                          {STATUS_LABELS[p.status] || p.status}
+                        </span>
+                        {p.briefStatus && BRIEF_BADGE[p.briefStatus] && (
+                          <span
+                            className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium ${BRIEF_BADGE[p.briefStatus].cls}`}
+                            title={BRIEF_BADGE[p.briefStatus].title}
+                          >
+                            {BRIEF_BADGE[p.briefStatus].label}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-5 py-4 text-xs text-gray-400">
                       {new Date(p.createdAt).toLocaleDateString("es-CO", { day: "numeric", month: "short", year: "numeric" })}

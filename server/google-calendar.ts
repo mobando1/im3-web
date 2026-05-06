@@ -258,6 +258,102 @@ export async function createProjectMeetingEvent(opts: {
 }
 
 /**
+ * List events from the impersonated user's primary calendar (info@im3systems.com).
+ * Used to surface external meetings that weren't created from the CRM.
+ */
+export type CalendarEventSummary = {
+  id: string;
+  summary: string;
+  description: string | null;
+  start: string | null; // ISO string
+  end: string | null;
+  startDate: string | null; // YYYY-MM-DD (timed) or just the date for all-day events
+  startTime: string | null; // HH:MM (24h) or null for all-day
+  isAllDay: boolean;
+  meetLink: string | null;
+  htmlLink: string | null;
+  organizerEmail: string | null;
+  attendees: Array<{ email: string; displayName: string | null; responseStatus: string | null }>;
+  status: string | null;
+  source: "google_calendar"; // distinguishes from local appointments / diagnostics
+};
+
+export async function listCalendarEvents(opts: {
+  timeMin?: Date;
+  timeMax?: Date;
+  maxResults?: number;
+  q?: string;
+}): Promise<CalendarEventSummary[]> {
+  const auth = getAuth();
+  if (!auth) return [];
+
+  const calendar = google.calendar({ version: "v3", auth });
+
+  const timeMin = (opts.timeMin || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)).toISOString();
+  const timeMax = (opts.timeMax || new Date(Date.now() + 90 * 24 * 60 * 60 * 1000)).toISOString();
+
+  try {
+    const res = await calendar.events.list({
+      calendarId: "primary",
+      timeMin,
+      timeMax,
+      maxResults: opts.maxResults || 250,
+      singleEvents: true,
+      orderBy: "startTime",
+      q: opts.q,
+    });
+
+    const events = res.data.items || [];
+
+    return events.map((e): CalendarEventSummary => {
+      const startRaw = e.start?.dateTime || e.start?.date || null;
+      const endRaw = e.end?.dateTime || e.end?.date || null;
+      const isAllDay = !e.start?.dateTime;
+
+      let startDate: string | null = null;
+      let startTime: string | null = null;
+      if (startRaw) {
+        if (isAllDay) {
+          startDate = startRaw; // already YYYY-MM-DD
+        } else {
+          const d = new Date(startRaw);
+          startDate = d.toISOString().slice(0, 10);
+          startTime = d.toTimeString().slice(0, 5);
+        }
+      }
+
+      const meetLink = e.hangoutLink
+        || e.conferenceData?.entryPoints?.find(p => p.entryPointType === "video")?.uri
+        || null;
+
+      return {
+        id: e.id || "",
+        summary: e.summary || "(Sin título)",
+        description: e.description || null,
+        start: startRaw,
+        end: endRaw,
+        startDate,
+        startTime,
+        isAllDay,
+        meetLink,
+        htmlLink: e.htmlLink || null,
+        organizerEmail: e.organizer?.email || null,
+        attendees: (e.attendees || []).map(a => ({
+          email: a.email || "",
+          displayName: a.displayName || null,
+          responseStatus: a.responseStatus || null,
+        })),
+        status: e.status || null,
+        source: "google_calendar",
+      };
+    });
+  } catch (err) {
+    log(`[Calendar] Error listando eventos: ${(err as Error).message}`);
+    return [];
+  }
+}
+
+/**
  * Delete a Google Calendar event (used when canceling/rescheduling meetings).
  */
 export async function deleteCalendarEvent(eventId: string): Promise<boolean> {

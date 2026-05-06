@@ -1,12 +1,15 @@
 import { google, gmail_v1 } from "googleapis";
 import { db } from "./db";
-import { gmailEmails, gmailSyncState, contacts, sentEmails, activityLog, contactEmails } from "@shared/schema";
-import { eq, and, gte, lte, ilike } from "drizzle-orm";
+import { gmailEmails, gmailSyncState, contacts, sentEmails, activityLog, contactEmails, notifications } from "@shared/schema";
+import { eq, and, gte, lte, ilike, desc } from "drizzle-orm";
 import { log } from "./index";
 import { classifyEmailRelevance } from "./agents/email-classifier";
 import { runAgent } from "./agents/runner";
 
-const SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"];
+const SCOPES = [
+  "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/gmail.send",
+];
 
 function getAuth() {
   const email = process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
@@ -299,6 +302,40 @@ async function fetchAndStoreMessage(
       await db.update(contacts).set({ lastActivityAt: new Date() }).where(eq(contacts.id, contactId));
     } catch (err: unknown) {
       log(`[Gmail Sync] Error logging activity: ${(err as Error).message}`);
+    }
+
+    // In-app notification for new INBOUND emails (anti-spam: 1 per contact per 30 min)
+    if (direction === "inbound") {
+      try {
+        const [contact] = await db
+          .select({ nombre: contacts.nombre, empresa: contacts.empresa })
+          .from(contacts)
+          .where(eq(contacts.id, contactId))
+          .limit(1);
+
+        const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
+        const [recent] = await db
+          .select({ id: notifications.id })
+          .from(notifications)
+          .where(and(
+            eq(notifications.contactId, contactId),
+            eq(notifications.type, "new_email"),
+            gte(notifications.createdAt, thirtyMinAgo),
+          ))
+          .orderBy(desc(notifications.createdAt))
+          .limit(1);
+
+        if (!recent) {
+          await db.insert(notifications).values({
+            type: "new_email",
+            title: `Nuevo email de ${contact?.nombre || fromEmail}`,
+            description: `${contact?.empresa ? `${contact.empresa} · ` : ""}${(subject || "Sin asunto").substring(0, 100)}`,
+            contactId,
+          });
+        }
+      } catch (err: unknown) {
+        log(`[Gmail Sync] Error creating notification: ${(err as Error).message}`);
+      }
     }
   }
 
@@ -624,4 +661,157 @@ export async function syncGmailEmails(): Promise<{ newMessages: number; errors: 
   }
 
   return { newMessages, errors };
+}
+
+// ───────────────────────────────────────────────────────────────
+// Gmail Send (Phase 2 — replies + new emails from CRM)
+// ───────────────────────────────────────────────────────────────
+
+/**
+ * Encode a string as base64url (RFC 4648).
+ */
+function base64UrlEncode(input: string): string {
+  return Buffer.from(input, "utf-8")
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
+/**
+ * RFC 2047 encoding for non-ASCII subject/From-name characters.
+ */
+function encodeMimeWord(value: string): string {
+  // eslint-disable-next-line no-control-regex
+  if (/^[\x00-\x7F]*$/.test(value)) return value;
+  return `=?UTF-8?B?${Buffer.from(value, "utf-8").toString("base64")}?=`;
+}
+
+/**
+ * Generate an RFC 2822 Message-ID.
+ */
+function generateMessageId(): string {
+  const random = Math.random().toString(36).slice(2);
+  const timestamp = Date.now().toString(36);
+  const domain = (IMPERSONATED_EMAIL().split("@")[1] || "im3systems.com");
+  return `<${timestamp}.${random}@${domain}>`;
+}
+
+/**
+ * Fetch RFC 2822 Message-ID and References headers for an existing Gmail message.
+ * Used to thread replies properly.
+ */
+export async function getOriginalMessageHeaders(
+  gmailMessageId: string
+): Promise<{ messageIdHeader: string | null; references: string | null; subject: string | null } | null> {
+  const auth = getAuth();
+  if (!auth) return null;
+  try {
+    const gmail = google.gmail({ version: "v1", auth });
+    const res = await gmail.users.messages.get({
+      userId: "me",
+      id: gmailMessageId,
+      format: "metadata",
+      metadataHeaders: ["Message-ID", "References", "Subject"],
+    });
+    const headers = res.data.payload?.headers || [];
+    const messageIdHeader = getHeader(headers, "Message-ID") || null;
+    const references = getHeader(headers, "References") || null;
+    const subject = getHeader(headers, "Subject") || null;
+    return { messageIdHeader, references, subject };
+  } catch (err) {
+    log(`[Gmail Send] Failed to fetch original headers: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+export type SendGmailInput = {
+  to: string[];
+  cc?: string[];
+  subject: string;
+  html: string;
+  text?: string; // optional plain-text alternative
+  threadId?: string; // Gmail thread ID for replies
+  inReplyTo?: string; // Original RFC 2822 Message-ID header value
+  references?: string; // References header chain
+};
+
+export type SendGmailResult = {
+  gmailMessageId: string;
+  gmailThreadId: string;
+  rawMessageIdHeader: string;
+};
+
+/**
+ * Send an email via Gmail API as the impersonated user (info@im3systems.com).
+ * Supports replies (via threadId + In-Reply-To/References) and plain new emails.
+ */
+export async function sendGmailMessage(input: SendGmailInput): Promise<SendGmailResult> {
+  const auth = getAuth();
+  if (!auth) throw new Error("Gmail not configured");
+
+  const gmail = google.gmail({ version: "v1", auth });
+  const fromAddress = IMPERSONATED_EMAIL();
+  const messageIdHeader = generateMessageId();
+
+  const boundary = `=_im3_${Date.now().toString(36)}_${Math.random().toString(36).slice(2)}`;
+
+  const headerLines: string[] = [
+    `From: IM3 Systems <${fromAddress}>`,
+    `To: ${input.to.join(", ")}`,
+  ];
+  if (input.cc && input.cc.length > 0) {
+    headerLines.push(`Cc: ${input.cc.join(", ")}`);
+  }
+  headerLines.push(`Subject: ${encodeMimeWord(input.subject)}`);
+  headerLines.push(`Message-ID: ${messageIdHeader}`);
+  headerLines.push(`Date: ${new Date().toUTCString()}`);
+  if (input.inReplyTo) headerLines.push(`In-Reply-To: ${input.inReplyTo}`);
+  if (input.references) headerLines.push(`References: ${input.references}`);
+  headerLines.push("MIME-Version: 1.0");
+
+  const plainText = input.text || input.html.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+
+  let body: string;
+  if (input.html) {
+    headerLines.push(`Content-Type: multipart/alternative; boundary="${boundary}"`);
+    body = [
+      "",
+      `--${boundary}`,
+      "Content-Type: text/plain; charset=UTF-8",
+      "Content-Transfer-Encoding: 7bit",
+      "",
+      plainText,
+      "",
+      `--${boundary}`,
+      "Content-Type: text/html; charset=UTF-8",
+      "Content-Transfer-Encoding: 7bit",
+      "",
+      input.html,
+      "",
+      `--${boundary}--`,
+      "",
+    ].join("\r\n");
+  } else {
+    headerLines.push("Content-Type: text/plain; charset=UTF-8");
+    body = `\r\n${plainText}`;
+  }
+
+  const raw = `${headerLines.join("\r\n")}\r\n${body}`;
+  const encoded = base64UrlEncode(raw);
+
+  const sendRes = await gmail.users.messages.send({
+    userId: "me",
+    requestBody: {
+      raw: encoded,
+      ...(input.threadId ? { threadId: input.threadId } : {}),
+    },
+  });
+
+  const gmailMessageId = sendRes.data.id || "";
+  const gmailThreadId = sendRes.data.threadId || input.threadId || "";
+
+  if (!gmailMessageId) throw new Error("Gmail send returned no message ID");
+
+  return { gmailMessageId, gmailThreadId, rawMessageIdHeader: messageIdHeader };
 }

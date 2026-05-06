@@ -6,6 +6,8 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import {
   Select,
   SelectContent,
@@ -119,6 +121,24 @@ type WhatsAppMsg = {
   readAt: string | null;
   errorMessage: string | null;
   createdAt: string;
+};
+
+type ConversationItem = {
+  id: string;
+  channel: "email" | "whatsapp" | "meeting" | "event";
+  source: string;
+  direction: "inbound" | "outbound" | "system";
+  date: string;
+  subject: string | null;
+  preview: string;
+  bodyHtml: string | null;
+  bodyText: string | null;
+  status: string | null;
+  fromEmail: string | null;
+  gmailThreadId: string | null;
+  hasAttachments: boolean;
+  templateName: string | null;
+  meta: Record<string, any>;
 };
 
 type ProposalItem = {
@@ -559,6 +579,83 @@ export default function ContactDetailPage() {
     enabled: !!contactId,
   });
 
+  // Unified conversation timeline (Phase 1)
+  const [conversationFilter, setConversationFilter] = useState<"all" | "email" | "whatsapp" | "meeting">("all");
+  const [conversationShowEvents, setConversationShowEvents] = useState(false);
+  const [expandedConversationId, setExpandedConversationId] = useState<string | null>(null);
+  const { data: conversationTimeline = [], isLoading: conversationLoading } = useQuery<ConversationItem[]>({
+    queryKey: [`/api/admin/contacts/${contactId}/conversation-timeline`, { events: conversationShowEvents }],
+    queryFn: async () => {
+      const res = await apiRequest("GET", `/api/admin/contacts/${contactId}/conversation-timeline?includeEvents=${conversationShowEvents}`);
+      return res.json();
+    },
+    enabled: !!contactId,
+  });
+
+  // Gmail composer (Phase 2 — reply / new email from CRM)
+  const [composerOpen, setComposerOpen] = useState(false);
+  const [composerTo, setComposerTo] = useState("");
+  const [composerCc, setComposerCc] = useState("");
+  const [composerSubject, setComposerSubject] = useState("");
+  const [composerBody, setComposerBody] = useState("");
+  const [composerReplyToId, setComposerReplyToId] = useState<string | null>(null);
+  const [composerError, setComposerError] = useState<string | null>(null);
+
+  const sendGmailMutation = useMutation({
+    mutationFn: async (payload: { to: string; cc: string; subject: string; body: string; replyToGmailEmailId: string | null }) => {
+      const res = await apiRequest("POST", "/api/admin/gmail/send", {
+        contactId,
+        to: payload.to,
+        cc: payload.cc || undefined,
+        subject: payload.subject,
+        body: payload.body,
+        replyToGmailEmailId: payload.replyToGmailEmailId || undefined,
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/conversation-timeline`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/email-timeline`] });
+      queryClient.invalidateQueries({ queryKey: [`/api/admin/contacts/${contactId}/activity`] });
+      setComposerOpen(false);
+      setComposerTo("");
+      setComposerCc("");
+      setComposerSubject("");
+      setComposerBody("");
+      setComposerReplyToId(null);
+      setComposerError(null);
+    },
+    onError: (err: Error) => {
+      setComposerError(err.message || "Error enviando el email");
+    },
+  });
+
+  function openComposerNew() {
+    setComposerReplyToId(null);
+    setComposerTo(contact?.email || "");
+    setComposerCc("");
+    setComposerSubject("");
+    setComposerBody("");
+    setComposerError(null);
+    setComposerOpen(true);
+  }
+
+  function openComposerReply(item: ConversationItem) {
+    setComposerReplyToId(item.id.startsWith("gmail:") ? item.id.replace("gmail:", "") : null);
+    const replyAddr = item.fromEmail || contact?.email || "";
+    setComposerTo(replyAddr);
+    setComposerCc("");
+    const baseSubject = item.subject || "";
+    setComposerSubject(baseSubject.toLowerCase().startsWith("re:") ? baseSubject : `Re: ${baseSubject}`);
+    // Quote original message as plain text
+    const quotedSource = item.bodyText || (item.bodyHtml ? item.bodyHtml.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim() : item.preview);
+    const dateLabel = new Date(item.date).toLocaleString("es-CO");
+    const quoted = `\n\n---\nEl ${dateLabel}, ${item.fromEmail || "el contacto"} escribió:\n${quotedSource.split("\n").map(l => `> ${l}`).join("\n")}`;
+    setComposerBody(quoted);
+    setComposerError(null);
+    setComposerOpen(true);
+  }
+
   const { data: gmailSyncStatus } = useQuery<{ lastSyncAt: string | null }>({
     queryKey: ["/api/admin/gmail-sync-status"],
     enabled: !!contactId,
@@ -815,6 +912,13 @@ export default function ContactDetailPage() {
       await apiRequest("DELETE", `/api/admin/contacts/${contactId}`);
     },
     onSuccess: () => {
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === "string" && key.startsWith("/api/admin/contacts");
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/dashboard"] });
       navigate("/admin/contacts");
     },
   });
@@ -1121,6 +1225,9 @@ export default function ContactDetailPage() {
           </TabsTrigger>
           <TabsTrigger value="diagnostico" className="gap-1.5 data-[state=active]:bg-white">
             <FileText className="w-3.5 h-3.5" /> Diagnostico
+          </TabsTrigger>
+          <TabsTrigger value="conversacion" className="gap-1.5 data-[state=active]:bg-white">
+            <Inbox className="w-3.5 h-3.5" /> Conversación{conversationTimeline.length > 0 ? ` (${conversationTimeline.length})` : ""}
           </TabsTrigger>
           <TabsTrigger value="emails" className="gap-1.5 data-[state=active]:bg-white">
             <Mail className="w-3.5 h-3.5" /> Emails ({emailTimeline.length || totalEmails})
@@ -1864,6 +1971,275 @@ export default function ContactDetailPage() {
               </Card>
             </>
           )}
+        </TabsContent>
+
+        {/* ===== TAB: CONVERSACIÓN (unified) ===== */}
+        <TabsContent value="conversacion" className="space-y-4 mt-4">
+          <Card className="bg-white border-gray-200 shadow-sm">
+            <CardHeader className="pb-3 border-b border-gray-100">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <CardTitle className="text-base text-gray-900 flex items-center gap-2">
+                    <Inbox className="w-4 h-4 text-gray-500" /> Conversación unificada
+                  </CardTitle>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Todos los canales (email, WhatsApp, reuniones) en orden cronológico.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setConversationShowEvents((v) => !v)}
+                    className="text-xs h-8"
+                    data-testid="toggle-conversation-events"
+                  >
+                    <Activity className="w-3.5 h-3.5 mr-1.5" />
+                    {conversationShowEvents ? "Ocultar eventos" : "Mostrar eventos"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    onClick={openComposerNew}
+                    className="text-xs h-8 bg-[#2FA4A9] hover:bg-[#2FA4A9]/90 text-white"
+                    data-testid="button-new-email"
+                  >
+                    <Send className="w-3.5 h-3.5 mr-1.5" />
+                    Nuevo email
+                  </Button>
+                </div>
+              </div>
+
+              {/* Channel filter chips */}
+              <div className="flex items-center gap-1.5 flex-wrap mt-3">
+                {([
+                  { key: "all", label: "Todos", icon: null },
+                  { key: "email", label: "Emails", icon: Mail },
+                  { key: "whatsapp", label: "WhatsApp", icon: MessageSquare },
+                  { key: "meeting", label: "Reuniones", icon: Calendar },
+                ] as const).map((f) => {
+                  const Icon = f.icon;
+                  const active = conversationFilter === f.key;
+                  const count = f.key === "all"
+                    ? conversationTimeline.filter(i => i.channel !== "event").length
+                    : conversationTimeline.filter(i => i.channel === f.key).length;
+                  return (
+                    <button
+                      key={f.key}
+                      onClick={() => setConversationFilter(f.key)}
+                      className={`text-xs px-2.5 py-1 rounded-full border transition-colors flex items-center gap-1.5 ${
+                        active
+                          ? "bg-gray-900 text-white border-gray-900"
+                          : "bg-white text-gray-700 border-gray-200 hover:border-gray-300"
+                      }`}
+                      data-testid={`filter-conversation-${f.key}`}
+                    >
+                      {Icon && <Icon className="w-3 h-3" />}
+                      {f.label}
+                      <span className={`text-[10px] ${active ? "text-gray-300" : "text-gray-400"}`}>{count}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </CardHeader>
+
+            <CardContent className="p-0">
+              {conversationLoading && (
+                <div className="text-center py-12 text-sm text-gray-500">Cargando conversación...</div>
+              )}
+
+              {!conversationLoading && conversationTimeline.length === 0 && (
+                <div className="text-center py-12 px-4">
+                  <Inbox className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                  <p className="text-sm text-gray-500">Aún no hay actividad de conversación.</p>
+                  <p className="text-xs text-gray-400 mt-1">Los emails, WhatsApp y reuniones aparecerán aquí.</p>
+                </div>
+              )}
+
+              {!conversationLoading && conversationTimeline.length > 0 && (
+                <div className="divide-y divide-gray-100">
+                  {conversationTimeline
+                    .filter((item) => {
+                      if (conversationFilter === "all") return item.channel !== "event" || conversationShowEvents;
+                      return item.channel === conversationFilter;
+                    })
+                    .map((item) => {
+                      const isExpanded = expandedConversationId === item.id;
+                      const isInbound = item.direction === "inbound";
+                      const isOutbound = item.direction === "outbound";
+                      const isMeeting = item.channel === "meeting";
+                      const isEvent = item.channel === "event";
+
+                      const ChannelIcon = item.channel === "email"
+                        ? Mail
+                        : item.channel === "whatsapp"
+                        ? MessageSquare
+                        : item.channel === "meeting"
+                        ? Calendar
+                        : Activity;
+
+                      const accentColor = isEvent
+                        ? "border-l-gray-200"
+                        : isMeeting
+                        ? "border-l-purple-300"
+                        : isInbound
+                        ? "border-l-green-400"
+                        : "border-l-blue-400";
+
+                      const bgHover = isExpanded ? "bg-gray-50" : "hover:bg-gray-50/60";
+
+                      const dateObj = new Date(item.date);
+                      const dateLabel = dateObj.toLocaleString("es-CO", {
+                        day: "2-digit",
+                        month: "short",
+                        year: "numeric",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      });
+
+                      const directionLabel = isInbound
+                        ? "Entrante"
+                        : isOutbound
+                        ? "Saliente"
+                        : item.channel === "meeting"
+                        ? (item.status === "completed" ? "Completada" : item.status === "cancelled" ? "Cancelada" : "Programada")
+                        : "Evento";
+
+                      const directionColor = isInbound
+                        ? "bg-green-50 text-green-700 border-green-200"
+                        : isOutbound
+                        ? "bg-blue-50 text-blue-700 border-blue-200"
+                        : isMeeting
+                        ? "bg-purple-50 text-purple-700 border-purple-200"
+                        : "bg-gray-50 text-gray-600 border-gray-200";
+
+                      const headline = item.subject
+                        ? item.subject
+                        : item.channel === "whatsapp"
+                        ? (isInbound ? `Mensaje de ${contact.nombre || "cliente"}` : "WhatsApp enviado")
+                        : item.preview;
+
+                      const canExpand = !!(item.bodyHtml || item.bodyText) || !!item.meta?.meetLink;
+
+                      return (
+                        <div
+                          key={item.id}
+                          className={`border-l-4 ${accentColor} ${bgHover} transition-colors`}
+                          data-testid={`conversation-item-${item.id}`}
+                        >
+                          <button
+                            onClick={() => canExpand && setExpandedConversationId(isExpanded ? null : item.id)}
+                            disabled={!canExpand}
+                            className={`w-full text-left px-4 py-3 ${canExpand ? "cursor-pointer" : "cursor-default"}`}
+                          >
+                            <div className="flex items-start gap-3">
+                              <div className={`mt-0.5 w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 ${
+                                isInbound ? "bg-green-100" : isOutbound ? "bg-blue-100" : isMeeting ? "bg-purple-100" : "bg-gray-100"
+                              }`}>
+                                <ChannelIcon className={`w-3.5 h-3.5 ${
+                                  isInbound ? "text-green-700" : isOutbound ? "text-blue-700" : isMeeting ? "text-purple-700" : "text-gray-500"
+                                }`} />
+                              </div>
+
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                                  <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-4 font-normal ${directionColor}`}>
+                                    {directionLabel}
+                                  </Badge>
+                                  {item.templateName && (
+                                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 font-normal bg-amber-50 text-amber-700 border-amber-200">
+                                      {item.templateName}
+                                    </Badge>
+                                  )}
+                                  {item.hasAttachments && (
+                                    <Paperclip className="w-3 h-3 text-gray-400" />
+                                  )}
+                                  <span className="text-[11px] text-gray-400 ml-auto">{dateLabel}</span>
+                                </div>
+
+                                <p className={`text-sm font-medium text-gray-900 truncate ${isEvent ? "font-normal text-gray-600" : ""}`}>
+                                  {headline}
+                                </p>
+
+                                {item.preview && item.preview !== headline && (
+                                  <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">
+                                    {item.preview}
+                                  </p>
+                                )}
+
+                                {item.fromEmail && (
+                                  <p className="text-[11px] text-gray-400 mt-0.5">{item.fromEmail}</p>
+                                )}
+                              </div>
+
+                              {canExpand && (
+                                isExpanded ? <ChevronUp className="w-4 h-4 text-gray-400 mt-1" /> : <ChevronDown className="w-4 h-4 text-gray-400 mt-1" />
+                              )}
+                            </div>
+                          </button>
+
+                          {isExpanded && (
+                            <div className="px-4 pb-4 pt-1 ml-10 border-t border-gray-100 mt-1 pt-3 bg-white">
+                              {item.channel === "email" && (
+                                <div className="flex items-center gap-2 mb-3 pb-2 border-b border-gray-100">
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={(e) => { e.stopPropagation(); openComposerReply(item); }}
+                                    className="text-xs h-7"
+                                    data-testid={`button-reply-${item.id}`}
+                                  >
+                                    <Send className="w-3 h-3 mr-1.5" /> Responder
+                                  </Button>
+                                </div>
+                              )}
+                              {item.channel === "email" && item.bodyHtml && (
+                                <div
+                                  className="text-sm text-gray-700 prose prose-sm max-w-none"
+                                  dangerouslySetInnerHTML={{ __html: item.bodyHtml }}
+                                />
+                              )}
+                              {item.channel === "email" && !item.bodyHtml && item.bodyText && (
+                                <pre className="text-sm text-gray-700 whitespace-pre-wrap font-sans">{item.bodyText}</pre>
+                              )}
+                              {item.channel === "whatsapp" && item.bodyText && (
+                                <p className="text-sm text-gray-700 whitespace-pre-wrap">{item.bodyText}</p>
+                              )}
+                              {item.channel === "meeting" && (
+                                <div className="space-y-2 text-sm">
+                                  {item.bodyText && (
+                                    <p className="text-gray-700 whitespace-pre-wrap">{item.bodyText}</p>
+                                  )}
+                                  {item.meta?.meetLink && (
+                                    <a
+                                      href={String(item.meta.meetLink)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1.5 text-blue-600 hover:underline text-xs"
+                                    >
+                                      <Video className="w-3.5 h-3.5" /> Abrir Google Meet
+                                    </a>
+                                  )}
+                                  {item.meta?.recordingUrl && (
+                                    <a
+                                      href={String(item.meta.recordingUrl)}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center gap-1.5 text-blue-600 hover:underline text-xs ml-3"
+                                    >
+                                      <Mic className="w-3.5 h-3.5" /> Grabación
+                                    </a>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         {/* ===== TAB: EMAILS ===== */}
@@ -2824,6 +3200,97 @@ export default function ContactDetailPage() {
           )}
         </TabsContent>
       </Tabs>
+
+      {/* ===== Gmail Composer Dialog (Phase 2) ===== */}
+      <Dialog open={composerOpen} onOpenChange={(open) => { if (!open) { setComposerOpen(false); setComposerError(null); } }}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-base">
+              <Send className="w-4 h-4 text-[#2FA4A9]" />
+              {composerReplyToId ? "Responder email" : "Nuevo email"}
+            </DialogTitle>
+            <p className="text-xs text-gray-500 mt-1">
+              Enviado desde <span className="font-medium">info@im3systems.com</span> vía Gmail.
+              {composerReplyToId && " Quedará en el mismo hilo del original."}
+            </p>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Para</label>
+              <Input
+                value={composerTo}
+                onChange={(e) => setComposerTo(e.target.value)}
+                placeholder="email@ejemplo.com"
+                className="text-sm"
+                data-testid="composer-to"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Cc (opcional)</label>
+              <Input
+                value={composerCc}
+                onChange={(e) => setComposerCc(e.target.value)}
+                placeholder="cc@ejemplo.com (separados por coma)"
+                className="text-sm"
+                data-testid="composer-cc"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Asunto</label>
+              <Input
+                value={composerSubject}
+                onChange={(e) => setComposerSubject(e.target.value)}
+                placeholder="Asunto del email"
+                className="text-sm"
+                data-testid="composer-subject"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-gray-500 mb-1 block">Mensaje</label>
+              <Textarea
+                value={composerBody}
+                onChange={(e) => setComposerBody(e.target.value)}
+                placeholder="Escribe tu mensaje..."
+                rows={10}
+                className="text-sm font-sans"
+                data-testid="composer-body"
+              />
+            </div>
+            {composerError && (
+              <div className="text-xs text-red-600 bg-red-50 border border-red-200 rounded px-3 py-2">
+                {composerError}
+              </div>
+            )}
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button
+              variant="outline"
+              onClick={() => { setComposerOpen(false); setComposerError(null); }}
+              disabled={sendGmailMutation.isPending}
+              className="text-sm"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => sendGmailMutation.mutate({
+                to: composerTo,
+                cc: composerCc,
+                subject: composerSubject,
+                body: composerBody,
+                replyToGmailEmailId: composerReplyToId,
+              })}
+              disabled={sendGmailMutation.isPending || !composerTo.trim() || !composerSubject.trim() || !composerBody.trim()}
+              className="bg-[#2FA4A9] hover:bg-[#2FA4A9]/90 text-white text-sm"
+              data-testid="composer-send"
+            >
+              <Send className="w-3.5 h-3.5 mr-1.5" />
+              {sendGmailMutation.isPending ? "Enviando..." : "Enviar"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

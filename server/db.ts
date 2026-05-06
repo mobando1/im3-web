@@ -581,6 +581,75 @@ export async function runMigrations() {
     `).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_analytics_daily_project_date" ON "client_analytics_daily" ("client_project_id", "date" DESC);`).catch(() => {});
 
+    // Proposal Briefs — material de soporte detallado post-reunión (1:1 con proposals)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "proposal_briefs" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "proposal_id" varchar NOT NULL,
+        "contact_id" varchar NOT NULL,
+        "title" text,
+        "sections" json DEFAULT '{}'::json,
+        "status" text DEFAULT 'not_generated' NOT NULL,
+        "access_token" varchar DEFAULT gen_random_uuid() NOT NULL,
+        "ai_sources_report" json,
+        "notes" text,
+        "outdated_since_proposal_update" timestamp,
+        "generated_at" timestamp,
+        "sent_at" timestamp,
+        "viewed_at" timestamp,
+        "expires_at" timestamp,
+        "deleted_at" timestamp,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "updated_at" timestamp DEFAULT now() NOT NULL,
+        CONSTRAINT "proposal_briefs_proposal_id_unique" UNIQUE("proposal_id"),
+        CONSTRAINT "proposal_briefs_access_token_unique" UNIQUE("access_token")
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_proposal_briefs_contact_id" ON "proposal_briefs" ("contact_id");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_proposal_briefs_deleted_at" ON "proposal_briefs" ("deleted_at");`).catch(() => {});
+
+    // Snapshots del brief para undo del chat
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "proposal_brief_snapshots" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "brief_id" varchar NOT NULL,
+        "sections" json NOT NULL,
+        "triggered_by_message_id" varchar,
+        "change_summary" text,
+        "module_key" text,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_proposal_brief_snapshots_brief" ON "proposal_brief_snapshots" ("brief_id", "created_at" DESC);`).catch(() => {});
+
+    // Chat IA del brief — historial separado del chat de proposals
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "proposal_brief_chat_messages" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "brief_id" varchar NOT NULL,
+        "role" text NOT NULL,
+        "content" text NOT NULL,
+        "tool_calls" json,
+        "attachments" json,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_proposal_brief_chat_brief_id" ON "proposal_brief_chat_messages" ("brief_id", "created_at");`).catch(() => {});
+
+    // Analytics de visualización del brief público
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "proposal_brief_views" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "brief_id" varchar NOT NULL,
+        "module" text,
+        "time_spent" integer,
+        "device" text,
+        "ip" text,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_proposal_brief_views_brief" ON "proposal_brief_views" ("brief_id", "created_at" DESC);`).catch(() => {});
+
     console.log("✓ Database tables and indexes ensured");
 
     // Ensure admin user exists with correct password

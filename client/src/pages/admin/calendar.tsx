@@ -18,6 +18,26 @@ type Appointment = {
   meetLink: string | null;
   googleDriveUrl: string | null;
   meetingStatus?: string;
+  source?: "diagnostic" | "manual" | "google_calendar";
+  htmlLink?: string | null;
+};
+
+type ExternalCalendarEvent = {
+  id: string;
+  summary: string;
+  description: string | null;
+  start: string | null;
+  end: string | null;
+  startDate: string | null;
+  startTime: string | null;
+  isAllDay: boolean;
+  meetLink: string | null;
+  htmlLink: string | null;
+  organizerEmail: string | null;
+  attendees: Array<{ email: string; displayName: string | null; responseStatus: string | null }>;
+  status: string | null;
+  source: "google_calendar";
+  matchedContact?: { id: string; nombre: string; empresa: string; email: string } | null;
 };
 
 type ManualAppointment = {
@@ -75,6 +95,14 @@ export default function CalendarPage() {
 
   const { data: manualAppointments = [] } = useQuery<ManualAppointment[]>({
     queryKey: ["/api/admin/appointments"],
+  });
+
+  // Phase 3: External Google Calendar events (info@im3systems.com primary)
+  const [showExternalEvents, setShowExternalEvents] = useState(true);
+  const { data: externalEvents = [] } = useQuery<ExternalCalendarEvent[]>({
+    queryKey: ["/api/admin/calendar/external-events"],
+    enabled: showExternalEvents,
+    staleTime: 60_000,
   });
 
   const queryClient = useQueryClient();
@@ -154,6 +182,14 @@ export default function CalendarPage() {
     },
   });
 
+  // Track CRM-known meetLinks so we skip the same event when it shows up via Google
+  const crmMeetLinks = useMemo(() => {
+    const set = new Set<string>();
+    for (const a of appointments) if (a.meetLink) set.add(a.meetLink);
+    for (const m of manualAppointments) if (m.meetLink) set.add(m.meetLink);
+    return set;
+  }, [appointments, manualAppointments]);
+
   const appointmentsByDate = useMemo(() => {
     const map: Record<string, Appointment[]> = {};
     for (const apt of appointments) {
@@ -161,7 +197,7 @@ export default function CalendarPage() {
       if (!date) continue;
       const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
       if (!map[key]) map[key] = [];
-      map[key].push(apt);
+      map[key].push({ ...apt, source: "diagnostic" });
     }
     for (const ma of manualAppointments) {
       const key = ma.date;
@@ -176,10 +212,32 @@ export default function CalendarPage() {
         meetLink: ma.meetLink,
         googleDriveUrl: null,
         meetingStatus: ma.status || "scheduled",
+        source: "manual",
       });
     }
+    if (showExternalEvents) {
+      for (const ev of externalEvents) {
+        if (!ev.startDate) continue;
+        // Skip events already created from the CRM (same Meet link)
+        if (ev.meetLink && crmMeetLinks.has(ev.meetLink)) continue;
+        if (!map[ev.startDate]) map[ev.startDate] = [];
+        map[ev.startDate].push({
+          id: `gcal-${ev.id}`,
+          fechaCita: ev.startDate,
+          horaCita: ev.startTime || (ev.isAllDay ? "Todo el día" : "—"),
+          contactName: ev.matchedContact ? ev.matchedContact.nombre : ev.summary,
+          contactCompany: ev.matchedContact?.empresa || (ev.organizerEmail || ""),
+          contactId: ev.matchedContact?.id || "",
+          meetLink: ev.meetLink,
+          googleDriveUrl: null,
+          meetingStatus: ev.status === "cancelled" ? "cancelled" : "scheduled",
+          source: "google_calendar",
+          htmlLink: ev.htmlLink,
+        });
+      }
+    }
     return map;
-  }, [appointments, manualAppointments]);
+  }, [appointments, manualAppointments, externalEvents, showExternalEvents, crmMeetLinks]);
 
   // Calendar grid
   const firstDay = new Date(currentMonth.year, currentMonth.month, 1);
@@ -224,8 +282,27 @@ export default function CalendarPage() {
       meetLink: ma.meetLink,
       googleDriveUrl: null,
       meetingStatus: ma.status || "scheduled",
+      source: "manual" as const,
     }));
-    return [...appointments, ...converted]
+    const externals: Appointment[] = showExternalEvents
+      ? externalEvents
+          .filter((ev) => ev.startDate && (!ev.meetLink || !crmMeetLinks.has(ev.meetLink)))
+          .map((ev) => ({
+            id: `gcal-${ev.id}`,
+            fechaCita: ev.startDate || "",
+            horaCita: ev.startTime || (ev.isAllDay ? "Todo el día" : "—"),
+            contactName: ev.matchedContact ? ev.matchedContact.nombre : ev.summary,
+            contactCompany: ev.matchedContact?.empresa || (ev.organizerEmail || ""),
+            contactId: ev.matchedContact?.id || "",
+            meetLink: ev.meetLink,
+            googleDriveUrl: null,
+            meetingStatus: ev.status === "cancelled" ? "cancelled" : "scheduled",
+            source: "google_calendar" as const,
+            htmlLink: ev.htmlLink,
+          }))
+      : [];
+    const taggedDiagnostics: Appointment[] = appointments.map((a) => ({ ...a, source: "diagnostic" as const }));
+    return [...taggedDiagnostics, ...converted, ...externals]
       .filter((a) => {
         const d = parseDateString(a.fechaCita);
         return d && d.getTime() >= now.getTime() - 24 * 60 * 60 * 1000;
@@ -235,16 +312,33 @@ export default function CalendarPage() {
         const db = parseDateString(b.fechaCita)?.getTime() || 0;
         return da - db;
       })
-      .slice(0, 10);
-  }, [appointments, manualAppointments]);
+      .slice(0, 15);
+  }, [appointments, manualAppointments, externalEvents, showExternalEvents, crmMeetLinks]);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2 flex-wrap">
         <h2 className="text-2xl font-bold text-gray-900">Calendario</h2>
-        <Button size="sm" onClick={() => setShowCreate(true)} className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white gap-1.5">
-          <Plus className="w-4 h-4" /> Nueva Cita
-        </Button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setShowExternalEvents((v) => !v)}
+            className="text-xs h-8"
+            data-testid="toggle-external-events"
+          >
+            <CalendarIcon className="w-3.5 h-3.5 mr-1.5" />
+            {showExternalEvents ? "Ocultar Google Calendar" : "Mostrar Google Calendar"}
+            {showExternalEvents && externalEvents.length > 0 && (
+              <span className="ml-1.5 text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0 rounded-full">
+                {externalEvents.length}
+              </span>
+            )}
+          </Button>
+          <Button size="sm" onClick={() => setShowCreate(true)} className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white gap-1.5">
+            <Plus className="w-4 h-4" /> Nueva Cita
+          </Button>
+        </div>
       </div>
 
       {showCreate && (
@@ -376,13 +470,23 @@ export default function CalendarPage() {
                         </span>
                         <div className="mt-1 space-y-0.5">
                           {apts.slice(0, 2).map((apt) => {
-                            const statusClass = meetingStatusColors[apt.meetingStatus || "scheduled"] || meetingStatusColors.scheduled;
+                            const isExternal = apt.source === "google_calendar";
+                            const statusClass = isExternal
+                              ? "bg-blue-50 text-blue-700 border border-blue-100"
+                              : (meetingStatusColors[apt.meetingStatus || "scheduled"] || meetingStatusColors.scheduled);
+                            const handleClick = (e: React.MouseEvent) => {
+                              e.stopPropagation();
+                              if (apt.contactId) navigate(`/admin/contacts/${apt.contactId}`);
+                              else if (isExternal && apt.htmlLink) window.open(apt.htmlLink, "_blank", "noopener,noreferrer");
+                            };
                             return (
                               <button
                                 key={apt.id}
-                                onClick={() => apt.contactId && navigate(`/admin/contacts/${apt.contactId}`)}
+                                onClick={handleClick}
                                 className={`w-full text-left px-1.5 py-0.5 rounded text-[10px] font-medium ${statusClass} hover:opacity-80 transition-colors truncate block`}
+                                title={isExternal ? "Evento de Google Calendar" : undefined}
                               >
+                                {isExternal && <span className="mr-0.5">🗓</span>}
                                 {apt.horaCita} {apt.contactName}
                               </button>
                             );
@@ -420,17 +524,22 @@ export default function CalendarPage() {
               upcoming.map((apt) => {
                 const status = apt.meetingStatus || "scheduled";
                 const isManual = apt.id.startsWith("manual-");
+                const isExternal = apt.source === "google_calendar";
                 const realId = isManual ? apt.id.replace("manual-", "") : apt.id;
 
                 return (
                   <div
                     key={apt.id}
                     className={`rounded-lg border p-3 transition-colors cursor-pointer ${
+                      isExternal ? "border-blue-200 bg-blue-50/20 hover:border-blue-300" :
                       status === "completed" ? "border-emerald-200 bg-emerald-50/30" :
                       status === "no_show" ? "border-red-200 bg-red-50/30" :
                       "border-gray-100 hover:border-[#2FA4A9]/30"
                     }`}
-                    onClick={() => apt.contactId && navigate(`/admin/contacts/${apt.contactId}`)}
+                    onClick={() => {
+                      if (apt.contactId) navigate(`/admin/contacts/${apt.contactId}`);
+                      else if (isExternal && apt.htmlLink) window.open(apt.htmlLink, "_blank", "noopener,noreferrer");
+                    }}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
@@ -438,6 +547,11 @@ export default function CalendarPage() {
                         <p className="text-xs text-gray-500 truncate">{apt.contactCompany}</p>
                       </div>
                       <div className="flex items-center gap-1 flex-shrink-0">
+                        {isExternal && (
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-5 bg-blue-50 text-blue-700 border-blue-200" title="Evento de Google Calendar">
+                            🗓 Google
+                          </Badge>
+                        )}
                         <Badge variant="outline" className={`text-[10px] px-1.5 py-0 h-5 ${
                           status === "completed" ? "bg-emerald-50 text-emerald-700 border-emerald-200" :
                           status === "no_show" ? "bg-red-50 text-red-700 border-red-200" :
@@ -482,7 +596,7 @@ export default function CalendarPage() {
                           Meet
                         </a>
                       )}
-                      {status === "scheduled" && (
+                      {status === "scheduled" && !isExternal && (
                         <>
                           <button
                             onClick={(e) => {
@@ -511,6 +625,17 @@ export default function CalendarPage() {
                             <UserX className="w-3 h-3" /> No show
                           </button>
                         </>
+                      )}
+                      {isExternal && apt.htmlLink && (
+                        <a
+                          href={apt.htmlLink}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline"
+                        >
+                          <ExternalLink className="w-3 h-3" /> Abrir en Google
+                        </a>
                       )}
                     </div>
                   </div>

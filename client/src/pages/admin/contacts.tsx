@@ -142,7 +142,13 @@ export default function Contacts() {
       await apiRequest("DELETE", `/api/admin/contacts/${id}`);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/contacts"] });
+      queryClient.invalidateQueries({
+        predicate: (query) => {
+          const key = query.queryKey[0];
+          return typeof key === "string" && key.startsWith("/api/admin/contacts");
+        },
+      });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/dashboard"] });
     },
   });
 

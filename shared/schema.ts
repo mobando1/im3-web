@@ -750,6 +750,86 @@ export const proposalViews = pgTable("proposal_views", {
 export type ProposalView = typeof proposalViews.$inferSelect;
 
 // ───────────────────────────────────────────────────────────────
+// Proposal Briefs — material de soporte detallado post-reunión
+// Documento hermano de proposals (1:1) que se envía DESPUÉS de la
+// presentación de la propuesta inicial. Profundiza cada módulo con:
+// qué problema resuelve, cómo funciona, en qué parte de la reunión
+// surgió, ejemplos concretos, qué pasaría si no se hace.
+// La inicial vive corta y vendedora; el brief vive largo y didáctico.
+// ───────────────────────────────────────────────────────────────
+export const proposalBriefs = pgTable("proposal_briefs", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  proposalId: varchar("proposal_id").notNull().unique(), // 1:1 con proposals
+  contactId: varchar("contact_id").notNull(),            // redundante para queries directas
+  title: text("title"),
+  // ProposalBriefData (ver shared/proposal-template/types.ts)
+  sections: json("sections").$type<Record<string, unknown>>().default({}),
+  status: text("status").notNull().default("not_generated"), // not_generated | draft | ready | sent
+  accessToken: varchar("access_token").default(sql`gen_random_uuid()`).notNull().unique(),
+  aiSourcesReport: json("ai_sources_report").$type<Record<string, string[]>>(),
+  notes: text("notes"),
+  // Marca el brief como desactualizado si la propuesta inicial cambia tras generarlo
+  outdatedSinceProposalUpdate: timestamp("outdated_since_proposal_update"),
+  generatedAt: timestamp("generated_at"),
+  sentAt: timestamp("sent_at"),
+  viewedAt: timestamp("viewed_at"),
+  expiresAt: timestamp("expires_at"),
+  deletedAt: timestamp("deleted_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type ProposalBrief = typeof proposalBriefs.$inferSelect;
+export type InsertProposalBrief = typeof proposalBriefs.$inferInsert;
+
+// Snapshots del brief antes de cada cambio del chat — undo del chat IA
+export const proposalBriefSnapshots = pgTable("proposal_brief_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  briefId: varchar("brief_id").notNull(),
+  sections: json("sections").$type<Record<string, unknown>>().notNull(),
+  triggeredByMessageId: varchar("triggered_by_message_id"),
+  changeSummary: text("change_summary"),
+  moduleKey: text("module_key"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ProposalBriefSnapshot = typeof proposalBriefSnapshots.$inferSelect;
+export type InsertProposalBriefSnapshot = typeof proposalBriefSnapshots.$inferInsert;
+
+// Chat IA del brief — historial separado del chat de proposals
+export const proposalBriefChatMessages = pgTable("proposal_brief_chat_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  briefId: varchar("brief_id").notNull(),
+  role: text("role").notNull(), // "user" | "assistant"
+  content: text("content").notNull(),
+  toolCalls: json("tool_calls").$type<Array<{ tool: string; module?: string; summary: string }>>(),
+  attachments: json("attachments").$type<Array<{
+    name: string;
+    mime: string;
+    size: number;
+    driveFileId?: string;
+    url?: string;
+  }>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ProposalBriefChatMessage = typeof proposalBriefChatMessages.$inferSelect;
+export type InsertProposalBriefChatMessage = typeof proposalBriefChatMessages.$inferInsert;
+
+// Analytics de visualización del brief público
+export const proposalBriefViews = pgTable("proposal_brief_views", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  briefId: varchar("brief_id").notNull(),
+  module: text("module"),
+  timeSpent: integer("time_spent"),
+  device: text("device"),
+  ip: text("ip"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type ProposalBriefView = typeof proposalBriefViews.$inferSelect;
+
+// ───────────────────────────────────────────────────────────────
 // Gmail Email Sync
 // ───────────────────────────────────────────────────────────────
 
