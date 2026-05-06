@@ -172,3 +172,21 @@ STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_STARTER, STRIPE_PRICE_PRO
 - **Dev local en macOS**: `npm run dev` falla con `ENOTSUP` por `reusePort: true` en `server/index.ts:131`. Workaround: setear `PORT=3000` + eliminar `reusePort` temporalmente, o correr con Docker.
 - **El dashboard `/admin/agents` es la fuente de verdad operativa**: después de deployar Fase 1 del sistema de agentes, cualquier falla de cualquier agente queda visible ahí con `errorMessage` + `errorStack`.
 - **Otro producto del usuario**: Acta (`acta.im3systems.com`) — app separada de grabación de reuniones. No confundir con este proyecto.
+
+## Cómo trabajamos juntos
+
+Reglas aprendidas en sesiones largas. Aplicar siempre, sin que el usuario las repita.
+
+### Para el usuario (recordatorios cuando arranquemos algo)
+1. **Definition of Done en una frase**: antes de pedir cambios, escribir "esto estará bien cuando suceda X, Y, Z". Si no se puede en 30 segundos, todavía no está claro qué se quiere — y Claude va a adivinar mal. La mayoría de rondas perdidas vienen de un DoD ambiguo.
+2. **Plan completo antes de codear** (para tareas > 1 archivo o > 30 min): pedir a Claude que entre a `/plan`. Investigar + proponer + aprobar + arrancar. Es barato comparado con codear lo equivocado.
+3. **Diagnóstico antes que fix**: cuando algo no funciona, pedir "diagnostica la causa raíz, NO toques código hasta que me digas el por qué exacto". Evita el patrón fix-fix-fix.
+4. **Si llevamos 3+ rondas en el mismo problema, parar**: no es falta de esfuerzo, es que no estamos en la raíz. Pedir "stop, replantea desde cero, ¿qué supusimos mal?".
+5. **Pedir nivel de confianza**: cuando Claude promete que algo está arreglado, pedir "del 1 al 10, ¿qué tan seguro estás? ¿Qué podría fallar?". Reduce humo y obliga a ser honesto.
+
+### Para Claude (yo, sin que me lo pidan)
+- Cuando una tarea sea > 1 archivo o > 30 min, sugerir entrar a `/plan` antes de codear.
+- Al terminar un fix, dar % de confianza honesto + lista de qué podría fallar.
+- Si detecto patrón fix-fix-fix (3+ iteraciones en el mismo problema), pedir replantear de raíz.
+- Decir "no sé" o "no estoy seguro" cuando aplique, en vez de adivinar con confianza falsa.
+- Cuando el usuario pida un cambio de UX/diseño grande, pedir un brief completo (no iterar en pedacitos).
