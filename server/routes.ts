@@ -20,7 +20,7 @@ import { calculateLeadScore } from "./lead-scoring";
 import { isWhatsAppConfigured, calculateWhatsAppSchedule, WHATSAPP_SEQUENCE, sendWhatsAppText } from "./whatsapp";
 import passport from "passport";
 import { z } from "zod";
-import { analyzeCommitsForProject, generateWeeklySummary, calculateProjectHealth, generateProjectFromProposal, generateProjectArtifacts } from "./project-ai";
+import { analyzeCommitsForProject, generateWeeklySummary, calculateProjectHealth, generateProjectFromProposal, generateProjectArtifacts, appendPhaseArtifact } from "./project-ai";
 import { fetchRepoContext } from "./github-repo-context";
 import { syncDriveFilesToProject } from "./drive-file-sync";
 import { generateProposal, regenerateProposalSection, generateSectionOptions, applySectionOption } from "./proposal-ai";
@@ -5188,6 +5188,56 @@ ${urls}
     } catch (err: any) {
       log(`Error creating project: ${err?.message}`);
       res.status(500).json({ error: "Error creando proyecto" });
+    }
+  });
+
+  // Generate (fresh) or append phases via AI on an existing project.
+  // Body: { brief: string, githubRepoUrl?: string, mode: "fresh" | "append" }
+  // - fresh: only allowed if the project has zero phases. Designs 3-6 phases from scratch.
+  // - append: adds ONE new phase at the end without touching existing ones.
+  app.post("/api/admin/projects/:id/generate-phases", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const projectId = req.params.id as string;
+    const { brief, githubRepoUrl, mode } = req.body || {};
+
+    if (!brief || typeof brief !== "string" || brief.trim().length < 20) {
+      return res.status(400).json({ message: "brief requerido (mínimo 20 caracteres)" });
+    }
+    if (mode !== "fresh" && mode !== "append") {
+      return res.status(400).json({ message: "mode debe ser 'fresh' o 'append'" });
+    }
+
+    try {
+      const [project] = await db.select().from(clientProjects).where(eq(clientProjects.id, projectId));
+      if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+
+      let repoContext: string | null = null;
+      const repoToRead = githubRepoUrl || project.githubRepoUrl;
+      if (repoToRead) {
+        try { repoContext = await fetchRepoContext(repoToRead); }
+        catch (err) { log(`generate-phases: fetchRepoContext failed: ${err}`); }
+      }
+
+      if (mode === "fresh") {
+        const existing = await db.select({ id: projectPhases.id }).from(projectPhases).where(eq(projectPhases.projectId, projectId));
+        if (existing.length > 0) {
+          return res.status(400).json({ message: "El proyecto ya tiene fases. Usa mode='append' para agregar una nueva." });
+        }
+        const startDate = project.startDate ? new Date(project.startDate) : new Date();
+        const artifacts = await generateProjectArtifacts(projectId, {
+          brief: brief.trim(),
+          repoContext: repoContext || undefined,
+          startDate,
+        });
+        return res.json({ mode: "fresh", ...artifacts });
+      }
+
+      // mode === "append"
+      const result = await appendPhaseArtifact(projectId, brief.trim(), { repoContext: repoContext || undefined });
+      return res.json({ mode: "append", phasesCreated: 1, ...result });
+    } catch (err: any) {
+      log(`Error generate-phases: ${err?.message}`);
+      res.status(500).json({ error: err?.message || "Error generando fases" });
     }
   });
 

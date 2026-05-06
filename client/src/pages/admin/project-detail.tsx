@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useRef, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Copy, ExternalLink, Plus, Trash2, Send, Clock, CheckCircle2, Circle, AlertCircle, ChevronDown, ChevronRight, Github, CalendarDays, BarChart3, Diamond, TrendingUp, Package, MessageSquare, Timer, Mic, FolderOpen, Lightbulb, FileText, Image, File, ThumbsUp, X, UserPlus, Users, RefreshCw, Mail } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Plus, Trash2, Send, Clock, CheckCircle2, Circle, AlertCircle, ChevronDown, ChevronRight, Github, CalendarDays, BarChart3, Diamond, TrendingUp, Package, MessageSquare, Timer, Mic, FolderOpen, Lightbulb, FileText, Image, File, ThumbsUp, X, UserPlus, Users, RefreshCw, Mail, Sparkles, Pencil, Wrench, Building2 } from "lucide-react";
 import { format, parseISO, differenceInDays, startOfMonth, endOfMonth, eachDayOfInterval, eachMonthOfInterval, isSameDay, isSameMonth, addMonths, subMonths, isWithinInterval } from "date-fns";
 import { es } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
@@ -332,8 +332,41 @@ export default function AdminProjectDetail() {
   const [msgContent, setMsgContent] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
+  // AI phase generation (fresh / append)
+  const [showAIPhase, setShowAIPhase] = useState<false | "fresh" | "append">(false);
+  const [aiPhaseForm, setAIPhaseForm] = useState({ brief: "", githubRepoUrl: "" });
+
+  // Editar info del proyecto (cliente, tipo, repo, etc.)
+  const [showEditInfo, setShowEditInfo] = useState(false);
+  const [editInfoForm, setEditInfoForm] = useState({
+    name: "",
+    contactId: "",
+    projectType: "client" as "client" | "internal",
+    githubRepoUrl: "",
+    totalBudget: "",
+    currency: "USD",
+    status: "planning",
+  });
+
   // Edit project
   const [editForm, setEditForm] = useState<Record<string, string>>({});
+
+  // Queries que dependen de los modals (se cargan solo si están abiertos)
+  const { data: githubStatus } = useQuery<{ configured: boolean; connected: boolean; githubUsername: string | null }>({
+    queryKey: ["/api/admin/github/status"],
+    enabled: showAIPhase !== false || showEditInfo,
+  });
+
+  const { data: githubRepos = [] } = useQuery<Array<{ id: number; fullName: string; url: string; description: string | null; isPrivate: boolean }>>({
+    queryKey: ["/api/admin/github/repos"],
+    enabled: (showAIPhase !== false || showEditInfo) && !!githubStatus?.connected,
+  });
+
+  const { data: contactsList = [] } = useQuery<Array<{ id: string; nombre: string; empresa: string }>>({
+    queryKey: ["/api/admin/contacts"],
+    select: (data: any) => (Array.isArray(data) ? data : data?.contacts || []),
+    enabled: showEditInfo,
+  });
 
   useEffect(() => {
     if (project) {
@@ -346,6 +379,15 @@ export default function AdminProjectDetail() {
         healthStatus: (project as any).healthStatus || "on_track",
         healthNote: (project as any).healthNote || "",
         githubRepoUrl: (project as any).githubRepoUrl || "",
+      });
+      setEditInfoForm({
+        name: project.name,
+        contactId: project.contactId || "",
+        projectType: ((project as any).projectType || "client") as "client" | "internal",
+        githubRepoUrl: project.githubRepoUrl || "",
+        totalBudget: project.totalBudget?.toString() || "",
+        currency: project.currency,
+        status: project.status,
       });
       // Auto-expand all phases
       setExpandedPhases(new Set(project.phases.map(p => p.id)));
@@ -362,6 +404,40 @@ export default function AdminProjectDetail() {
   const addPhaseMut = useMutation({
     mutationFn: async (data: Record<string, unknown>) => { await apiRequest("POST", `/api/admin/projects/${params.id}/phases`, data); },
     onSuccess: () => { invalidate(); setShowAddPhase(false); setPhaseForm({ name: "", description: "", estimatedHours: "", startDate: "", endDate: "" }); },
+  });
+
+  const generatePhasesAIMut = useMutation({
+    mutationFn: async (data: { brief: string; githubRepoUrl?: string; mode: "fresh" | "append" }) => {
+      const res = await apiRequest("POST", `/api/admin/projects/${params.id}/generate-phases`, data);
+      return res.json();
+    },
+    onSuccess: (data: { mode: string; phasesCreated?: number; tasksCreated?: number }) => {
+      invalidate();
+      setShowAIPhase(false);
+      setAIPhaseForm({ brief: "", githubRepoUrl: "" });
+      toast({
+        title: data.mode === "fresh" ? "Fases generadas con IA" : "Fase añadida con IA",
+        description: `${data.phasesCreated ?? 0} fases · ${data.tasksCreated ?? 0} tareas`,
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error generando fases", description: err?.message, variant: "destructive" });
+    },
+  });
+
+  const updateProjectInfoMut = useMutation({
+    mutationFn: async (data: Record<string, unknown>) => {
+      const res = await apiRequest("PATCH", `/api/admin/projects/${params.id}`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidate();
+      setShowEditInfo(false);
+      toast({ title: "Información del proyecto actualizada" });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error actualizando proyecto", description: err?.message, variant: "destructive" });
+    },
   });
 
   const addTaskMut = useMutation({
@@ -523,6 +599,14 @@ export default function AdminProjectDetail() {
           <button onClick={copyPortalLink} className="p-2 rounded-lg text-gray-400 hover:text-[#2FA4A9] hover:bg-[#2FA4A9]/10 transition-colors" title="Copiar link portal del cliente (legacy)">
             <Copy className="w-4 h-4" />
           </button>
+          <button
+            onClick={() => setShowEditInfo(true)}
+            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors"
+            title="Editar información del proyecto"
+          >
+            <Pencil className="w-3.5 h-3.5" />
+            Editar
+          </button>
           <a
             href={`/portal/projects/${project.id}`}
             target="_blank"
@@ -633,13 +717,42 @@ export default function AdminProjectDetail() {
               }}>
                 <Clock className="w-3.5 h-3.5 mr-1.5" /> Auto-fechas
               </Button>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowAIPhase("append")}
+                className="border-[#2FA4A9]/30 text-[#2FA4A9] hover:bg-[#2FA4A9]/5"
+              >
+                <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Fase con IA
+              </Button>
               <Button size="sm" variant="outline" onClick={() => setShowAddPhase(true)}>
-                <Plus className="w-3.5 h-3.5 mr-1.5" /> Fase
+                <Plus className="w-3.5 h-3.5 mr-1.5" /> Fase manual
               </Button>
             </div>
 
             {project.phases.length === 0 ? (
-              <p className="text-center text-gray-400 py-12">No hay fases. Crea la primera fase del roadmap.</p>
+              <div className="text-center py-12 space-y-4 bg-gradient-to-br from-[#2FA4A9]/5 to-transparent rounded-xl border border-dashed border-[#2FA4A9]/20">
+                <div className="w-14 h-14 rounded-2xl bg-[#2FA4A9]/10 text-[#2FA4A9] flex items-center justify-center mx-auto">
+                  <Sparkles className="w-6 h-6" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-base font-semibold text-gray-900">Aún no hay fases en este proyecto</p>
+                  <p className="text-sm text-gray-500 max-w-md mx-auto">
+                    Describe hacia dónde va el proyecto y deja que Claude diseñe 3-6 fases con tareas y entregables.
+                  </p>
+                </div>
+                <div className="flex items-center justify-center gap-2 pt-2">
+                  <Button
+                    onClick={() => setShowAIPhase("fresh")}
+                    className="bg-[#2FA4A9] hover:bg-[#238b8f] gap-2"
+                  >
+                    <Sparkles className="w-4 h-4" /> Generar fases con IA
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowAddPhase(true)} className="gap-2">
+                    <Plus className="w-4 h-4" /> Crear manualmente
+                  </Button>
+                </div>
+              </div>
             ) : (
               <div className="space-y-3">
                 {project.phases.map((phase, idx) => {
@@ -2067,6 +2180,227 @@ export default function AdminProjectDetail() {
           </div>
         )}
       </div>
+
+      {/* Modal: Generar / Añadir fase con IA */}
+      <Dialog open={showAIPhase !== false} onOpenChange={(open) => { if (!generatePhasesAIMut.isPending && !open) setShowAIPhase(false); }}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>
+              {showAIPhase === "fresh" ? "Generar fases con IA" : "Añadir fase con IA"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label>
+                {showAIPhase === "fresh"
+                  ? "Brief — hacia dónde va este proyecto"
+                  : "¿Qué fase añadimos? Describe el cambio o lo que sigue"}
+              </Label>
+              <Textarea
+                value={aiPhaseForm.brief}
+                onChange={e => setAIPhaseForm(f => ({ ...f, brief: e.target.value }))}
+                placeholder={showAIPhase === "fresh"
+                  ? "Describe el problema, los usuarios, el alcance, el resultado esperado. Mínimo 2-3 párrafos."
+                  : "Ej: ahora también vamos a integrar pagos con Stripe y necesito que la IA arme una fase para esa parte."}
+                rows={6}
+              />
+              <p className="text-[11px] text-gray-400">{aiPhaseForm.brief.length} caracteres {aiPhaseForm.brief.length < 20 && "· mínimo 20"}</p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Repo de GitHub (opcional)</Label>
+              {githubStatus?.connected ? (
+                <Select
+                  value={aiPhaseForm.githubRepoUrl || project.githubRepoUrl || "__none__"}
+                  onValueChange={v => setAIPhaseForm(f => ({ ...f, githubRepoUrl: v === "__none__" ? "" : v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar repositorio" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    <SelectItem value="__none__">— Sin repositorio —</SelectItem>
+                    {githubRepos.map(r => (
+                      <SelectItem key={r.id} value={r.url}>
+                        <span className="flex items-center gap-2">
+                          <span>{r.fullName}</span>
+                          {r.isPrivate && <span className="text-[9px] uppercase tracking-wider font-semibold bg-gray-100 text-gray-500 px-1 rounded">privado</span>}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="flex items-center justify-between p-3 rounded-lg border border-dashed border-gray-200 bg-gray-50">
+                  <p className="text-xs text-gray-500">GitHub no está conectado.</p>
+                  <a href="/api/github/authorize" className="text-xs font-medium text-[#2FA4A9] hover:underline">
+                    Conectar GitHub →
+                  </a>
+                </div>
+              )}
+              <p className="text-[11px] text-gray-400">Si seleccionas un repo, la IA leerá README + docs/ + últimos commits.</p>
+            </div>
+
+            {showAIPhase === "append" && project.phases.length > 0 && (
+              <div className="text-[11px] text-gray-500 bg-blue-50 border border-blue-100 rounded-lg p-3">
+                Se añadirá UNA nueva fase al final del proyecto. Las {project.phases.length} fases existentes no se tocan.
+              </div>
+            )}
+
+            <Button
+              onClick={() => {
+                if (aiPhaseForm.brief.trim().length < 20) {
+                  toast({ title: "Brief demasiado corto", variant: "destructive" });
+                  return;
+                }
+                generatePhasesAIMut.mutate({
+                  brief: aiPhaseForm.brief.trim(),
+                  githubRepoUrl: aiPhaseForm.githubRepoUrl || undefined,
+                  mode: showAIPhase === "fresh" ? "fresh" : "append",
+                });
+              }}
+              disabled={generatePhasesAIMut.isPending || aiPhaseForm.brief.trim().length < 20}
+              className="w-full bg-[#2FA4A9] hover:bg-[#238b8f] gap-2"
+            >
+              <Sparkles className="w-4 h-4" />
+              {generatePhasesAIMut.isPending
+                ? "Generando con IA…"
+                : (showAIPhase === "fresh" ? "Generar fases" : "Añadir fase")}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: Editar info del proyecto */}
+      <Dialog open={showEditInfo} onOpenChange={(open) => { if (!updateProjectInfoMut.isPending && !open) setShowEditInfo(false); }}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Editar información del proyecto</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 pt-2">
+            <div className="space-y-2">
+              <Label>Tipo de proyecto</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {([["client", "Cliente", Building2], ["internal", "Interno IM3", Wrench]] as const).map(([value, label, Icon]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setEditInfoForm(f => ({ ...f, projectType: value, contactId: value === "internal" ? "" : f.contactId }))}
+                    className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+                      editInfoForm.projectType === value
+                        ? "border-[#2FA4A9] bg-[#2FA4A9]/5 text-[#2FA4A9]"
+                        : "border-gray-200 text-gray-600 hover:border-gray-300"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" /> {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Nombre</Label>
+              <Input value={editInfoForm.name} onChange={e => setEditInfoForm(f => ({ ...f, name: e.target.value }))} />
+            </div>
+
+            {editInfoForm.projectType === "client" && (
+              <div className="space-y-2">
+                <Label>Cliente</Label>
+                <Select value={editInfoForm.contactId || "__none__"} onValueChange={v => setEditInfoForm(f => ({ ...f, contactId: v === "__none__" ? "" : v }))}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar contacto" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— Sin cliente asignado —</SelectItem>
+                    {contactsList.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.nombre} ({c.empresa})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Repo de GitHub</Label>
+              {githubStatus?.connected ? (
+                <Select
+                  value={editInfoForm.githubRepoUrl || "__none__"}
+                  onValueChange={v => setEditInfoForm(f => ({ ...f, githubRepoUrl: v === "__none__" ? "" : v }))}
+                >
+                  <SelectTrigger><SelectValue placeholder="Seleccionar repositorio" /></SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    <SelectItem value="__none__">— Sin repositorio —</SelectItem>
+                    {githubRepos.map(r => (
+                      <SelectItem key={r.id} value={r.url}>
+                        <span className="flex items-center gap-2">
+                          <span>{r.fullName}</span>
+                          {r.isPrivate && <span className="text-[9px] uppercase tracking-wider font-semibold bg-gray-100 text-gray-500 px-1 rounded">privado</span>}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <Input
+                  value={editInfoForm.githubRepoUrl}
+                  onChange={e => setEditInfoForm(f => ({ ...f, githubRepoUrl: e.target.value }))}
+                  placeholder="https://github.com/owner/repo"
+                />
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label>Estado</Label>
+              <Select value={editInfoForm.status} onValueChange={v => setEditInfoForm(f => ({ ...f, status: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="planning">Planeación</SelectItem>
+                  <SelectItem value="in_progress">En progreso</SelectItem>
+                  <SelectItem value="paused">Pausado</SelectItem>
+                  <SelectItem value="completed">Completado</SelectItem>
+                  <SelectItem value="cancelled">Cancelado</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Presupuesto</Label>
+                <Input type="number" value={editInfoForm.totalBudget} onChange={e => setEditInfoForm(f => ({ ...f, totalBudget: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Moneda</Label>
+                <Select value={editInfoForm.currency} onValueChange={v => setEditInfoForm(f => ({ ...f, currency: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="USD">USD</SelectItem>
+                    <SelectItem value="COP">COP</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <Button
+              onClick={() => {
+                if (editInfoForm.projectType === "client" && !editInfoForm.contactId) {
+                  toast({ title: "Falta cliente", description: "Selecciona un contacto o cambia a tipo Interno.", variant: "destructive" });
+                  return;
+                }
+                updateProjectInfoMut.mutate({
+                  name: editInfoForm.name,
+                  contactId: editInfoForm.projectType === "internal" ? null : (editInfoForm.contactId || null),
+                  projectType: editInfoForm.projectType,
+                  githubRepoUrl: editInfoForm.githubRepoUrl || null,
+                  status: editInfoForm.status,
+                  totalBudget: editInfoForm.totalBudget ? parseInt(editInfoForm.totalBudget) : null,
+                  currency: editInfoForm.currency,
+                });
+              }}
+              disabled={updateProjectInfoMut.isPending || !editInfoForm.name}
+              className="w-full bg-[#2FA4A9] hover:bg-[#238b8f]"
+            >
+              {updateProjectInfoMut.isPending ? "Guardando…" : "Guardar cambios"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

@@ -74,6 +74,16 @@ export default function AdminProjects() {
     queryKey: ["/api/admin/projects"],
   });
 
+  const { data: githubStatus } = useQuery<{ configured: boolean; connected: boolean; githubUsername: string | null }>({
+    queryKey: ["/api/admin/github/status"],
+    enabled: showCreate,
+  });
+
+  const { data: githubRepos = [] } = useQuery<Array<{ id: number; fullName: string; url: string; description: string | null; isPrivate: boolean }>>({
+    queryKey: ["/api/admin/github/repos"],
+    enabled: showCreate && !!githubStatus?.connected,
+  });
+
   const { data: contactsList = [] } = useQuery<Array<{ id: string; nombre: string; empresa: string }>>({
     queryKey: ["/api/admin/contacts"],
     select: (data: any) => (Array.isArray(data) ? data : data?.contacts || []),
@@ -123,20 +133,6 @@ export default function AdminProjects() {
     },
     onError: (err: any) => {
       toast({ title: "Error eliminando proyecto", description: err?.message, variant: "destructive" });
-    },
-  });
-
-  const seedMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/admin/projects/seed");
-      return res.json();
-    },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] });
-      toast({ title: data.message || "Proyecto demo creado" });
-    },
-    onError: () => {
-      toast({ title: "Error creando proyecto demo", variant: "destructive" });
     },
   });
 
@@ -222,31 +218,6 @@ export default function AdminProjects() {
               </button>
             ))}
           </div>
-          <Button
-            variant="outline"
-            onClick={() => {
-              apiRequest("POST", "/api/admin/projects/seed-p2f").then(r => r.json()).then(data => {
-                queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] });
-                toast({ title: data.message || "Proyecto P2F creado" });
-              }).catch(() => toast({ title: "Error creando P2F", variant: "destructive" }));
-            }}
-            className="gap-1.5"
-          >
-            <Sparkles className="w-4 h-4" /> P2F
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              apiRequest("POST", "/api/admin/projects/seed-p2f-data").then(r => r.json()).then(data => {
-                queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] });
-                toast({ title: data.message || "Datos P2F poblados" });
-              }).catch(() => toast({ title: "Error poblando datos", variant: "destructive" }));
-            }}
-            className="gap-1.5 text-xs"
-          >
-            P2F Datos
-          </Button>
           <Button onClick={() => setShowCreate(true)} className="bg-[#2FA4A9] hover:bg-[#238b8f]">
             <Plus className="w-4 h-4 mr-2" /> Nuevo proyecto
           </Button>
@@ -277,13 +248,11 @@ export default function AdminProjects() {
           <p className="text-gray-500">No hay proyectos{filterStatus !== "all" ? ` en estado "${STATUS_LABELS[filterStatus]}"` : ""}</p>
           {filterStatus === "all" && (
             <Button
-              variant="outline"
-              onClick={() => seedMutation.mutate()}
-              disabled={seedMutation.isPending}
-              className="gap-2"
+              onClick={() => setShowCreate(true)}
+              className="gap-2 bg-[#2FA4A9] hover:bg-[#238b8f]"
             >
-              <Sparkles className="w-4 h-4" />
-              {seedMutation.isPending ? "Creando..." : "Crear proyecto demo"}
+              <Plus className="w-4 h-4" />
+              Crear primer proyecto
             </Button>
           )}
         </div>
@@ -560,12 +529,38 @@ export default function AdminProjects() {
 
             <div className="space-y-2">
               <Label>Repo de GitHub (opcional)</Label>
-              <Input
-                value={form.githubRepoUrl}
-                onChange={e => setForm(f => ({ ...f, githubRepoUrl: e.target.value }))}
-                placeholder="https://github.com/owner/repo"
-              />
-              <p className="text-[11px] text-gray-400">Si se conecta, la IA leerá README + docs/ + últimos commits para refinar las fases.</p>
+              {githubStatus?.connected ? (
+                <Select
+                  value={form.githubRepoUrl || "__none__"}
+                  onValueChange={v => setForm(f => ({ ...f, githubRepoUrl: v === "__none__" ? "" : v }))}
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleccionar repositorio" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    <SelectItem value="__none__">— Sin repositorio —</SelectItem>
+                    {githubRepos.map(r => (
+                      <SelectItem key={r.id} value={r.url}>
+                        <span className="flex items-center gap-2">
+                          <span>{r.fullName}</span>
+                          {r.isPrivate && <span className="text-[9px] uppercase tracking-wider font-semibold bg-gray-100 text-gray-500 px-1 rounded">privado</span>}
+                        </span>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : (
+                <div className="flex items-center justify-between p-3 rounded-lg border border-dashed border-gray-200 bg-gray-50">
+                  <p className="text-xs text-gray-500">GitHub no está conectado.</p>
+                  <a
+                    href="/api/github/authorize"
+                    className="text-xs font-medium text-[#2FA4A9] hover:underline"
+                  >
+                    Conectar GitHub →
+                  </a>
+                </div>
+              )}
+              <p className="text-[11px] text-gray-400">Si seleccionas un repo, la IA leerá README + docs/ + últimos commits para refinar las fases.</p>
             </div>
 
             <div className="grid grid-cols-2 gap-4">

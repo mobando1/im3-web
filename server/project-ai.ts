@@ -492,6 +492,161 @@ Reglas:
 }
 
 /**
+ * Designs ONE additional phase with AI and appends it to an existing project,
+ * preserving all current phases and tasks. Useful for mid-execution course corrections.
+ */
+export async function appendPhaseArtifact(
+  projectId: string,
+  brief: string,
+  options: { repoContext?: string } = {},
+): Promise<{ phaseId: string; tasksCreated: number; deliverablesCreated: number }> {
+  const anthropic = getClient();
+  if (!anthropic) throw new Error("ANTHROPIC_API_KEY no configurado");
+  if (!db) throw new Error("Database not configured");
+  const database = db;
+
+  const trimmedBrief = brief.trim();
+  if (trimmedBrief.length < 10) throw new Error("Brief demasiado corto");
+
+  const [project] = await database.select().from(clientProjects).where(eq(clientProjects.id, projectId));
+  if (!project) throw new Error("Proyecto no encontrado");
+
+  const existingPhases = await database.select().from(projectPhases)
+    .where(eq(projectPhases.projectId, projectId))
+    .orderBy(asc(projectPhases.orderIndex));
+
+  const lastPhase = existingPhases[existingPhases.length - 1];
+  const nextOrderIndex = lastPhase ? lastPhase.orderIndex + 1 : 0;
+  const minStart = lastPhase?.endDate ? new Date(lastPhase.endDate) : new Date();
+  const phaseStart = minStart.getTime() < Date.now() ? new Date() : minStart;
+
+  // 1. Design one phase
+  const designContext = `
+Brief de lo que sigue / del cambio:
+${trimmedBrief}
+
+${options.repoContext ? `Contexto del repositorio:\n${options.repoContext}\n` : ""}
+
+Fases ya existentes en el proyecto:
+${existingPhases.length === 0 ? "(ninguna todavía)" : existingPhases.map((p, i) => `${i + 1}. ${p.name} (${p.status})`).join("\n")}
+`.trim();
+
+  let phaseSpec: PhaseSpec = { name: "Nueva fase", weeks: 2, deliverables: [] };
+  try {
+    const designRes = await anthropic.messages.create({
+      model: "claude-sonnet-4-6",
+      max_tokens: 600,
+      system: `Diseña UNA SOLA fase nueva para añadir al final del proyecto, basada en el brief. NO repitas fases existentes. La fase debe ser concreta y aterrizar específicamente lo que pide el brief.
+
+Responde SOLO con un JSON válido (un objeto, no un array), sin markdown:
+{ "name": "Nombre de la fase", "weeks": 3, "deliverables": ["Entregable 1", "Entregable 2"] }`,
+      messages: [{ role: "user", content: designContext }],
+    });
+    const designText = designRes.content?.[0]?.type === "text" ? designRes.content[0].text.trim() : "{}";
+    const cleaned = designText.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim();
+    const parsed = JSON.parse(cleaned);
+    phaseSpec = {
+      name: String(parsed.name || "Nueva fase").slice(0, 200),
+      weeks: Math.max(1, Math.min(20, Number(parsed.weeks) || 2)),
+      deliverables: Array.isArray(parsed.deliverables) ? parsed.deliverables.map(String).slice(0, 6) : [],
+    };
+  } catch (err) {
+    log(`appendPhaseArtifact: design failed, using fallback: ${err}`);
+  }
+
+  // 2. Insert phase + deliverables
+  const phaseEnd = new Date(phaseStart.getTime() + phaseSpec.weeks * 7 * 24 * 60 * 60 * 1000);
+
+  const [phase] = await database.insert(projectPhases).values({
+    projectId,
+    name: phaseSpec.name,
+    orderIndex: nextOrderIndex,
+    status: "pending",
+    startDate: phaseStart,
+    endDate: phaseEnd,
+    estimatedHours: Math.round(phaseSpec.weeks * 40),
+  }).returning();
+
+  let totalDeliverables = 0;
+  if (phaseSpec.deliverables && phaseSpec.deliverables.length > 0) {
+    for (const d of phaseSpec.deliverables) {
+      await database.insert(projectDeliverables).values({
+        projectId,
+        phaseId: phase.id,
+        title: d,
+        type: d.toLowerCase().includes("diseño") || d.toLowerCase().includes("mockup") ? "design"
+          : d.toLowerCase().includes("documento") || d.toLowerCase().includes("spec") ? "document"
+          : "feature",
+        status: "pending",
+      });
+      totalDeliverables++;
+    }
+  }
+
+  // 3. Generate tasks for the new phase
+  let totalTasks = 0;
+  try {
+    const taskRes = await anthropic.messages.create({
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 1500,
+      system: `Genera 4-8 tareas detalladas para una fase específica.
+
+Responde SOLO con un JSON array válido, sin markdown. Formato:
+[ { "title": "...", "priority": "high|medium|low", "isMilestone": false, "clientFacingTitle": "..." } ]
+
+- Primera tarea: kickoff/planeación de la fase
+- Última tarea: milestone (isMilestone: true) con la entrega principal
+- Específicas al brief, NO genéricas`,
+      messages: [{ role: "user", content: `Brief: ${trimmedBrief}\n\nFase: ${phaseSpec.name} (${phaseSpec.weeks} semanas)\nEntregables: ${phaseSpec.deliverables?.join(", ") || "—"}` }],
+    });
+    const taskText = taskRes.content?.[0]?.type === "text" ? taskRes.content[0].text.trim() : "[]";
+    const tasks = JSON.parse(taskText.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim()) as Array<{ title: string; priority: string; isMilestone?: boolean; clientFacingTitle?: string }>;
+
+    const phaseDays = Math.max(1, Math.round((phaseEnd.getTime() - phaseStart.getTime()) / (24 * 60 * 60 * 1000)));
+
+    for (let j = 0; j < tasks.length; j++) {
+      const t = tasks[j];
+      const taskDueDate = new Date(phaseStart.getTime() + ((j + 1) / tasks.length) * phaseDays * 24 * 60 * 60 * 1000);
+      await database.insert(projectTasks).values({
+        phaseId: phase.id,
+        projectId,
+        title: t.title,
+        clientFacingTitle: t.clientFacingTitle || t.title,
+        priority: t.priority || "medium",
+        isMilestone: t.isMilestone || false,
+        status: "pending",
+        dueDate: taskDueDate,
+      });
+      totalTasks++;
+    }
+  } catch (err) {
+    log(`appendPhaseArtifact: task generation failed: ${err}`);
+    await database.insert(projectTasks).values({
+      phaseId: phase.id,
+      projectId,
+      title: `Completar ${phaseSpec.name}`,
+      priority: "high",
+      status: "pending",
+      isMilestone: true,
+      dueDate: phaseEnd,
+    });
+    totalTasks = 1;
+  }
+
+  // 4. Extend project's estimatedEndDate if needed
+  const currentEnd = project.estimatedEndDate ? new Date(project.estimatedEndDate) : null;
+  if (!currentEnd || phaseEnd.getTime() > currentEnd.getTime()) {
+    await database.update(clientProjects)
+      .set({ estimatedEndDate: phaseEnd, updatedAt: new Date() })
+      .where(eq(clientProjects.id, projectId));
+  }
+
+  log(`appendPhaseArtifact: añadida fase "${phaseSpec.name}" a ${projectId} con ${totalTasks} tareas`);
+
+  return { phaseId: phase.id, tasksCreated: totalTasks, deliverablesCreated: totalDeliverables };
+}
+
+/**
  * Generate a full project plan from a proposal using AI.
  * Thin wrapper: creates the project row, then delegates to generateProjectArtifacts.
  */
