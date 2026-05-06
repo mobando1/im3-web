@@ -322,6 +322,12 @@ export async function runMigrations() {
     await pool.query(`ALTER TABLE "project_tasks" ADD COLUMN IF NOT EXISTS "due_date" timestamp;`).catch(() => {});
     await pool.query(`ALTER TABLE "project_tasks" ADD COLUMN IF NOT EXISTS "is_milestone" boolean DEFAULT false NOT NULL;`).catch(() => {});
 
+    // Soft delete: phases and tasks marked deletedAt instead of removed, recoverable for ~undo flow
+    await pool.query(`ALTER TABLE "project_phases" ADD COLUMN IF NOT EXISTS "deleted_at" timestamp;`).catch(() => {});
+    await pool.query(`ALTER TABLE "project_tasks" ADD COLUMN IF NOT EXISTS "deleted_at" timestamp;`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_project_phases_deleted_at" ON "project_phases" ("deleted_at");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_project_tasks_deleted_at" ON "project_tasks" ("deleted_at");`).catch(() => {});
+
     // Project deliverables: client rating
     await pool.query(`ALTER TABLE "project_deliverables" ADD COLUMN IF NOT EXISTS "client_rating" integer;`).catch(() => {});
 

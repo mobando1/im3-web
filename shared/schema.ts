@@ -423,6 +423,8 @@ export const projectPhases = pgTable("project_phases", {
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"),
   estimatedHours: integer("estimated_hours"),
+  // Soft delete: nulls = active; timestamp = removed but recoverable via /restore endpoint.
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -452,6 +454,8 @@ export const projectTasks = pgTable("project_tasks", {
   estimatedHours: integer("estimated_hours"),
   actualHours: numeric("actual_hours", { precision: 6, scale: 2 }),
   completedAt: timestamp("completed_at"),
+  // Soft delete: cascaded from phase delete or set independently when a task is removed.
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

@@ -5240,7 +5240,8 @@ ${urls}
           const [c] = await db!.select({ nombre: contacts.nombre, empresa: contacts.empresa }).from(contacts).where(eq(contacts.id, p.contactId));
           if (c) contactName = `${c.nombre} (${c.empresa})`;
         }
-        const allTasks = await db!.select({ status: projectTasks.status }).from(projectTasks).where(eq(projectTasks.projectId, p.id));
+        const allTasks = await db!.select({ status: projectTasks.status }).from(projectTasks)
+          .where(and(eq(projectTasks.projectId, p.id), isNull(projectTasks.deletedAt)));
         const completedTasks = allTasks.filter(t => t.status === "completed").length;
         const progress = allTasks.length > 0 ? Math.round((completedTasks / allTasks.length) * 100) : 0;
         return { ...p, contactName, progress, taskCount: allTasks.length, completedTaskCount: completedTasks };
@@ -5390,7 +5391,8 @@ Responde SOLO con un JSON válido, sin markdown:
         : brief.trim();
 
       if (mode === "fresh") {
-        const existing = await db.select({ id: projectPhases.id }).from(projectPhases).where(eq(projectPhases.projectId, projectId));
+        const existing = await db.select({ id: projectPhases.id }).from(projectPhases)
+          .where(and(eq(projectPhases.projectId, projectId), isNull(projectPhases.deletedAt)));
         if (existing.length > 0) {
           return res.status(400).json({ message: "El proyecto ya tiene fases. Usa mode='append' para agregar una nueva." });
         }
@@ -5484,8 +5486,11 @@ Responde SOLO con un JSON válido, sin markdown:
       const [project] = await db.select().from(clientProjects).where(eq(clientProjects.id, req.params.id as string));
       if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
-      const phases = await db.select().from(projectPhases).where(eq(projectPhases.projectId, project.id)).orderBy(asc(projectPhases.orderIndex));
-      const allTasks = await db.select().from(projectTasks).where(eq(projectTasks.projectId, project.id));
+      const phases = await db.select().from(projectPhases)
+        .where(and(eq(projectPhases.projectId, project.id), isNull(projectPhases.deletedAt)))
+        .orderBy(asc(projectPhases.orderIndex));
+      const allTasks = await db.select().from(projectTasks)
+        .where(and(eq(projectTasks.projectId, project.id), isNull(projectTasks.deletedAt)));
       const deliverables = await db.select().from(projectDeliverables).where(eq(projectDeliverables.projectId, project.id)).orderBy(desc(projectDeliverables.createdAt));
       const timeLogs = await db.select().from(projectTimeLog).where(eq(projectTimeLog.projectId, project.id)).orderBy(desc(projectTimeLog.createdAt));
       const messages = await db.select().from(projectMessages).where(eq(projectMessages.projectId, project.id)).orderBy(asc(projectMessages.createdAt));
@@ -5574,7 +5579,7 @@ Responde SOLO con un JSON válido, sin markdown:
       const force = req.body?.force === true;
       await autoDistributePhaseDates(req.params.id as string, force);
       const phases = await db.select().from(projectPhases)
-        .where(eq(projectPhases.projectId, req.params.id as string))
+        .where(and(eq(projectPhases.projectId, req.params.id as string), isNull(projectPhases.deletedAt)))
         .orderBy(asc(projectPhases.orderIndex));
       res.json({ message: "Fechas distribuidas", phases });
     } catch (err: any) {
@@ -5600,7 +5605,9 @@ Responde SOLO con un JSON válido, sin markdown:
   app.get("/api/admin/projects/:id/phases", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
-      const phases = await db.select().from(projectPhases).where(eq(projectPhases.projectId, req.params.id as string)).orderBy(asc(projectPhases.orderIndex));
+      const phases = await db.select().from(projectPhases)
+        .where(and(eq(projectPhases.projectId, req.params.id as string), isNull(projectPhases.deletedAt)))
+        .orderBy(asc(projectPhases.orderIndex));
       res.json(phases);
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
@@ -5648,11 +5655,38 @@ Responde SOLO con un JSON válido, sin markdown:
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
+  // Soft delete: marks deletedAt on the phase and cascades to its active tasks.
+  // The row stays in DB so /restore can revert it (undo flow in the UI).
   app.delete("/api/admin/phases/:id", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
-      await db.delete(projectTasks).where(eq(projectTasks.phaseId, req.params.id as string));
-      await db.delete(projectPhases).where(eq(projectPhases.id, req.params.id as string));
+      const phaseId = req.params.id as string;
+      const now = new Date();
+      await db.update(projectPhases)
+        .set({ deletedAt: now, updatedAt: now })
+        .where(eq(projectPhases.id, phaseId));
+      await db.update(projectTasks)
+        .set({ deletedAt: now, updatedAt: now })
+        .where(and(eq(projectTasks.phaseId, phaseId), isNull(projectTasks.deletedAt)));
+      res.json({ success: true, deletedAt: now.toISOString() });
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
+  });
+
+  // Restore a soft-deleted phase + all tasks under it that are currently soft-deleted.
+  // Used by the "Deshacer" toast in the UI.
+  app.post("/api/admin/phases/:id/restore", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const phaseId = req.params.id as string;
+      const now = new Date();
+      const [phase] = await db.update(projectPhases)
+        .set({ deletedAt: null, updatedAt: now })
+        .where(eq(projectPhases.id, phaseId))
+        .returning();
+      if (!phase) return res.status(404).json({ message: "Fase no encontrada" });
+      await db.update(projectTasks)
+        .set({ deletedAt: null, updatedAt: now })
+        .where(eq(projectTasks.phaseId, phaseId));
       res.json({ success: true });
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
@@ -5691,10 +5725,26 @@ Responde SOLO con un JSON válido, sin markdown:
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
+  // Soft delete a single task. Recoverable via /restore.
   app.delete("/api/admin/tasks/:id", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
-      await db.delete(projectTasks).where(eq(projectTasks.id, req.params.id as string));
+      const now = new Date();
+      await db.update(projectTasks)
+        .set({ deletedAt: now, updatedAt: now })
+        .where(eq(projectTasks.id, req.params.id as string));
+      res.json({ success: true, deletedAt: now.toISOString() });
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
+  });
+
+  app.post("/api/admin/tasks/:id/restore", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [task] = await db.update(projectTasks)
+        .set({ deletedAt: null, updatedAt: new Date() })
+        .where(eq(projectTasks.id, req.params.id as string))
+        .returning();
+      if (!task) return res.status(404).json({ message: "Tarea no encontrada" });
       res.json({ success: true });
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
@@ -6789,8 +6839,11 @@ Responde SOLO con un JSON válido, sin markdown:
     const project = await getProjectByToken(req.params.token as string, req);
     if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
-    const phases = await db!.select().from(projectPhases).where(eq(projectPhases.projectId, project.id)).orderBy(asc(projectPhases.orderIndex));
-    const allTasks = await db!.select().from(projectTasks).where(eq(projectTasks.projectId, project.id));
+    const phases = await db!.select().from(projectPhases)
+      .where(and(eq(projectPhases.projectId, project.id), isNull(projectPhases.deletedAt)))
+      .orderBy(asc(projectPhases.orderIndex));
+    const allTasks = await db!.select().from(projectTasks)
+      .where(and(eq(projectTasks.projectId, project.id), isNull(projectTasks.deletedAt)));
     const timeLogs = await db!.select().from(projectTimeLog).where(eq(projectTimeLog.projectId, project.id));
     const unreadMessages = await db!.select({ id: projectMessages.id }).from(projectMessages).where(and(eq(projectMessages.projectId, project.id), eq(projectMessages.senderType, "team"), eq(projectMessages.isRead, false)));
 
@@ -6827,8 +6880,11 @@ Responde SOLO con un JSON válido, sin markdown:
     const project = await getProjectByToken(req.params.token as string, req);
     if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
-    const phases = await db!.select().from(projectPhases).where(eq(projectPhases.projectId, project.id)).orderBy(asc(projectPhases.orderIndex));
-    const allTasks = await db!.select().from(projectTasks).where(eq(projectTasks.projectId, project.id));
+    const phases = await db!.select().from(projectPhases)
+      .where(and(eq(projectPhases.projectId, project.id), isNull(projectPhases.deletedAt)))
+      .orderBy(asc(projectPhases.orderIndex));
+    const allTasks = await db!.select().from(projectTasks)
+      .where(and(eq(projectTasks.projectId, project.id), isNull(projectTasks.deletedAt)));
 
     const enriched = phases.map(ph => {
       const phaseTasks = allTasks.filter(t => t.phaseId === ph.id);

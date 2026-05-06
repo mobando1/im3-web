@@ -12,6 +12,8 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { ToastAction } from "@/components/ui/toast";
 import { useToast } from "@/hooks/use-toast";
 
 type ProjectDetail = {
@@ -59,6 +61,7 @@ type ProjectDetail = {
     description: string | null;
     type: string;
     status: string;
+    phaseId: string | null;
     deliveredAt: string | null;
     approvedAt: string | null;
     clientComment: string | null;
@@ -358,6 +361,13 @@ export default function AdminProjectDetail() {
   // Edit project
   const [editForm, setEditForm] = useState<Record<string, string>>({});
 
+  // Confirm-before-destroy: holds the entity awaiting user confirmation. Cleared on confirm/cancel.
+  type PendingDelete =
+    | { kind: "phase"; id: string; name: string; taskCount: number; deliverableCount: number }
+    | { kind: "task"; id: string; title: string }
+    | { kind: "deliverable"; id: string; title: string };
+  const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+
   // Queries que dependen de los modals (se cargan solo si están abiertos)
   const { data: githubStatus } = useQuery<{ configured: boolean; connected: boolean; githubUsername: string | null }>({
     queryKey: ["/api/admin/github/status"],
@@ -498,9 +508,25 @@ export default function AdminProjectDetail() {
     onSuccess: invalidate,
   });
 
+  const restoreTaskMut = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("POST", `/api/admin/tasks/${id}/restore`); },
+    onSuccess: () => { invalidate(); toast({ title: "Tarea restaurada" }); },
+  });
+
   const deleteTaskMut = useMutation({
     mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/admin/tasks/${id}`); },
-    onSuccess: invalidate,
+    onSuccess: (_data, taskId) => {
+      invalidate();
+      toast({
+        title: "Tarea eliminada",
+        description: "Puedes deshacer si fue por error.",
+        action: (
+          <ToastAction altText="Deshacer" onClick={() => restoreTaskMut.mutate(taskId)}>
+            Deshacer
+          </ToastAction>
+        ),
+      });
+    },
   });
 
   const updatePhaseMut = useMutation({
@@ -508,9 +534,28 @@ export default function AdminProjectDetail() {
     onSuccess: invalidate,
   });
 
+  const restorePhaseMut = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("POST", `/api/admin/phases/${id}/restore`); },
+    onSuccess: () => { invalidate(); toast({ title: "Fase restaurada", description: "Tareas y entregables recuperados." }); },
+  });
+
   const deletePhaseMut = useMutation({
-    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/admin/phases/${id}`); },
-    onSuccess: invalidate,
+    mutationFn: async ({ id, taskCount }: { id: string; taskCount: number }) => {
+      await apiRequest("DELETE", `/api/admin/phases/${id}`);
+      return { id, taskCount };
+    },
+    onSuccess: (result) => {
+      invalidate();
+      toast({
+        title: "Fase eliminada",
+        description: result.taskCount > 0 ? `${result.taskCount} tarea${result.taskCount === 1 ? "" : "s"} también ocultadas. Puedes deshacer.` : "Puedes deshacer si fue por error.",
+        action: (
+          <ToastAction altText="Deshacer" onClick={() => restorePhaseMut.mutate(result.id)}>
+            Deshacer
+          </ToastAction>
+        ),
+      });
+    },
   });
 
   const addDelivMut = useMutation({
@@ -847,8 +892,19 @@ export default function AdminProjectDetail() {
                             </SelectContent>
                           </Select>
                           <button
-                            onClick={e => { e.stopPropagation(); deletePhaseMut.mutate(phase.id); }}
+                            onClick={e => {
+                              e.stopPropagation();
+                              const phaseDeliverables = project.deliverables.filter(d => d.phaseId === phase.id).length;
+                              setPendingDelete({
+                                kind: "phase",
+                                id: phase.id,
+                                name: phase.name,
+                                taskCount: phase.tasks.length,
+                                deliverableCount: phaseDeliverables,
+                              });
+                            }}
                             className="p-1 rounded text-gray-300 hover:text-red-500 transition-colors"
+                            title="Eliminar fase"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -902,8 +958,9 @@ export default function AdminProjectDetail() {
                                   "bg-gray-50 text-gray-400"
                                 }`}>{task.priority}</span>
                                 <button
-                                  onClick={() => deleteTaskMut.mutate(task.id)}
+                                  onClick={() => setPendingDelete({ kind: "task", id: task.id, title: task.title })}
                                   className="p-1 rounded text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                                  title="Eliminar tarea"
                                 >
                                   <Trash2 className="w-3 h-3" />
                                 </button>
@@ -1486,7 +1543,11 @@ export default function AdminProjectDetail() {
                           </Button>
                         )}
                       </div>
-                      <button onClick={() => deleteDelivMut.mutate(d.id)} className="p-1 rounded text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                      <button
+                        onClick={() => setPendingDelete({ kind: "deliverable", id: d.id, title: d.title })}
+                        className="p-1 rounded text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                        title="Eliminar entrega"
+                      >
                         <Trash2 className="w-4 h-4" />
                       </button>
                     </div>
@@ -2453,6 +2514,58 @@ export default function AdminProjectDetail() {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Confirm-before-delete dialog (fases, tareas, entregas). Usa AlertDialog con estilo destructivo. */}
+      <AlertDialog open={pendingDelete !== null} onOpenChange={(open) => { if (!open) setPendingDelete(null); }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {pendingDelete?.kind === "phase" && `¿Eliminar fase "${pendingDelete.name}"?`}
+              {pendingDelete?.kind === "task" && `¿Eliminar tarea "${pendingDelete.title}"?`}
+              {pendingDelete?.kind === "deliverable" && `¿Eliminar entrega "${pendingDelete.title}"?`}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2">
+                {pendingDelete?.kind === "phase" && (
+                  <>
+                    <p>Esta acción ocultará la fase junto con:</p>
+                    <ul className="list-disc list-inside text-sm space-y-0.5">
+                      <li>{pendingDelete.taskCount} tarea{pendingDelete.taskCount === 1 ? "" : "s"}</li>
+                      <li>{pendingDelete.deliverableCount} entrega{pendingDelete.deliverableCount === 1 ? "" : "s"}</li>
+                    </ul>
+                    <p className="text-[#2FA4A9] text-sm font-medium">Podrás deshacer durante unos segundos desde el toast que aparece.</p>
+                  </>
+                )}
+                {pendingDelete?.kind === "task" && (
+                  <p>Podrás deshacer durante unos segundos desde el toast.</p>
+                )}
+                {pendingDelete?.kind === "deliverable" && (
+                  <p>Esta acción es <strong>permanente</strong> — la entrega no se podrá recuperar.</p>
+                )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              onClick={() => {
+                if (!pendingDelete) return;
+                if (pendingDelete.kind === "phase") {
+                  deletePhaseMut.mutate({ id: pendingDelete.id, taskCount: pendingDelete.taskCount });
+                } else if (pendingDelete.kind === "task") {
+                  deleteTaskMut.mutate(pendingDelete.id);
+                } else {
+                  deleteDelivMut.mutate(pendingDelete.id);
+                }
+                setPendingDelete(null);
+              }}
+            >
+              Sí, eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {/* Modal: Editar info del proyecto */}
       <Dialog open={showEditInfo} onOpenChange={(open) => { if (!updateProjectInfoMut.isPending && !open) setShowEditInfo(false); }}>
