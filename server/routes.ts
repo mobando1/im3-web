@@ -5370,8 +5370,18 @@ Responde SOLO con un JSON válido, sin markdown:
       let repoContext: string | null = null;
       const repoToRead = cleanRepoUrl || project.githubRepoUrl;
       if (repoToRead) {
-        try { repoContext = await fetchRepoContext(repoToRead); }
-        catch (err) { log(`generate-phases: fetchRepoContext failed: ${err}`); }
+        log(`generate-phases: attempting to fetch repo context for ${repoToRead}`);
+        try {
+          repoContext = await fetchRepoContext(repoToRead);
+          if (repoContext) {
+            log(`generate-phases: repo loaded — ${repoContext.length} chars from ${repoToRead}`);
+          } else {
+            log(`generate-phases: fetchRepoContext returned null for ${repoToRead} (private/inaccessible/empty)`);
+          }
+        }
+        catch (err) { log(`generate-phases: fetchRepoContext threw: ${err}`); }
+      } else {
+        log(`generate-phases: no repo configured for project ${projectId} — skipping repo context`);
       }
 
       // Merge clarifications into the brief so Claude has full context

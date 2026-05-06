@@ -15,6 +15,36 @@ function getClient(): Anthropic | null {
   return client;
 }
 
+/**
+ * Tolerant JSON extractor. Handles markdown code fences, prose before/after,
+ * and partial responses. Logs the raw text on failure so we can diagnose
+ * exactly what Claude returned (helps when models drift their output format).
+ */
+function parseAIJson<T>(text: string, label: string): T | null {
+  if (!text || typeof text !== "string") {
+    log(`parseAIJson [${label}] received empty/non-string input`);
+    return null;
+  }
+  let cleaned = text.trim().replace(/^```(?:json|JSON)?\s*/i, "").replace(/\s*```$/i, "").trim();
+  try {
+    return JSON.parse(cleaned) as T;
+  } catch {
+    const arrayMatch = cleaned.match(/\[[\s\S]*\]/);
+    const objMatch = cleaned.match(/\{[\s\S]*\}/);
+    const candidate = arrayMatch?.[0] || objMatch?.[0];
+    if (candidate) {
+      try {
+        return JSON.parse(candidate) as T;
+      } catch (err2) {
+        log(`parseAIJson [${label}] secondary parse failed: ${(err2 as Error).message}. Raw (first 800ch): ${text.slice(0, 800)}`);
+        return null;
+      }
+    }
+    log(`parseAIJson [${label}] no JSON found. Raw (first 800ch): ${text.slice(0, 800)}`);
+    return null;
+  }
+}
+
 type CommitInfo = {
   sha: string;
   message: string;
@@ -336,10 +366,9 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato:
         messages: [{ role: "user", content: designPrompt }],
       });
 
-      const designText = designRes.content?.[0]?.type === "text" ? designRes.content[0].text.trim() : "[]";
-      const designCleaned = designText.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim();
-      const parsed = JSON.parse(designCleaned) as PhaseSpec[];
-      if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("AI returned empty phases");
+      const designText = designRes.content?.[0]?.type === "text" ? designRes.content[0].text : "";
+      const parsed = parseAIJson<PhaseSpec[]>(designText, "design-phases-fresh");
+      if (!parsed || !Array.isArray(parsed) || parsed.length === 0) throw new Error("AI returned empty phases");
       phaseSpecs = parsed.map(p => {
         const cs = p.currentStatus;
         const validStatus = cs === "completed" || cs === "in_progress" || cs === "pending" ? cs : undefined;
@@ -415,8 +444,8 @@ Fases: ${phaseSpecs.map((p, i) => `${i + 1}. ${p.name} (${p.weeks} semanas)`).jo
 `.trim();
 
       const response = await anthropic.messages.create({
-        model: "claude-haiku-4-5-20251001",
-        max_tokens: 3000,
+        model: "claude-sonnet-4-6",
+        max_tokens: 6000,
         system: `${IM3_PROJECT_CONTEXT}
 
 ---
@@ -425,7 +454,7 @@ Eres un project manager senior de IM3. Genera tareas detalladas para cada fase s
 
 Responde SOLO con un JSON array válido. Sin texto antes ni después. Sin bloques de código markdown.
 
-Formato:
+Formato EXACTO (no agregues comentarios, explicaciones ni claves extra):
 [
   {
     "phaseIndex": 0,
@@ -435,22 +464,27 @@ Formato:
   }
 ]
 
-Reglas:
-- 4-8 tareas por fase
+Reglas estrictas:
+- DEBES generar tareas para TODAS las fases (un objeto por phaseIndex empezando en 0)
+- 4-8 tareas por fase. NO menos de 4.
 - La primera tarea de cada fase debe ser el kickoff/planeación
 - La última tarea de cada fase debe ser un milestone (isMilestone: true) con la entrega principal
 - Prioridades realistas: 2-3 high, resto medium/low
 - clientFacingTitle debe ser comprensible para un empresario no técnico
-- Tareas específicas al brief, NO genéricas. Aplica los anti-patrones IM3.`,
+- Tareas específicas al brief, NO genéricas. Aplica los anti-patrones IM3.
+- Si tienes contexto del repositorio, usa nombres de archivos/módulos reales en las tareas cuando aplique.`,
         messages: [{ role: "user", content: `Genera tareas para este proyecto:\n\n${taskContext}` }],
       });
 
-      const text = response.content?.[0]?.type === "text" ? response.content[0].text.trim() : "[]";
-      const cleaned = text.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim();
-      const phaseTasks = JSON.parse(cleaned) as Array<{
+      const text = response.content?.[0]?.type === "text" ? response.content[0].text : "";
+      const phaseTasks = parseAIJson<Array<{
         phaseIndex: number;
         tasks: Array<{ title: string; priority: string; isMilestone?: boolean; clientFacingTitle?: string }>;
-      }>;
+      }>>(text, "tasks-fresh");
+      if (!phaseTasks || !Array.isArray(phaseTasks) || phaseTasks.length === 0) {
+        throw new Error("AI returned empty or invalid tasks payload");
+      }
+      log(`generateProjectArtifacts: Sonnet returned tasks for ${phaseTasks.length} phases`);
 
       const now = new Date();
       for (const pt of phaseTasks) {
@@ -507,8 +541,8 @@ Reglas:
         system: "Genera 3 ideas de mejoras futuras para un proyecto de tecnología. JSON array: [{\"title\": \"...\", \"description\": \"...\", \"priority\": \"medium\"}]. Sin markdown.",
         messages: [{ role: "user", content: `Brief: ${brief.substring(0, 500)}` }],
       });
-      const ideasText = ideasResponse.content?.[0]?.type === "text" ? ideasResponse.content[0].text.trim() : "[]";
-      const ideas = JSON.parse(ideasText.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim());
+      const ideasText = ideasResponse.content?.[0]?.type === "text" ? ideasResponse.content[0].text : "";
+      const ideas = parseAIJson<Array<{ title: string; description?: string; priority?: string }>>(ideasText, "ideas-fresh") || [];
       for (const idea of ideas) {
         await database.insert(projectIdeas).values({ projectId, ...idea, suggestedBy: "team", status: "suggested" });
       }
@@ -575,9 +609,9 @@ Responde SOLO con un JSON válido (un objeto, no un array), sin markdown:
 { "name": "Nombre de la fase", "weeks": 3, "deliverables": ["Entregable 1", "Entregable 2"] }`,
       messages: [{ role: "user", content: designContext }],
     });
-    const designText = designRes.content?.[0]?.type === "text" ? designRes.content[0].text.trim() : "{}";
-    const cleaned = designText.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim();
-    const parsed = JSON.parse(cleaned);
+    const designText = designRes.content?.[0]?.type === "text" ? designRes.content[0].text : "";
+    const parsed = parseAIJson<{ name?: string; weeks?: number; deliverables?: string[] }>(designText, "design-phase-append");
+    if (!parsed) throw new Error("AI returned invalid phase design");
     phaseSpec = {
       name: String(parsed.name || "Nueva fase").slice(0, 200),
       weeks: Math.max(1, Math.min(20, Number(parsed.weeks) || 2)),
@@ -620,15 +654,15 @@ Responde SOLO con un JSON válido (un objeto, no un array), sin markdown:
   let totalTasks = 0;
   try {
     const taskRes = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
-      max_tokens: 1500,
+      model: "claude-sonnet-4-6",
+      max_tokens: 2500,
       system: `${IM3_PROJECT_CONTEXT}
 
 ---
 
 Genera 4-8 tareas detalladas para una fase específica de un proyecto IM3, siguiendo las reglas IM3 arriba.
 
-Responde SOLO con un JSON array válido, sin markdown. Formato:
+Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato EXACTO:
 [ { "title": "...", "priority": "high|medium|low", "isMilestone": false, "clientFacingTitle": "..." } ]
 
 - Primera tarea: kickoff/planeación de la fase
@@ -636,8 +670,12 @@ Responde SOLO con un JSON array válido, sin markdown. Formato:
 - Específicas al brief, NO genéricas`,
       messages: [{ role: "user", content: `Brief: ${trimmedBrief}\n\nFase: ${phaseSpec.name} (${phaseSpec.weeks} semanas)\nEntregables: ${phaseSpec.deliverables?.join(", ") || "—"}` }],
     });
-    const taskText = taskRes.content?.[0]?.type === "text" ? taskRes.content[0].text.trim() : "[]";
-    const tasks = JSON.parse(taskText.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim()) as Array<{ title: string; priority: string; isMilestone?: boolean; clientFacingTitle?: string }>;
+    const taskText = taskRes.content?.[0]?.type === "text" ? taskRes.content[0].text : "";
+    const tasks = parseAIJson<Array<{ title: string; priority: string; isMilestone?: boolean; clientFacingTitle?: string }>>(taskText, "tasks-append");
+    if (!tasks || !Array.isArray(tasks) || tasks.length === 0) {
+      throw new Error("AI returned empty or invalid tasks payload (append)");
+    }
+    log(`appendPhaseArtifact: Sonnet returned ${tasks.length} tasks for new phase`);
 
     const phaseDays = Math.max(1, Math.round((phaseEnd.getTime() - phaseStart.getTime()) / (24 * 60 * 60 * 1000)));
 
