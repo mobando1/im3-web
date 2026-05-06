@@ -848,7 +848,7 @@ export default function Portal() {
                     <div className="h-4" />
 
                     {/* Barras de fases */}
-                    <div className="space-y-4">
+                    <div className="space-y-6">
                       {phases.map((phase, idx) => {
                         const color = PHASE_COLORS[idx % PHASE_COLORS.length];
                         const left = getPos(phase.startDate) ?? 0;
@@ -857,20 +857,32 @@ export default function Portal() {
                         const completed = phase.tasks.filter(t => t.status === "completed").length;
                         const phaseProgress = phase.tasks.length > 0 ? (completed / phase.tasks.length) * 100 : 0;
                         const isComplete = phaseProgress === 100;
+                        const dateRange = (phase.startDate || phase.endDate) ?
+                          `${phase.startDate ? new Date(phase.startDate).toLocaleDateString("es-CO", { day: "numeric", month: "short" }) : "?"} → ${phase.endDate ? new Date(phase.endDate).toLocaleDateString("es-CO", { day: "numeric", month: "short" }) : "?"}`
+                          : "";
                         return (
-                          <div key={phase.id} className="relative h-12">
-                            <div className="absolute inset-y-0 left-0 right-0 bg-gray-50 rounded-md" />
-                            <div
-                              className="absolute top-1 bottom-1 rounded-md flex items-center px-3 shadow-sm overflow-hidden"
-                              style={{ left: `${left}%`, width: `${width}%`, backgroundColor: color, opacity: isComplete ? 0.8 : 1 }}
-                              title={`${phase.name} · ${phase.startDate ? new Date(phase.startDate).toLocaleDateString("es-CO") : ""} → ${phase.endDate ? new Date(phase.endDate).toLocaleDateString("es-CO") : ""}`}
-                            >
-                              {/* Progreso interno */}
-                              <div className="absolute inset-y-0 left-0 bg-white/25" style={{ width: `${phaseProgress}%` }} />
-                              <div className="relative z-10 flex items-center gap-2 text-white text-xs font-medium truncate">
-                                {isComplete && <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
-                                <span className="truncate">{phase.name}</span>
-                                <span className="text-white/80 text-[10px] shrink-0">{Math.round(phaseProgress)}%</span>
+                          <div key={phase.id} className="relative">
+                            {/* Header: número de fase + nombre + porcentaje (siempre visibles) */}
+                            <div className="flex items-baseline justify-between gap-3 mb-1.5">
+                              <div className="flex items-baseline gap-2 min-w-0 flex-1">
+                                <span className="text-[10px] uppercase tracking-wider font-bold shrink-0" style={{ color }}>FASE {idx + 1}</span>
+                                <h4 className="text-sm font-semibold text-gray-900 truncate">{phase.name}</h4>
+                                {isComplete && <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />}
+                              </div>
+                              <div className="flex items-baseline gap-2 shrink-0">
+                                {dateRange && <span className="text-[11px] text-gray-400">{dateRange}</span>}
+                                <span className="text-sm font-bold" style={{ color }}>{Math.round(phaseProgress)}%</span>
+                              </div>
+                            </div>
+                            {/* Barra */}
+                            <div className="relative h-3">
+                              <div className="absolute inset-y-0 left-0 right-0 bg-gray-100 rounded-full" />
+                              <div
+                                className="absolute inset-y-0 rounded-full overflow-hidden"
+                                style={{ left: `${left}%`, width: `${width}%`, backgroundColor: `${color}33` }}
+                                title={`${phase.name} · ${dateRange}`}
+                              >
+                                <div className="absolute inset-y-0 left-0 rounded-full" style={{ width: `${phaseProgress}%`, backgroundColor: color }} />
                               </div>
                             </div>
                           </div>
@@ -878,7 +890,7 @@ export default function Portal() {
                       })}
                     </div>
 
-                    <p className="text-[11px] text-gray-400 text-center mt-6">Cada barra es una fase del proyecto. La franja blanca interna muestra el porcentaje completado.</p>
+                    <p className="text-[11px] text-gray-400 text-center mt-6">Cada barra representa una fase. La parte sólida muestra el progreso ({phases.filter(p => p.tasks.length > 0 && p.tasks.filter(t => t.status === "completed").length === p.tasks.length).length} de {phases.length} fases completadas).</p>
                   </div>
                 </div>
               );
