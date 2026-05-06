@@ -5264,14 +5264,89 @@ ${urls}
     }
   });
 
-  // Generate (fresh) or append phases via AI on an existing project.
+  // Clarifying questions step (one-shot Sonnet call).
   // Body: { brief: string, githubRepoUrl?: string, mode: "fresh" | "append" }
-  // - fresh: only allowed if the project has zero phases. Designs 3-6 phases from scratch.
-  // - append: adds ONE new phase at the end without touching existing ones.
-  app.post("/api/admin/projects/:id/generate-phases", requireAuth, async (req, res) => {
+  // Response: { questions: [{ id, question, hint?, options?: string[] }] }
+  app.post("/api/admin/projects/:id/clarify-brief", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     const projectId = req.params.id as string;
     const { brief, githubRepoUrl, mode } = req.body || {};
+
+    if (!brief || typeof brief !== "string" || brief.trim().length < 20) {
+      return res.status(400).json({ message: "brief requerido (mínimo 20 caracteres)" });
+    }
+
+    try {
+      const [project] = await db.select().from(clientProjects).where(eq(clientProjects.id, projectId));
+      if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
+
+      let repoContext: string | null = null;
+      const repoToRead = (githubRepoUrl || "").trim() || project.githubRepoUrl;
+      if (repoToRead) {
+        try { repoContext = await fetchRepoContext(repoToRead); }
+        catch (err) { log(`clarify-brief: fetchRepoContext failed: ${err}`); }
+      }
+
+      const Anthropic = (await import("@anthropic-ai/sdk")).default;
+      if (!process.env.ANTHROPIC_API_KEY) return res.status(500).json({ message: "ANTHROPIC_API_KEY no configurado" });
+      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+      const { IM3_PROJECT_CONTEXT } = await import("./im3-project-context");
+
+      const userPrompt = `${mode === "append" ? "El proyecto ya tiene fases. Estamos por AÑADIR una fase nueva." : "Vamos a diseñar las fases iniciales del proyecto."}
+
+Brief inicial del usuario:
+${brief.trim()}
+
+${repoContext ? `\nContexto del repositorio conectado:\n${repoContext}\n` : "\n(No hay repo conectado todavía.)\n"}`;
+
+      const response = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1200,
+        system: `${IM3_PROJECT_CONTEXT}
+
+---
+
+Eres un project manager senior de IM3. Antes de proponer fases, identificás qué FALTA aclarar en el brief para hacer un plan acertado.
+
+Genera entre 3 y 5 preguntas clave que ayudarían a diseñar mejor el proyecto. Las preguntas deben:
+- Ser específicas al proyecto que se describe (NO genéricas)
+- Cubrir áreas críticas que el brief deja vagas: alcance, integraciones, volúmenes, usuarios, deadlines duros, restricciones técnicas
+- Ser respondibles con texto corto (1-3 frases)
+- Si la pregunta tiene 2-4 opciones obvias, incluir un array "options" con esas opciones
+
+Responde SOLO con un JSON válido, sin markdown:
+{
+  "questions": [
+    { "id": "q1", "question": "¿Cuántos usuarios concurrentes esperas?", "hint": "Si no sabes, da un orden de magnitud", "options": ["<10", "10-100", "100-1000", ">1000"] },
+    { "id": "q2", "question": "¿Hay un deadline duro o algún evento que marque el go-live?" }
+  ]
+}`,
+        messages: [{ role: "user", content: userPrompt }],
+      });
+
+      const text = response.content?.[0]?.type === "text" ? response.content[0].text.trim() : "{}";
+      const cleaned = text.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim();
+      const parsed = JSON.parse(cleaned) as { questions: Array<{ id: string; question: string; hint?: string; options?: string[] }> };
+
+      const questions = Array.isArray(parsed.questions) ? parsed.questions.slice(0, 5) : [];
+      res.json({ questions, repoLoaded: !!repoContext });
+    } catch (err: any) {
+      log(`Error clarify-brief: ${err?.message}`);
+      res.status(500).json({ error: err?.message || "Error generando preguntas" });
+    }
+  });
+
+  // Generate (fresh) or append phases via AI on an existing project.
+  // Body: {
+  //   brief: string,
+  //   githubRepoUrl?: string,           // if different from project's, persists it
+  //   mode: "fresh" | "append",
+  //   clarifications?: [{ question, answer }]   // optional clarifying Q&A from prior step
+  // }
+  app.post("/api/admin/projects/:id/generate-phases", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const projectId = req.params.id as string;
+    const { brief, githubRepoUrl, mode, clarifications } = req.body || {};
 
     if (!brief || typeof brief !== "string" || brief.trim().length < 20) {
       return res.status(400).json({ message: "brief requerido (mínimo 20 caracteres)" });
@@ -5284,12 +5359,25 @@ ${urls}
       const [project] = await db.select().from(clientProjects).where(eq(clientProjects.id, projectId));
       if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
+      // Bug fix: persist the selected repo on the project if it differs
+      const cleanRepoUrl = (githubRepoUrl || "").trim() || null;
+      if (cleanRepoUrl && cleanRepoUrl !== project.githubRepoUrl) {
+        await db.update(clientProjects)
+          .set({ githubRepoUrl: cleanRepoUrl, updatedAt: new Date() })
+          .where(eq(clientProjects.id, projectId));
+      }
+
       let repoContext: string | null = null;
-      const repoToRead = githubRepoUrl || project.githubRepoUrl;
+      const repoToRead = cleanRepoUrl || project.githubRepoUrl;
       if (repoToRead) {
         try { repoContext = await fetchRepoContext(repoToRead); }
         catch (err) { log(`generate-phases: fetchRepoContext failed: ${err}`); }
       }
+
+      // Merge clarifications into the brief so Claude has full context
+      const enrichedBrief = Array.isArray(clarifications) && clarifications.length > 0
+        ? `${brief.trim()}\n\n## Aclaraciones adicionales\n${clarifications.map((c: { question: string; answer: string }) => `- ${c.question}\n  ${c.answer}`).join("\n")}`
+        : brief.trim();
 
       if (mode === "fresh") {
         const existing = await db.select({ id: projectPhases.id }).from(projectPhases).where(eq(projectPhases.projectId, projectId));
@@ -5298,16 +5386,16 @@ ${urls}
         }
         const startDate = project.startDate ? new Date(project.startDate) : new Date();
         const artifacts = await generateProjectArtifacts(projectId, {
-          brief: brief.trim(),
+          brief: enrichedBrief,
           repoContext: repoContext || undefined,
           startDate,
         });
-        return res.json({ mode: "fresh", ...artifacts });
+        return res.json({ mode: "fresh", repoLoaded: !!repoContext, ...artifacts });
       }
 
       // mode === "append"
-      const result = await appendPhaseArtifact(projectId, brief.trim(), { repoContext: repoContext || undefined });
-      return res.json({ mode: "append", phasesCreated: 1, ...result });
+      const result = await appendPhaseArtifact(projectId, enrichedBrief, { repoContext: repoContext || undefined });
+      return res.json({ mode: "append", phasesCreated: 1, repoLoaded: !!repoContext, ...result });
     } catch (err: any) {
       log(`Error generate-phases: ${err?.message}`);
       res.status(500).json({ error: err?.message || "Error generando fases" });

@@ -332,9 +332,16 @@ export default function AdminProjectDetail() {
   const [msgContent, setMsgContent] = useState("");
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
-  // AI phase generation (fresh / append)
+  // AI phase generation (fresh / append) — multi-step flow:
+  // step "brief": user writes brief + selects repo
+  // step "questions": Claude asks 3-5 clarifying questions
+  // step "generating": AI is designing phases / generating tasks
   const [showAIPhase, setShowAIPhase] = useState<false | "fresh" | "append">(false);
+  const [aiPhaseStep, setAIPhaseStep] = useState<"brief" | "questions" | "generating">("brief");
   const [aiPhaseForm, setAIPhaseForm] = useState({ brief: "", githubRepoUrl: "" });
+  const [aiClarifyQuestions, setAIClarifyQuestions] = useState<Array<{ id: string; question: string; hint?: string; options?: string[] }>>([]);
+  const [aiClarifyAnswers, setAIClarifyAnswers] = useState<Record<string, string>>({});
+  const [aiGenStep, setAIGenStep] = useState<0 | 1 | 2 | 3>(0); // 0=idle, 1=reading repo, 2=designing phases, 3=generating tasks
 
   // Editar info del proyecto (cliente, tipo, repo, etc.)
   const [showEditInfo, setShowEditInfo] = useState(false);
@@ -398,6 +405,18 @@ export default function AdminProjectDetail() {
     if (activeTab === "Mensajes") messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [activeTab, project?.messages]);
 
+  // Hydrate AI phase form when the modal opens (bug 1A: pick up project's saved repo)
+  // and reset clarification state so each modal opening starts fresh.
+  useEffect(() => {
+    if (showAIPhase !== false && project) {
+      setAIPhaseForm({ brief: "", githubRepoUrl: project.githubRepoUrl || "" });
+      setAIPhaseStep("brief");
+      setAIClarifyQuestions([]);
+      setAIClarifyAnswers({});
+      setAIGenStep(0);
+    }
+  }, [showAIPhase, project?.githubRepoUrl]);
+
   const invalidate = () => queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${params.id}`] });
 
   // Mutations
@@ -406,24 +425,53 @@ export default function AdminProjectDetail() {
     onSuccess: () => { invalidate(); setShowAddPhase(false); setPhaseForm({ name: "", description: "", estimatedHours: "", startDate: "", endDate: "" }); },
   });
 
-  const generatePhasesAIMut = useMutation({
+  const clarifyBriefMut = useMutation({
     mutationFn: async (data: { brief: string; githubRepoUrl?: string; mode: "fresh" | "append" }) => {
+      const res = await apiRequest("POST", `/api/admin/projects/${params.id}/clarify-brief`, data);
+      return res.json();
+    },
+    onSuccess: (data: { questions: Array<{ id: string; question: string; hint?: string; options?: string[] }>; repoLoaded: boolean }) => {
+      setAIClarifyQuestions(data.questions || []);
+      setAIPhaseStep("questions");
+    },
+    onError: (err: any) => {
+      toast({ title: "Error generando preguntas", description: err?.message, variant: "destructive" });
+    },
+  });
+
+  const generatePhasesAIMut = useMutation({
+    mutationFn: async (data: {
+      brief: string;
+      githubRepoUrl?: string;
+      mode: "fresh" | "append";
+      clarifications?: Array<{ question: string; answer: string }>;
+    }) => {
       const res = await apiRequest("POST", `/api/admin/projects/${params.id}/generate-phases`, data);
       return res.json();
     },
-    onSuccess: (data: { mode: string; phasesCreated?: number; tasksCreated?: number }) => {
+    onSuccess: (data: { mode: string; phasesCreated?: number; tasksCreated?: number; repoLoaded?: boolean }) => {
       invalidate();
       setShowAIPhase(false);
-      setAIPhaseForm({ brief: "", githubRepoUrl: "" });
       toast({
         title: data.mode === "fresh" ? "Fases generadas con IA" : "Fase añadida con IA",
-        description: `${data.phasesCreated ?? 0} fases · ${data.tasksCreated ?? 0} tareas`,
+        description: `${data.phasesCreated ?? 0} fases · ${data.tasksCreated ?? 0} tareas${data.repoLoaded ? " · repo leído" : ""}`,
       });
     },
     onError: (err: any) => {
+      setAIPhaseStep("questions");
       toast({ title: "Error generando fases", description: err?.message, variant: "destructive" });
     },
   });
+
+  // Optimistic step animation when "generating": cycle through "leyendo repo / diseñando / tareas".
+  useEffect(() => {
+    if (aiPhaseStep !== "generating") return;
+    const hasRepo = !!(aiPhaseForm.githubRepoUrl || project?.githubRepoUrl);
+    setAIGenStep(hasRepo ? 1 : 2);
+    const t1 = hasRepo ? setTimeout(() => setAIGenStep(2), 6000) : null;
+    const t2 = setTimeout(() => setAIGenStep(3), hasRepo ? 14000 : 10000);
+    return () => { if (t1) clearTimeout(t1); clearTimeout(t2); };
+  }, [aiPhaseStep, aiPhaseForm.githubRepoUrl, project?.githubRepoUrl]);
 
   const updateProjectInfoMut = useMutation({
     mutationFn: async (data: Record<string, unknown>) => {
@@ -2181,92 +2229,228 @@ export default function AdminProjectDetail() {
         )}
       </div>
 
-      {/* Modal: Generar / Añadir fase con IA */}
-      <Dialog open={showAIPhase !== false} onOpenChange={(open) => { if (!generatePhasesAIMut.isPending && !open) setShowAIPhase(false); }}>
+      {/* Modal: Generar / Añadir fase con IA — multi-step */}
+      <Dialog open={showAIPhase !== false} onOpenChange={(open) => {
+        if (!generatePhasesAIMut.isPending && !clarifyBriefMut.isPending && !open) setShowAIPhase(false);
+      }}>
         <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {showAIPhase === "fresh" ? "Generar fases con IA" : "Añadir fase con IA"}
             </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 pt-2">
-            <div className="space-y-2">
-              <Label>
-                {showAIPhase === "fresh"
-                  ? "Brief — hacia dónde va este proyecto"
-                  : "¿Qué fase añadimos? Describe el cambio o lo que sigue"}
-              </Label>
-              <Textarea
-                value={aiPhaseForm.brief}
-                onChange={e => setAIPhaseForm(f => ({ ...f, brief: e.target.value }))}
-                placeholder={showAIPhase === "fresh"
-                  ? "Describe el problema, los usuarios, el alcance, el resultado esperado. Mínimo 2-3 párrafos."
-                  : "Ej: ahora también vamos a integrar pagos con Stripe y necesito que la IA arme una fase para esa parte."}
-                rows={6}
-              />
-              <p className="text-[11px] text-gray-400">{aiPhaseForm.brief.length} caracteres {aiPhaseForm.brief.length < 20 && "· mínimo 20"}</p>
-            </div>
 
-            <div className="space-y-2">
-              <Label>Repo de GitHub (opcional)</Label>
-              {githubStatus?.connected ? (
-                <Select
-                  value={aiPhaseForm.githubRepoUrl || project.githubRepoUrl || "__none__"}
-                  onValueChange={v => setAIPhaseForm(f => ({ ...f, githubRepoUrl: v === "__none__" ? "" : v }))}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar repositorio" />
-                  </SelectTrigger>
-                  <SelectContent className="max-h-72">
-                    <SelectItem value="__none__">— Sin repositorio —</SelectItem>
-                    {githubRepos.map(r => (
-                      <SelectItem key={r.id} value={r.url}>
-                        <span className="flex items-center gap-2">
-                          <span>{r.fullName}</span>
-                          {r.isPrivate && <span className="text-[9px] uppercase tracking-wider font-semibold bg-gray-100 text-gray-500 px-1 rounded">privado</span>}
-                        </span>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              ) : (
-                <div className="flex items-center justify-between p-3 rounded-lg border border-dashed border-gray-200 bg-gray-50">
-                  <p className="text-xs text-gray-500">GitHub no está conectado.</p>
-                  <a href="/api/github/authorize" className="text-xs font-medium text-[#2FA4A9] hover:underline">
-                    Conectar GitHub →
-                  </a>
+          {/* Step indicator */}
+          <div className="flex items-center gap-2 text-[11px] text-gray-400 pt-1">
+            <span className={aiPhaseStep === "brief" ? "text-[#2FA4A9] font-semibold" : ""}>1. Brief</span>
+            <span>›</span>
+            <span className={aiPhaseStep === "questions" ? "text-[#2FA4A9] font-semibold" : ""}>2. Preguntas</span>
+            <span>›</span>
+            <span className={aiPhaseStep === "generating" ? "text-[#2FA4A9] font-semibold" : ""}>3. Generación</span>
+          </div>
+
+          {aiPhaseStep === "brief" && (
+            <div className="space-y-4 pt-2">
+              <div className="space-y-2">
+                <Label>
+                  {showAIPhase === "fresh"
+                    ? "Brief — hacia dónde va este proyecto"
+                    : "¿Qué fase añadimos? Describe el cambio o lo que sigue"}
+                </Label>
+                <Textarea
+                  value={aiPhaseForm.brief}
+                  onChange={e => setAIPhaseForm(f => ({ ...f, brief: e.target.value }))}
+                  placeholder={showAIPhase === "fresh"
+                    ? "Describe el problema, los usuarios, el alcance, el resultado esperado. Mínimo 2-3 párrafos."
+                    : "Ej: ahora también vamos a integrar pagos con Stripe y necesito que la IA arme una fase para esa parte."}
+                  rows={6}
+                />
+                <p className="text-[11px] text-gray-400">{aiPhaseForm.brief.length} caracteres {aiPhaseForm.brief.length < 20 && "· mínimo 20"}</p>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Repo de GitHub (opcional)</Label>
+                {githubStatus?.connected ? (
+                  <Select
+                    value={aiPhaseForm.githubRepoUrl || "__none__"}
+                    onValueChange={v => setAIPhaseForm(f => ({ ...f, githubRepoUrl: v === "__none__" ? "" : v }))}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Seleccionar repositorio" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-72">
+                      <SelectItem value="__none__">— Sin repositorio —</SelectItem>
+                      {githubRepos.map(r => (
+                        <SelectItem key={r.id} value={r.url}>
+                          <span className="flex items-center gap-2">
+                            <span>{r.fullName}</span>
+                            {r.isPrivate && <span className="text-[9px] uppercase tracking-wider font-semibold bg-gray-100 text-gray-500 px-1 rounded">privado</span>}
+                          </span>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : (
+                  <div className="flex items-center justify-between p-3 rounded-lg border border-dashed border-gray-200 bg-gray-50">
+                    <p className="text-xs text-gray-500">GitHub no está conectado.</p>
+                    <a href="/api/github/authorize" className="text-xs font-medium text-[#2FA4A9] hover:underline">
+                      Conectar GitHub →
+                    </a>
+                  </div>
+                )}
+                <p className="text-[11px] text-gray-400">Si seleccionas un repo, la IA leerá README + docs/ + últimos commits para ajustar las fases al estado real.</p>
+              </div>
+
+              {showAIPhase === "append" && project.phases.length > 0 && (
+                <div className="text-[11px] text-gray-500 bg-blue-50 border border-blue-100 rounded-lg p-3">
+                  Se añadirá UNA nueva fase al final del proyecto. Las {project.phases.length} fases existentes no se tocan.
                 </div>
               )}
-              <p className="text-[11px] text-gray-400">Si seleccionas un repo, la IA leerá README + docs/ + últimos commits.</p>
+
+              <Button
+                onClick={() => {
+                  if (aiPhaseForm.brief.trim().length < 20) {
+                    toast({ title: "Brief demasiado corto", variant: "destructive" });
+                    return;
+                  }
+                  clarifyBriefMut.mutate({
+                    brief: aiPhaseForm.brief.trim(),
+                    githubRepoUrl: aiPhaseForm.githubRepoUrl || undefined,
+                    mode: showAIPhase === "fresh" ? "fresh" : "append",
+                  });
+                }}
+                disabled={clarifyBriefMut.isPending || aiPhaseForm.brief.trim().length < 20}
+                className="w-full bg-[#2FA4A9] hover:bg-[#238b8f] gap-2"
+              >
+                <Sparkles className="w-4 h-4" />
+                {clarifyBriefMut.isPending ? "Analizando brief…" : "Continuar — Claude hará preguntas"}
+              </Button>
             </div>
+          )}
 
-            {showAIPhase === "append" && project.phases.length > 0 && (
-              <div className="text-[11px] text-gray-500 bg-blue-50 border border-blue-100 rounded-lg p-3">
-                Se añadirá UNA nueva fase al final del proyecto. Las {project.phases.length} fases existentes no se tocan.
+          {aiPhaseStep === "questions" && (
+            <div className="space-y-4 pt-2">
+              <p className="text-xs text-gray-500">
+                Claude detectó {aiClarifyQuestions.length} áreas que vale la pena aclarar antes de proponer fases. Responde lo que sepas — puedes saltarte preguntas dejándolas vacías.
+              </p>
+
+              {aiClarifyQuestions.length === 0 ? (
+                <p className="text-sm text-gray-400 italic text-center py-6">No se generaron preguntas. Continúa para generar las fases con el brief original.</p>
+              ) : (
+                <div className="space-y-4">
+                  {aiClarifyQuestions.map((q, i) => (
+                    <div key={q.id || i} className="space-y-2">
+                      <Label className="text-sm">
+                        <span className="text-[#2FA4A9] mr-1">{i + 1}.</span>
+                        {q.question}
+                      </Label>
+                      {q.hint && <p className="text-[11px] text-gray-400 -mt-1">{q.hint}</p>}
+                      {q.options && q.options.length > 0 ? (
+                        <div className="flex flex-wrap gap-2">
+                          {q.options.map(opt => (
+                            <button
+                              key={opt}
+                              type="button"
+                              onClick={() => setAIClarifyAnswers(a => ({ ...a, [q.id]: opt }))}
+                              className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                                aiClarifyAnswers[q.id] === opt
+                                  ? "border-[#2FA4A9] bg-[#2FA4A9]/10 text-[#2FA4A9]"
+                                  : "border-gray-200 text-gray-600 hover:border-gray-300"
+                              }`}
+                            >
+                              {opt}
+                            </button>
+                          ))}
+                          <Input
+                            value={aiClarifyAnswers[q.id] && !q.options?.includes(aiClarifyAnswers[q.id]) ? aiClarifyAnswers[q.id] : ""}
+                            onChange={e => setAIClarifyAnswers(a => ({ ...a, [q.id]: e.target.value }))}
+                            placeholder="O responde libremente…"
+                            className="text-xs"
+                          />
+                        </div>
+                      ) : (
+                        <Textarea
+                          value={aiClarifyAnswers[q.id] || ""}
+                          onChange={e => setAIClarifyAnswers(a => ({ ...a, [q.id]: e.target.value }))}
+                          placeholder="Tu respuesta…"
+                          rows={2}
+                          className="text-sm"
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={() => setAIPhaseStep("brief")} className="flex-1">
+                  Atrás
+                </Button>
+                <Button
+                  onClick={() => {
+                    setAIPhaseStep("generating");
+                    const clarifications = aiClarifyQuestions
+                      .map(q => ({ question: q.question, answer: (aiClarifyAnswers[q.id] || "").trim() }))
+                      .filter(c => c.answer.length > 0);
+                    generatePhasesAIMut.mutate({
+                      brief: aiPhaseForm.brief.trim(),
+                      githubRepoUrl: aiPhaseForm.githubRepoUrl || undefined,
+                      mode: showAIPhase === "fresh" ? "fresh" : "append",
+                      clarifications: clarifications.length > 0 ? clarifications : undefined,
+                    });
+                  }}
+                  className="flex-1 bg-[#2FA4A9] hover:bg-[#238b8f] gap-2"
+                >
+                  <Sparkles className="w-4 h-4" />
+                  Generar fases
+                </Button>
               </div>
-            )}
+            </div>
+          )}
 
-            <Button
-              onClick={() => {
-                if (aiPhaseForm.brief.trim().length < 20) {
-                  toast({ title: "Brief demasiado corto", variant: "destructive" });
-                  return;
-                }
-                generatePhasesAIMut.mutate({
-                  brief: aiPhaseForm.brief.trim(),
-                  githubRepoUrl: aiPhaseForm.githubRepoUrl || undefined,
-                  mode: showAIPhase === "fresh" ? "fresh" : "append",
-                });
-              }}
-              disabled={generatePhasesAIMut.isPending || aiPhaseForm.brief.trim().length < 20}
-              className="w-full bg-[#2FA4A9] hover:bg-[#238b8f] gap-2"
-            >
-              <Sparkles className="w-4 h-4" />
-              {generatePhasesAIMut.isPending
-                ? "Generando con IA…"
-                : (showAIPhase === "fresh" ? "Generar fases" : "Añadir fase")}
-            </Button>
-          </div>
+          {aiPhaseStep === "generating" && (
+            <div className="space-y-4 pt-2">
+              <p className="text-xs text-gray-500">Claude está construyendo el plan. Esto suele tomar 15-30 segundos.</p>
+              <div className="space-y-2">
+                {(() => {
+                  const hasRepo = !!(aiPhaseForm.githubRepoUrl || project?.githubRepoUrl);
+                  const steps = [
+                    ...(hasRepo ? [{ id: 1, label: "Leyendo repositorio en GitHub", model: "fetch" }] : []),
+                    { id: 2, label: "Diseñando fases con Claude Sonnet 4.6", model: "Sonnet" },
+                    { id: 3, label: "Distribuyendo tareas con Claude Haiku 4.5", model: "Haiku" },
+                  ];
+                  return steps.map((s) => {
+                    const status = aiGenStep > s.id ? "done" : aiGenStep === s.id ? "running" : "pending";
+                    return (
+                      <div key={s.id} className={`flex items-center gap-3 p-3 rounded-lg border ${
+                        status === "done" ? "border-emerald-200 bg-emerald-50" :
+                        status === "running" ? "border-[#2FA4A9]/30 bg-[#2FA4A9]/5" :
+                        "border-gray-200 bg-gray-50"
+                      }`}>
+                        <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
+                          status === "done" ? "bg-emerald-500 text-white" :
+                          status === "running" ? "bg-[#2FA4A9] text-white animate-pulse" :
+                          "bg-gray-300 text-white"
+                        }`}>
+                          {status === "done" ? <CheckCircle2 className="w-3 h-3" /> : <Sparkles className="w-3 h-3" />}
+                        </div>
+                        <span className={`text-sm ${
+                          status === "done" ? "text-emerald-700" :
+                          status === "running" ? "text-gray-900 font-medium" :
+                          "text-gray-400"
+                        }`}>
+                          {s.label}
+                        </span>
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
+              {generatePhasesAIMut.isPending && (
+                <p className="text-[11px] text-gray-400 text-center">Trabajando… no cierres esta ventana.</p>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
 

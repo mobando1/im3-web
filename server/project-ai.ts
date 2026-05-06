@@ -3,6 +3,7 @@ import { log } from "./index";
 import { db } from "./db";
 import { clientProjects, projectPhases, projectTasks, projectDeliverables, projectActivityEntries, projectTimeLog, projectIdeas } from "@shared/schema";
 import { eq, desc, gte, asc } from "drizzle-orm";
+import { IM3_PROJECT_CONTEXT } from "./im3-project-context";
 
 let client: Anthropic | null = null;
 
@@ -270,7 +271,7 @@ export async function calculateProjectHealth(projectId: string): Promise<{
   return { healthStatus, healthNote };
 }
 
-type PhaseSpec = { name: string; weeks: number; deliverables?: string[] };
+type PhaseSpec = { name: string; weeks: number; deliverables?: string[]; currentStatus?: "pending" | "in_progress" | "completed" };
 
 type GenerateArtifactsOptions = {
   brief: string;
@@ -308,19 +309,29 @@ export async function generateProjectArtifacts(
     }
 
     try {
+      const hasRepo = !!repoContext;
       const designPrompt = `Brief del proyecto:\n${brief}${repoContext ? `\n\nContexto del repositorio:\n${repoContext}` : ""}`;
       const designRes = await anthropic.messages.create({
         model: "claude-sonnet-4-6",
-        max_tokens: 1500,
-        system: `Eres un project manager senior diseñando el plan de un proyecto de software/tecnología.
+        max_tokens: 2000,
+        system: `${IM3_PROJECT_CONTEXT}
 
-Diseña entre 3 y 6 fases secuenciales. Cada fase debe tener un nombre concreto, una duración realista en semanas, y 2-4 entregables principales.
+---
 
-Si te dan contexto del repositorio, úsalo para entender el ESTADO ACTUAL — no propongas "setup inicial" si ya hay infra montada. Reflejá lo que falta para llegar a donde apunta el brief.
+Eres un project manager senior de IM3 Systems diseñando el plan de un proyecto. Sigue las reglas de IM3 arriba al pie de la letra.
+
+Diseña entre 3 y 6 fases secuenciales. Cada fase debe tener un nombre concreto al dominio del cliente, una duración realista en semanas (2-4 típicamente), y 2-4 entregables verificables.${hasRepo ? `
+
+IMPORTANTE: te di contexto real del repositorio del proyecto (README, docs, manifest, últimos commits). USALO para deducir qué partes ya están implementadas. Para CADA fase devuelve un campo "currentStatus":
+- "completed" si el grueso del trabajo de esa fase ya está en el código (ej: ya hay infraestructura montada, autenticación funcionando, modelos de datos creados, etc.)
+- "in_progress" si está parcialmente hecho
+- "pending" si todavía no se aborda en el repo
+
+Sé honesto: si el repo muestra que ya hay 50% del proyecto, marca las fases tempranas como completed. NO propongas como "pendientes" cosas que claramente ya existen.` : ""}
 
 Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato:
 [
-  { "name": "Nombre de la fase", "weeks": 3, "deliverables": ["Entregable 1", "Entregable 2"] }
+  { "name": "Nombre de la fase", "weeks": 3, "deliverables": ["Entregable 1", "Entregable 2"]${hasRepo ? `, "currentStatus": "completed" | "in_progress" | "pending"` : ""} }
 ]`,
         messages: [{ role: "user", content: designPrompt }],
       });
@@ -329,11 +340,16 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato:
       const designCleaned = designText.replace(/^```json?\s*/i, "").replace(/\s*```$/i, "").trim();
       const parsed = JSON.parse(designCleaned) as PhaseSpec[];
       if (!Array.isArray(parsed) || parsed.length === 0) throw new Error("AI returned empty phases");
-      phaseSpecs = parsed.map(p => ({
-        name: String(p.name || "Fase").slice(0, 200),
-        weeks: Math.max(1, Math.min(20, Number(p.weeks) || 2)),
-        deliverables: Array.isArray(p.deliverables) ? p.deliverables.map(String).slice(0, 6) : [],
-      }));
+      phaseSpecs = parsed.map(p => {
+        const cs = p.currentStatus;
+        const validStatus = cs === "completed" || cs === "in_progress" || cs === "pending" ? cs : undefined;
+        return {
+          name: String(p.name || "Fase").slice(0, 200),
+          weeks: Math.max(1, Math.min(20, Number(p.weeks) || 2)),
+          deliverables: Array.isArray(p.deliverables) ? p.deliverables.map(String).slice(0, 6) : [],
+          currentStatus: validStatus,
+        };
+      });
     } catch (err) {
       log(`AI phase design failed: ${err}. Falling back to single planning phase.`);
       phaseSpecs = [{ name: "Planeación inicial", weeks: 2, deliverables: ["Plan de proyecto"] }];
@@ -343,17 +359,19 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato:
   // 2. Insert phases + deliverables
   let totalDeliverables = 0;
   let currentDate = new Date(startDate);
-  const insertedPhases: Array<{ id: string; startDate: Date; endDate: Date; spec: PhaseSpec }> = [];
+  const insertedPhases: Array<{ id: string; startDate: Date; endDate: Date; spec: PhaseSpec; phaseStatus: string }> = [];
 
   for (let i = 0; i < phaseSpecs.length; i++) {
     const p = phaseSpecs[i];
     const phaseEndDate = new Date(currentDate.getTime() + (p.weeks * 7 * 24 * 60 * 60 * 1000));
+    const phaseStatus = p.currentStatus || "pending";
+    const isCompleted = phaseStatus === "completed";
 
     const [phase] = await database.insert(projectPhases).values({
       projectId,
       name: p.name,
       orderIndex: i,
-      status: "pending",
+      status: phaseStatus,
       startDate: currentDate,
       endDate: phaseEndDate,
       estimatedHours: Math.round(p.weeks * 40),
@@ -368,13 +386,14 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato:
           type: d.toLowerCase().includes("diseño") || d.toLowerCase().includes("mockup") || d.toLowerCase().includes("figma") ? "design"
             : d.toLowerCase().includes("documento") || d.toLowerCase().includes("spec") ? "document"
             : "feature",
-          status: "pending",
+          status: isCompleted ? "delivered" : "pending",
+          deliveredAt: isCompleted ? new Date() : null,
         });
         totalDeliverables++;
       }
     }
 
-    insertedPhases.push({ id: phase.id, startDate: new Date(currentDate), endDate: phaseEndDate, spec: p });
+    insertedPhases.push({ id: phase.id, startDate: new Date(currentDate), endDate: phaseEndDate, spec: p, phaseStatus });
     currentDate = phaseEndDate;
   }
 
@@ -398,7 +417,11 @@ Fases: ${phaseSpecs.map((p, i) => `${i + 1}. ${p.name} (${p.weeks} semanas)`).jo
       const response = await anthropic.messages.create({
         model: "claude-haiku-4-5-20251001",
         max_tokens: 3000,
-        system: `Eres un project manager senior. Genera tareas detalladas para cada fase de un proyecto de desarrollo de software/tecnología.
+        system: `${IM3_PROJECT_CONTEXT}
+
+---
+
+Eres un project manager senior de IM3. Genera tareas detalladas para cada fase siguiendo las reglas IM3 arriba.
 
 Responde SOLO con un JSON array válido. Sin texto antes ni después. Sin bloques de código markdown.
 
@@ -418,7 +441,7 @@ Reglas:
 - La última tarea de cada fase debe ser un milestone (isMilestone: true) con la entrega principal
 - Prioridades realistas: 2-3 high, resto medium/low
 - clientFacingTitle debe ser comprensible para un empresario no técnico
-- Tareas específicas al brief, NO genéricas`,
+- Tareas específicas al brief, NO genéricas. Aplica los anti-patrones IM3.`,
         messages: [{ role: "user", content: `Genera tareas para este proyecto:\n\n${taskContext}` }],
       });
 
@@ -429,9 +452,11 @@ Reglas:
         tasks: Array<{ title: string; priority: string; isMilestone?: boolean; clientFacingTitle?: string }>;
       }>;
 
+      const now = new Date();
       for (const pt of phaseTasks) {
         const phase = insertedPhases[pt.phaseIndex];
         if (!phase) continue;
+        const phaseIsCompleted = phase.phaseStatus === "completed";
 
         const phaseDays = Math.max(1, Math.round((phase.endDate.getTime() - phase.startDate.getTime()) / (24 * 60 * 60 * 1000)));
 
@@ -446,23 +471,27 @@ Reglas:
             clientFacingTitle: t.clientFacingTitle || t.title,
             priority: t.priority || "medium",
             isMilestone: t.isMilestone || false,
-            status: "pending",
+            status: phaseIsCompleted ? "completed" : "pending",
             dueDate: taskDueDate,
+            completedAt: phaseIsCompleted ? now : null,
           });
           totalTasks++;
         }
       }
     } catch (err) {
       log(`AI task generation failed, creating basic tasks: ${err}`);
+      const now = new Date();
       for (const phase of insertedPhases) {
+        const phaseIsCompleted = phase.phaseStatus === "completed";
         await database.insert(projectTasks).values({
           phaseId: phase.id,
           projectId,
           title: `Completar ${phase.spec.name}`,
           priority: "high",
-          status: "pending",
+          status: phaseIsCompleted ? "completed" : "pending",
           isMilestone: true,
           dueDate: phase.endDate,
+          completedAt: phaseIsCompleted ? now : null,
         });
         totalTasks++;
       }
@@ -535,8 +564,12 @@ ${existingPhases.length === 0 ? "(ninguna todavía)" : existingPhases.map((p, i)
   try {
     const designRes = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
-      max_tokens: 600,
-      system: `Diseña UNA SOLA fase nueva para añadir al final del proyecto, basada en el brief. NO repitas fases existentes. La fase debe ser concreta y aterrizar específicamente lo que pide el brief.
+      max_tokens: 800,
+      system: `${IM3_PROJECT_CONTEXT}
+
+---
+
+Diseña UNA SOLA fase nueva para añadir al final del proyecto IM3, siguiendo las reglas IM3 arriba. NO repitas fases existentes. La fase debe ser concreta y aterrizar específicamente lo que pide el brief.
 
 Responde SOLO con un JSON válido (un objeto, no un array), sin markdown:
 { "name": "Nombre de la fase", "weeks": 3, "deliverables": ["Entregable 1", "Entregable 2"] }`,
@@ -589,7 +622,11 @@ Responde SOLO con un JSON válido (un objeto, no un array), sin markdown:
     const taskRes = await anthropic.messages.create({
       model: "claude-haiku-4-5-20251001",
       max_tokens: 1500,
-      system: `Genera 4-8 tareas detalladas para una fase específica.
+      system: `${IM3_PROJECT_CONTEXT}
+
+---
+
+Genera 4-8 tareas detalladas para una fase específica de un proyecto IM3, siguiendo las reglas IM3 arriba.
 
 Responde SOLO con un JSON array válido, sin markdown. Formato:
 [ { "title": "...", "priority": "high|medium|low", "isMilestone": false, "clientFacingTitle": "..." } ]
