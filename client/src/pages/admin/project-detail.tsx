@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useRef, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Copy, ExternalLink, Plus, Trash2, Send, Clock, CheckCircle2, Circle, AlertCircle, ChevronDown, ChevronRight, Github, CalendarDays, BarChart3, Diamond, TrendingUp, Package, MessageSquare, Timer, Mic, FolderOpen, Lightbulb, FileText, Image, File, ThumbsUp, X, UserPlus, Users, RefreshCw, Mail, Sparkles, Pencil, Wrench, Building2 } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Plus, Trash2, Send, Clock, CheckCircle2, Circle, AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Github, CalendarDays, BarChart3, Diamond, TrendingUp, Package, MessageSquare, Timer, Mic, FolderOpen, Lightbulb, FileText, Image, File, ThumbsUp, X, UserPlus, Users, RefreshCw, Mail, Sparkles, Pencil, Wrench, Building2 } from "lucide-react";
 import { format, parseISO, differenceInDays, startOfMonth, endOfMonth, eachDayOfInterval, eachMonthOfInterval, isSameDay, isSameMonth, addMonths, subMonths, isWithinInterval } from "date-fns";
 import { es } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
@@ -339,12 +339,17 @@ export default function AdminProjectDetail() {
   // step "brief": user writes brief + selects repo
   // step "questions": Claude asks 3-5 clarifying questions
   // step "generating": AI is designing phases / generating tasks
+  // step "repo-failed": fases creadas pero el repo seleccionado no se pudo leer — surface explícito
   const [showAIPhase, setShowAIPhase] = useState<false | "fresh" | "append">(false);
-  const [aiPhaseStep, setAIPhaseStep] = useState<"brief" | "questions" | "generating">("brief");
+  const [aiPhaseStep, setAIPhaseStep] = useState<"brief" | "questions" | "generating" | "repo-failed">("brief");
   const [aiPhaseForm, setAIPhaseForm] = useState({ brief: "", githubRepoUrl: "" });
   const [aiClarifyQuestions, setAIClarifyQuestions] = useState<Array<{ id: string; question: string; hint?: string; options?: string[] }>>([]);
   const [aiClarifyAnswers, setAIClarifyAnswers] = useState<Record<string, string>>({});
   const [aiGenStep, setAIGenStep] = useState<0 | 1 | 2 | 3>(0); // 0=idle, 1=reading repo, 2=designing phases, 3=generating tasks
+  // Track if the user wanted the repo read but the backend couldn't load it.
+  // Surfaces a persistent warning rather than a silent failure.
+  const [aiRepoLoadFailed, setAIRepoLoadFailed] = useState(false);
+  const [aiPhaseResult, setAIPhaseResult] = useState<{ phasesCreated: number; tasksCreated: number; mode: string } | null>(null);
 
   // Editar info del proyecto (cliente, tipo, repo, etc.)
   const [showEditInfo, setShowEditInfo] = useState(false);
@@ -424,6 +429,8 @@ export default function AdminProjectDetail() {
       setAIClarifyQuestions([]);
       setAIClarifyAnswers({});
       setAIGenStep(0);
+      setAIRepoLoadFailed(false);
+      setAIPhaseResult(null);
     }
   }, [showAIPhase, project?.githubRepoUrl]);
 
@@ -442,6 +449,10 @@ export default function AdminProjectDetail() {
     },
     onSuccess: (data: { questions: Array<{ id: string; question: string; hint?: string; options?: string[] }>; repoLoaded: boolean }) => {
       setAIClarifyQuestions(data.questions || []);
+      // Si el usuario seleccionó repo pero el backend no pudo cargarlo, dejar evidencia
+      // visible en el step "questions" en vez de fallar silenciosamente.
+      const repoWasRequested = !!aiPhaseForm.githubRepoUrl;
+      setAIRepoLoadFailed(repoWasRequested && data.repoLoaded === false);
       setAIPhaseStep("questions");
     },
     onError: (err: any) => {
@@ -461,6 +472,21 @@ export default function AdminProjectDetail() {
     },
     onSuccess: (data: { mode: string; phasesCreated?: number; tasksCreated?: number; repoLoaded?: boolean }) => {
       invalidate();
+      const repoWasRequested = !!(aiPhaseForm.githubRepoUrl || project?.githubRepoUrl);
+      const repoFailed = repoWasRequested && data.repoLoaded === false;
+
+      // Surface el fallo del repo en el modal en vez de cerrar silenciosamente.
+      // Las fases YA se crearon; el usuario decide si las acepta o regenera.
+      if (repoFailed) {
+        setAIPhaseResult({
+          mode: data.mode,
+          phasesCreated: data.phasesCreated ?? 0,
+          tasksCreated: data.tasksCreated ?? 0,
+        });
+        setAIPhaseStep("repo-failed");
+        return;
+      }
+
       setShowAIPhase(false);
       toast({
         title: data.mode === "fresh" ? "Fases generadas con IA" : "Fase añadida con IA",
@@ -2301,14 +2327,16 @@ export default function AdminProjectDetail() {
             </DialogTitle>
           </DialogHeader>
 
-          {/* Step indicator */}
-          <div className="flex items-center gap-2 text-[11px] text-gray-400 pt-1">
-            <span className={aiPhaseStep === "brief" ? "text-[#2FA4A9] font-semibold" : ""}>1. Brief</span>
-            <span>›</span>
-            <span className={aiPhaseStep === "questions" ? "text-[#2FA4A9] font-semibold" : ""}>2. Preguntas</span>
-            <span>›</span>
-            <span className={aiPhaseStep === "generating" ? "text-[#2FA4A9] font-semibold" : ""}>3. Generación</span>
-          </div>
+          {/* Step indicator (hidden in terminal warning state) */}
+          {aiPhaseStep !== "repo-failed" && (
+            <div className="flex items-center gap-2 text-[11px] text-gray-400 pt-1">
+              <span className={aiPhaseStep === "brief" ? "text-[#2FA4A9] font-semibold" : ""}>1. Brief</span>
+              <span>›</span>
+              <span className={aiPhaseStep === "questions" ? "text-[#2FA4A9] font-semibold" : ""}>2. Preguntas</span>
+              <span>›</span>
+              <span className={aiPhaseStep === "generating" ? "text-[#2FA4A9] font-semibold" : ""}>3. Generación</span>
+            </div>
+          )}
 
           {aiPhaseStep === "brief" && (
             <div className="space-y-4 pt-2">
@@ -2391,6 +2419,15 @@ export default function AdminProjectDetail() {
 
           {aiPhaseStep === "questions" && (
             <div className="space-y-4 pt-2">
+              {aiRepoLoadFailed && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+                  <div className="text-xs text-amber-800">
+                    <strong>El repo seleccionado no se pudo leer.</strong> Las preguntas y las fases se generarán <em>sin</em> contexto del código actual.
+                    Razones probables: token de GitHub revocado, repo borrado, o tu cuenta no tiene acceso. Considera <a href="/api/github/authorize" className="underline font-medium">reconectar GitHub</a> y reintentar.
+                  </div>
+                </div>
+              )}
               <p className="text-xs text-gray-500">
                 Claude detectó {aiClarifyQuestions.length} áreas que vale la pena aclarar antes de proponer fases. Responde lo que sepas — puedes saltarte preguntas dejándolas vacías.
               </p>
@@ -2510,6 +2547,53 @@ export default function AdminProjectDetail() {
               {generatePhasesAIMut.isPending && (
                 <p className="text-[11px] text-gray-400 text-center">Trabajando… no cierres esta ventana.</p>
               )}
+            </div>
+          )}
+
+          {aiPhaseStep === "repo-failed" && aiPhaseResult && (
+            <div className="space-y-4 pt-2">
+              <div className="bg-amber-50 border border-amber-300 rounded-xl p-4 space-y-2">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-amber-600 mt-0.5 shrink-0" />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold text-amber-900">
+                      Las fases se generaron, pero el repo no se pudo leer
+                    </p>
+                    <p className="text-xs text-amber-800 mt-1">
+                      Repo: <code className="bg-amber-100 px-1 rounded">{aiPhaseForm.githubRepoUrl || project.githubRepoUrl}</code>
+                    </p>
+                  </div>
+                </div>
+                <div className="ml-8 space-y-2">
+                  <p className="text-xs text-amber-800 font-medium">Resultado:</p>
+                  <p className="text-xs text-amber-800">
+                    Se crearon <strong>{aiPhaseResult.phasesCreated} fases</strong> y <strong>{aiPhaseResult.tasksCreated} tareas</strong>, pero <em>sin contexto del código actual</em>. Las fases NO reflejan qué partes ya están implementadas — todas quedan como pendientes aunque tengas avance real.
+                  </p>
+                  <p className="text-xs text-amber-800 font-medium pt-1">Razones probables:</p>
+                  <ul className="list-disc list-inside text-xs text-amber-800 space-y-0.5">
+                    <li>El token OAuth de GitHub fue revocado o expiró</li>
+                    <li>El repo fue borrado, renombrado o trasladado de owner</li>
+                    <li>Tu cuenta GitHub conectada no tiene acceso al repo</li>
+                  </ul>
+                  <p className="text-xs text-amber-800 pt-1">
+                    Mira los logs del servidor (línea con <code className="bg-amber-100 px-1 rounded">generate-phases:</code>) para ver el código exacto del error.
+                  </p>
+                </div>
+              </div>
+              <div className="flex gap-2">
+                <a href="/api/github/authorize" className="flex-1">
+                  <Button variant="outline" className="w-full gap-2">
+                    <Github className="w-4 h-4" />
+                    Reconectar GitHub
+                  </Button>
+                </a>
+                <Button
+                  onClick={() => setShowAIPhase(false)}
+                  className="flex-1 bg-[#2FA4A9] hover:bg-[#238b8f]"
+                >
+                  Entiendo, continuar igual
+                </Button>
+              </div>
             </div>
           )}
         </DialogContent>
