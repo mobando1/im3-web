@@ -1099,29 +1099,75 @@ export default function AdminProjectDetail() {
         </div>
       )}
 
-      {/* Stats bar — premium design */}
+      {/* Stats bar — cada card con sublinea contextual + mini-barra cuando aplica */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
-        {[
-          { label: "Progreso", value: `${project.progress}%`, icon: TrendingUp, color: "bg-teal-50 text-teal-600", accent: "#2FA4A9" },
-          { label: "Horas", value: project.totalHours.toFixed(1), icon: Timer, color: "bg-blue-50 text-blue-600", accent: "#3B82F6" },
-          { label: "Entregas", value: `${project.deliverables.filter(d => d.status === "approved").length}/${project.deliverables.length}`, icon: Package, color: "bg-purple-50 text-purple-600", accent: "#8B5CF6" },
-          { label: "Mensajes", value: project.messages.length.toString(), icon: MessageSquare, color: "bg-amber-50 text-amber-600", accent: "#D97706" },
-        ].map(s => {
+        {(() => {
+          const approvedDeliv = project.deliverables.filter(d => d.status === "approved").length;
+          const totalDeliv = project.deliverables.length;
+          const delivPct = totalDeliv > 0 ? Math.round((approvedDeliv / totalDeliv) * 100) : 0;
+          const completedTasks = project.phases.reduce((s, p) => s + p.tasks.filter(t => t.status === "completed").length, 0);
+          const totalTasks = project.phases.reduce((s, p) => s + p.tasks.length, 0);
+          return [
+            {
+              label: "Progreso",
+              value: `${project.progress}%`,
+              hint: totalTasks > 0 ? `${completedTasks}/${totalTasks} tareas` : "Sin tareas todavía",
+              icon: TrendingUp,
+              color: "bg-teal-50 text-teal-600",
+              accent: "#2FA4A9",
+              barPct: project.progress,
+            },
+            {
+              label: "Horas",
+              value: project.totalHours.toFixed(1),
+              hint: project.totalHours > 0 ? "estimadas + registradas" : "Aún sin horas",
+              icon: Timer,
+              color: "bg-blue-50 text-blue-600",
+              accent: "#3B82F6",
+              barPct: null,
+            },
+            {
+              label: "Entregas",
+              value: `${approvedDeliv}/${totalDeliv}`,
+              hint: totalDeliv > 0 ? `${delivPct}% aprobadas` : "Sin entregas",
+              icon: Package,
+              color: "bg-purple-50 text-purple-600",
+              accent: "#8B5CF6",
+              barPct: totalDeliv > 0 ? delivPct : null,
+            },
+            {
+              label: "Mensajes",
+              value: project.messages.length.toString(),
+              hint: project.messages.length === 0 ? "Sin mensajes" : `del cliente y equipo`,
+              icon: MessageSquare,
+              color: "bg-amber-50 text-amber-600",
+              accent: "#D97706",
+              barPct: null,
+            },
+          ];
+        })().map(s => {
           const Icon = s.icon;
           return (
-            <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-3 md:p-4 relative overflow-hidden group hover:shadow-md transition-shadow">
+            <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-3 md:p-4 relative overflow-hidden group hover:shadow-md hover:border-gray-300 transition-all">
               <div className="flex items-center justify-between gap-2">
                 <div className="min-w-0">
                   <p className="text-[10px] md:text-[11px] text-gray-400 font-semibold uppercase tracking-wider truncate">{s.label}</p>
-                  <p className="text-xl md:text-2xl font-bold text-gray-900 mt-0.5 md:mt-1">{s.value}</p>
+                  <p className="text-xl md:text-2xl font-bold text-gray-900 mt-0.5 md:mt-1 tabular-nums">{s.value}</p>
+                  <p className="text-[10px] md:text-[11px] text-gray-400 mt-0.5 truncate">{s.hint}</p>
                 </div>
-                <div className={`w-9 h-9 md:w-10 md:h-10 rounded-xl ${s.color} flex items-center justify-center shrink-0`}>
+                <div className={`w-9 h-9 md:w-10 md:h-10 rounded-xl ${s.color} flex items-center justify-center shrink-0 group-hover:scale-110 transition-transform`}>
                   <Icon className="w-4 h-4 md:w-5 md:h-5" />
                 </div>
               </div>
-              {s.label === "Progreso" && (
+              {s.barPct !== null && (
                 <div className="mt-2 md:mt-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                  <motion.div initial={{ width: 0 }} animate={{ width: `${project.progress}%` }} transition={{ duration: 1, ease: "easeOut" }} className="h-full rounded-full" style={{ background: s.accent }} />
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: `${s.barPct}%` }}
+                    transition={{ duration: 1, ease: "easeOut" }}
+                    className="h-full rounded-full"
+                    style={{ background: s.accent }}
+                  />
                 </div>
               )}
             </div>
@@ -1141,10 +1187,24 @@ export default function AdminProjectDetail() {
       {/* Calendario de reuniones del proyecto */}
       <MeetingsSection projectId={project.id} />
 
-      {/* Tabs — with icons (auto-scroll active into view on mobile) */}
+      {/* Tabs — con icono + count badge (mensajes, entregas pendientes) y dot
+          rojo si hay actividad sin atender (mensajes del cliente sin leer). */}
       <div className="flex gap-1 border-b border-gray-200 overflow-x-auto scroll-smooth scrollbar-thin -mx-4 px-4 sm:mx-0 sm:px-0">
         {tabs.map(t => {
           const TabIcon = TAB_ICONS[t] || Circle;
+          // Tab metadata — count opcional, dot rojo cuando hay item nuevo
+          let count: number | null = null;
+          let hasUrgent = false;
+          if (t === "Mensajes") {
+            const fromClient = project.messages.filter(m => m.senderType === "client" && !m.isRead).length;
+            count = project.messages.length || null;
+            hasUrgent = fromClient > 0;
+          } else if (t === "Entregas") {
+            count = project.deliverables.length || null;
+          } else if (t === "Roadmap") {
+            count = project.phases.length || null;
+          }
+          const isActive = activeTab === t;
           return (
             <button
               key={t}
@@ -1152,14 +1212,29 @@ export default function AdminProjectDetail() {
                 setActiveTab(t);
                 e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
               }}
-              className={`px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
-                activeTab === t
+              className={`relative px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 transition-all flex items-center gap-1.5 whitespace-nowrap ${
+                isActive
                   ? "border-[#2FA4A9] text-[#2FA4A9]"
-                  : "border-transparent text-gray-500 hover:text-gray-700"
+                  : "border-transparent text-gray-500 hover:text-gray-800 hover:border-gray-300"
               }`}
             >
-              <TabIcon className="w-3.5 h-3.5" />
+              <TabIcon className={`w-3.5 h-3.5 transition-transform ${isActive ? "scale-110" : ""}`} />
               {t}
+              {count !== null && count > 0 && (
+                <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-semibold tabular-nums transition-colors ${
+                  isActive
+                    ? "bg-[#2FA4A9]/10 text-[#2FA4A9]"
+                    : "bg-gray-100 text-gray-500"
+                }`}>
+                  {count}
+                </span>
+              )}
+              {hasUrgent && (
+                <span
+                  className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500 ring-2 ring-white animate-pulse"
+                  title="Mensajes sin leer del cliente"
+                />
+              )}
             </button>
           );
         })}
@@ -1274,30 +1349,40 @@ export default function AdminProjectDetail() {
                     visibleTasks = [...visibleTasks].sort((a, b) => (order[a.priority] ?? 1) - (order[b.priority] ?? 1));
                   }
 
+                  // Status visual: drives the colored rail on the left edge of the card
+                  // and the color of the progress bar so each phase is scannable at a glance.
+                  const statusVisual = phase.status === "completed"
+                    ? { rail: "bg-emerald-500", bar: "bg-emerald-500", chipBg: "bg-emerald-500", chipText: "text-white" }
+                    : phase.status === "in_progress"
+                      ? { rail: "bg-[#2FA4A9]", bar: "bg-[#2FA4A9]", chipBg: "bg-[#2FA4A9]", chipText: "text-white" }
+                      : { rail: "bg-gray-300", bar: "bg-gray-300", chipBg: "bg-gray-100", chipText: "text-gray-500" };
                   return (
                     <SortableRow key={phase.id} id={phase.id}>
                       {({ handleListeners }) => (
-                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <div className="relative bg-white rounded-xl border border-gray-200 overflow-hidden transition-all hover:shadow-md hover:border-gray-300">
+                      {/* Status rail — color del estado en el borde izquierdo, escaneable al
+                          recorrer el roadmap sin tener que leer cada chip individual */}
+                      <div className={`absolute left-0 top-0 bottom-0 w-1 ${statusVisual.rail}`} aria-hidden="true" />
                       {/* Phase header */}
                       <div
-                        className="flex items-start gap-2 sm:gap-3 px-3 sm:px-5 py-3 sm:py-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                        className="flex items-start gap-2 sm:gap-3 px-3 sm:px-5 py-3 sm:py-4 cursor-pointer hover:bg-gray-50/60 transition-colors"
                         onClick={() => togglePhase(phase.id)}
                       >
                         {/* Drag handle (long-press on mobile, click+drag on desktop) */}
                         <button
                           {...(handleListeners || {})}
                           onClick={(e) => e.stopPropagation()}
-                          className="mt-1 shrink-0 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing touch-none"
+                          className="mt-1 shrink-0 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing touch-none transition-colors"
                           aria-label="Reordenar fase"
                         >
                           <GripVertical className="w-4 h-4" />
                         </button>
                         <div className="mt-1 shrink-0">
-                          {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                          <ChevronRight className={`w-4 h-4 text-gray-400 transition-transform duration-200 ${isExpanded ? "rotate-90" : ""}`} />
                         </div>
                         <div className="flex-1 min-w-0" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-[10px] sm:text-xs font-semibold text-gray-400">FASE {idx + 1}</span>
+                            <span className={`inline-flex items-center justify-center min-w-[42px] px-1.5 py-0.5 text-[10px] sm:text-[11px] font-bold rounded ${statusVisual.chipBg} ${statusVisual.chipText} tracking-wide`}>FASE {idx + 1}</span>
                             <h3 className="font-medium text-gray-900 break-words">
                               <EditableText
                                 value={phase.name}
@@ -1349,7 +1434,7 @@ export default function AdminProjectDetail() {
                           {/* Mobile: compact progress + status under metadata */}
                           <div className="flex items-center gap-2 mt-2 sm:hidden">
                             <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                              <div className="h-full bg-[#2FA4A9] rounded-full transition-all" style={{ width: `${phaseProgress}%` }} />
+                              <div className={`h-full ${statusVisual.bar} rounded-full transition-all duration-500`} style={{ width: `${phaseProgress}%` }} />
                             </div>
                             <span className="text-[11px] text-gray-500 font-medium tabular-nums w-9 text-right">{phaseProgress}%</span>
                             <Select
@@ -1370,7 +1455,7 @@ export default function AdminProjectDetail() {
                         {/* Desktop: progress + status inline at right */}
                         <div className="hidden sm:flex items-center gap-3 shrink-0">
                           <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                            <div className="h-full bg-[#2FA4A9] rounded-full" style={{ width: `${phaseProgress}%` }} />
+                            <div className={`h-full ${statusVisual.bar} rounded-full transition-all duration-500`} style={{ width: `${phaseProgress}%` }} />
                           </div>
                           <span className="text-xs text-gray-400 w-8 text-right tabular-nums">{phaseProgress}%</span>
                           <Select
@@ -2584,8 +2669,14 @@ export default function AdminProjectDetail() {
                   );
                 })}
               </div>
-              <Button size="sm" variant="outline" onClick={() => setShowAddDeliverable(true)}>
-                <Plus className="w-3.5 h-3.5 mr-1.5" /> Nueva entrega
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowAddDeliverable(true)}
+                className="group hover:border-gray-400 hover:bg-gray-50 hover:shadow-sm active:scale-[0.97] transition-all"
+              >
+                <Plus className="w-3.5 h-3.5 mr-1.5 group-hover:rotate-90 transition-transform" />
+                Nueva entrega
               </Button>
             </div>
 
@@ -2614,7 +2705,7 @@ export default function AdminProjectDetail() {
                         <div className="relative shrink-0 mt-0.5">
                           <button
                             onClick={(e) => { e.stopPropagation(); setDelivStatusMenu(delivStatusMenu === d.id ? null : d.id); }}
-                            className={`w-7 h-7 rounded-full ring-1 ring-inset flex items-center justify-center transition-all ${DELIV_STATUS_META[status].ringClass}`}
+                            className={`w-7 h-7 rounded-full ring-1 ring-inset flex items-center justify-center transition-all hover:scale-110 active:scale-95 ${DELIV_STATUS_META[status].ringClass}`}
                             title={`${DELIV_STATUS_META[status].label} — clic para cambiar`}
                           >
                             <StatusIcon className={`w-3.5 h-3.5 ${DELIV_STATUS_META[status].iconClass}`} strokeWidth={2.25} />
@@ -2622,7 +2713,7 @@ export default function AdminProjectDetail() {
                           {delivStatusMenu === d.id && (
                             <>
                               <div className="fixed inset-0 z-10" onClick={() => setDelivStatusMenu(null)} />
-                              <div className="absolute left-0 top-9 z-20 w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+                              <div className="absolute left-0 top-9 z-20 w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-1 animate-in fade-in-0 zoom-in-95 slide-in-from-top-1 duration-150">
                                 {STATUS_ORDER.map(s => {
                                   const M = DELIV_STATUS_META[s];
                                   const Ico = M.icon;
@@ -3538,16 +3629,48 @@ export default function AdminProjectDetail() {
             </DialogTitle>
           </DialogHeader>
 
-          {/* Step indicator (hidden in terminal warning state) */}
-          {aiPhaseStep !== "repo-failed" && (
-            <div className="flex items-center gap-2 text-[11px] text-gray-400 pt-1">
-              <span className={aiPhaseStep === "brief" ? "text-[#2FA4A9] font-semibold" : ""}>1. Brief</span>
-              <span>›</span>
-              <span className={aiPhaseStep === "questions" ? "text-[#2FA4A9] font-semibold" : ""}>2. Preguntas</span>
-              <span>›</span>
-              <span className={aiPhaseStep === "generating" ? "text-[#2FA4A9] font-semibold" : ""}>3. Generación</span>
-            </div>
-          )}
+          {/* Step indicator — circular dots con barra conectora.
+              Past steps quedan llenas, current con ring teal pulsante,
+              future en gris. Patron estandar de wizards (Linear, Notion). */}
+          {aiPhaseStep !== "repo-failed" && (() => {
+            const steps = [
+              { key: "brief",      label: "Brief" },
+              { key: "questions",  label: "Preguntas" },
+              { key: "generating", label: "Generación" },
+            ] as const;
+            const currentIdx = steps.findIndex(s => s.key === aiPhaseStep);
+            return (
+              <div className="flex items-center gap-1 pt-1 pb-1">
+                {steps.map((s, i) => {
+                  const isPast = i < currentIdx;
+                  const isCurrent = i === currentIdx;
+                  return (
+                    <div key={s.key} className="flex items-center gap-1 flex-1">
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div
+                          className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold transition-all ${
+                            isPast
+                              ? "bg-[#2FA4A9] text-white"
+                              : isCurrent
+                                ? "bg-[#2FA4A9] text-white ring-4 ring-[#2FA4A9]/20 animate-pulse"
+                                : "bg-gray-100 text-gray-400"
+                          }`}
+                        >
+                          {isPast ? <CheckCircle2 className="w-3.5 h-3.5" /> : i + 1}
+                        </div>
+                        <span className={`text-[11px] font-medium ${isCurrent ? "text-[#2FA4A9]" : isPast ? "text-gray-700" : "text-gray-400"}`}>
+                          {s.label}
+                        </span>
+                      </div>
+                      {i < steps.length - 1 && (
+                        <div className={`flex-1 h-px ${isPast ? "bg-[#2FA4A9]" : "bg-gray-200"} transition-colors`} />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            );
+          })()}
 
           {aiPhaseStep === "brief" && (
             <div className="space-y-4 pt-2">
@@ -3620,10 +3743,19 @@ export default function AdminProjectDetail() {
                   });
                 }}
                 disabled={clarifyBriefMut.isPending || aiPhaseForm.brief.trim().length < 20}
-                className="w-full bg-[#2FA4A9] hover:bg-[#238b8f] gap-2"
+                className="group w-full bg-[#2FA4A9] hover:bg-[#238b8f] hover:shadow-md active:scale-[0.99] transition-all gap-2"
               >
-                <Sparkles className="w-4 h-4" />
-                {clarifyBriefMut.isPending ? "Analizando brief…" : "Continuar — Claude hará preguntas"}
+                {clarifyBriefMut.isPending ? (
+                  <>
+                    <RefreshCw className="w-4 h-4 animate-spin" />
+                    Analizando brief…
+                  </>
+                ) : (
+                  <>
+                    <Sparkles className="w-4 h-4 group-hover:scale-110 group-hover:rotate-12 transition-transform" />
+                    Continuar — Claude hará preguntas
+                  </>
+                )}
               </Button>
             </div>
           )}
@@ -3719,44 +3851,71 @@ export default function AdminProjectDetail() {
 
           {aiPhaseStep === "generating" && (
             <div className="space-y-4 pt-2">
-              <p className="text-xs text-gray-500">Claude está construyendo el plan. Esto suele tomar 15-30 segundos.</p>
+              <p className="text-xs text-gray-500">Claude está construyendo el plan. Esto suele tomar 15–30 segundos.</p>
               <div className="space-y-2">
                 {(() => {
                   const hasRepo = !!(aiPhaseForm.githubRepoUrl || project?.githubRepoUrl);
                   const steps = [
-                    ...(hasRepo ? [{ id: 1, label: "Leyendo repositorio en GitHub", model: "fetch" }] : []),
-                    { id: 2, label: "Diseñando fases con Claude Sonnet 4.6", model: "Sonnet" },
-                    { id: 3, label: "Distribuyendo tareas con Claude Haiku 4.5", model: "Haiku" },
+                    ...(hasRepo ? [{ id: 1, label: "Leyendo repositorio en GitHub", hint: "Lee README, schema, endpoints y commits" }] : []),
+                    { id: 2, label: "Diseñando fases con Claude Sonnet", hint: "Detecta qué está hecho vs. pendiente" },
+                    { id: 3, label: "Distribuyendo tareas y entregables", hint: "4–8 tareas por fase + dependencias" },
                   ];
-                  return steps.map((s) => {
+                  return steps.map((s, i) => {
                     const status = aiGenStep > s.id ? "done" : aiGenStep === s.id ? "running" : "pending";
                     return (
-                      <div key={s.id} className={`flex items-center gap-3 p-3 rounded-lg border ${
-                        status === "done" ? "border-emerald-200 bg-emerald-50" :
-                        status === "running" ? "border-[#2FA4A9]/30 bg-[#2FA4A9]/5" :
-                        "border-gray-200 bg-gray-50"
-                      }`}>
-                        <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 ${
+                      <div
+                        key={s.id}
+                        className={`flex items-start gap-3 p-3 rounded-lg border transition-all duration-300 ${
+                          status === "done" ? "border-emerald-200 bg-emerald-50" :
+                          status === "running" ? "border-[#2FA4A9]/40 bg-[#2FA4A9]/5 shadow-sm scale-[1.01]" :
+                          "border-gray-200 bg-gray-50/50"
+                        }`}
+                        style={{ animationDelay: `${i * 100}ms` }}
+                      >
+                        <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 transition-all ${
                           status === "done" ? "bg-emerald-500 text-white" :
-                          status === "running" ? "bg-[#2FA4A9] text-white animate-pulse" :
-                          "bg-gray-300 text-white"
+                          status === "running" ? "bg-[#2FA4A9] text-white ring-4 ring-[#2FA4A9]/20" :
+                          "bg-gray-200 text-gray-400"
                         }`}>
-                          {status === "done" ? <CheckCircle2 className="w-3 h-3" /> : <Sparkles className="w-3 h-3" />}
+                          {status === "done" ? (
+                            <CheckCircle2 className="w-4 h-4" />
+                          ) : status === "running" ? (
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Circle className="w-3.5 h-3.5" />
+                          )}
                         </div>
-                        <span className={`text-sm ${
-                          status === "done" ? "text-emerald-700" :
-                          status === "running" ? "text-gray-900 font-medium" :
-                          "text-gray-400"
-                        }`}>
-                          {s.label}
-                        </span>
+                        <div className="flex-1 min-w-0">
+                          <p className={`text-sm leading-tight ${
+                            status === "done" ? "text-emerald-700 font-medium" :
+                            status === "running" ? "text-gray-900 font-semibold" :
+                            "text-gray-400"
+                          }`}>
+                            {s.label}
+                          </p>
+                          {s.hint && (
+                            <p className={`text-[11px] mt-0.5 ${
+                              status === "running" ? "text-gray-600" : "text-gray-400"
+                            }`}>
+                              {s.hint}
+                            </p>
+                          )}
+                        </div>
+                        {status === "running" && (
+                          <span className="text-[10px] font-bold text-[#2FA4A9] uppercase tracking-wider animate-pulse">
+                            En curso
+                          </span>
+                        )}
                       </div>
                     );
                   });
                 })()}
               </div>
               {generatePhasesAIMut.isPending && (
-                <p className="text-[11px] text-gray-400 text-center">Trabajando… no cierres esta ventana.</p>
+                <div className="flex items-center justify-center gap-2 text-[11px] text-gray-400">
+                  <RefreshCw className="w-3 h-3 animate-spin" />
+                  <span>Trabajando… no cierres esta ventana.</span>
+                </div>
               )}
             </div>
           )}
