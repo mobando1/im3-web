@@ -5284,7 +5284,8 @@ ${urls}
       let repoContext: string | null = null;
       const repoToRead = (githubRepoUrl || "").trim() || project.githubRepoUrl;
       if (repoToRead) {
-        try { repoContext = await fetchRepoContext(repoToRead); }
+        const adminUser = req.user as { githubAccessToken?: string } | undefined;
+        try { repoContext = await fetchRepoContext(repoToRead, adminUser?.githubAccessToken); }
         catch (err) { log(`clarify-brief: fetchRepoContext failed: ${err}`); }
       }
 
@@ -5371,13 +5372,15 @@ Responde SOLO con un JSON válido, sin markdown:
       let repoContext: string | null = null;
       const repoToRead = cleanRepoUrl || project.githubRepoUrl;
       if (repoToRead) {
-        log(`generate-phases: attempting to fetch repo context for ${repoToRead}`);
+        const adminUser = req.user as { githubAccessToken?: string } | undefined;
+        const tokenSource = adminUser?.githubAccessToken ? "OAuth token" : (process.env.GITHUB_TOKEN ? "fallback PAT" : "anonymous");
+        log(`generate-phases: attempting to fetch repo context for ${repoToRead} using ${tokenSource}`);
         try {
-          repoContext = await fetchRepoContext(repoToRead);
+          repoContext = await fetchRepoContext(repoToRead, adminUser?.githubAccessToken);
           if (repoContext) {
             log(`generate-phases: repo loaded — ${repoContext.length} chars from ${repoToRead}`);
           } else {
-            log(`generate-phases: fetchRepoContext returned null for ${repoToRead} (private/inaccessible/empty)`);
+            log(`generate-phases: fetchRepoContext returned null for ${repoToRead} (private/inaccessible/empty) — try reconnecting GitHub if this is unexpected`);
           }
         }
         catch (err) { log(`generate-phases: fetchRepoContext threw: ${err}`); }
