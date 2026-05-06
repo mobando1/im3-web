@@ -7879,8 +7879,82 @@ Responde SOLO con un JSON válido, sin markdown:
     const entries = await db!.select().from(projectActivityEntries)
       .where(eq(projectActivityEntries.projectId, req.params.id as string))
       .orderBy(desc(projectActivityEntries.createdAt))
-      .limit(50);
+      .limit(200);
     res.json(entries);
+  });
+
+  // Admin: register manual activity entry (cambios de diseño, decisiones, refactors no commiteados, reuniones internas)
+  app.post("/api/admin/projects/:id/activity", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const projectId = req.params.id as string;
+      const summaryLevel1 = String(req.body?.summaryLevel1 || "").trim();
+      const summaryLevel2 = req.body?.summaryLevel2 ? String(req.body.summaryLevel2).trim() : null;
+      const summaryLevel3 = req.body?.summaryLevel3 ? String(req.body.summaryLevel3).trim() : null;
+      const category = String(req.body?.category || "feature");
+      const isSignificant = req.body?.isSignificant === true;
+      const phaseId = req.body?.phaseId ? String(req.body.phaseId) : null;
+
+      if (!summaryLevel1 || summaryLevel1.length < 3) {
+        return res.status(400).json({ message: "El título es requerido (mínimo 3 caracteres)" });
+      }
+      if (summaryLevel1.length > 300) {
+        return res.status(400).json({ message: "El título no puede exceder 300 caracteres" });
+      }
+      const validCategories = ["feature", "bugfix", "improvement", "infrastructure", "meeting", "milestone"];
+      if (!validCategories.includes(category)) {
+        return res.status(400).json({ message: "Categoría inválida" });
+      }
+
+      const [entry] = await db.insert(projectActivityEntries).values({
+        projectId,
+        phaseId,
+        source: "manual",
+        summaryLevel1,
+        summaryLevel2,
+        summaryLevel3,
+        category,
+        aiGenerated: false,
+        isSignificant,
+      }).returning();
+      res.json(entry);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // Admin: delete an activity entry
+  app.delete("/api/admin/projects/:id/activity/:entryId", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const projectId = req.params.id as string;
+      const entryId = req.params.entryId as string;
+      const result = await db.delete(projectActivityEntries)
+        .where(and(eq(projectActivityEntries.id, entryId), eq(projectActivityEntries.projectId, projectId)))
+        .returning();
+      if (!result.length) return res.status(404).json({ message: "Entrada no encontrada" });
+      res.json({ ok: true });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
+  });
+
+  // Admin: get weekly-summary messages history for a project
+  app.get("/api/admin/projects/:id/weekly-summaries", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const projectId = req.params.id as string;
+      const summaries = await db.select().from(projectMessages)
+        .where(and(eq(projectMessages.projectId, projectId), eq(projectMessages.senderName, "Resumen semanal")))
+        .orderBy(desc(projectMessages.createdAt))
+        .limit(20);
+      res.json(summaries);
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ error: message });
+    }
   });
 
   // ── Admin: Sessions CRUD ──

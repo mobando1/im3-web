@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useRef, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Copy, ExternalLink, Plus, Trash2, Send, Clock, CheckCircle2, Circle, AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Github, CalendarDays, BarChart3, Diamond, TrendingUp, Package, MessageSquare, Timer, Mic, FolderOpen, Lightbulb, FileText, Image, File, ThumbsUp, X, UserPlus, Users, RefreshCw, Mail, Sparkles, Pencil, Wrench, Building2, GripVertical } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Plus, Trash2, Send, Clock, CheckCircle2, Circle, AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Github, CalendarDays, BarChart3, Diamond, TrendingUp, Package, MessageSquare, Timer, Mic, FolderOpen, Lightbulb, FileText, Image, File, ThumbsUp, X, UserPlus, Users, RefreshCw, Mail, Sparkles, Pencil, Wrench, Building2, GripVertical, History, Bot } from "lucide-react";
 import { format, parseISO, differenceInDays, startOfMonth, endOfMonth, eachDayOfInterval, eachMonthOfInterval, isSameDay, isSameMonth, addMonths, subMonths, isWithinInterval } from "date-fns";
 import { es } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
@@ -143,6 +143,7 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const TAB_ICONS: Record<string, typeof Circle> = {
   Roadmap: BarChart3,
+  Actividad: History,
   Timeline: TrendingUp,
   Calendario: CalendarDays,
   Entregas: Package,
@@ -154,7 +155,63 @@ const TAB_ICONS: Record<string, typeof Circle> = {
   Config: Circle,
 };
 
-const tabs = ["Roadmap", "Timeline", "Calendario", "Entregas", "Horas", "Sesiones", "Archivos", "Ideas", "Mensajes", "Config"];
+const tabs = ["Roadmap", "Actividad", "Timeline", "Calendario", "Entregas", "Horas", "Sesiones", "Archivos", "Ideas", "Mensajes", "Config"];
+
+const ACTIVITY_CATEGORY_LABELS: Record<string, string> = {
+  feature: "Nueva funcionalidad",
+  bugfix: "Bug fix",
+  improvement: "Mejora",
+  infrastructure: "Infraestructura",
+  meeting: "Reunión",
+  milestone: "Hito",
+};
+
+const ACTIVITY_CATEGORY_COLORS: Record<string, string> = {
+  feature: "bg-emerald-100 text-emerald-700",
+  bugfix: "bg-red-100 text-red-700",
+  improvement: "bg-blue-100 text-blue-700",
+  infrastructure: "bg-purple-100 text-purple-700",
+  meeting: "bg-amber-100 text-amber-700",
+  milestone: "bg-pink-100 text-pink-700",
+};
+
+const ACTIVITY_SOURCE_META: Record<string, { label: string; icon: typeof Circle; color: string }> = {
+  github_webhook: { label: "GitHub", icon: Github,   color: "text-gray-700" },
+  manual:         { label: "Manual", icon: Pencil,   color: "text-blue-600" },
+  system:         { label: "Sistema", icon: Sparkles, color: "text-purple-600" },
+};
+
+type ActivityEntry = {
+  id: string;
+  projectId: string;
+  phaseId: string | null;
+  source: string;
+  commitShas: string[] | null;
+  summaryLevel1: string;
+  summaryLevel2: string | null;
+  summaryLevel3: string | null;
+  category: string;
+  aiGenerated: boolean;
+  isSignificant: boolean;
+  createdAt: string;
+};
+
+type WeeklySummaryMessage = {
+  id: string;
+  content: string;
+  createdAt: string;
+};
+
+function timeAgoEs(dateStr: string): string {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diff = (now.getTime() - d.getTime()) / 1000;
+  if (diff < 60) return "ahora";
+  if (diff < 3600) return `hace ${Math.floor(diff / 60)} min`;
+  if (diff < 86400) return `hace ${Math.floor(diff / 3600)}h`;
+  if (diff < 86400 * 7) return `hace ${Math.floor(diff / 86400)}d`;
+  return format(d, "d MMM yyyy", { locale: es });
+}
 
 type GithubRepo = {
   id: number;
@@ -292,20 +349,39 @@ function GitHubRepoSelector({ projectId, currentRepo, aiEnabled, onConnected }: 
             <p className="text-xs text-emerald-600 truncate">{currentRepo}</p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 flex-wrap">
           <Button variant="outline" size="sm" onClick={async () => {
             try {
-              await apiRequest("POST", `/api/admin/projects/${projectId}/analyze-commits`);
+              const res = await apiRequest("POST", `/api/admin/projects/${projectId}/analyze`);
+              const data = await res.json().catch(() => ({}));
               onConnected();
-              toast({ title: "Commits analizados" });
-            } catch { toast({ title: "Error analizando", variant: "destructive" }); }
-          }}>Analizar commits</Button>
+              toast({
+                title: data?.results > 0 ? `${data.results} entrada(s) generada(s)` : "Análisis completado",
+                description: data?.message || "Mira el tab Actividad para ver los resúmenes",
+              });
+            } catch (err: any) {
+              toast({ title: "Error analizando", description: err?.message, variant: "destructive" });
+            }
+          }}>
+            <Bot className="w-3.5 h-3.5 mr-1.5" />
+            Analizar commits
+          </Button>
           <Button variant="outline" size="sm" onClick={async () => {
             try {
-              await apiRequest("POST", `/api/admin/projects/${projectId}/weekly-summary`);
-              toast({ title: "Resumen semanal generado" });
-            } catch { toast({ title: "Error generando resumen", variant: "destructive" }); }
-          }}>Resumen semanal</Button>
+              const res = await apiRequest("POST", `/api/admin/projects/${projectId}/weekly-summary`);
+              const data = await res.json().catch(() => ({}));
+              onConnected();
+              toast({ title: "Resumen semanal generado", description: "Disponible en el tab Actividad" });
+              if (data?.summary) {
+                window.dispatchEvent(new CustomEvent("im3:show-weekly-summary", { detail: { summary: data.summary } }));
+              }
+            } catch (err: any) {
+              toast({ title: "Error generando resumen", description: err?.message, variant: "destructive" });
+            }
+          }}>
+            <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+            Resumen semanal
+          </Button>
         </div>
       </div>
     );
@@ -431,6 +507,21 @@ export default function AdminProjectDetail() {
   // Time log creation
   const [showAddTime, setShowAddTime] = useState(false);
   const [timeForm, setTimeForm] = useState({ description: "", hours: "", date: new Date().toISOString().split("T")[0], category: "development" });
+
+  // Activity feed (timeline de cambios — commits, manual entries, sistema)
+  const [showManualActivity, setShowManualActivity] = useState(false);
+  const [manualActivityForm, setManualActivityForm] = useState({
+    summaryLevel1: "",
+    summaryLevel2: "",
+    summaryLevel3: "",
+    category: "feature",
+    phaseId: "",
+    isSignificant: false,
+  });
+  const [activityFilter, setActivityFilter] = useState<string>("all"); // all | <category> | manual | github_webhook
+  const [expandedActivity, setExpandedActivity] = useState<Set<string>>(new Set());
+  const [showLevel3, setShowLevel3] = useState<Set<string>>(new Set());
+  const [weeklySummaryModal, setWeeklySummaryModal] = useState<{ open: boolean; summary: string | null; date?: string }>({ open: false, summary: null });
 
   // Messages
   const [msgContent, setMsgContent] = useState("");
@@ -763,6 +854,78 @@ export default function AdminProjectDetail() {
   const { data: sessions = [] } = useQuery<any[]>({ queryKey: [`/api/admin/projects/${params.id}/sessions`], enabled: activeTab === "Sesiones" });
   const { data: files = [] } = useQuery<any[]>({ queryKey: [`/api/admin/projects/${params.id}/files`], enabled: activeTab === "Archivos" });
   const { data: ideas = [] } = useQuery<any[]>({ queryKey: [`/api/admin/projects/${params.id}/ideas`], enabled: activeTab === "Ideas" });
+
+  // Activity feed
+  const { data: activityEntries = [], isLoading: activityLoading } = useQuery<ActivityEntry[]>({
+    queryKey: [`/api/admin/projects/${params.id}/activity`],
+    enabled: activeTab === "Actividad",
+  });
+  const { data: weeklySummaries = [] } = useQuery<WeeklySummaryMessage[]>({
+    queryKey: [`/api/admin/projects/${params.id}/weekly-summaries`],
+    enabled: activeTab === "Actividad",
+  });
+  const invalidateActivity = () => {
+    queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${params.id}/activity`] });
+    queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${params.id}/weekly-summaries`] });
+  };
+
+  const addManualActivityMut = useMutation({
+    mutationFn: async (data: Record<string, unknown>) => {
+      const res = await apiRequest("POST", `/api/admin/projects/${params.id}/activity`, data);
+      return res.json();
+    },
+    onSuccess: () => {
+      invalidateActivity();
+      setShowManualActivity(false);
+      setManualActivityForm({ summaryLevel1: "", summaryLevel2: "", summaryLevel3: "", category: "feature", phaseId: "", isSignificant: false });
+      toast({ title: "Actividad registrada" });
+    },
+    onError: (err: any) => toast({ title: "Error", description: err?.message || "No se pudo registrar", variant: "destructive" }),
+  });
+
+  const deleteActivityMut = useMutation({
+    mutationFn: async (entryId: string) => { await apiRequest("DELETE", `/api/admin/projects/${params.id}/activity/${entryId}`); },
+    onSuccess: () => { invalidateActivity(); toast({ title: "Entrada eliminada" }); },
+  });
+
+  const analyzeCommitsMut = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/projects/${params.id}/analyze`);
+      return res.json() as Promise<{ message: string; results: number }>;
+    },
+    onSuccess: (data) => {
+      invalidateActivity();
+      toast({
+        title: data.results > 0 ? `${data.results} entrada(s) generada(s)` : "Análisis completado",
+        description: data.message,
+      });
+    },
+    onError: (err: any) => toast({ title: "Error analizando commits", description: err?.message, variant: "destructive" }),
+  });
+
+  const generateWeeklySummaryMut = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/projects/${params.id}/weekly-summary`);
+      return res.json() as Promise<{ message: string; summary: string }>;
+    },
+    onSuccess: (data) => {
+      invalidateActivity();
+      setWeeklySummaryModal({ open: true, summary: data.summary, date: new Date().toISOString() });
+    },
+    onError: (err: any) => toast({ title: "No se pudo generar resumen", description: err?.message || "Sin actividad esta semana", variant: "destructive" }),
+  });
+
+  // Listener para abrir el modal del resumen cuando se dispara desde GitHubRepoSelector
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const ce = e as CustomEvent<{ summary: string }>;
+      if (ce.detail?.summary) {
+        setWeeklySummaryModal({ open: true, summary: ce.detail.summary, date: new Date().toISOString() });
+      }
+    };
+    window.addEventListener("im3:show-weekly-summary", handler);
+    return () => window.removeEventListener("im3:show-weekly-summary", handler);
+  }, []);
 
   const invalidateSessions = () => queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${params.id}/sessions`] });
   const invalidateFiles = () => queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${params.id}/files`] });
@@ -1496,6 +1659,288 @@ export default function AdminProjectDetail() {
             </Dialog>
           </div>
         )}
+
+        {/* ── ACTIVIDAD (feed de cambios) ── */}
+        {activeTab === "Actividad" && (() => {
+          const filteredEntries = activityEntries.filter(e => {
+            if (activityFilter === "all") return true;
+            if (activityFilter === "manual" || activityFilter === "github_webhook" || activityFilter === "system") {
+              return e.source === activityFilter;
+            }
+            return e.category === activityFilter;
+          });
+          const counts = {
+            all: activityEntries.length,
+            manual: activityEntries.filter(e => e.source === "manual").length,
+            github: activityEntries.filter(e => e.source === "github_webhook").length,
+          };
+          const grouped: Array<[string, ActivityEntry[]]> = [];
+          let currentDate = "";
+          let currentBucket: ActivityEntry[] = [];
+          for (const entry of filteredEntries) {
+            const dateKey = format(parseISO(entry.createdAt), "yyyy-MM-dd");
+            if (dateKey !== currentDate) {
+              if (currentBucket.length) grouped.push([currentDate, currentBucket]);
+              currentDate = dateKey;
+              currentBucket = [];
+            }
+            currentBucket.push(entry);
+          }
+          if (currentBucket.length) grouped.push([currentDate, currentBucket]);
+
+          const formatGroupDate = (dateKey: string) => {
+            const d = parseISO(dateKey);
+            const today = new Date();
+            const yesterday = new Date(); yesterday.setDate(today.getDate() - 1);
+            if (format(today, "yyyy-MM-dd") === dateKey) return "Hoy";
+            if (format(yesterday, "yyyy-MM-dd") === dateKey) return "Ayer";
+            return format(d, "EEEE d 'de' MMMM, yyyy", { locale: es });
+          };
+
+          const filterChips: Array<{ key: string; label: string; count?: number }> = [
+            { key: "all", label: "Todas", count: counts.all },
+            { key: "github_webhook", label: "GitHub", count: counts.github },
+            { key: "manual", label: "Manuales", count: counts.manual },
+            { key: "feature", label: "Features" },
+            { key: "bugfix", label: "Bugs" },
+            { key: "improvement", label: "Mejoras" },
+            { key: "infrastructure", label: "Infra" },
+            { key: "meeting", label: "Reuniones" },
+            { key: "milestone", label: "Hitos" },
+          ];
+
+          return (
+            <div className="space-y-4">
+              {/* Header con acciones */}
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="text-base font-semibold text-gray-900">Bitácora del proyecto</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    Trazabilidad completa: commits analizados con IA, cambios de diseño, decisiones y notas internas.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {project.githubRepoUrl && project.aiTrackingEnabled && (
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => analyzeCommitsMut.mutate()}
+                      disabled={analyzeCommitsMut.isPending}
+                    >
+                      <Bot className="w-3.5 h-3.5 mr-1.5" />
+                      {analyzeCommitsMut.isPending ? "Analizando..." : "Analizar commits"}
+                    </Button>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => generateWeeklySummaryMut.mutate()}
+                    disabled={generateWeeklySummaryMut.isPending}
+                  >
+                    <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                    {generateWeeklySummaryMut.isPending ? "Generando..." : "Resumen semanal"}
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="bg-[#2FA4A9] hover:bg-[#238b8f]"
+                    onClick={() => setShowManualActivity(true)}
+                  >
+                    <Plus className="w-3.5 h-3.5 mr-1.5" />
+                    Registrar actividad
+                  </Button>
+                </div>
+              </div>
+
+              {/* Banner: AI tracking off */}
+              {!project.aiTrackingEnabled && (
+                <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center gap-3">
+                  <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs text-amber-800 font-medium">Análisis automático de commits desactivado</p>
+                    <p className="text-[11px] text-amber-700 mt-0.5">
+                      Conecta un repo en <button className="underline" onClick={() => setActiveTab("Config")}>Config</button> para que el cron diario (6 AM Bogotá) analice commits y los publique aquí.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Filtros */}
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 -mx-1 px-1">
+                {filterChips.map(chip => {
+                  const active = activityFilter === chip.key;
+                  return (
+                    <button
+                      key={chip.key}
+                      onClick={() => setActivityFilter(chip.key)}
+                      className={`text-xs px-2.5 py-1 rounded-full font-medium transition-all flex items-center gap-1.5 whitespace-nowrap shrink-0 ${
+                        active ? "bg-gray-900 text-white" : "bg-gray-100 text-gray-600 hover:bg-gray-200"
+                      }`}
+                    >
+                      <span>{chip.label}</span>
+                      {chip.count !== undefined && (
+                        <span className={`text-[10px] tabular-nums ${active ? "text-gray-300" : "text-gray-400"}`}>{chip.count}</span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Resúmenes semanales — destacados */}
+              {weeklySummaries.length > 0 && activityFilter === "all" && (
+                <div className="bg-gradient-to-br from-[#2FA4A9]/5 to-blue-50 border border-[#2FA4A9]/20 rounded-xl p-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sparkles className="w-4 h-4 text-[#2FA4A9]" />
+                    <h4 className="text-sm font-semibold text-gray-800">Resúmenes semanales</h4>
+                    <span className="text-[10px] text-gray-400 ml-auto">{weeklySummaries.length} generado(s)</span>
+                  </div>
+                  <div className="space-y-2">
+                    {weeklySummaries.slice(0, 3).map(s => (
+                      <button
+                        key={s.id}
+                        onClick={() => setWeeklySummaryModal({ open: true, summary: s.content, date: s.createdAt })}
+                        className="w-full text-left bg-white rounded-lg p-3 hover:shadow-sm border border-gray-100 hover:border-[#2FA4A9]/40 transition-all group"
+                      >
+                        <div className="flex items-center justify-between mb-1">
+                          <p className="text-[11px] text-gray-500 font-medium">
+                            {format(parseISO(s.createdAt), "EEEE d MMM, yyyy", { locale: es })}
+                          </p>
+                          <ChevronRight className="w-3.5 h-3.5 text-gray-300 group-hover:text-[#2FA4A9] transition-colors" />
+                        </div>
+                        <p className="text-xs text-gray-700 line-clamp-2">{s.content.slice(0, 200)}{s.content.length > 200 ? "..." : ""}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Feed cronológico */}
+              {activityLoading ? (
+                <p className="text-center text-sm text-gray-400 py-12">Cargando bitácora...</p>
+              ) : grouped.length === 0 ? (
+                <div className="bg-white rounded-xl border border-gray-200 border-dashed py-16 px-6 text-center">
+                  <History className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                  <p className="text-sm font-medium text-gray-600 mb-1">Sin actividad registrada todavía</p>
+                  <p className="text-xs text-gray-400 mb-4 max-w-sm mx-auto">
+                    Cuando hagas commits al repo conectado, el cron diario los analizará y aparecerán aquí.
+                    También puedes registrar cambios de diseño, decisiones o reuniones manualmente.
+                  </p>
+                  <Button size="sm" className="bg-[#2FA4A9] hover:bg-[#238b8f]" onClick={() => setShowManualActivity(true)}>
+                    <Plus className="w-3.5 h-3.5 mr-1.5" />
+                    Registrar primera entrada
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-6">
+                  {grouped.map(([dateKey, entries]) => (
+                    <div key={dateKey}>
+                      <div className="sticky top-0 z-10 bg-gray-50 -mx-4 px-4 sm:mx-0 sm:px-3 py-1.5 mb-2 rounded-md">
+                        <p className="text-[11px] font-bold text-gray-500 uppercase tracking-wider">
+                          {formatGroupDate(dateKey)}
+                          <span className="ml-2 text-[10px] font-normal text-gray-400 normal-case">{entries.length} entrada(s)</span>
+                        </p>
+                      </div>
+                      <div className="space-y-2">
+                        {entries.map(entry => {
+                          const isExpanded = expandedActivity.has(entry.id);
+                          const showFullDetail = showLevel3.has(entry.id);
+                          const sourceMeta = ACTIVITY_SOURCE_META[entry.source] || ACTIVITY_SOURCE_META.system;
+                          const SourceIcon = sourceMeta.icon;
+                          return (
+                            <div
+                              key={entry.id}
+                              className={`bg-white rounded-xl border ${entry.isSignificant ? "border-[#2FA4A9]/40 shadow-sm" : "border-gray-200"} overflow-hidden group`}
+                            >
+                              <div
+                                className="flex items-start gap-3 p-3 cursor-pointer hover:bg-gray-50 transition-colors"
+                                onClick={() => {
+                                  setExpandedActivity(prev => {
+                                    const next = new Set(prev);
+                                    next.has(entry.id) ? next.delete(entry.id) : next.add(entry.id);
+                                    return next;
+                                  });
+                                }}
+                              >
+                                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 mt-0.5 ${ACTIVITY_CATEGORY_COLORS[entry.category] || "bg-gray-100 text-gray-600"}`}>
+                                  {ACTIVITY_CATEGORY_LABELS[entry.category] || entry.category}
+                                </span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm text-gray-800 leading-snug">{entry.summaryLevel1}</p>
+                                  <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                                    <span className={`inline-flex items-center gap-1 text-[10px] ${sourceMeta.color}`}>
+                                      <SourceIcon className="w-3 h-3" />
+                                      {sourceMeta.label}
+                                    </span>
+                                    {entry.aiGenerated && (
+                                      <span className="inline-flex items-center gap-1 text-[10px] text-purple-600">
+                                        <Bot className="w-3 h-3" /> IA
+                                      </span>
+                                    )}
+                                    {entry.isSignificant && (
+                                      <span className="text-[10px] text-[#2FA4A9] font-medium">★ Significativo</span>
+                                    )}
+                                    {entry.commitShas && entry.commitShas.length > 0 && (
+                                      <span className="text-[10px] text-gray-400">
+                                        {entry.commitShas.length} commit{entry.commitShas.length !== 1 ? "s" : ""}
+                                      </span>
+                                    )}
+                                    <span className="text-[10px] text-gray-400 ml-auto">{timeAgoEs(entry.createdAt)}</span>
+                                  </div>
+                                </div>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    if (confirm("¿Eliminar esta entrada? No se puede deshacer.")) {
+                                      deleteActivityMut.mutate(entry.id);
+                                    }
+                                  }}
+                                  className="opacity-0 group-hover:opacity-100 p-1 rounded text-gray-300 hover:text-red-500 hover:bg-red-50 transition-all shrink-0"
+                                  title="Eliminar entrada"
+                                  aria-label="Eliminar"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+                              {isExpanded && (entry.summaryLevel2 || entry.summaryLevel3) && (
+                                <div className="border-t border-gray-100 p-3 bg-gray-50/50 animate-in fade-in-0 slide-in-from-top-1 duration-200">
+                                  {entry.summaryLevel2 && (
+                                    <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">{entry.summaryLevel2}</p>
+                                  )}
+                                  {entry.summaryLevel3 && (
+                                    <>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setShowLevel3(prev => {
+                                            const next = new Set(prev);
+                                            next.has(entry.id) ? next.delete(entry.id) : next.add(entry.id);
+                                            return next;
+                                          });
+                                        }}
+                                        className="text-xs text-[#2FA4A9] hover:underline mt-2 flex items-center gap-1"
+                                      >
+                                        {showFullDetail ? "Ocultar detalle técnico" : "Ver detalle técnico"}
+                                        <ChevronDown className={`w-3 h-3 transition-transform ${showFullDetail ? "rotate-180" : ""}`} />
+                                      </button>
+                                      {showFullDetail && (
+                                        <div className="mt-2 text-xs text-gray-500 leading-relaxed whitespace-pre-wrap bg-white rounded-lg p-3 border border-gray-100">
+                                          {entry.summaryLevel3}
+                                        </div>
+                                      )}
+                                    </>
+                                  )}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── TIMELINE (Gantt) ── */}
         {activeTab === "Timeline" && (() => {
@@ -3435,6 +3880,157 @@ export default function AdminProjectDetail() {
             >
               {updateProjectInfoMut.isPending ? "Guardando…" : "Guardar cambios"}
             </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: registrar actividad manual */}
+      <Dialog open={showManualActivity} onOpenChange={setShowManualActivity}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Registrar actividad</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3 pt-2">
+            <p className="text-xs text-gray-500">
+              Captura cambios que no son commits: diseño, decisiones, refactors, reuniones internas, cambios de estrategia.
+            </p>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Título <span className="text-red-500">*</span></Label>
+              <Input
+                value={manualActivityForm.summaryLevel1}
+                onChange={e => setManualActivityForm(f => ({ ...f, summaryLevel1: e.target.value }))}
+                placeholder="Ej: Rediseño completo del flujo de onboarding"
+                maxLength={300}
+              />
+              <p className="text-[10px] text-gray-400 text-right">{manualActivityForm.summaryLevel1.length}/300</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1.5">
+                <Label className="text-xs">Categoría</Label>
+                <Select
+                  value={manualActivityForm.category}
+                  onValueChange={v => setManualActivityForm(f => ({ ...f, category: v }))}
+                >
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="feature">Nueva funcionalidad</SelectItem>
+                    <SelectItem value="bugfix">Bug fix</SelectItem>
+                    <SelectItem value="improvement">Mejora</SelectItem>
+                    <SelectItem value="infrastructure">Infraestructura</SelectItem>
+                    <SelectItem value="meeting">Reunión</SelectItem>
+                    <SelectItem value="milestone">Hito</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-1.5">
+                <Label className="text-xs">Fase (opcional)</Label>
+                <Select
+                  value={manualActivityForm.phaseId || "_none"}
+                  onValueChange={v => setManualActivityForm(f => ({ ...f, phaseId: v === "_none" ? "" : v }))}
+                >
+                  <SelectTrigger><SelectValue placeholder="Sin fase" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="_none">Sin fase</SelectItem>
+                    {project.phases.map(p => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Descripción para el cliente (opcional)</Label>
+              <Textarea
+                value={manualActivityForm.summaryLevel2}
+                onChange={e => setManualActivityForm(f => ({ ...f, summaryLevel2: e.target.value }))}
+                placeholder="Explicación clara, sin jerga técnica. Qué cambió y por qué importa."
+                rows={3}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label className="text-xs">Detalle técnico (opcional)</Label>
+              <Textarea
+                value={manualActivityForm.summaryLevel3}
+                onChange={e => setManualActivityForm(f => ({ ...f, summaryLevel3: e.target.value }))}
+                placeholder="Implementación, decisiones técnicas, alternativas consideradas, problemas resueltos."
+                rows={4}
+              />
+            </div>
+            <label className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={manualActivityForm.isSignificant}
+                onChange={e => setManualActivityForm(f => ({ ...f, isSignificant: e.target.checked }))}
+                className="rounded border-gray-300 text-[#2FA4A9] focus:ring-[#2FA4A9]"
+              />
+              Marcar como cambio significativo (visible al cliente como destacado)
+            </label>
+            <div className="flex gap-2 pt-2">
+              <Button
+                variant="outline"
+                className="flex-1"
+                onClick={() => setShowManualActivity(false)}
+                disabled={addManualActivityMut.isPending}
+              >
+                Cancelar
+              </Button>
+              <Button
+                className="flex-1 bg-[#2FA4A9] hover:bg-[#238b8f]"
+                disabled={!manualActivityForm.summaryLevel1.trim() || addManualActivityMut.isPending}
+                onClick={() => {
+                  addManualActivityMut.mutate({
+                    summaryLevel1: manualActivityForm.summaryLevel1.trim(),
+                    summaryLevel2: manualActivityForm.summaryLevel2.trim() || null,
+                    summaryLevel3: manualActivityForm.summaryLevel3.trim() || null,
+                    category: manualActivityForm.category,
+                    phaseId: manualActivityForm.phaseId || null,
+                    isSignificant: manualActivityForm.isSignificant,
+                  });
+                }}
+              >
+                {addManualActivityMut.isPending ? "Guardando..." : "Registrar"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal: resumen semanal */}
+      <Dialog open={weeklySummaryModal.open} onOpenChange={(open) => { if (!open) setWeeklySummaryModal({ open: false, summary: null }); }}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-[#2FA4A9]" />
+              Resumen semanal
+            </DialogTitle>
+          </DialogHeader>
+          <div className="pt-2 space-y-3">
+            {weeklySummaryModal.date && (
+              <p className="text-xs text-gray-400">
+                Generado {format(parseISO(weeklySummaryModal.date), "EEEE d 'de' MMMM, yyyy 'a las' HH:mm", { locale: es })}
+              </p>
+            )}
+            <div className="bg-gradient-to-br from-[#2FA4A9]/5 to-blue-50 border border-[#2FA4A9]/20 rounded-xl p-4">
+              <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-wrap">{weeklySummaryModal.summary}</p>
+            </div>
+            <div className="flex items-center justify-between gap-2 pt-2">
+              <p className="text-[11px] text-gray-400">
+                Este resumen también queda guardado y visible para el cliente en su portal.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  if (weeklySummaryModal.summary) {
+                    navigator.clipboard.writeText(weeklySummaryModal.summary);
+                    toast({ title: "Resumen copiado al portapapeles" });
+                  }
+                }}
+              >
+                <Copy className="w-3.5 h-3.5 mr-1.5" />
+                Copiar
+              </Button>
+            </div>
           </div>
         </DialogContent>
       </Dialog>
