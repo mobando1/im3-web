@@ -280,6 +280,11 @@ export default function Portal() {
   const [reviewRating, setReviewRating] = useState(0);
   const [delivFilter, setDelivFilter] = useState<string>("all");
   const [timelineFilter, setTimelineFilter] = useState<string>("all");
+  const [timelineView, setTimelineView] = useState<"gantt" | "feed">(() => {
+    if (typeof window === "undefined") return "gantt";
+    return (localStorage.getItem("portal_timeline_view") as "gantt" | "feed") || "gantt";
+  });
+  useEffect(() => { try { localStorage.setItem("portal_timeline_view", timelineView); } catch {} }, [timelineView]);
   const [showIdeaForm, setShowIdeaForm] = useState(false);
   const [ideaTitle, setIdeaTitle] = useState("");
   const [ideaDesc, setIdeaDesc] = useState("");
@@ -758,49 +763,174 @@ export default function Portal() {
         {/* ── TIMELINE ── */}
         {activeSection === "Timeline" && (
           <div className="space-y-6">
-            {/* Category filters */}
-            {activityCategories.length > 1 && (
-              <div className="flex gap-1.5 overflow-x-auto">
+            {/* Toggle de vista */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="inline-flex bg-gray-100 rounded-lg p-0.5">
                 <button
-                  onClick={() => setTimelineFilter("all")}
-                  className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${
-                    timelineFilter === "all" ? "bg-[#2FA4A9] text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                  onClick={() => setTimelineView("gantt")}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    timelineView === "gantt" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
                   }`}
                 >
-                  Todas ({activityEntries.length})
+                  📊 Gantt
                 </button>
-                {activityCategories.map(cat => (
-                  <button
-                    key={cat}
-                    onClick={() => setTimelineFilter(cat)}
-                    className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${
-                      timelineFilter === cat ? "bg-[#2FA4A9] text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                    }`}
-                  >
-                    {CATEGORY_LABELS[cat] || cat} ({activityEntries.filter(e => e.category === cat).length})
-                  </button>
-                ))}
+                <button
+                  onClick={() => setTimelineView("feed")}
+                  className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                    timelineView === "feed" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  📜 Cronología
+                </button>
               </div>
-            )}
+            </div>
 
-            {Object.keys(activityByDay).length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-gray-400">No hay actividad registrada aún.</p>
-                <p className="text-xs text-gray-300 mt-1">Cuando el equipo empiece a trabajar, aquí verás todo lo que se hace.</p>
-              </div>
-            ) : (
-              Object.entries(activityByDay).sort(([a], [b]) => b.localeCompare(a)).map(([day, entries]) => (
-                <div key={day}>
-                  <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3 sticky top-[180px] bg-gray-50 py-1 z-10">
-                    {formatWeekday(day)}
-                  </h3>
-                  <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-1">
-                    {entries.map(entry => (
-                      <ActivityItem key={entry.id} entry={entry} />
-                    ))}
+            {/* Vista Gantt — barras de fases sobre eje temporal */}
+            {timelineView === "gantt" && (() => {
+              const allDates: number[] = [];
+              phases.forEach(phase => {
+                if (phase.startDate) allDates.push(new Date(phase.startDate).getTime());
+                if (phase.endDate) allDates.push(new Date(phase.endDate).getTime());
+                phase.tasks.forEach(t => { if (t.dueDate) allDates.push(new Date(t.dueDate).getTime()); });
+              });
+              if (allDates.length < 2) {
+                return (
+                  <div className="text-center py-16 bg-white rounded-xl border border-gray-200">
+                    <p className="text-gray-400 text-sm font-medium mb-1">Timeline visual no disponible aún</p>
+                    <p className="text-gray-300 text-xs">Las fases del proyecto aún no tienen fechas asignadas. Mientras tanto, mira la vista Cronología →</p>
+                  </div>
+                );
+              }
+              const minTime = Math.min(...allDates);
+              const maxTime = Math.max(...allDates);
+              const totalMs = Math.max(maxTime - minTime, 86400000);
+              const today = Date.now();
+              const todayPos = Math.max(0, Math.min(100, ((today - minTime) / totalMs) * 100));
+              const PHASE_COLORS = ["#2FA4A9", "#3B82F6", "#8B5CF6", "#D97706", "#EC4899", "#10B981"];
+              const getPos = (dateStr: string | null) => dateStr ? Math.max(0, Math.min(100, ((new Date(dateStr).getTime() - minTime) / totalMs) * 100)) : null;
+
+              // Generar ticks mensuales
+              const months: Date[] = [];
+              const cursor = new Date(minTime);
+              cursor.setDate(1);
+              while (cursor.getTime() <= maxTime) {
+                months.push(new Date(cursor));
+                cursor.setMonth(cursor.getMonth() + 1);
+              }
+              const monthName = (d: Date) => d.toLocaleDateString("es-CO", { month: "short", year: d.getMonth() === 0 ? "numeric" : undefined });
+
+              return (
+                <div className="bg-white rounded-xl border border-gray-200 p-5 overflow-x-auto">
+                  <div className="relative min-w-[560px]">
+                    {/* Eje de meses */}
+                    <div className="relative h-10 mb-4">
+                      <div className="absolute bottom-0 left-0 right-0 h-px bg-gray-200" />
+                      {months.map((month, i) => {
+                        const pos = Math.max(0, Math.min(100, ((month.getTime() - minTime) / totalMs) * 100));
+                        const isJan = month.getMonth() === 0;
+                        return (
+                          <div key={i} className="absolute bottom-0" style={{ left: `${pos}%` }}>
+                            <div className="absolute bottom-0 w-px h-3 bg-gray-300" />
+                            <div className="absolute bottom-[-18px] -translate-x-1/2 whitespace-nowrap">
+                              <span className={`text-[10px] ${isJan ? "font-bold text-gray-600" : "text-gray-400"}`}>{monthName(month)}</span>
+                            </div>
+                            <div className="absolute top-6 w-px bg-gray-100/50 pointer-events-none" style={{ height: `${phases.length * 60 + 30}px`, zIndex: 0 }} />
+                          </div>
+                        );
+                      })}
+                      {/* Marcador "Hoy" */}
+                      <div className="absolute bottom-0 z-20" style={{ left: `${todayPos}%` }}>
+                        <div className="absolute -top-7 -translate-x-1/2 text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-200 px-2 py-0.5 rounded-full">Hoy</div>
+                        <div className="absolute bottom-0 w-px h-3 bg-rose-400" />
+                      </div>
+                    </div>
+
+                    <div className="h-4" />
+
+                    {/* Barras de fases */}
+                    <div className="space-y-4">
+                      {phases.map((phase, idx) => {
+                        const color = PHASE_COLORS[idx % PHASE_COLORS.length];
+                        const left = getPos(phase.startDate) ?? 0;
+                        const right = getPos(phase.endDate) ?? 100;
+                        const width = Math.max(right - left, 3);
+                        const completed = phase.tasks.filter(t => t.status === "completed").length;
+                        const phaseProgress = phase.tasks.length > 0 ? (completed / phase.tasks.length) * 100 : 0;
+                        const isComplete = phaseProgress === 100;
+                        return (
+                          <div key={phase.id} className="relative h-12">
+                            <div className="absolute inset-y-0 left-0 right-0 bg-gray-50 rounded-md" />
+                            <div
+                              className="absolute top-1 bottom-1 rounded-md flex items-center px-3 shadow-sm overflow-hidden"
+                              style={{ left: `${left}%`, width: `${width}%`, backgroundColor: color, opacity: isComplete ? 0.8 : 1 }}
+                              title={`${phase.name} · ${phase.startDate ? new Date(phase.startDate).toLocaleDateString("es-CO") : ""} → ${phase.endDate ? new Date(phase.endDate).toLocaleDateString("es-CO") : ""}`}
+                            >
+                              {/* Progreso interno */}
+                              <div className="absolute inset-y-0 left-0 bg-white/25" style={{ width: `${phaseProgress}%` }} />
+                              <div className="relative z-10 flex items-center gap-2 text-white text-xs font-medium truncate">
+                                {isComplete && <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />}
+                                <span className="truncate">{phase.name}</span>
+                                <span className="text-white/80 text-[10px] shrink-0">{Math.round(phaseProgress)}%</span>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+
+                    <p className="text-[11px] text-gray-400 text-center mt-6">Cada barra es una fase del proyecto. La franja blanca interna muestra el porcentaje completado.</p>
                   </div>
                 </div>
-              ))
+              );
+            })()}
+
+            {/* Vista Feed — actividad cronológica con filtros */}
+            {timelineView === "feed" && (
+              <>
+                {activityCategories.length > 1 && (
+                  <div className="flex gap-1.5 overflow-x-auto">
+                    <button
+                      onClick={() => setTimelineFilter("all")}
+                      className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${
+                        timelineFilter === "all" ? "bg-[#2FA4A9] text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                      }`}
+                    >
+                      Todas ({activityEntries.length})
+                    </button>
+                    {activityCategories.map(cat => (
+                      <button
+                        key={cat}
+                        onClick={() => setTimelineFilter(cat)}
+                        className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors whitespace-nowrap ${
+                          timelineFilter === cat ? "bg-[#2FA4A9] text-white" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                        }`}
+                      >
+                        {CATEGORY_LABELS[cat] || cat} ({activityEntries.filter(e => e.category === cat).length})
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {Object.keys(activityByDay).length === 0 ? (
+                  <div className="text-center py-12">
+                    <p className="text-gray-400">No hay actividad registrada aún.</p>
+                    <p className="text-xs text-gray-300 mt-1">Cuando el equipo empiece a trabajar, aquí verás todo lo que se hace.</p>
+                  </div>
+                ) : (
+                  Object.entries(activityByDay).sort(([a], [b]) => b.localeCompare(a)).map(([day, entries]) => (
+                    <div key={day}>
+                      <h3 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3 sticky top-[180px] bg-gray-50 py-1 z-10">
+                        {formatWeekday(day)}
+                      </h3>
+                      <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-1">
+                        {entries.map(entry => (
+                          <ActivityItem key={entry.id} entry={entry} />
+                        ))}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </>
             )}
           </div>
         )}
