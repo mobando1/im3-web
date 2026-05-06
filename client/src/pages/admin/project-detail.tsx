@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -1036,27 +1036,32 @@ export default function AdminProjectDetail() {
           </div>
         </div>
         <div className="flex items-center gap-2 self-end sm:self-start shrink-0">
-          <button onClick={copyPortalLink} className="p-2 rounded-lg text-gray-400 hover:text-[#2FA4A9] hover:bg-[#2FA4A9]/10 transition-colors" title="Copiar link portal del cliente (legacy)" aria-label="Copiar link portal">
-            <Copy className="w-4 h-4" />
+          <button
+            onClick={copyPortalLink}
+            className="group p-2 rounded-lg text-gray-400 hover:text-[#2FA4A9] hover:bg-[#2FA4A9]/10 active:scale-[0.95] transition-all"
+            title="Copiar link portal del cliente (legacy)"
+            aria-label="Copiar link portal"
+          >
+            <Copy className="w-4 h-4 group-hover:scale-110 transition-transform" />
           </button>
           <button
             onClick={() => setShowEditInfo(true)}
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors"
+            className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 hover:border-gray-300 hover:text-gray-900 hover:shadow-sm active:scale-[0.97] transition-all"
             title="Editar información del proyecto"
             aria-label="Editar"
           >
-            <Pencil className="w-3.5 h-3.5" />
+            <Pencil className="w-3.5 h-3.5 group-hover:rotate-6 transition-transform" />
             <span className="hidden sm:inline">Editar</span>
           </button>
           <a
             href={`/portal/projects/${project.id}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 rounded-lg bg-[#2FA4A9] text-white text-sm font-medium hover:bg-[#238b8f] transition-colors"
+            className="group inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 rounded-lg bg-[#2FA4A9] text-white text-sm font-medium hover:bg-[#238b8f] hover:shadow-md active:scale-[0.97] transition-all"
             title="Abre el portal completo como lo ve el cliente (con tab Analytics)"
             aria-label="Ver como cliente"
           >
-            <ExternalLink className="w-3.5 h-3.5" />
+            <ExternalLink className="w-3.5 h-3.5 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
             <span className="hidden sm:inline">Ver como cliente</span>
             <span className="sm:hidden">Ver</span>
           </a>
@@ -1075,11 +1080,21 @@ export default function AdminProjectDetail() {
           </div>
           <Button
             size="sm"
-            className="bg-amber-600 hover:bg-amber-700 text-white shrink-0"
+            className="group bg-amber-600 hover:bg-amber-700 hover:shadow-md text-white shrink-0 active:scale-[0.97] transition-all"
             onClick={() => activateProjectMut.mutate()}
             disabled={activateProjectMut.isPending}
           >
-            {activateProjectMut.isPending ? "Activando..." : "Activar portal →"}
+            {activateProjectMut.isPending ? (
+              <>
+                <RefreshCw className="w-3.5 h-3.5 mr-1.5 animate-spin" />
+                Activando...
+              </>
+            ) : (
+              <>
+                Activar portal
+                <span className="ml-1 group-hover:translate-x-0.5 transition-transform">→</span>
+              </>
+            )}
           </Button>
         </div>
       )}
@@ -1156,23 +1171,36 @@ export default function AdminProjectDetail() {
         {activeTab === "Roadmap" && (
           <div className="space-y-4">
             <div className="flex flex-wrap justify-end gap-2">
-              <Button size="sm" variant="outline" onClick={() => {
-                apiRequest("POST", `/api/admin/projects/${params.id}/auto-dates`, { force: true })
-                  .then(() => { invalidate(); toast({ title: "Fechas distribuidas automáticamente" }); })
-                  .catch(() => toast({ title: "Error distribuyendo fechas", variant: "destructive" }));
-              }}>
-                <Clock className="w-3.5 h-3.5 sm:mr-1.5" /> <span className="hidden sm:inline">Auto-fechas</span>
+              <Button
+                size="sm"
+                variant="outline"
+                className="group hover:border-gray-400 hover:bg-gray-50 hover:shadow-sm active:scale-[0.97] transition-all"
+                onClick={() => {
+                  apiRequest("POST", `/api/admin/projects/${params.id}/auto-dates`, { force: true })
+                    .then(() => { invalidate(); toast({ title: "Fechas distribuidas automáticamente" }); })
+                    .catch(() => toast({ title: "Error distribuyendo fechas", variant: "destructive" }));
+                }}
+              >
+                <Clock className="w-3.5 h-3.5 sm:mr-1.5 group-hover:rotate-12 transition-transform" />
+                <span className="hidden sm:inline">Auto-fechas</span>
               </Button>
               <Button
                 size="sm"
                 variant="outline"
                 onClick={() => setShowAIPhase("append")}
-                className="border-[#2FA4A9]/30 text-[#2FA4A9] hover:bg-[#2FA4A9]/5"
+                className="group border-[#2FA4A9]/30 text-[#2FA4A9] hover:bg-[#2FA4A9]/10 hover:border-[#2FA4A9] hover:shadow-sm active:scale-[0.97] transition-all"
               >
-                <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Fase IA
+                <Sparkles className="w-3.5 h-3.5 mr-1.5 group-hover:scale-110 transition-transform" />
+                Fase IA
               </Button>
-              <Button size="sm" variant="outline" onClick={() => setShowAddPhase(true)}>
-                <Plus className="w-3.5 h-3.5 mr-1.5" /> Fase manual
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => setShowAddPhase(true)}
+                className="group hover:border-gray-400 hover:bg-gray-50 hover:shadow-sm active:scale-[0.97] transition-all"
+              >
+                <Plus className="w-3.5 h-3.5 mr-1.5 group-hover:rotate-90 transition-transform" />
+                Fase manual
               </Button>
             </div>
 
@@ -1187,15 +1215,21 @@ export default function AdminProjectDetail() {
                     Describe hacia dónde va el proyecto y deja que Claude diseñe 3-6 fases con tareas y entregables.
                   </p>
                 </div>
-                <div className="flex items-center justify-center gap-2 pt-2">
+                <div className="flex items-center justify-center gap-2 pt-2 flex-wrap">
                   <Button
                     onClick={() => setShowAIPhase("fresh")}
-                    className="bg-[#2FA4A9] hover:bg-[#238b8f] gap-2"
+                    className="group bg-[#2FA4A9] hover:bg-[#238b8f] hover:shadow-md active:scale-[0.97] transition-all gap-2"
                   >
-                    <Sparkles className="w-4 h-4" /> Generar fases con IA
+                    <Sparkles className="w-4 h-4 group-hover:scale-110 group-hover:rotate-12 transition-transform" />
+                    Generar fases con IA
                   </Button>
-                  <Button variant="outline" onClick={() => setShowAddPhase(true)} className="gap-2">
-                    <Plus className="w-4 h-4" /> Crear manualmente
+                  <Button
+                    variant="outline"
+                    onClick={() => setShowAddPhase(true)}
+                    className="group hover:border-gray-400 hover:bg-gray-50 hover:shadow-sm active:scale-[0.97] transition-all gap-2"
+                  >
+                    <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform" />
+                    Crear manualmente
                   </Button>
                 </div>
               </div>
@@ -3893,13 +3927,27 @@ export default function AdminProjectDetail() {
             {editInfoForm.projectType === "client" && (
               <div className="space-y-2">
                 <Label>Cliente</Label>
-                <Select value={editInfoForm.contactId || "__none__"} onValueChange={v => setEditInfoForm(f => ({ ...f, contactId: v === "__none__" ? "" : v }))}>
+                <Select
+                  value={editInfoForm.contactId || "__none__"}
+                  onValueChange={v => {
+                    if (v === "__create__") {
+                      setShowEditInfo(false);
+                      navigate("/admin/contacts?new=true");
+                      return;
+                    }
+                    setEditInfoForm(f => ({ ...f, contactId: v === "__none__" ? "" : v }));
+                  }}
+                >
                   <SelectTrigger><SelectValue placeholder="Seleccionar contacto" /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="__none__">— Sin cliente asignado —</SelectItem>
                     {contactsList.map(c => (
                       <SelectItem key={c.id} value={c.id}>{c.nombre} ({c.empresa})</SelectItem>
                     ))}
+                    <SelectSeparator />
+                    <SelectItem value="__create__" className="text-[#2FA4A9] font-medium">
+                      + Crear nuevo contacto
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -4019,12 +4067,19 @@ export default function AdminProjectDetail() {
                 >
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="feature">Nueva funcionalidad</SelectItem>
-                    <SelectItem value="bugfix">Bug fix</SelectItem>
-                    <SelectItem value="improvement">Mejora</SelectItem>
-                    <SelectItem value="infrastructure">Infraestructura</SelectItem>
-                    <SelectItem value="meeting">Reunión</SelectItem>
-                    <SelectItem value="milestone">Hito</SelectItem>
+                    {Object.entries(ACTIVITY_CATEGORY_META).map(([key, meta]) => {
+                      const Icon = meta.icon;
+                      return (
+                        <SelectItem key={key} value={key}>
+                          <div className="flex items-center gap-2">
+                            <span className={`w-5 h-5 rounded-md ${meta.avatarBg} flex items-center justify-center shrink-0`}>
+                              <Icon className="w-3 h-3 text-white" />
+                            </span>
+                            {meta.label}
+                          </div>
+                        </SelectItem>
+                      );
+                    })}
                   </SelectContent>
                 </Select>
               </div>
