@@ -6109,6 +6109,9 @@ Responde SOLO con un JSON válido, sin markdown:
       .where(eq(clientProjects.id, projectId));
     if (!project) return res.status(404).json({ error: "Proyecto no encontrado" });
     const qs = m[3] || "";
+    // Marcar que este request llegó autenticado vía bridge — permite acceso a
+    // proyectos internos que normalmente bloquea getProjectByToken por seguridad.
+    (req as any).bridgeAuth = true;
     req.url = `/api/portal/${project.accessToken}${tail}${qs}`;
     next();
   });
@@ -6771,17 +6774,19 @@ Responde SOLO con un JSON válido, sin markdown:
   // Portal del Cliente — Public endpoints (auth by token)
   // ─────────────────────────────────────────────────────────────
 
-  async function getProjectByToken(token: string) {
+  async function getProjectByToken(token: string, req?: any) {
     const [project] = await db!.select().from(clientProjects).where(eq(clientProjects.accessToken, token));
     if (!project) return null;
-    // Internal IM3 projects are never accessible through the public portal even if a token leaks.
-    if (project.projectType === "internal") return null;
+    // Internal IM3 projects are never accessible through the PUBLIC portal even if a token leaks.
+    // PERO si la request llegó vía el bridge middleware (req.bridgeAuth=true) significa que
+    // el usuario está autenticado como cliente vinculado o admin viendo como preview — OK acceder.
+    if (project.projectType === "internal" && !req?.bridgeAuth) return null;
     return project;
   }
 
   // Portal overview
   app.get("/api/portal/:token", async (req, res) => {
-    const project = await getProjectByToken(req.params.token as string);
+    const project = await getProjectByToken(req.params.token as string, req);
     if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
     const phases = await db!.select().from(projectPhases).where(eq(projectPhases.projectId, project.id)).orderBy(asc(projectPhases.orderIndex));
@@ -6819,7 +6824,7 @@ Responde SOLO con un JSON válido, sin markdown:
 
   // Portal phases with tasks
   app.get("/api/portal/:token/phases", async (req, res) => {
-    const project = await getProjectByToken(req.params.token as string);
+    const project = await getProjectByToken(req.params.token as string, req);
     if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
     const phases = await db!.select().from(projectPhases).where(eq(projectPhases.projectId, project.id)).orderBy(asc(projectPhases.orderIndex));
@@ -6839,7 +6844,7 @@ Responde SOLO con un JSON válido, sin markdown:
 
   // Portal deliverables
   app.get("/api/portal/:token/deliverables", async (req, res) => {
-    const project = await getProjectByToken(req.params.token as string);
+    const project = await getProjectByToken(req.params.token as string, req);
     if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
     const deliverables = await db!.select().from(projectDeliverables).where(eq(projectDeliverables.projectId, project.id)).orderBy(desc(projectDeliverables.createdAt));
@@ -6848,7 +6853,7 @@ Responde SOLO con un JSON válido, sin markdown:
 
   // Portal: approve/reject deliverable
   app.patch("/api/portal/:token/deliverables/:id", async (req, res) => {
-    const project = await getProjectByToken(req.params.token as string);
+    const project = await getProjectByToken(req.params.token as string, req);
     if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
     const { status, clientComment, clientRating } = req.body;
@@ -6890,7 +6895,7 @@ Responde SOLO con un JSON válido, sin markdown:
 
   // Portal time log summary
   app.get("/api/portal/:token/timelog", async (req, res) => {
-    const project = await getProjectByToken(req.params.token as string);
+    const project = await getProjectByToken(req.params.token as string, req);
     if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
     const logs = await db!.select().from(projectTimeLog).where(eq(projectTimeLog.projectId, project.id)).orderBy(desc(projectTimeLog.createdAt));
@@ -6917,7 +6922,7 @@ Responde SOLO con un JSON válido, sin markdown:
   app.get("/api/portal/:token/messages", async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
-      const project = await getProjectByToken(req.params.token as string);
+      const project = await getProjectByToken(req.params.token as string, req);
       if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
       const msgs = await db.select().from(projectMessages).where(eq(projectMessages.projectId, project.id)).orderBy(asc(projectMessages.createdAt));
       res.json(msgs);
@@ -6928,7 +6933,7 @@ Responde SOLO con un JSON válido, sin markdown:
   app.post("/api/portal/:token/messages", async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
-      const project = await getProjectByToken(req.params.token as string);
+      const project = await getProjectByToken(req.params.token as string, req);
       if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
       const [msg] = await db.insert(projectMessages).values({
         projectId: project.id,
@@ -6944,7 +6949,7 @@ Responde SOLO con un JSON válido, sin markdown:
   app.patch("/api/portal/:token/messages/read", async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
-      const project = await getProjectByToken(req.params.token as string);
+      const project = await getProjectByToken(req.params.token as string, req);
       if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
       await db.update(projectMessages).set({ isRead: true }).where(and(eq(projectMessages.projectId, project.id), eq(projectMessages.senderType, "team")));
       res.json({ success: true });
@@ -6953,7 +6958,7 @@ Responde SOLO con un JSON válido, sin markdown:
 
   // Portal: pulse (current task + last 48h activity)
   app.get("/api/portal/:token/pulse", async (req, res) => {
-    const project = await getProjectByToken(req.params.token as string);
+    const project = await getProjectByToken(req.params.token as string, req);
     if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
     // Current focus: highest priority in_progress task
@@ -7009,7 +7014,7 @@ Responde SOLO con un JSON válido, sin markdown:
 
   // Portal: full activity feed (paginated, grouped by week)
   app.get("/api/portal/:token/activity", async (req, res) => {
-    const project = await getProjectByToken(req.params.token as string);
+    const project = await getProjectByToken(req.params.token as string, req);
     if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
     const limit = parseInt(req.query.limit as string) || 50;
@@ -7026,7 +7031,7 @@ Responde SOLO con un JSON válido, sin markdown:
 
   // Portal: investment data
   app.get("/api/portal/:token/investment", async (req, res) => {
-    const project = await getProjectByToken(req.params.token as string);
+    const project = await getProjectByToken(req.params.token as string, req);
     if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
     const logs = await db!.select().from(projectTimeLog).where(eq(projectTimeLog.projectId, project.id));
@@ -7074,7 +7079,7 @@ Responde SOLO con un JSON válido, sin markdown:
 
   app.get("/api/portal/:token/sessions", async (req, res) => {
     try {
-      const project = await getProjectByToken(req.params.token as string);
+      const project = await getProjectByToken(req.params.token as string, req);
       if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
       const sessions = await db!.select().from(projectSessions)
         .where(eq(projectSessions.projectId, project.id))
@@ -7090,7 +7095,7 @@ Responde SOLO con un JSON válido, sin markdown:
 
   app.get("/api/portal/:token/files", async (req, res) => {
     try {
-      const project = await getProjectByToken(req.params.token as string);
+      const project = await getProjectByToken(req.params.token as string, req);
       if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
       const files = await db!.select().from(projectFiles)
         .where(eq(projectFiles.projectId, project.id))
@@ -7106,7 +7111,7 @@ Responde SOLO con un JSON válido, sin markdown:
 
   app.get("/api/portal/:token/ideas", async (req, res) => {
     try {
-      const project = await getProjectByToken(req.params.token as string);
+      const project = await getProjectByToken(req.params.token as string, req);
       if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
       const ideas = await db!.select().from(projectIdeas)
         .where(eq(projectIdeas.projectId, project.id))
@@ -7120,7 +7125,7 @@ Responde SOLO con un JSON válido, sin markdown:
 
   app.post("/api/portal/:token/ideas", async (req, res) => {
     try {
-      const project = await getProjectByToken(req.params.token as string);
+      const project = await getProjectByToken(req.params.token as string, req);
       if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
       const [idea] = await db!.insert(projectIdeas).values({
         projectId: project.id,
@@ -7138,7 +7143,7 @@ Responde SOLO con un JSON válido, sin markdown:
   // Captura una entrada en project_activity_entries para journaling de desarrollo.
   app.post("/api/portal/:token/quick-note", async (req, res) => {
     try {
-      const project = await getProjectByToken(req.params.token as string);
+      const project = await getProjectByToken(req.params.token as string, req);
       if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
       if ((project.projectType || "client") !== "internal") {
         return res.status(403).json({ error: "Las notas rápidas solo aplican a proyectos internos" });
@@ -7167,7 +7172,7 @@ Responde SOLO con un JSON válido, sin markdown:
 
   app.patch("/api/portal/:token/ideas/:ideaId/vote", async (req, res) => {
     try {
-      const project = await getProjectByToken(req.params.token as string);
+      const project = await getProjectByToken(req.params.token as string, req);
       if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
       const [idea] = await db!.select().from(projectIdeas).where(eq(projectIdeas.id, req.params.ideaId as string)).limit(1);
       if (!idea || idea.projectId !== project.id) return res.status(404).json({ message: "Idea no encontrada" });
