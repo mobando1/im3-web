@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useRef, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Copy, ExternalLink, Plus, Trash2, Send, Clock, CheckCircle2, Circle, AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Github, CalendarDays, BarChart3, Diamond, TrendingUp, Package, MessageSquare, Timer, Mic, FolderOpen, Lightbulb, FileText, Image, File, ThumbsUp, X, UserPlus, Users, RefreshCw, Mail, Sparkles, Pencil, Wrench, Building2 } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Plus, Trash2, Send, Clock, CheckCircle2, Circle, AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Github, CalendarDays, BarChart3, Diamond, TrendingUp, Package, MessageSquare, Timer, Mic, FolderOpen, Lightbulb, FileText, Image, File, ThumbsUp, X, UserPlus, Users, RefreshCw, Mail, Sparkles, Pencil, Wrench, Building2, GripVertical } from "lucide-react";
 import { format, parseISO, differenceInDays, startOfMonth, endOfMonth, eachDayOfInterval, eachMonthOfInterval, isSameDay, isSameMonth, addMonths, subMonths, isWithinInterval } from "date-fns";
 import { es } from "date-fns/locale";
 import { motion, AnimatePresence } from "framer-motion";
@@ -12,7 +12,11 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { DndContext, closestCenter, PointerSensor, TouchSensor, KeyboardSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, arrayMove, useSortable } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { ToastAction } from "@/components/ui/toast";
 import { EditableText } from "@/components/ui/editable-text";
 import { useToast } from "@/hooks/use-toast";
@@ -50,6 +54,8 @@ type ProjectDetail = {
       clientFacingTitle: string | null;
       status: string;
       priority: string;
+      assigneeName: string | null;
+      orderIndex: number;
       estimatedHours: number | null;
       actualHours: string | null;
       dueDate: string | null;
@@ -109,6 +115,24 @@ const DELIVERABLE_COLORS: Record<string, string> = {
   rejected: "bg-red-100 text-red-700",
 };
 
+type DelivStatus = "pending" | "delivered" | "approved" | "rejected";
+
+const DELIV_STATUS_META: Record<DelivStatus, { icon: typeof Circle; iconClass: string; ringClass: string; label: string; dotClass: string }> = {
+  pending:   { icon: Circle,        iconClass: "text-gray-400",    ringClass: "ring-gray-200 hover:ring-gray-300 bg-white",         label: "Pendiente",  dotClass: "bg-gray-300" },
+  delivered: { icon: Send,          iconClass: "text-blue-500",    ringClass: "ring-blue-200 hover:ring-blue-300 bg-blue-50/40",     label: "Entregado",  dotClass: "bg-blue-400" },
+  approved:  { icon: CheckCircle2,  iconClass: "text-emerald-500", ringClass: "ring-emerald-200 hover:ring-emerald-300 bg-emerald-50/40", label: "Aprobado",  dotClass: "bg-emerald-400" },
+  rejected:  { icon: AlertCircle,   iconClass: "text-red-500",     ringClass: "ring-red-200 hover:ring-red-300 bg-red-50/40",        label: "Rechazado",  dotClass: "bg-red-400" },
+};
+
+const DELIV_TYPE_META: Record<string, { icon: typeof Circle; label: string }> = {
+  feature:  { icon: Sparkles, label: "Feature" },
+  bugfix:   { icon: Wrench,   label: "Bug" },
+  design:   { icon: Image,    label: "Diseño" },
+  document: { icon: FileText, label: "Doc" },
+  video:    { icon: Mic,      label: "Video" },
+  other:    { icon: Diamond,  label: "Otro" },
+};
+
 const CATEGORY_LABELS: Record<string, string> = {
   development: "Desarrollo",
   design: "Diseño",
@@ -140,6 +164,80 @@ type GithubRepo = {
   isPrivate: boolean;
   updatedAt: string;
 };
+
+/**
+ * Sortable row wrapper. Renders the children with drag-handle props.
+ * Disable when sort is not "manual" so users can't reorder while a sort is applied.
+ */
+function SortableRow({ id, disabled, children }: {
+  id: string;
+  disabled?: boolean;
+  children: (args: { handleListeners: Record<string, unknown> | undefined; isDragging: boolean }) => React.ReactNode;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id, disabled });
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+    position: "relative",
+    zIndex: isDragging ? 10 : "auto",
+  };
+  return (
+    <div ref={setNodeRef} style={style} {...attributes}>
+      {children({ handleListeners: disabled ? undefined : listeners, isDragging })}
+    </div>
+  );
+}
+
+function AssigneeChip({ value, onSave }: { value: string | null; onSave: (next: string | null) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(value ?? "");
+  // Sync draft from external value, but only when not editing — avoid clobbering user input mid-typing.
+  useEffect(() => { if (!editing) setDraft(value ?? ""); }, [value, editing]);
+
+  if (editing) {
+    return (
+      <input
+        autoFocus
+        value={draft}
+        onChange={e => setDraft(e.target.value)}
+        onBlur={() => { const v = draft.trim(); if (v !== (value ?? "")) onSave(v || null); setEditing(false); }}
+        onKeyDown={e => {
+          if (e.key === "Enter") { e.currentTarget.blur(); }
+          if (e.key === "Escape") { setDraft(value ?? ""); setEditing(false); }
+        }}
+        placeholder="Nombre"
+        className="text-[10px] border border-gray-300 rounded px-1.5 py-0.5 outline-none focus:border-[#2FA4A9] w-24"
+      />
+    );
+  }
+
+  if (!value) {
+    return (
+      <button
+        type="button"
+        onClick={() => setEditing(true)}
+        className="text-[10px] text-gray-400 hover:text-[#2FA4A9] inline-flex items-center gap-0.5 transition-colors"
+        aria-label="Asignar a alguien"
+      >
+        <UserPlus className="w-3 h-3" /> asignar
+      </button>
+    );
+  }
+
+  const initial = value.trim().charAt(0).toUpperCase() || "?";
+  return (
+    <button
+      type="button"
+      onClick={() => setEditing(true)}
+      className="inline-flex items-center gap-1 text-[10px] bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-full pl-0.5 pr-2 py-0.5 transition-colors max-w-[140px]"
+      title={`Asignado a ${value} — clic para cambiar`}
+    >
+      <span className="w-4 h-4 rounded-full bg-blue-200 text-blue-800 flex items-center justify-center text-[9px] font-semibold shrink-0">{initial}</span>
+      <span className="truncate">{value}</span>
+    </button>
+  );
+}
 
 function GitHubRepoSelector({ projectId, currentRepo, aiEnabled, onConnected }: {
   projectId: string;
@@ -315,6 +413,8 @@ export default function AdminProjectDetail() {
   // Deliverable creation
   const [showAddDeliverable, setShowAddDeliverable] = useState(false);
   const [delivForm, setDelivForm] = useState({ title: "", description: "", type: "feature", phaseId: "", screenshotUrl: "", demoUrl: "" });
+  const [delivFilter, setDelivFilter] = useState<"all" | "pending" | "delivered" | "approved" | "rejected">("all");
+  const [delivStatusMenu, setDelivStatusMenu] = useState<string | null>(null);
 
   // Session creation
   const [showAddSession, setShowAddSession] = useState(false);
@@ -373,6 +473,12 @@ export default function AdminProjectDetail() {
     | { kind: "task"; id: string; title: string }
     | { kind: "deliverable"; id: string; title: string };
   const [pendingDelete, setPendingDelete] = useState<PendingDelete | null>(null);
+  const [confirmDeleteProject, setConfirmDeleteProject] = useState(false);
+  // Per-phase filter and sort (Roadmap)
+  type PhaseFilter = "all" | "pending" | "overdue" | "completed";
+  type PhaseSort = "manual" | "date" | "priority";
+  const [phaseFilter, setPhaseFilter] = useState<Record<string, PhaseFilter>>({});
+  const [phaseSort, setPhaseSort] = useState<Record<string, PhaseSort>>({});
 
   // Queries que dependen de los modals (se cargan solo si están abiertos)
   const { data: githubStatus } = useQuery<{ configured: boolean; connected: boolean; githubUsername: string | null }>({
@@ -561,6 +667,22 @@ export default function AdminProjectDetail() {
     onSuccess: invalidate,
   });
 
+  // Drag-to-reorder mutations
+  const reorderTasksMut = useMutation({
+    mutationFn: async ({ phaseId, taskIds }: { phaseId: string; taskIds: string[] }) => {
+      await apiRequest("POST", `/api/admin/phases/${phaseId}/reorder-tasks`, { taskIds });
+    },
+    onSuccess: invalidate,
+    onError: () => { invalidate(); toast({ title: "No se pudo reordenar — recargado", variant: "destructive" }); },
+  });
+  const reorderPhasesMut = useMutation({
+    mutationFn: async ({ phaseIds }: { phaseIds: string[] }) => {
+      await apiRequest("POST", `/api/admin/projects/${params.id}/reorder-phases`, { phaseIds });
+    },
+    onSuccess: invalidate,
+    onError: () => { invalidate(); toast({ title: "No se pudo reordenar — recargado", variant: "destructive" }); },
+  });
+
   const restorePhaseMut = useMutation({
     mutationFn: async (id: string) => { await apiRequest("POST", `/api/admin/phases/${id}/restore`); },
     onSuccess: () => { invalidate(); toast({ title: "Fase restaurada", description: "Tareas y entregables recuperados." }); },
@@ -704,38 +826,73 @@ export default function AdminProjectDetail() {
     toast({ title: "Link copiado" });
   };
 
+  // ── Drag-and-drop sensors ──
+  // - PointerSensor with distance 8: regular click doesn't trigger drag
+  // - TouchSensor with delay 250ms: tap-to-edit still works on mobile, long-press starts drag
+  // - KeyboardSensor: accessibility (Space + arrows)
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 250, tolerance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handlePhaseDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = project.phases.findIndex(p => p.id === active.id);
+    const newIndex = project.phases.findIndex(p => p.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const newOrder = arrayMove(project.phases, oldIndex, newIndex);
+    reorderPhasesMut.mutate({ phaseIds: newOrder.map(p => p.id) });
+  };
+
+  const handleTaskDragEnd = (phaseId: string, allPhaseTasks: { id: string }[]) => (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = allPhaseTasks.findIndex(t => t.id === active.id);
+    const newIndex = allPhaseTasks.findIndex(t => t.id === over.id);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const newOrder = arrayMove(allPhaseTasks, oldIndex, newIndex);
+    reorderTasksMut.mutate({ phaseId, taskIds: newOrder.map(t => t.id) });
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start gap-4">
-        <button onClick={() => navigate("/admin/projects")} className="mt-1 p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors">
-          <ArrowLeft className="w-5 h-5" />
-        </button>
-        <div className="flex-1">
-          <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
-          {project.contactName && <p className="text-sm text-gray-500 mt-0.5">{project.contactName}</p>}
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:gap-4">
+        <div className="flex items-start gap-3 flex-1 min-w-0">
+          <button onClick={() => navigate("/admin/projects")} className="mt-1 p-1.5 rounded-lg hover:bg-gray-100 text-gray-400 transition-colors shrink-0" aria-label="Volver">
+            <ArrowLeft className="w-5 h-5" />
+          </button>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900 break-words">{project.name}</h1>
+            {project.contactName && <p className="text-sm text-gray-500 mt-0.5 truncate">{project.contactName}</p>}
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={copyPortalLink} className="p-2 rounded-lg text-gray-400 hover:text-[#2FA4A9] hover:bg-[#2FA4A9]/10 transition-colors" title="Copiar link portal del cliente (legacy)">
+        <div className="flex items-center gap-2 self-end sm:self-start shrink-0">
+          <button onClick={copyPortalLink} className="p-2 rounded-lg text-gray-400 hover:text-[#2FA4A9] hover:bg-[#2FA4A9]/10 transition-colors" title="Copiar link portal del cliente (legacy)" aria-label="Copiar link portal">
             <Copy className="w-4 h-4" />
           </button>
           <button
             onClick={() => setShowEditInfo(true)}
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 rounded-lg border border-gray-200 text-gray-600 text-sm font-medium hover:bg-gray-50 transition-colors"
             title="Editar información del proyecto"
+            aria-label="Editar"
           >
             <Pencil className="w-3.5 h-3.5" />
-            Editar
+            <span className="hidden sm:inline">Editar</span>
           </button>
           <a
             href={`/portal/projects/${project.id}`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#2FA4A9] text-white text-sm font-medium hover:bg-[#238b8f] transition-colors"
+            className="inline-flex items-center gap-1.5 px-2.5 py-1.5 sm:px-3 rounded-lg bg-[#2FA4A9] text-white text-sm font-medium hover:bg-[#238b8f] transition-colors"
             title="Abre el portal completo como lo ve el cliente (con tab Analytics)"
+            aria-label="Ver como cliente"
           >
             <ExternalLink className="w-3.5 h-3.5" />
-            Ver como cliente
+            <span className="hidden sm:inline">Ver como cliente</span>
+            <span className="sm:hidden">Ver</span>
           </a>
         </div>
       </div>
@@ -762,7 +919,7 @@ export default function AdminProjectDetail() {
       )}
 
       {/* Stats bar — premium design */}
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         {[
           { label: "Progreso", value: `${project.progress}%`, icon: TrendingUp, color: "bg-teal-50 text-teal-600", accent: "#2FA4A9" },
           { label: "Horas", value: project.totalHours.toFixed(1), icon: Timer, color: "bg-blue-50 text-blue-600", accent: "#3B82F6" },
@@ -771,18 +928,18 @@ export default function AdminProjectDetail() {
         ].map(s => {
           const Icon = s.icon;
           return (
-            <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-4 relative overflow-hidden group hover:shadow-md transition-shadow">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-[11px] text-gray-400 font-semibold uppercase tracking-wider">{s.label}</p>
-                  <p className="text-2xl font-bold text-gray-900 mt-1">{s.value}</p>
+            <div key={s.label} className="bg-white rounded-xl border border-gray-200 p-3 md:p-4 relative overflow-hidden group hover:shadow-md transition-shadow">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-[10px] md:text-[11px] text-gray-400 font-semibold uppercase tracking-wider truncate">{s.label}</p>
+                  <p className="text-xl md:text-2xl font-bold text-gray-900 mt-0.5 md:mt-1">{s.value}</p>
                 </div>
-                <div className={`w-10 h-10 rounded-xl ${s.color} flex items-center justify-center`}>
-                  <Icon className="w-5 h-5" />
+                <div className={`w-9 h-9 md:w-10 md:h-10 rounded-xl ${s.color} flex items-center justify-center shrink-0`}>
+                  <Icon className="w-4 h-4 md:w-5 md:h-5" />
                 </div>
               </div>
               {s.label === "Progreso" && (
-                <div className="mt-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                <div className="mt-2 md:mt-3 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                   <motion.div initial={{ width: 0 }} animate={{ width: `${project.progress}%` }} transition={{ duration: 1, ease: "easeOut" }} className="h-full rounded-full" style={{ background: s.accent }} />
                 </div>
               )}
@@ -803,15 +960,18 @@ export default function AdminProjectDetail() {
       {/* Calendario de reuniones del proyecto */}
       <MeetingsSection projectId={project.id} />
 
-      {/* Tabs — with icons */}
-      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto">
+      {/* Tabs — with icons (auto-scroll active into view on mobile) */}
+      <div className="flex gap-1 border-b border-gray-200 overflow-x-auto scroll-smooth scrollbar-thin -mx-4 px-4 sm:mx-0 sm:px-0">
         {tabs.map(t => {
           const TabIcon = TAB_ICONS[t] || Circle;
           return (
             <button
               key={t}
-              onClick={() => setActiveTab(t)}
-              className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
+              onClick={(e) => {
+                setActiveTab(t);
+                e.currentTarget.scrollIntoView({ behavior: "smooth", block: "nearest", inline: "center" });
+              }}
+              className={`px-3 sm:px-4 py-2.5 text-sm font-medium border-b-2 transition-colors flex items-center gap-1.5 whitespace-nowrap ${
                 activeTab === t
                   ? "border-[#2FA4A9] text-[#2FA4A9]"
                   : "border-transparent text-gray-500 hover:text-gray-700"
@@ -829,13 +989,13 @@ export default function AdminProjectDetail() {
         {/* ── ROADMAP ── */}
         {activeTab === "Roadmap" && (
           <div className="space-y-4">
-            <div className="flex justify-end gap-2">
+            <div className="flex flex-wrap justify-end gap-2">
               <Button size="sm" variant="outline" onClick={() => {
                 apiRequest("POST", `/api/admin/projects/${params.id}/auto-dates`, { force: true })
                   .then(() => { invalidate(); toast({ title: "Fechas distribuidas automáticamente" }); })
                   .catch(() => toast({ title: "Error distribuyendo fechas", variant: "destructive" }));
               }}>
-                <Clock className="w-3.5 h-3.5 mr-1.5" /> Auto-fechas
+                <Clock className="w-3.5 h-3.5 sm:mr-1.5" /> <span className="hidden sm:inline">Auto-fechas</span>
               </Button>
               <Button
                 size="sm"
@@ -843,7 +1003,7 @@ export default function AdminProjectDetail() {
                 onClick={() => setShowAIPhase("append")}
                 className="border-[#2FA4A9]/30 text-[#2FA4A9] hover:bg-[#2FA4A9]/5"
               >
-                <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Fase con IA
+                <Sparkles className="w-3.5 h-3.5 mr-1.5" /> Fase IA
               </Button>
               <Button size="sm" variant="outline" onClick={() => setShowAddPhase(true)}>
                 <Plus className="w-3.5 h-3.5 mr-1.5" /> Fase manual
@@ -874,24 +1034,71 @@ export default function AdminProjectDetail() {
                 </div>
               </div>
             ) : (
-              <div className="space-y-3">
-                {project.phases.map((phase, idx) => {
+              <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handlePhaseDragEnd}>
+                <SortableContext items={project.phases.map(p => p.id)} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-3">
+                    {project.phases.map((phase, idx) => {
                   const isExpanded = expandedPhases.has(phase.id);
                   const completed = phase.tasks.filter(t => t.status === "completed").length;
                   const phaseProgress = phase.tasks.length > 0 ? Math.round((completed / phase.tasks.length) * 100) : 0;
 
+                  // Phase summary calcs (vencidas / esta semana)
+                  const phaseToday = new Date();
+                  phaseToday.setHours(0, 0, 0, 0);
+                  const weekFromNow = new Date(phaseToday);
+                  weekFromNow.setDate(weekFromNow.getDate() + 7);
+                  const overdueCount = phase.tasks.filter(t => t.dueDate && t.status !== "completed" && new Date(t.dueDate) < phaseToday).length;
+                  const thisWeekCount = phase.tasks.filter(t => {
+                    if (!t.dueDate || t.status === "completed") return false;
+                    const due = new Date(t.dueDate);
+                    return due >= phaseToday && due <= weekFromNow;
+                  }).length;
+
+                  // Filter + sort
+                  const filterKey: PhaseFilter = phaseFilter[phase.id] || "all";
+                  const sortKey: PhaseSort = phaseSort[phase.id] || "manual";
+                  let visibleTasks = phase.tasks;
+                  if (filterKey === "pending") visibleTasks = visibleTasks.filter(t => t.status !== "completed");
+                  else if (filterKey === "overdue") visibleTasks = visibleTasks.filter(t => t.dueDate && t.status !== "completed" && new Date(t.dueDate) < phaseToday);
+                  else if (filterKey === "completed") visibleTasks = visibleTasks.filter(t => t.status === "completed");
+
+                  if (sortKey === "date") {
+                    visibleTasks = [...visibleTasks].sort((a, b) => {
+                      if (!a.dueDate && !b.dueDate) return 0;
+                      if (!a.dueDate) return 1;
+                      if (!b.dueDate) return -1;
+                      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+                    });
+                  } else if (sortKey === "priority") {
+                    const order: Record<string, number> = { high: 0, medium: 1, low: 2 };
+                    visibleTasks = [...visibleTasks].sort((a, b) => (order[a.priority] ?? 1) - (order[b.priority] ?? 1));
+                  }
+
                   return (
-                    <div key={phase.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                    <SortableRow key={phase.id} id={phase.id}>
+                      {({ handleListeners }) => (
+                    <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
                       {/* Phase header */}
                       <div
-                        className="flex items-center gap-3 px-5 py-4 cursor-pointer hover:bg-gray-50 transition-colors"
+                        className="flex items-start gap-2 sm:gap-3 px-3 sm:px-5 py-3 sm:py-4 cursor-pointer hover:bg-gray-50 transition-colors"
                         onClick={() => togglePhase(phase.id)}
                       >
-                        {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-                        <div className="flex-1" onClick={e => e.stopPropagation()}>
+                        {/* Drag handle (long-press on mobile, click+drag on desktop) */}
+                        <button
+                          {...(handleListeners || {})}
+                          onClick={(e) => e.stopPropagation()}
+                          className="mt-1 shrink-0 text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing touch-none"
+                          aria-label="Reordenar fase"
+                        >
+                          <GripVertical className="w-4 h-4" />
+                        </button>
+                        <div className="mt-1 shrink-0">
+                          {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                        </div>
+                        <div className="flex-1 min-w-0" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-xs font-semibold text-gray-400">FASE {idx + 1}</span>
-                            <h3 className="font-medium text-gray-900">
+                            <span className="text-[10px] sm:text-xs font-semibold text-gray-400">FASE {idx + 1}</span>
+                            <h3 className="font-medium text-gray-900 break-words">
                               <EditableText
                                 value={phase.name}
                                 kind="phase-name"
@@ -904,7 +1111,7 @@ export default function AdminProjectDetail() {
                               />
                             </h3>
                           </div>
-                          <div className="text-xs text-gray-400 mt-0.5">
+                          <div className="text-xs text-gray-400 mt-0.5 break-words">
                             <EditableText
                               value={phase.description || ""}
                               kind="phase-description"
@@ -924,12 +1131,48 @@ export default function AdminProjectDetail() {
                               {phase.startDate ? new Date(phase.startDate).toLocaleDateString("es-CO", { day: "numeric", month: "short" }) : "?"} — {phase.endDate ? new Date(phase.endDate).toLocaleDateString("es-CO", { day: "numeric", month: "short" }) : "?"}
                             </p>
                           )}
+                          {/* Summary chips: vencidas / esta semana */}
+                          {(overdueCount > 0 || thisWeekCount > 0) && (
+                            <div className="flex items-center gap-2 mt-1 flex-wrap">
+                              {overdueCount > 0 && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded">
+                                  <AlertCircle className="w-3 h-3" /> {overdueCount} vencida{overdueCount === 1 ? "" : "s"}
+                                </span>
+                              )}
+                              {thisWeekCount > 0 && (
+                                <span className="inline-flex items-center gap-1 text-[10px] font-medium text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded">
+                                  <Clock className="w-3 h-3" /> {thisWeekCount} esta semana
+                                </span>
+                              )}
+                            </div>
+                          )}
+                          {/* Mobile: compact progress + status under metadata */}
+                          <div className="flex items-center gap-2 mt-2 sm:hidden">
+                            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                              <div className="h-full bg-[#2FA4A9] rounded-full transition-all" style={{ width: `${phaseProgress}%` }} />
+                            </div>
+                            <span className="text-[11px] text-gray-500 font-medium tabular-nums w-9 text-right">{phaseProgress}%</span>
+                            <Select
+                              value={phase.status}
+                              onValueChange={v => { updatePhaseMut.mutate({ id: phase.id, data: { status: v } }); }}
+                            >
+                              <SelectTrigger className="h-7 w-28 text-xs shrink-0" onClick={e => e.stopPropagation()}>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="pending">Pendiente</SelectItem>
+                                <SelectItem value="in_progress">En progreso</SelectItem>
+                                <SelectItem value="completed">Completada</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3">
+                        {/* Desktop: progress + status inline at right */}
+                        <div className="hidden sm:flex items-center gap-3 shrink-0">
                           <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
                             <div className="h-full bg-[#2FA4A9] rounded-full" style={{ width: `${phaseProgress}%` }} />
                           </div>
-                          <span className="text-xs text-gray-400 w-8 text-right">{phaseProgress}%</span>
+                          <span className="text-xs text-gray-400 w-8 text-right tabular-nums">{phaseProgress}%</span>
                           <Select
                             value={phase.status}
                             onValueChange={v => { updatePhaseMut.mutate({ id: phase.id, data: { status: v } }); }}
@@ -943,33 +1186,36 @@ export default function AdminProjectDetail() {
                               <SelectItem value="completed">Completada</SelectItem>
                             </SelectContent>
                           </Select>
-                          <button
-                            onClick={e => {
-                              e.stopPropagation();
-                              const phaseDeliverables = project.deliverables.filter(d => d.phaseId === phase.id).length;
-                              setPendingDelete({
-                                kind: "phase",
-                                id: phase.id,
-                                name: phase.name,
-                                taskCount: phase.tasks.length,
-                                deliverableCount: phaseDeliverables,
-                              });
-                            }}
-                            className="p-1 rounded text-gray-300 hover:text-red-500 transition-colors"
-                            title="Eliminar fase"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
                         </div>
+                        <button
+                          onClick={e => {
+                            e.stopPropagation();
+                            const phaseDeliverables = project.deliverables.filter(d => d.phaseId === phase.id).length;
+                            setPendingDelete({
+                              kind: "phase",
+                              id: phase.id,
+                              name: phase.name,
+                              taskCount: phase.tasks.length,
+                              deliverableCount: phaseDeliverables,
+                            });
+                          }}
+                          className="p-1 mt-0.5 rounded text-gray-300 hover:text-red-500 transition-colors shrink-0"
+                          title="Eliminar fase"
+                          aria-label="Eliminar fase"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
 
                       {/* Tasks */}
                       {isExpanded && (
-                        <div className="border-t border-gray-100 px-5 py-3 space-y-1">
+                        <div className="border-t border-gray-100 px-3 sm:px-5 py-3 space-y-1">
                           {/* Inline date editing for phase */}
-                          <div className="flex items-center gap-2 py-2 mb-2 border-b border-gray-50">
-                            <CalendarDays className="w-3.5 h-3.5 text-gray-400" />
-                            <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Fechas:</span>
+                          <div className="flex items-center gap-2 flex-wrap py-2 mb-2 border-b border-gray-50">
+                            <div className="flex items-center gap-1.5">
+                              <CalendarDays className="w-3.5 h-3.5 text-gray-400" />
+                              <span className="text-[10px] text-gray-400 font-medium uppercase tracking-wider">Fechas:</span>
+                            </div>
                             <input
                               type="date"
                               value={phase.startDate ? phase.startDate.split("T")[0] : ""}
@@ -986,8 +1232,47 @@ export default function AdminProjectDetail() {
                               onClick={e => e.stopPropagation()}
                             />
                           </div>
-                          {phase.tasks.length > 0 && (
-                            <div className="grid grid-cols-[20px_1fr_120px_72px_24px] items-center gap-3 px-1 pb-1.5 border-b border-gray-50 text-[9px] font-medium uppercase tracking-wider text-gray-400">
+                          {/* Filter + sort toolbar */}
+                          {phase.tasks.length > 1 && (
+                            <div className="flex items-center justify-between gap-2 flex-wrap py-2 mb-1">
+                              <div className="flex items-center gap-1 bg-gray-50 rounded-lg p-0.5 flex-wrap">
+                                {([
+                                  { key: "all" as const, label: "Todas", count: phase.tasks.length },
+                                  { key: "pending" as const, label: "Pendientes", count: phase.tasks.filter(t => t.status !== "completed").length },
+                                  { key: "overdue" as const, label: "Vencidas", count: overdueCount },
+                                  { key: "completed" as const, label: "Listas", count: completed },
+                                ]).map(f => {
+                                  if (f.key !== "all" && f.count === 0) return null;
+                                  const active = filterKey === f.key;
+                                  return (
+                                    <button
+                                      key={f.key}
+                                      onClick={() => setPhaseFilter(p => ({ ...p, [phase.id]: f.key }))}
+                                      className={`text-[10px] px-2 py-1 rounded font-medium transition-colors flex items-center gap-1 ${
+                                        active ? "bg-white shadow-sm text-gray-900" : "text-gray-500 hover:text-gray-700"
+                                      } ${f.key === "overdue" && f.count > 0 && !active ? "text-red-600" : ""}`}
+                                    >
+                                      <span>{f.label}</span>
+                                      <span className="text-gray-400 tabular-nums">{f.count}</span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                              <Select value={sortKey} onValueChange={v => setPhaseSort(p => ({ ...p, [phase.id]: v as PhaseSort }))}>
+                                <SelectTrigger className="h-7 text-xs w-32 shrink-0">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="manual">Orden manual</SelectItem>
+                                  <SelectItem value="date">Por fecha</SelectItem>
+                                  <SelectItem value="priority">Por prioridad</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                          )}
+                          {visibleTasks.length > 0 && (
+                            <div className="hidden md:grid grid-cols-[16px_20px_1fr_128px_92px_24px] items-center gap-3 px-1 pb-1.5 border-b border-gray-50 text-[10px] font-medium uppercase tracking-wider text-gray-400">
+                              <span></span>
                               <span></span>
                               <span>Descripción</span>
                               <span>Fecha de entrega</span>
@@ -995,82 +1280,144 @@ export default function AdminProjectDetail() {
                               <span></span>
                             </div>
                           )}
-                          {phase.tasks.map(task => {
+                          {phase.tasks.length > 0 && visibleTasks.length === 0 && (
+                            <p className="text-xs text-gray-400 italic py-3 text-center">No hay tareas que coincidan con este filtro.</p>
+                          )}
+                          <DndContext sensors={dndSensors} collisionDetection={closestCenter} onDragEnd={handleTaskDragEnd(phase.id, visibleTasks)}>
+                            <SortableContext items={visibleTasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+                          {visibleTasks.map(task => {
                             const Icon = TASK_STATUS_ICONS[task.status] || Circle;
+                            const today = new Date();
+                            today.setHours(0, 0, 0, 0);
+                            const isOverdue = !!task.dueDate && task.status !== "completed" && new Date(task.dueDate) < today;
+                            const priorityClasses =
+                              task.priority === "high" ? "bg-red-50 text-red-600 hover:bg-red-100" :
+                              task.priority === "medium" ? "bg-amber-50 text-amber-600 hover:bg-amber-100" :
+                              "bg-gray-100 text-gray-500 hover:bg-gray-200";
                             return (
-                              <div key={task.id} className={`grid grid-cols-[20px_1fr_120px_72px_24px] items-center gap-3 py-1.5 group ${task.isMilestone ? "bg-amber-50/50 -mx-2 px-2 rounded-lg" : ""}`}>
-                                <button onClick={() => cycleTaskStatus(task)} className="shrink-0 justify-self-start">
-                                  <Icon className={`w-4 h-4 ${TASK_STATUS_COLORS[task.status]}`} />
-                                </button>
-                                <span className={`text-sm min-w-0 flex items-start gap-1.5 ${task.status === "completed" ? "line-through text-gray-400" : "text-gray-700"} ${task.isMilestone ? "font-semibold" : ""}`}>
-                                  {task.isMilestone && <span className="text-amber-500 text-sm shrink-0">🏁</span>}
-                                  <span className="min-w-0 flex-1 break-words">
-                                    <EditableText
-                                      value={task.title}
-                                      kind="task-title"
-                                      onSave={(title) => new Promise<void>((resolve, reject) => {
-                                        updateTaskMut.mutate(
-                                          { id: task.id, data: { title } },
-                                          { onSuccess: () => resolve(), onError: (err) => reject(err) }
-                                        );
-                                      })}
-                                    />
-                                  </span>
-                                </span>
-                                <input
-                                  type="date"
-                                  value={task.dueDate ? task.dueDate.split("T")[0] : ""}
-                                  onChange={e => updateTaskMut.mutate({ id: task.id, data: { dueDate: e.target.value || null } })}
-                                  className={`text-[10px] border rounded px-1.5 py-0.5 outline-none w-full ${task.dueDate ? "border-gray-200 text-gray-500" : "border-dashed border-gray-300 text-gray-400"} focus:border-[#2FA4A9]`}
-                                  title="Fecha límite"
-                                />
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium text-center justify-self-center ${
-                                  task.priority === "high" ? "bg-red-50 text-red-600" :
-                                  task.priority === "medium" ? "bg-amber-50 text-amber-600" :
-                                  "bg-gray-50 text-gray-400"
-                                }`}>{task.priority}</span>
-                                <button
-                                  onClick={() => setPendingDelete({ kind: "task", id: task.id, title: task.title })}
-                                  className="p-1 rounded text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all justify-self-end"
-                                  title="Eliminar tarea"
-                                >
-                                  <Trash2 className="w-3 h-3" />
-                                </button>
+                              <SortableRow key={task.id} id={task.id} disabled={sortKey !== "manual"}>
+                                {({ handleListeners }) => (
+                              <div className={`flex flex-col gap-1.5 md:grid md:grid-cols-[16px_20px_1fr_128px_92px_24px] md:items-center md:gap-3 py-2 group ${task.isMilestone ? "bg-amber-50/50 -mx-2 px-2 rounded-lg" : ""}`}>
+                                {/* Mobile row 1 / Desktop cols 1-3 + 6 */}
+                                <div className="flex items-start gap-2 md:contents">
+                                  {/* Drag handle (hidden when sort isn't manual) */}
+                                  {handleListeners ? (
+                                    <button
+                                      {...handleListeners}
+                                      className="shrink-0 mt-0.5 md:mt-0 md:justify-self-start text-gray-300 hover:text-gray-500 cursor-grab active:cursor-grabbing touch-none"
+                                      aria-label="Reordenar tarea"
+                                    >
+                                      <GripVertical className="w-3.5 h-3.5" />
+                                    </button>
+                                  ) : (
+                                    <span className="shrink-0 w-3.5 md:w-4 md:justify-self-start" />
+                                  )}
+                                  <button onClick={() => cycleTaskStatus(task)} className="shrink-0 mt-0.5 md:mt-0 md:justify-self-start" aria-label="Cambiar estado">
+                                    <Icon className={`w-4 h-4 ${TASK_STATUS_COLORS[task.status]}`} />
+                                  </button>
+                                  <div className="text-sm flex-1 min-w-0">
+                                    <div className={`flex items-start gap-1.5 ${task.status === "completed" ? "line-through text-gray-400" : "text-gray-700"} ${task.isMilestone ? "font-semibold" : ""}`}>
+                                      {task.isMilestone && <span className="text-amber-500 text-sm shrink-0">🏁</span>}
+                                      <div className="min-w-0 flex-1 break-words">
+                                        <EditableText
+                                          value={task.title}
+                                          kind="task-title"
+                                          onSave={(title) => new Promise<void>((resolve, reject) => {
+                                            updateTaskMut.mutate(
+                                              { id: task.id, data: { title } },
+                                              { onSuccess: () => resolve(), onError: (err) => reject(err) }
+                                            );
+                                          })}
+                                        />
+                                      </div>
+                                    </div>
+                                    {/* Assignee chip — outside the line-through wrapper so it doesn't get crossed out */}
+                                    <div className="mt-0.5">
+                                      <AssigneeChip
+                                        value={task.assigneeName}
+                                        onSave={(next) => updateTaskMut.mutate({ id: task.id, data: { assigneeName: next } })}
+                                      />
+                                    </div>
+                                  </div>
+                                  {/* Mobile-only delete (always visible) */}
+                                  <button
+                                    onClick={() => setPendingDelete({ kind: "task", id: task.id, title: task.title })}
+                                    className="md:hidden p-1 -mr-1 rounded text-gray-300 hover:text-red-500 shrink-0"
+                                    aria-label="Eliminar tarea"
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                </div>
+                                {/* Mobile row 2 / Desktop cols 3-4 + 5 */}
+                                <div className="flex items-center gap-2 ml-6 md:ml-0 md:contents">
+                                  <input
+                                    type="date"
+                                    value={task.dueDate ? task.dueDate.split("T")[0] : ""}
+                                    onChange={e => updateTaskMut.mutate({ id: task.id, data: { dueDate: e.target.value || null } })}
+                                    className={`text-[10px] border rounded px-1.5 py-1 outline-none w-32 md:w-full ${
+                                      isOverdue
+                                        ? "border-red-300 text-red-600 bg-red-50"
+                                        : task.dueDate
+                                          ? "border-gray-200 text-gray-600"
+                                          : "border-dashed border-gray-300 text-gray-400"
+                                    } focus:border-[#2FA4A9]`}
+                                    title={isOverdue ? "Fecha vencida" : "Fecha límite"}
+                                  />
+                                  <select
+                                    value={task.priority}
+                                    onChange={e => updateTaskMut.mutate({ id: task.id, data: { priority: e.target.value } })}
+                                    className={`appearance-none text-[10px] px-2 py-1 rounded font-medium border-0 outline-none cursor-pointer transition-colors md:justify-self-center ${priorityClasses}`}
+                                    aria-label="Nivel de prioridad"
+                                  >
+                                    <option value="low">Bajo</option>
+                                    <option value="medium">Medio</option>
+                                    <option value="high">Alto</option>
+                                  </select>
+                                  {/* Desktop-only delete (hover-revealed) */}
+                                  <button
+                                    onClick={() => setPendingDelete({ kind: "task", id: task.id, title: task.title })}
+                                    className="hidden md:flex p-1 rounded text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all md:justify-self-end"
+                                    aria-label="Eliminar tarea"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
                               </div>
+                                )}
+                              </SortableRow>
                             );
                           })}
+                            </SortableContext>
+                          </DndContext>
 
                           {addingTaskPhase === phase.id ? (
                             <div className="space-y-2 pt-2">
-                              <div className="flex items-center gap-2">
-                                <Input
-                                  value={taskForm.title}
-                                  onChange={e => setTaskForm(f => ({ ...f, title: e.target.value }))}
-                                  placeholder="Nueva tarea..."
-                                  className="h-8 text-sm"
-                                  autoFocus
-                                  onKeyDown={e => { if (e.key === "Enter" && taskForm.title) addTaskMut.mutate({ phaseId: phase.id, data: { ...taskForm, dueDate: taskForm.dueDate || null } }); if (e.key === "Escape") setAddingTaskPhase(null); }}
-                                />
-                                <Select value={taskForm.priority} onValueChange={v => setTaskForm(f => ({ ...f, priority: v }))}>
-                                  <SelectTrigger className="h-8 w-24 text-xs"><SelectValue /></SelectTrigger>
-                                  <SelectContent>
-                                    <SelectItem value="low">Low</SelectItem>
-                                    <SelectItem value="medium">Medium</SelectItem>
-                                    <SelectItem value="high">High</SelectItem>
-                                  </SelectContent>
-                                </Select>
-                                <Button size="sm" className="h-8" onClick={() => { if (taskForm.title) addTaskMut.mutate({ phaseId: phase.id, data: { ...taskForm, dueDate: taskForm.dueDate || null } }); }}>
-                                  <Plus className="w-3.5 h-3.5" />
-                                </Button>
-                              </div>
-                              <div className="flex items-center gap-3">
+                              <Input
+                                value={taskForm.title}
+                                onChange={e => setTaskForm(f => ({ ...f, title: e.target.value }))}
+                                placeholder="Nueva tarea..."
+                                className="h-9 text-sm"
+                                autoFocus
+                                onKeyDown={e => { if (e.key === "Enter" && taskForm.title) addTaskMut.mutate({ phaseId: phase.id, data: { ...taskForm, dueDate: taskForm.dueDate || null } }); if (e.key === "Escape") setAddingTaskPhase(null); }}
+                              />
+                              <div className="flex items-center gap-2 flex-wrap">
                                 <Input
                                   type="date"
                                   value={taskForm.dueDate}
                                   onChange={e => setTaskForm(f => ({ ...f, dueDate: e.target.value }))}
-                                  className="h-7 text-xs w-36"
+                                  className="h-8 text-xs flex-1 min-w-[140px]"
                                   placeholder="Fecha límite"
                                 />
+                                <Select value={taskForm.priority} onValueChange={v => setTaskForm(f => ({ ...f, priority: v }))}>
+                                  <SelectTrigger className="h-8 w-24 text-xs"><SelectValue /></SelectTrigger>
+                                  <SelectContent>
+                                    <SelectItem value="low">Bajo</SelectItem>
+                                    <SelectItem value="medium">Medio</SelectItem>
+                                    <SelectItem value="high">Alto</SelectItem>
+                                  </SelectContent>
+                                </Select>
+                              </div>
+                              <div className="flex items-center justify-between gap-2">
                                 <label className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer select-none">
                                   <input
                                     type="checkbox"
@@ -1080,6 +1427,14 @@ export default function AdminProjectDetail() {
                                   />
                                   🏁 Milestone
                                 </label>
+                                <div className="flex items-center gap-2">
+                                  <Button size="sm" variant="ghost" className="h-8" onClick={() => setAddingTaskPhase(null)}>
+                                    Cancelar
+                                  </Button>
+                                  <Button size="sm" className="h-8 bg-[#2FA4A9] hover:bg-[#238b8f]" disabled={!taskForm.title} onClick={() => { if (taskForm.title) addTaskMut.mutate({ phaseId: phase.id, data: { ...taskForm, dueDate: taskForm.dueDate || null } }); }}>
+                                    <Plus className="w-3.5 h-3.5 mr-1" /> Agregar
+                                  </Button>
+                                </div>
                               </div>
                             </div>
                           ) : (
@@ -1093,9 +1448,13 @@ export default function AdminProjectDetail() {
                         </div>
                       )}
                     </div>
+                      )}
+                    </SortableRow>
                   );
-                })}
-              </div>
+                    })}
+                  </div>
+                </SortableContext>
+              </DndContext>
             )}
 
             {/* Add phase dialog */}
@@ -1377,280 +1736,425 @@ export default function AdminProjectDetail() {
                 </div>
               )}
 
-              <div className="flex gap-4">
-                {/* Calendar grid */}
-                <div className={`bg-white rounded-xl border border-gray-200 p-6 ${selectedDay ? "flex-1" : "w-full"} transition-all`}>
-                  {/* Month navigation */}
-                  <div className="flex items-center justify-between mb-6">
-                    <button onClick={() => setCalendarMonth(prev => subMonths(prev, 1))} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500">
-                      <ChevronDown className="w-4 h-4 rotate-90" />
-                    </button>
-                    <div className="flex items-center gap-3">
-                      <h3 className="text-lg font-bold text-gray-900 capitalize">
-                        {format(calendarMonth, "MMMM yyyy", { locale: es })}
-                      </h3>
-                      <button onClick={() => { setCalendarMonth(new Date()); setSelectedDay(new Date()); }} className="text-[10px] text-[#2FA4A9] font-medium hover:underline">
-                        Hoy
-                      </button>
-                    </div>
-                    <button onClick={() => setCalendarMonth(prev => addMonths(prev, 1))} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500">
-                      <ChevronDown className="w-4 h-4 -rotate-90" />
-                    </button>
-                  </div>
-
-                  {/* Day headers */}
-                  <div className="grid grid-cols-7 gap-px mb-1">
-                    {["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"].map(d => (
-                      <div key={d} className="text-center text-[10px] font-semibold text-gray-400 uppercase tracking-wider py-2">{d}</div>
-                    ))}
-                  </div>
-
-                  {/* Calendar grid */}
-                  <div className="grid grid-cols-7 gap-px">
-                    {Array.from({ length: startDay }).map((_, i) => (
-                      <div key={`empty-${i}`} className="h-24 bg-gray-50/30 rounded-lg" />
-                    ))}
-                    {days.map(day => {
-                      const dayEvents = getEventsForDay(day);
-                      const isToday = isSameDay(day, today);
-                      const isSelected = selectedDay && isSameDay(day, selectedDay);
-                      return (
-                        <div
-                          key={day.toISOString()}
-                          onClick={() => setSelectedDay(day)}
-                          className={`h-24 rounded-lg p-1.5 border cursor-pointer transition-all ${
-                            isSelected ? "border-[#2FA4A9] bg-teal-50/50 ring-1 ring-[#2FA4A9]/20"
-                            : isToday ? "border-[#2FA4A9]/40 bg-teal-50/20"
-                            : "border-transparent hover:bg-gray-50 hover:border-gray-200"
-                          }`}
-                        >
-                          <div className={`text-[11px] font-medium mb-1 ${isSelected ? "text-[#2FA4A9] font-bold" : isToday ? "text-[#2FA4A9] font-bold" : "text-gray-500"}`}>
-                            {format(day, "d")}
-                          </div>
-                          <div className="space-y-0.5 overflow-hidden">
-                            {dayEvents.slice(0, 3).map((ev, i) => (
-                              <div key={i} className="flex items-center gap-1">
-                                {ev.type === "milestone" ? (
-                                  <Diamond className="w-2.5 h-2.5 shrink-0 text-amber-500 fill-amber-500" />
-                                ) : (
-                                  <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: ev.color }} />
-                                )}
-                                <span className="text-[9px] text-gray-600 truncate">{ev.label}</span>
-                              </div>
-                            ))}
-                            {dayEvents.length > 3 && (
-                              <span className="text-[9px] text-gray-400">+{dayEvents.length - 3} más</span>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Legend */}
-                  <div className="flex items-center gap-4 mt-4 pt-4 border-t border-gray-100">
-                    <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500" /><span className="text-[10px] text-gray-500">Completada</span></div>
-                    <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-500" /><span className="text-[10px] text-gray-500">En progreso</span></div>
-                    <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-gray-400" /><span className="text-[10px] text-gray-500">Pendiente</span></div>
-                    <div className="flex items-center gap-1.5"><Diamond className="w-2.5 h-2.5 text-amber-500 fill-amber-500" /><span className="text-[10px] text-gray-500">Milestone</span></div>
-                  </div>
-                </div>
-
-                {/* Side panel — day detail */}
-                <AnimatePresence>
-                  {selectedDay && (
-                    <motion.div
-                      initial={{ width: 0, opacity: 0 }}
-                      animate={{ width: 340, opacity: 1 }}
-                      exit={{ width: 0, opacity: 0 }}
-                      transition={{ duration: 0.2 }}
-                      className="shrink-0 overflow-hidden"
-                    >
-                      <div className="bg-white rounded-xl border border-gray-200 p-5 h-full w-[340px]">
-                        <div className="flex items-center justify-between mb-4">
-                          <div>
-                            <p className="text-sm font-bold text-gray-900 capitalize">{format(selectedDay, "EEEE", { locale: es })}</p>
-                            <p className="text-xs text-gray-400">{format(selectedDay, "d 'de' MMMM, yyyy", { locale: es })}</p>
-                          </div>
-                          <button onClick={() => setSelectedDay(null)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">✕</button>
-                        </div>
-
-                        {selectedDayEvents.length === 0 ? (
-                          <div className="text-center py-8">
-                            <CalendarDays className="w-8 h-8 text-gray-200 mx-auto mb-2" />
-                            <p className="text-xs text-gray-400 mb-3">Sin eventos este día</p>
-                          </div>
-                        ) : (
-                          <div className="space-y-2 mb-4">
-                            {selectedDayEvents.map((ev, i) => {
-                              const StatusIcon = ev.taskId ? (TASK_STATUS_ICONS[ev.status] || Circle) : Circle;
-                              return (
-                                <div key={i} className="flex items-start gap-3 p-3 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors group">
-                                  <div className="w-1 h-full rounded-full shrink-0 self-stretch" style={{ background: ev.color }} />
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-sm font-medium text-gray-800 truncate">{ev.label}</p>
-                                    <p className="text-[10px] text-gray-400">{ev.phaseName}</p>
-                                    {ev.type === "milestone" && <span className="text-[10px] text-amber-600 font-medium">🏁 Milestone</span>}
-                                    {(ev.type === "phase_start" || ev.type === "phase_end") && (
-                                      <span className="text-[10px] text-gray-400">{ev.type === "phase_start" ? "Inicio de fase" : "Fin de fase"}</span>
-                                    )}
-                                  </div>
-                                  {ev.taskId && (
-                                    <button
-                                      onClick={() => {
-                                        const order = ["pending", "in_progress", "completed"];
-                                        const next = order[(order.indexOf(ev.status) + 1) % order.length];
-                                        updateTaskMut.mutate({ id: ev.taskId!, data: { status: next } });
-                                      }}
-                                      className="shrink-0"
-                                      title="Cambiar estado"
-                                    >
-                                      <StatusIcon className={`w-4 h-4 ${TASK_STATUS_COLORS[ev.status]} hover:scale-110 transition-transform`} />
-                                    </button>
-                                  )}
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
-
-                        {/* Quick add task */}
-                        <div className="border-t border-gray-100 pt-3 mt-3">
-                          <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-2">Agregar tarea rápida</p>
-                          <div className="space-y-2">
-                            <Input
-                              placeholder="Nombre de la tarea"
-                              value={calQuickTask.title}
-                              onChange={e => setCalQuickTask(f => ({ ...f, title: e.target.value }))}
-                              className="h-8 text-xs"
-                            />
-                            {project.phases.length > 0 && (
-                              <Select value={calQuickTask.phaseId} onValueChange={v => setCalQuickTask(f => ({ ...f, phaseId: v }))}>
-                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Seleccionar fase" /></SelectTrigger>
-                                <SelectContent>
-                                  {project.phases.map(p => (
-                                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            )}
-                            <Button
-                              size="sm"
-                              className="w-full h-8 text-xs bg-[#2FA4A9] hover:bg-[#238b8f]"
-                              disabled={!calQuickTask.title || !calQuickTask.phaseId}
-                              onClick={() => {
-                                addTaskMut.mutate({
-                                  phaseId: calQuickTask.phaseId,
-                                  data: {
-                                    title: calQuickTask.title,
-                                    priority: "medium",
-                                    dueDate: format(selectedDay, "yyyy-MM-dd"),
-                                  },
-                                });
-                                setCalQuickTask({ title: "", phaseId: "" });
-                              }}
-                            >
-                              <Plus className="w-3 h-3 mr-1" /> Crear tarea para este día
-                            </Button>
-                          </div>
-                        </div>
+              {(() => {
+                const dayDetailBody = selectedDay ? (
+                  <>
+                    {selectedDayEvents.length === 0 ? (
+                      <div className="text-center py-8">
+                        <CalendarDays className="w-8 h-8 text-gray-200 mx-auto mb-2" />
+                        <p className="text-xs text-gray-400 mb-3">Sin eventos este día</p>
                       </div>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
-              </div>
+                    ) : (
+                      <div className="space-y-2 mb-4">
+                        {selectedDayEvents.map((ev, i) => {
+                          const StatusIcon = ev.taskId ? (TASK_STATUS_ICONS[ev.status] || Circle) : Circle;
+                          return (
+                            <div key={i} className="flex items-start gap-3 p-3 rounded-lg border border-gray-100 hover:border-gray-200 transition-colors group">
+                              <div className="w-1 rounded-full shrink-0 self-stretch" style={{ background: ev.color }} />
+                              <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-800 break-words">{ev.label}</p>
+                                <p className="text-[10px] text-gray-400">{ev.phaseName}</p>
+                                {ev.type === "milestone" && <span className="text-[10px] text-amber-600 font-medium">🏁 Milestone</span>}
+                                {(ev.type === "phase_start" || ev.type === "phase_end") && (
+                                  <span className="text-[10px] text-gray-400">{ev.type === "phase_start" ? "Inicio de fase" : "Fin de fase"}</span>
+                                )}
+                              </div>
+                              {ev.taskId && (
+                                <button
+                                  onClick={() => {
+                                    const order = ["pending", "in_progress", "completed"];
+                                    const next = order[(order.indexOf(ev.status) + 1) % order.length];
+                                    updateTaskMut.mutate({ id: ev.taskId!, data: { status: next } });
+                                  }}
+                                  className="shrink-0"
+                                  title="Cambiar estado"
+                                  aria-label="Cambiar estado"
+                                >
+                                  <StatusIcon className={`w-4 h-4 ${TASK_STATUS_COLORS[ev.status]} hover:scale-110 transition-transform`} />
+                                </button>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Quick add task */}
+                    <div className="border-t border-gray-100 pt-3 mt-3">
+                      <p className="text-[10px] text-gray-400 font-semibold uppercase tracking-wider mb-2">Agregar tarea rápida</p>
+                      <div className="space-y-2">
+                        <Input
+                          placeholder="Nombre de la tarea"
+                          value={calQuickTask.title}
+                          onChange={e => setCalQuickTask(f => ({ ...f, title: e.target.value }))}
+                          className="h-9 text-sm"
+                        />
+                        {project.phases.length > 0 && (
+                          <Select value={calQuickTask.phaseId} onValueChange={v => setCalQuickTask(f => ({ ...f, phaseId: v }))}>
+                            <SelectTrigger className="h-9 text-sm"><SelectValue placeholder="Seleccionar fase" /></SelectTrigger>
+                            <SelectContent>
+                              {project.phases.map(p => (
+                                <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        )}
+                        <Button
+                          size="sm"
+                          className="w-full h-9 text-sm bg-[#2FA4A9] hover:bg-[#238b8f]"
+                          disabled={!calQuickTask.title || !calQuickTask.phaseId}
+                          onClick={() => {
+                            addTaskMut.mutate({
+                              phaseId: calQuickTask.phaseId,
+                              data: {
+                                title: calQuickTask.title,
+                                priority: "medium",
+                                dueDate: format(selectedDay, "yyyy-MM-dd"),
+                              },
+                            });
+                            setCalQuickTask({ title: "", phaseId: "" });
+                          }}
+                        >
+                          <Plus className="w-3.5 h-3.5 mr-1" /> Crear tarea para este día
+                        </Button>
+                      </div>
+                    </div>
+                  </>
+                ) : null;
+
+                return (
+                  <div className="flex gap-4">
+                    {/* Calendar grid */}
+                    <div className={`bg-white rounded-xl border border-gray-200 p-3 sm:p-6 ${selectedDay ? "md:flex-1" : ""} w-full transition-all`}>
+                      {/* Month navigation */}
+                      <div className="flex items-center justify-between mb-4 sm:mb-6">
+                        <button onClick={() => setCalendarMonth(prev => subMonths(prev, 1))} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" aria-label="Mes anterior">
+                          <ChevronDown className="w-4 h-4 rotate-90" />
+                        </button>
+                        <div className="flex items-center gap-2 sm:gap-3 min-w-0">
+                          <h3 className="text-base sm:text-lg font-bold text-gray-900 capitalize truncate">
+                            {format(calendarMonth, "MMMM yyyy", { locale: es })}
+                          </h3>
+                          <button onClick={() => { setCalendarMonth(new Date()); setSelectedDay(new Date()); }} className="text-[10px] text-[#2FA4A9] font-medium hover:underline shrink-0">
+                            Hoy
+                          </button>
+                        </div>
+                        <button onClick={() => setCalendarMonth(prev => addMonths(prev, 1))} className="p-2 rounded-lg hover:bg-gray-100 text-gray-500" aria-label="Mes siguiente">
+                          <ChevronDown className="w-4 h-4 -rotate-90" />
+                        </button>
+                      </div>
+
+                      {/* Day headers */}
+                      <div className="grid grid-cols-7 gap-px mb-1">
+                        {["Dom", "Lun", "Mar", "Mié", "Jue", "Vie", "Sáb"].map(d => (
+                          <div key={d} className="text-center text-[9px] sm:text-[10px] font-semibold text-gray-400 uppercase tracking-wider py-1.5 sm:py-2">
+                            <span className="hidden sm:inline">{d}</span>
+                            <span className="sm:hidden">{d.charAt(0)}</span>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Calendar grid */}
+                      <div className="grid grid-cols-7 gap-px">
+                        {Array.from({ length: startDay }).map((_, i) => (
+                          <div key={`empty-${i}`} className="h-14 sm:h-24 bg-gray-50/30 rounded-lg" />
+                        ))}
+                        {days.map(day => {
+                          const dayEvents = getEventsForDay(day);
+                          const isToday = isSameDay(day, today);
+                          const isSelected = selectedDay && isSameDay(day, selectedDay);
+                          return (
+                            <div
+                              key={day.toISOString()}
+                              onClick={() => setSelectedDay(day)}
+                              className={`h-14 sm:h-24 rounded-lg p-1 sm:p-1.5 border cursor-pointer transition-all ${
+                                isSelected ? "border-[#2FA4A9] bg-teal-50/50 ring-1 ring-[#2FA4A9]/20"
+                                : isToday ? "border-[#2FA4A9]/40 bg-teal-50/20"
+                                : "border-transparent hover:bg-gray-50 hover:border-gray-200"
+                              }`}
+                            >
+                              <div className={`text-[10px] sm:text-[11px] font-medium mb-0.5 sm:mb-1 ${isSelected ? "text-[#2FA4A9] font-bold" : isToday ? "text-[#2FA4A9] font-bold" : "text-gray-500"}`}>
+                                {format(day, "d")}
+                              </div>
+                              {/* Mobile: dots only */}
+                              <div className="flex items-center gap-0.5 flex-wrap sm:hidden">
+                                {dayEvents.slice(0, 4).map((ev, i) => (
+                                  ev.type === "milestone" ? (
+                                    <Diamond key={i} className="w-2 h-2 text-amber-500 fill-amber-500" />
+                                  ) : (
+                                    <div key={i} className="w-1.5 h-1.5 rounded-full" style={{ background: ev.color }} />
+                                  )
+                                ))}
+                                {dayEvents.length > 4 && <span className="text-[8px] text-gray-400">+{dayEvents.length - 4}</span>}
+                              </div>
+                              {/* Desktop: labels */}
+                              <div className="hidden sm:block space-y-0.5 overflow-hidden">
+                                {dayEvents.slice(0, 3).map((ev, i) => (
+                                  <div key={i} className="flex items-center gap-1">
+                                    {ev.type === "milestone" ? (
+                                      <Diamond className="w-2.5 h-2.5 shrink-0 text-amber-500 fill-amber-500" />
+                                    ) : (
+                                      <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: ev.color }} />
+                                    )}
+                                    <span className="text-[9px] text-gray-600 truncate">{ev.label}</span>
+                                  </div>
+                                ))}
+                                {dayEvents.length > 3 && (
+                                  <span className="text-[9px] text-gray-400">+{dayEvents.length - 3} más</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+
+                      {/* Legend */}
+                      <div className="flex items-center gap-3 sm:gap-4 mt-3 sm:mt-4 pt-3 sm:pt-4 border-t border-gray-100 flex-wrap">
+                        <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500" /><span className="text-[10px] text-gray-500">Completada</span></div>
+                        <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-500" /><span className="text-[10px] text-gray-500">En progreso</span></div>
+                        <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-gray-400" /><span className="text-[10px] text-gray-500">Pendiente</span></div>
+                        <div className="flex items-center gap-1.5"><Diamond className="w-2.5 h-2.5 text-amber-500 fill-amber-500" /><span className="text-[10px] text-gray-500">Milestone</span></div>
+                      </div>
+                    </div>
+
+                    {/* Desktop side panel — day detail */}
+                    <AnimatePresence>
+                      {selectedDay && (
+                        <motion.div
+                          initial={{ width: 0, opacity: 0 }}
+                          animate={{ width: 340, opacity: 1 }}
+                          exit={{ width: 0, opacity: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="shrink-0 overflow-hidden hidden md:block"
+                        >
+                          <div className="bg-white rounded-xl border border-gray-200 p-5 h-full w-[340px]">
+                            <div className="flex items-center justify-between mb-4">
+                              <div>
+                                <p className="text-sm font-bold text-gray-900 capitalize">{format(selectedDay, "EEEE", { locale: es })}</p>
+                                <p className="text-xs text-gray-400">{format(selectedDay, "d 'de' MMMM, yyyy", { locale: es })}</p>
+                              </div>
+                              <button onClick={() => setSelectedDay(null)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400" aria-label="Cerrar">✕</button>
+                            </div>
+                            {dayDetailBody}
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
+                    {/* Mobile: bottom sheet for day detail */}
+                    <Sheet open={!!selectedDay} onOpenChange={(open) => { if (!open) setSelectedDay(null); }}>
+                      <SheetContent side="bottom" className="md:hidden max-h-[85vh] overflow-y-auto rounded-t-2xl">
+                        {selectedDay && (
+                          <>
+                            <SheetHeader className="text-left">
+                              <SheetTitle className="capitalize">{format(selectedDay, "EEEE d 'de' MMMM", { locale: es })}</SheetTitle>
+                            </SheetHeader>
+                            <div className="pt-4">
+                              {dayDetailBody}
+                            </div>
+                          </>
+                        )}
+                      </SheetContent>
+                    </Sheet>
+                  </div>
+                );
+              })()}
             </div>
           );
         })()}
 
         {/* ── ENTREGAS ── */}
-        {activeTab === "Entregas" && (
+        {activeTab === "Entregas" && (() => {
+          const counts: Record<string, number> = { all: project.deliverables.length, pending: 0, delivered: 0, approved: 0, rejected: 0 };
+          for (const d of project.deliverables) counts[d.status] = (counts[d.status] || 0) + 1;
+          const visible = delivFilter === "all" ? project.deliverables : project.deliverables.filter(d => d.status === delivFilter);
+          const STATUS_ORDER: DelivStatus[] = ["pending", "delivered", "approved", "rejected"];
+          const sorted = [...visible].sort((a, b) => STATUS_ORDER.indexOf(a.status as DelivStatus) - STATUS_ORDER.indexOf(b.status as DelivStatus));
+          const filterTabs: Array<{ key: typeof delivFilter; label: string }> = [
+            { key: "all",       label: "Todas" },
+            { key: "pending",   label: "Pendientes" },
+            { key: "delivered", label: "Entregadas" },
+            { key: "approved",  label: "Aprobadas" },
+            { key: "rejected",  label: "Rechazadas" },
+          ];
+
+          return (
           <div className="space-y-4">
-            <div className="flex justify-end">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg p-0.5">
+                {filterTabs.map(t => {
+                  const c = counts[t.key] ?? 0;
+                  const active = delivFilter === t.key;
+                  if (t.key !== "all" && c === 0) return null;
+                  return (
+                    <button
+                      key={t.key}
+                      onClick={() => setDelivFilter(t.key)}
+                      className={`text-xs px-2.5 py-1 rounded-md font-medium transition-all flex items-center gap-1.5 ${active ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+                    >
+                      {t.key !== "all" && <span className={`w-1.5 h-1.5 rounded-full ${DELIV_STATUS_META[t.key as DelivStatus].dotClass}`} />}
+                      <span>{t.label}</span>
+                      <span className={`text-[10px] tabular-nums ${active ? "text-gray-400" : "text-gray-400"}`}>{c}</span>
+                    </button>
+                  );
+                })}
+              </div>
               <Button size="sm" variant="outline" onClick={() => setShowAddDeliverable(true)}>
-                <Plus className="w-3.5 h-3.5 mr-1.5" /> Entrega
+                <Plus className="w-3.5 h-3.5 mr-1.5" /> Nueva entrega
               </Button>
             </div>
 
             {project.deliverables.length === 0 ? (
-              <p className="text-center text-gray-400 py-12">No hay entregas registradas.</p>
+              <div className="bg-white rounded-xl border border-dashed border-gray-200 py-16 text-center">
+                <Package className="w-8 h-8 text-gray-300 mx-auto mb-3" strokeWidth={1.5} />
+                <p className="text-sm text-gray-500">Aún no hay entregas registradas.</p>
+                <p className="text-xs text-gray-400 mt-1">Crea la primera para empezar a trackear el progreso del proyecto.</p>
+              </div>
+            ) : sorted.length === 0 ? (
+              <div className="bg-white rounded-xl border border-dashed border-gray-200 py-12 text-center">
+                <p className="text-sm text-gray-500">No hay entregas con este filtro.</p>
+              </div>
             ) : (
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-100">
-                {project.deliverables.map(d => (
-                  <div key={d.id} className="group flex items-start gap-3 px-4 py-3 hover:bg-gray-50/60 transition-colors">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-start gap-2">
-                        <div className="flex-1 min-w-0 text-sm text-gray-900 leading-snug">
-                          <EditableText
-                            value={d.title}
-                            kind="deliverable-title"
-                            onSave={(title) => new Promise<void>((resolve, reject) => {
-                              updateDelivMut.mutate(
-                                { id: d.id, data: { title } },
-                                { onSuccess: () => resolve(), onError: (err) => reject(err) }
-                              );
-                            })}
-                          />
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <div className="divide-y divide-gray-100">
+                  {sorted.map(d => {
+                    const status = (d.status as DelivStatus) in DELIV_STATUS_META ? (d.status as DelivStatus) : "pending";
+                    const StatusIcon = DELIV_STATUS_META[status].icon;
+                    const typeMeta = DELIV_TYPE_META[d.type] || DELIV_TYPE_META.other;
+                    const TypeIcon = typeMeta.icon;
+                    const dateLabel = d.approvedAt ? `Aprobado ${format(parseISO(d.approvedAt), "d MMM", { locale: es })}` : d.deliveredAt ? `Entregado ${format(parseISO(d.deliveredAt), "d MMM", { locale: es })}` : null;
+                    return (
+                      <div key={d.id} className="group relative flex items-start gap-3.5 px-4 py-3.5 hover:bg-gray-50/70 transition-colors">
+                        {/* Status icon — interactive */}
+                        <div className="relative shrink-0 mt-0.5">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setDelivStatusMenu(delivStatusMenu === d.id ? null : d.id); }}
+                            className={`w-7 h-7 rounded-full ring-1 ring-inset flex items-center justify-center transition-all ${DELIV_STATUS_META[status].ringClass}`}
+                            title={`${DELIV_STATUS_META[status].label} — clic para cambiar`}
+                          >
+                            <StatusIcon className={`w-3.5 h-3.5 ${DELIV_STATUS_META[status].iconClass}`} strokeWidth={2.25} />
+                          </button>
+                          {delivStatusMenu === d.id && (
+                            <>
+                              <div className="fixed inset-0 z-10" onClick={() => setDelivStatusMenu(null)} />
+                              <div className="absolute left-0 top-9 z-20 w-44 bg-white border border-gray-200 rounded-lg shadow-lg py-1">
+                                {STATUS_ORDER.map(s => {
+                                  const M = DELIV_STATUS_META[s];
+                                  const Ico = M.icon;
+                                  const isCurrent = s === status;
+                                  return (
+                                    <button
+                                      key={s}
+                                      disabled={isCurrent}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDelivStatusMenu(null);
+                                        const data: Record<string, unknown> = { status: s };
+                                        if (s === "delivered" && !d.deliveredAt) data.deliveredAt = new Date().toISOString();
+                                        if (s === "approved" && !d.approvedAt) data.approvedAt = new Date().toISOString();
+                                        updateDelivMut.mutate({ id: d.id, data });
+                                      }}
+                                      className={`w-full flex items-center gap-2 px-3 py-1.5 text-xs ${isCurrent ? "bg-gray-50 text-gray-400 cursor-default" : "text-gray-700 hover:bg-gray-50"}`}
+                                    >
+                                      <Ico className={`w-3.5 h-3.5 ${M.iconClass}`} strokeWidth={2.25} />
+                                      <span className="flex-1 text-left">{M.label}</span>
+                                      {isCurrent && <span className="text-[10px] text-gray-400">actual</span>}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          )}
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
-                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${DELIVERABLE_COLORS[d.status]}`}>{d.status}</span>
-                          <span className="text-[10px] text-gray-400 uppercase tracking-wide">{d.type}</span>
+
+                        {/* Body */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start gap-3">
+                            <div className="flex-1 min-w-0 text-sm font-medium text-gray-900 leading-snug">
+                              <EditableText
+                                value={d.title}
+                                kind="deliverable-title"
+                                onSave={(title) => new Promise<void>((resolve, reject) => {
+                                  updateDelivMut.mutate(
+                                    { id: d.id, data: { title } },
+                                    { onSuccess: () => resolve(), onError: (err) => reject(err) }
+                                  );
+                                })}
+                              />
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0 pt-0.5 text-[11px] text-gray-400">
+                              <TypeIcon className="w-3 h-3" strokeWidth={2} />
+                              <span>{typeMeta.label}</span>
+                            </div>
+                          </div>
+
+                          <div className="text-[13px] text-gray-500 mt-0.5 leading-relaxed">
+                            <EditableText
+                              value={d.description || ""}
+                              kind="deliverable-description"
+                              multiline
+                              placeholder="Añadir descripción"
+                              onSave={(description) => new Promise<void>((resolve, reject) => {
+                                updateDelivMut.mutate(
+                                  { id: d.id, data: { description } },
+                                  { onSuccess: () => resolve(), onError: (err) => reject(err) }
+                                );
+                              })}
+                            />
+                          </div>
+
+                          {/* Metadata row: date · rating · demo */}
+                          {(dateLabel || d.clientRating || d.demoUrl) && (
+                            <div className="flex items-center gap-3 mt-2 text-[11px] text-gray-400">
+                              {dateLabel && (
+                                <span className="flex items-center gap-1">
+                                  <Clock className="w-3 h-3" strokeWidth={2} />
+                                  {dateLabel}
+                                </span>
+                              )}
+                              {d.clientRating && (
+                                <span className="flex items-center gap-0.5 text-amber-500">
+                                  {Array.from({ length: 5 }).map((_, i) => (
+                                    <span key={i} className={i < d.clientRating! ? "text-amber-500" : "text-gray-200"}>★</span>
+                                  ))}
+                                </span>
+                              )}
+                              {d.demoUrl && (
+                                <a
+                                  href={d.demoUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-1 text-[#2FA4A9] hover:text-[#238b8f] transition-colors"
+                                >
+                                  <ExternalLink className="w-3 h-3" strokeWidth={2} />
+                                  Ver demo
+                                </a>
+                              )}
+                            </div>
+                          )}
+
+                          {/* Client comment */}
+                          {d.clientComment && (
+                            <div className="mt-2 flex gap-2 bg-amber-50/70 border border-amber-100 rounded-md px-2.5 py-1.5">
+                              <MessageSquare className="w-3 h-3 text-amber-500 shrink-0 mt-0.5" strokeWidth={2} />
+                              <p className="text-[12px] text-amber-800 leading-relaxed">{d.clientComment}</p>
+                            </div>
+                          )}
                         </div>
+
+                        {/* Trash — always visible mobile, hover-revealed desktop */}
+                        <button
+                          onClick={() => setPendingDelete({ kind: "deliverable", id: d.id, title: d.title })}
+                          className="self-start p-1.5 rounded-md text-gray-300 hover:text-red-500 hover:bg-red-50 md:opacity-0 md:group-hover:opacity-100 transition-all shrink-0"
+                          title="Eliminar entrega"
+                          aria-label="Eliminar entrega"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" strokeWidth={2} />
+                        </button>
                       </div>
-                      <div className="text-xs text-gray-500 mt-0.5 leading-relaxed">
-                        <EditableText
-                          value={d.description || ""}
-                          kind="deliverable-description"
-                          multiline
-                          placeholder="Sin descripción — clic para añadir"
-                          onSave={(description) => new Promise<void>((resolve, reject) => {
-                            updateDelivMut.mutate(
-                              { id: d.id, data: { description } },
-                              { onSuccess: () => resolve(), onError: (err) => reject(err) }
-                            );
-                          })}
-                        />
-                      </div>
-                      {d.clientComment && (
-                        <p className="text-xs text-amber-700 mt-1.5 bg-amber-50 px-2 py-1 rounded">
-                          Comentario: {d.clientComment}
-                        </p>
-                      )}
-                      {(d.clientRating || d.demoUrl || d.status === "rejected") && (
-                        <div className="flex items-center gap-3 mt-1.5">
-                          {d.clientRating && (
-                            <span className="text-xs text-gray-400">
-                              {"★".repeat(d.clientRating)}{"☆".repeat(5 - d.clientRating)}
-                            </span>
-                          )}
-                          {d.demoUrl && (
-                            <a href={d.demoUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-[#2FA4A9] hover:underline">
-                              Ver demo
-                            </a>
-                          )}
-                          {d.status === "rejected" && (
-                            <button
-                              className="text-xs text-[#2FA4A9] hover:underline"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                updateDelivMut.mutate({ id: d.id, data: { status: "delivered", deliveredAt: new Date().toISOString() } });
-                              }}
-                            >
-                              Re-entregar
-                            </button>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => setPendingDelete({ kind: "deliverable", id: d.id, title: d.title })}
-                      className="p-1 rounded text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all shrink-0"
-                      title="Eliminar entrega"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ))}
+                    );
+                  })}
+                </div>
               </div>
             )}
 
@@ -1696,7 +2200,8 @@ export default function AdminProjectDetail() {
               </DialogContent>
             </Dialog>
           </div>
-        )}
+          );
+        })()}
 
         {/* ── HORAS ── */}
         {activeTab === "Horas" && (
@@ -1710,7 +2215,7 @@ export default function AdminProjectDetail() {
 
             {/* Category summary */}
             {project.timeLogs.length > 0 && (
-              <div className="grid grid-cols-5 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-3">
                 {Object.entries(
                   project.timeLogs.reduce((acc, l) => {
                     acc[l.category] = (acc[l.category] || 0) + parseFloat(l.hours);
@@ -1718,8 +2223,8 @@ export default function AdminProjectDetail() {
                   }, {} as Record<string, number>)
                 ).map(([cat, hrs]) => (
                   <div key={cat} className="bg-white rounded-lg border border-gray-200 p-3 text-center">
-                    <p className="text-xs text-gray-400">{CATEGORY_LABELS[cat] || cat}</p>
-                    <p className="text-lg font-bold text-gray-900">{hrs.toFixed(1)}h</p>
+                    <p className="text-[11px] sm:text-xs text-gray-400 truncate">{CATEGORY_LABELS[cat] || cat}</p>
+                    <p className="text-base sm:text-lg font-bold text-gray-900">{hrs.toFixed(1)}h</p>
                   </div>
                 ))}
               </div>
@@ -1728,34 +2233,60 @@ export default function AdminProjectDetail() {
             {project.timeLogs.length === 0 ? (
               <p className="text-center text-gray-400 py-12">No hay horas registradas.</p>
             ) : (
-              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-                <table className="w-full">
-                  <thead>
-                    <tr className="border-b border-gray-100 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      <th className="px-5 py-3">Fecha</th>
-                      <th className="px-5 py-3">Descripción</th>
-                      <th className="px-5 py-3">Categoría</th>
-                      <th className="px-5 py-3 text-right">Horas</th>
-                      <th className="px-5 py-3 w-8"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {project.timeLogs.map(l => (
-                      <tr key={l.id} className="group hover:bg-gray-50">
-                        <td className="px-5 py-3 text-sm text-gray-600">{l.date}</td>
-                        <td className="px-5 py-3 text-sm text-gray-900">{l.description}</td>
-                        <td className="px-5 py-3 text-xs text-gray-500">{CATEGORY_LABELS[l.category] || l.category}</td>
-                        <td className="px-5 py-3 text-sm font-medium text-gray-900 text-right">{parseFloat(l.hours).toFixed(1)}h</td>
-                        <td className="px-5 py-3">
-                          <button onClick={() => deleteTimeMut.mutate(l.id)} className="p-1 rounded text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+              <>
+                {/* Mobile: card list */}
+                <div className="md:hidden space-y-2">
+                  {project.timeLogs.map(l => (
+                    <div key={l.id} className="bg-white rounded-xl border border-gray-200 p-3 group">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm text-gray-900 break-words">{l.description}</p>
+                          <div className="flex items-center gap-2 mt-1 text-[11px] text-gray-400 flex-wrap">
+                            <span>{l.date}</span>
+                            <span className="text-gray-300">·</span>
+                            <span>{CATEGORY_LABELS[l.category] || l.category}</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-sm font-semibold text-gray-900 tabular-nums">{parseFloat(l.hours).toFixed(1)}h</span>
+                          <button onClick={() => deleteTimeMut.mutate(l.id)} className="p-1 rounded text-gray-300 hover:text-red-500" aria-label="Eliminar">
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
-                        </td>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {/* Desktop: table */}
+                <div className="hidden md:block bg-white rounded-xl border border-gray-200 overflow-hidden">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-100 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                        <th className="px-5 py-3">Fecha</th>
+                        <th className="px-5 py-3">Descripción</th>
+                        <th className="px-5 py-3">Categoría</th>
+                        <th className="px-5 py-3 text-right">Horas</th>
+                        <th className="px-5 py-3 w-8"></th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {project.timeLogs.map(l => (
+                        <tr key={l.id} className="group hover:bg-gray-50">
+                          <td className="px-5 py-3 text-sm text-gray-600">{l.date}</td>
+                          <td className="px-5 py-3 text-sm text-gray-900">{l.description}</td>
+                          <td className="px-5 py-3 text-xs text-gray-500">{CATEGORY_LABELS[l.category] || l.category}</td>
+                          <td className="px-5 py-3 text-sm font-medium text-gray-900 text-right">{parseFloat(l.hours).toFixed(1)}h</td>
+                          <td className="px-5 py-3">
+                            <button onClick={() => deleteTimeMut.mutate(l.id)} className="p-1 rounded text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all" aria-label="Eliminar">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
 
             <Dialog open={showAddTime} onOpenChange={setShowAddTime}>
@@ -1804,22 +2335,26 @@ export default function AdminProjectDetail() {
         {activeTab === "Sesiones" && (
           <div className="space-y-4">
             {/* CTA to record */}
-            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-5 flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
-                <Mic className="w-6 h-6" />
+            <div className="bg-gradient-to-r from-purple-50 to-indigo-50 border border-purple-200 rounded-xl p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+              <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-purple-100 text-purple-600 flex items-center justify-center shrink-0">
+                  <Mic className="w-5 h-5 sm:w-6 sm:h-6" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <h3 className="font-semibold text-gray-900">Grabar nueva sesión</h3>
+                  <p className="text-xs text-gray-500 mt-0.5">Abre Acta para grabar, transcribir y analizar la reunión con el cliente.</p>
+                </div>
               </div>
-              <div className="flex-1">
-                <h3 className="font-semibold text-gray-900">Grabar nueva sesión</h3>
-                <p className="text-xs text-gray-500 mt-0.5">Abre Acta para grabar, transcribir y analizar la reunión con el cliente.</p>
-              </div>
-              <a href="https://brave-kindness-production-049c.up.railway.app" target="_blank" rel="noopener noreferrer">
-                <Button size="sm" className="bg-purple-600 hover:bg-purple-700">
-                  <Mic className="w-3.5 h-3.5 mr-1.5" /> Abrir Acta
+              <div className="flex items-center gap-2 shrink-0">
+                <a href="https://brave-kindness-production-049c.up.railway.app" target="_blank" rel="noopener noreferrer" className="flex-1 sm:flex-initial">
+                  <Button size="sm" className="bg-purple-600 hover:bg-purple-700 w-full">
+                    <Mic className="w-3.5 h-3.5 mr-1.5" /> Abrir Acta
+                  </Button>
+                </a>
+                <Button size="sm" variant="outline" onClick={() => setShowAddSession(true)} className="flex-1 sm:flex-initial">
+                  <Plus className="w-3.5 h-3.5 mr-1.5" /> <span className="hidden sm:inline">Registrar manualmente</span><span className="sm:hidden">Manual</span>
                 </Button>
-              </a>
-              <Button size="sm" variant="outline" onClick={() => setShowAddSession(true)}>
-                <Plus className="w-3.5 h-3.5 mr-1.5" /> Registrar manualmente
-              </Button>
+              </div>
             </div>
 
             {sessions.length === 0 ? (
@@ -1871,7 +2406,7 @@ export default function AdminProjectDetail() {
                           </details>
                         )}
                       </div>
-                      <button onClick={() => deleteSessionMut.mutate(s.id)} className="p-1 text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                      <button onClick={() => deleteSessionMut.mutate(s.id)} className="p-1 text-gray-300 hover:text-red-500 md:opacity-0 md:group-hover:opacity-100 transition-all" aria-label="Eliminar sesión">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -1934,7 +2469,7 @@ export default function AdminProjectDetail() {
         {/* ── ARCHIVOS ── */}
         {activeTab === "Archivos" && (
           <div className="space-y-4">
-            <div className="flex justify-end gap-2">
+            <div className="flex justify-end gap-2 flex-wrap">
               <Button size="sm" variant="outline" onClick={async () => {
                 const folderId = (project as any).driveFolderId || prompt("ID de carpeta de Google Drive:");
                 if (!folderId) return;
@@ -1945,10 +2480,10 @@ export default function AdminProjectDetail() {
                   invalidate();
                 } catch { toast({ title: "Error sincronizando Drive", variant: "destructive" }); }
               }}>
-                <FolderOpen className="w-3.5 h-3.5 mr-1.5" /> Sincronizar Drive
+                <FolderOpen className="w-3.5 h-3.5 mr-1.5" /> <span className="hidden sm:inline">Sincronizar </span>Drive
               </Button>
               <Button size="sm" variant="outline" onClick={() => setShowAddFile(true)}>
-                <Plus className="w-3.5 h-3.5 mr-1.5" /> Agregar archivo
+                <Plus className="w-3.5 h-3.5 mr-1.5" /> <span className="hidden sm:inline">Agregar </span>Archivo
               </Button>
             </div>
 
@@ -1959,14 +2494,14 @@ export default function AdminProjectDetail() {
                 <p className="text-xs text-gray-300 mt-1">Sube contratos, diseños, specs y más.</p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {files.map((f: any) => {
                   const typeIcons: Record<string, typeof File> = { document: FileText, contract: FileText, image: Image, design: Image, recording: Mic, transcript: FileText };
                   const typeColors: Record<string, string> = { document: "bg-blue-50 text-blue-600", contract: "bg-amber-50 text-amber-600", image: "bg-pink-50 text-pink-600", design: "bg-purple-50 text-purple-600", recording: "bg-red-50 text-red-600", transcript: "bg-teal-50 text-teal-600" };
                   const FileIcon = typeIcons[f.type] || File;
                   const colorClass = typeColors[f.type] || "bg-gray-50 text-gray-500";
                   return (
-                    <div key={f.id} className="bg-white rounded-xl border border-gray-200 p-4 flex items-center gap-3 group hover:shadow-sm transition-shadow">
+                    <div key={f.id} className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4 flex items-center gap-3 group hover:shadow-sm transition-shadow">
                       <div className={`w-10 h-10 rounded-xl ${colorClass} flex items-center justify-center shrink-0`}>
                         <FileIcon className="w-5 h-5" />
                       </div>
@@ -1974,10 +2509,10 @@ export default function AdminProjectDetail() {
                         <a href={f.url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-gray-900 hover:text-[#2FA4A9] truncate block">{f.name}</a>
                         <p className="text-[10px] text-gray-400">{f.type} · {new Date(f.createdAt).toLocaleDateString("es-CO", { day: "numeric", month: "short" })}</p>
                       </div>
-                      <a href={f.url} target="_blank" rel="noopener noreferrer" className="p-1 text-gray-300 hover:text-[#2FA4A9]">
+                      <a href={f.url} target="_blank" rel="noopener noreferrer" className="p-1 text-gray-400 hover:text-[#2FA4A9] shrink-0" aria-label="Abrir archivo">
                         <ExternalLink className="w-3.5 h-3.5" />
                       </a>
-                      <button onClick={() => deleteFileMut.mutate(f.id)} className="p-1 text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                      <button onClick={() => deleteFileMut.mutate(f.id)} className="p-1 text-gray-300 hover:text-red-500 md:opacity-0 md:group-hover:opacity-100 transition-all shrink-0" aria-label="Eliminar archivo">
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                     </div>
@@ -2129,29 +2664,47 @@ export default function AdminProjectDetail() {
                 {ideas.map((idea: any) => {
                   const statusLabels: Record<string, string> = { suggested: "Sugerida", considering: "En evaluación", planned: "Planeada", implemented: "Implementada", dismissed: "Descartada" };
                   const statusColors: Record<string, string> = { suggested: "bg-gray-100 text-gray-600", considering: "bg-blue-100 text-blue-700", planned: "bg-purple-100 text-purple-700", implemented: "bg-emerald-100 text-emerald-700", dismissed: "bg-red-100 text-red-600" };
-                  const prioColors: Record<string, string> = { high: "bg-red-50 text-red-600", medium: "bg-amber-50 text-amber-600", low: "bg-gray-50 text-gray-400" };
+                  const prioLabels: Record<string, string> = { high: "Alto", medium: "Medio", low: "Bajo" };
+                  const prioColors: Record<string, string> = { high: "bg-red-50 text-red-600", medium: "bg-amber-50 text-amber-600", low: "bg-gray-100 text-gray-500" };
                   return (
-                    <div key={idea.id} className="bg-white rounded-xl border border-gray-200 p-5 group">
+                    <div key={idea.id} className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 group">
                       <div className="flex items-start gap-3">
                         <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-500 flex items-center justify-center shrink-0 mt-0.5">
                           <Lightbulb className="w-4 h-4" />
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <h4 className="font-semibold text-gray-900">{idea.title}</h4>
+                            <h4 className="font-semibold text-gray-900 break-words">{idea.title}</h4>
                             <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${statusColors[idea.status] || statusColors.suggested}`}>{statusLabels[idea.status] || idea.status}</span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${prioColors[idea.priority] || prioColors.medium}`}>{idea.priority}</span>
+                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${prioColors[idea.priority] || prioColors.medium}`}>{prioLabels[idea.priority] || idea.priority}</span>
                             {idea.suggestedBy === "client" && <span className="text-[10px] bg-teal-50 text-teal-600 px-2 py-0.5 rounded-full">Cliente</span>}
                           </div>
-                          {idea.description && <p className="text-sm text-gray-500 mt-1">{idea.description}</p>}
+                          {idea.description && <p className="text-sm text-gray-500 mt-1 break-words">{idea.description}</p>}
                           {idea.votes > 0 && (
                             <span className="inline-flex items-center gap-1 text-[10px] text-gray-400 mt-1">
                               <ThumbsUp className="w-3 h-3" /> {idea.votes} votos
                             </span>
                           )}
+                          {/* Mobile: status select + delete on second row */}
+                          <div className="flex items-center gap-2 mt-3 sm:hidden">
+                            <Select value={idea.status} onValueChange={v => updateIdeaMut.mutate({ id: idea.id, data: { status: v } })}>
+                              <SelectTrigger className="h-8 flex-1 text-xs"><SelectValue /></SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="suggested">Sugerida</SelectItem>
+                                <SelectItem value="considering">En evaluación</SelectItem>
+                                <SelectItem value="planned">Planeada</SelectItem>
+                                <SelectItem value="implemented">Implementada</SelectItem>
+                                <SelectItem value="dismissed">Descartada</SelectItem>
+                              </SelectContent>
+                            </Select>
+                            <button onClick={() => deleteIdeaMut.mutate(idea.id)} className="p-2 text-gray-300 hover:text-red-500 shrink-0" aria-label="Eliminar idea">
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
+                        {/* Desktop: status select + delete inline */}
                         <Select value={idea.status} onValueChange={v => updateIdeaMut.mutate({ id: idea.id, data: { status: v } })}>
-                          <SelectTrigger className="h-7 w-32 text-xs"><SelectValue /></SelectTrigger>
+                          <SelectTrigger className="h-7 w-32 text-xs hidden sm:flex"><SelectValue /></SelectTrigger>
                           <SelectContent>
                             <SelectItem value="suggested">Sugerida</SelectItem>
                             <SelectItem value="considering">En evaluación</SelectItem>
@@ -2160,7 +2713,7 @@ export default function AdminProjectDetail() {
                             <SelectItem value="dismissed">Descartada</SelectItem>
                           </SelectContent>
                         </Select>
-                        <button onClick={() => deleteIdeaMut.mutate(idea.id)} className="p-1 text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all">
+                        <button onClick={() => deleteIdeaMut.mutate(idea.id)} className="hidden sm:block p-1 text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all" aria-label="Eliminar idea">
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
@@ -2208,20 +2761,20 @@ export default function AdminProjectDetail() {
 
         {/* ── MENSAJES ── */}
         {activeTab === "Mensajes" && (
-          <div className="bg-white rounded-xl border border-gray-200 flex flex-col" style={{ height: "500px" }}>
-            <div className="flex-1 overflow-y-auto p-5 space-y-3">
+          <div className="bg-white rounded-xl border border-gray-200 flex flex-col h-[60vh] sm:h-[500px] min-h-[400px]">
+            <div className="flex-1 overflow-y-auto p-3 sm:p-5 space-y-3">
               {project.messages.length === 0 ? (
                 <p className="text-center text-gray-400 py-12">No hay mensajes. Envía el primero.</p>
               ) : (
                 project.messages.map(m => (
                   <div key={m.id} className={`flex ${m.senderType === "team" ? "justify-end" : "justify-start"}`}>
-                    <div className={`max-w-[70%] rounded-2xl px-4 py-2.5 ${
+                    <div className={`max-w-[85%] sm:max-w-[70%] rounded-2xl px-3.5 sm:px-4 py-2.5 ${
                       m.senderType === "team"
                         ? "bg-[#2FA4A9] text-white rounded-br-md"
                         : "bg-gray-100 text-gray-900 rounded-bl-md"
                     }`}>
                       <p className={`text-[10px] font-medium mb-0.5 ${m.senderType === "team" ? "text-white/70" : "text-gray-400"}`}>{m.senderName}</p>
-                      <p className="text-sm whitespace-pre-wrap">{m.content}</p>
+                      <p className="text-sm whitespace-pre-wrap break-words">{m.content}</p>
                       <p className={`text-[10px] mt-1 ${m.senderType === "team" ? "text-white/50" : "text-gray-300"}`}>
                         {new Date(m.createdAt).toLocaleString("es-CO", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}
                       </p>
@@ -2231,7 +2784,7 @@ export default function AdminProjectDetail() {
               )}
               <div ref={messagesEndRef} />
             </div>
-            <div className="border-t border-gray-100 p-4 flex gap-2">
+            <div className="border-t border-gray-100 p-3 sm:p-4 flex gap-2">
               <Input
                 value={msgContent}
                 onChange={e => setMsgContent(e.target.value)}
@@ -2242,7 +2795,8 @@ export default function AdminProjectDetail() {
               <Button
                 onClick={() => { if (msgContent.trim()) sendMsgMut.mutate(msgContent.trim()); }}
                 disabled={!msgContent.trim() || sendMsgMut.isPending}
-                className="bg-[#2FA4A9] hover:bg-[#238b8f]"
+                className="bg-[#2FA4A9] hover:bg-[#238b8f] shrink-0"
+                aria-label="Enviar"
               >
                 <Send className="w-4 h-4" />
               </Button>
@@ -2286,7 +2840,7 @@ export default function AdminProjectDetail() {
                   <Label>Descripción</Label>
                   <Textarea value={editForm.description || ""} onChange={e => setEditForm(f => ({ ...f, description: e.target.value }))} rows={3} />
                 </div>
-                <div className="grid grid-cols-3 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="space-y-1.5">
                     <Label>Estado</Label>
                     <Select value={editForm.status} onValueChange={v => setEditForm(f => ({ ...f, status: v }))}>
@@ -2333,7 +2887,7 @@ export default function AdminProjectDetail() {
             {/* Health status */}
             <div className="bg-white rounded-xl border border-gray-200 p-6 space-y-3">
               <h3 className="font-semibold text-gray-900">Estado de salud del proyecto</h3>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1.5">
                   <Label>Estado</Label>
                   <Select value={editForm.healthStatus || "on_track"} onValueChange={v => setEditForm(f => ({ ...f, healthStatus: v }))}>
@@ -2379,7 +2933,7 @@ export default function AdminProjectDetail() {
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={() => { if (confirm("¿Eliminar este proyecto permanentemente?")) deleteProjectMut.mutate(); }}
+                onClick={() => setConfirmDeleteProject(true)}
               >
                 Eliminar proyecto
               </Button>
@@ -2718,6 +3272,36 @@ export default function AdminProjectDetail() {
               }}
             >
               Sí, eliminar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirmación de borrar proyecto entero (permanente) */}
+      <AlertDialog open={confirmDeleteProject} onOpenChange={setConfirmDeleteProject}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>¿Eliminar este proyecto?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-2 text-sm text-gray-600">
+                <p>Vas a eliminar <strong className="text-gray-900">{project.name}</strong> y todo su contenido:</p>
+                <ul className="list-disc list-inside text-xs space-y-0.5 text-gray-500">
+                  <li>{project.phases.length} fase{project.phases.length === 1 ? "" : "s"} y todas sus tareas</li>
+                  <li>{project.deliverables.length} entrega{project.deliverables.length === 1 ? "" : "s"}</li>
+                  <li>{project.totalHours.toFixed(1)}h registradas</li>
+                  <li>{project.messages.length} mensaje{project.messages.length === 1 ? "" : "s"}</li>
+                </ul>
+                <p className="text-red-600 font-medium">Esta acción es permanente y no se puede deshacer.</p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 focus:ring-red-600"
+              onClick={() => { setConfirmDeleteProject(false); deleteProjectMut.mutate(); }}
+            >
+              Sí, eliminar proyecto
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

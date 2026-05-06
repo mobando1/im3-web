@@ -2564,8 +2564,10 @@ export async function registerRoutes(
     }
   });
 
-  // Tasks - update/complete
-  app.patch("/api/admin/tasks/:id", requireAuth, async (req, res) => {
+  // Tasks (CRM) - update/complete
+  // Note: path collides with project-tasks route registered later. We fall through
+  // (next()) when the ID isn't a CRM task so the project-tasks handler can run.
+  app.patch("/api/admin/tasks/:id", requireAuth, async (req, res, next) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     const taskId = req.params.id as string;
 
@@ -2587,7 +2589,7 @@ export async function registerRoutes(
         .where(eq(tasks.id, taskId))
         .returning();
 
-      if (!updated) return res.status(404).json({ error: "Tarea no encontrada" });
+      if (!updated) return next();
 
       if (updated.contactId && status === "completed") {
         logActivity(updated.contactId, "task_completed", `Tarea completada: ${updated.title}`, { taskId: updated.id });
@@ -2600,8 +2602,8 @@ export async function registerRoutes(
     }
   });
 
-  // Tasks - delete
-  app.delete("/api/admin/tasks/:id", requireAuth, async (req, res) => {
+  // Tasks (CRM) - delete (also falls through to project-tasks soft-delete on miss)
+  app.delete("/api/admin/tasks/:id", requireAuth, async (req, res, next) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     const taskId = req.params.id as string;
 
@@ -2610,7 +2612,7 @@ export async function registerRoutes(
         .where(eq(tasks.id, taskId))
         .returning();
 
-      if (!deleted) return res.status(404).json({ error: "Tarea no encontrada" });
+      if (!deleted) return next();
       res.json({ success: true });
     } catch (err: any) {
       log(`Error deleting task: ${err?.message}`);
@@ -5567,7 +5569,8 @@ Responde SOLO con un JSON válido, sin markdown:
         .where(and(eq(projectPhases.projectId, project.id), isNull(projectPhases.deletedAt)))
         .orderBy(asc(projectPhases.orderIndex));
       const allTasks = await db.select().from(projectTasks)
-        .where(and(eq(projectTasks.projectId, project.id), isNull(projectTasks.deletedAt)));
+        .where(and(eq(projectTasks.projectId, project.id), isNull(projectTasks.deletedAt)))
+        .orderBy(asc(projectTasks.orderIndex), asc(projectTasks.createdAt));
       const deliverables = await db.select().from(projectDeliverables).where(eq(projectDeliverables.projectId, project.id)).orderBy(desc(projectDeliverables.createdAt));
       const timeLogs = await db.select().from(projectTimeLog).where(eq(projectTimeLog.projectId, project.id)).orderBy(desc(projectTimeLog.createdAt));
       const messages = await db.select().from(projectMessages).where(eq(projectMessages.projectId, project.id)).orderBy(asc(projectMessages.createdAt));
@@ -5784,9 +5787,15 @@ Responde SOLO con un JSON válido, sin markdown:
   app.post("/api/admin/phases/:id/tasks", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
-      const [phase] = await db.select({ projectId: projectPhases.projectId }).from(projectPhases).where(eq(projectPhases.id, req.params.id as string));
+      const phaseId = req.params.id as string;
+      const [phase] = await db.select({ projectId: projectPhases.projectId }).from(projectPhases).where(eq(projectPhases.id, phaseId));
       if (!phase) return res.status(404).json({ message: "Fase no encontrada" });
-      const [task] = await db.insert(projectTasks).values({ ...req.body, phaseId: req.params.id as string, projectId: phase.projectId }).returning();
+      // Place new tasks at the end of the phase so manual order is preserved.
+      const existing = await db.select({ orderIndex: projectTasks.orderIndex })
+        .from(projectTasks)
+        .where(and(eq(projectTasks.phaseId, phaseId), isNull(projectTasks.deletedAt)));
+      const nextOrder = existing.length > 0 ? Math.max(...existing.map(t => t.orderIndex ?? 0)) + 1 : 0;
+      const [task] = await db.insert(projectTasks).values({ ...req.body, phaseId, projectId: phase.projectId, orderIndex: nextOrder }).returning();
       res.json(task);
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
@@ -5794,8 +5803,21 @@ Responde SOLO con un JSON válido, sin markdown:
   app.patch("/api/admin/tasks/:id", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
-      const updates: Record<string, unknown> = { ...req.body, updatedAt: new Date() };
-      if (req.body.status === "completed") updates.completedAt = new Date();
+      // Whitelist only mutable fields to avoid clients overwriting id/projectId/createdAt/etc.
+      const ALLOWED = ["title", "description", "clientFacingTitle", "clientFacingDescription", "status", "priority", "assigneeName", "startDate", "dueDate", "isMilestone", "estimatedHours", "actualHours", "orderIndex"] as const;
+      const updates: Record<string, unknown> = { updatedAt: new Date() };
+      for (const k of ALLOWED) {
+        if (k in req.body) updates[k] = req.body[k];
+      }
+      // Coerce date strings -> Date objects (timestamp columns)
+      for (const dateField of ["startDate", "dueDate"] as const) {
+        if (dateField in updates) {
+          const v = updates[dateField];
+          updates[dateField] = v ? new Date(v as string | number | Date) : null;
+        }
+      }
+      if (updates.status === "completed") updates.completedAt = new Date();
+      else if (updates.status === "pending") updates.completedAt = null;
       const [updated] = await db.update(projectTasks).set(updates).where(eq(projectTasks.id, req.params.id as string)).returning();
       if (!updated) return res.status(404).json({ message: "Tarea no encontrada" });
       res.json(updated);
@@ -5822,6 +5844,51 @@ Responde SOLO con un JSON válido, sin markdown:
         .where(eq(projectTasks.id, req.params.id as string))
         .returning();
       if (!task) return res.status(404).json({ message: "Tarea no encontrada" });
+      res.json({ success: true });
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
+  });
+
+  // Reorder tasks within a phase: body { taskIds: string[] } in desired order.
+  // Sets order_index = position for each task. Tasks belonging to other phases are ignored.
+  app.post("/api/admin/phases/:phaseId/reorder-tasks", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const phaseId = req.params.phaseId as string;
+    const { taskIds } = req.body as { taskIds?: string[] };
+    if (!Array.isArray(taskIds) || taskIds.length === 0) {
+      return res.status(400).json({ message: "taskIds[] requerido" });
+    }
+    try {
+      const now = new Date();
+      // Update one by one — small N (typical phase has <50 tasks) so loop is fine.
+      // Scope WHERE by phaseId to prevent moving tasks across phases through this endpoint.
+      await Promise.all(
+        taskIds.map((id, idx) =>
+          db!.update(projectTasks)
+            .set({ orderIndex: idx, updatedAt: now })
+            .where(and(eq(projectTasks.id, id), eq(projectTasks.phaseId, phaseId)))
+        )
+      );
+      res.json({ success: true });
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
+  });
+
+  // Reorder phases within a project: body { phaseIds: string[] } in desired order.
+  app.post("/api/admin/projects/:projectId/reorder-phases", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const projectId = req.params.projectId as string;
+    const { phaseIds } = req.body as { phaseIds?: string[] };
+    if (!Array.isArray(phaseIds) || phaseIds.length === 0) {
+      return res.status(400).json({ message: "phaseIds[] requerido" });
+    }
+    try {
+      const now = new Date();
+      await Promise.all(
+        phaseIds.map((id, idx) =>
+          db!.update(projectPhases)
+            .set({ orderIndex: idx, updatedAt: now })
+            .where(and(eq(projectPhases.id, id), eq(projectPhases.projectId, projectId)))
+        )
+      );
       res.json({ success: true });
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });

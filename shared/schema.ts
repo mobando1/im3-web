@@ -448,11 +448,13 @@ export const projectTasks = pgTable("project_tasks", {
   clientFacingDescription: text("client_facing_description"), // plain-language explanation
   status: text("status").notNull().default("pending"), // pending | in_progress | completed | blocked
   priority: text("priority").notNull().default("medium"), // low | medium | high
+  assigneeName: text("assignee_name"), // free-text owner (no relation to users table)
   startDate: timestamp("start_date"),
   dueDate: timestamp("due_date"),
   isMilestone: boolean("is_milestone").default(false).notNull(),
   estimatedHours: integer("estimated_hours"),
   actualHours: numeric("actual_hours", { precision: 6, scale: 2 }),
+  orderIndex: integer("order_index").notNull().default(0),
   completedAt: timestamp("completed_at"),
   // Soft delete: cascaded from phase delete or set independently when a task is removed.
   deletedAt: timestamp("deleted_at"),
