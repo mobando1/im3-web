@@ -305,6 +305,11 @@ export async function listCalendarEvents(opts: {
 
     const events = res.data.items || [];
 
+    // Format date+time in America/Bogota (avoid drift when server runs in UTC, e.g. Railway)
+    const TZ = "America/Bogota";
+    const dateFmt = new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" });
+    const timeFmt = new Intl.DateTimeFormat("en-GB", { timeZone: TZ, hour: "2-digit", minute: "2-digit", hour12: false });
+
     return events.map((e): CalendarEventSummary => {
       const startRaw = e.start?.dateTime || e.start?.date || null;
       const endRaw = e.end?.dateTime || e.end?.date || null;
@@ -317,8 +322,8 @@ export async function listCalendarEvents(opts: {
           startDate = startRaw; // already YYYY-MM-DD
         } else {
           const d = new Date(startRaw);
-          startDate = d.toISOString().slice(0, 10);
-          startTime = d.toTimeString().slice(0, 5);
+          startDate = dateFmt.format(d); // en-CA gives YYYY-MM-DD
+          startTime = timeFmt.format(d); // HH:MM 24h in Bogota
         }
       }
 

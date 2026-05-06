@@ -5359,7 +5359,7 @@ Responde SOLO con un JSON válido, sin markdown:
       const [project] = await db.select().from(clientProjects).where(eq(clientProjects.id, projectId));
       if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
-      // Bug fix: persist the selected repo on the project if it differs
+      // Bug fix 1B: persist the selected repo on the project if it differs
       const cleanRepoUrl = (githubRepoUrl || "").trim() || null;
       if (cleanRepoUrl && cleanRepoUrl !== project.githubRepoUrl) {
         await db.update(clientProjects)
@@ -10368,6 +10368,12 @@ Responde SOLO con un JSON válido, sin markdown:
         warning: agents.filter((a) => a.health === "warning").length,
         error: agents.filter((a) => a.health === "error").length,
         idle: agents.filter((a) => a.health === "idle").length,
+        byKind: {
+          ai: agents.filter((a) => a.kind === "ai").length,
+          automation: agents.filter((a) => a.kind === "automation").length,
+          integration: agents.filter((a) => a.kind === "integration").length,
+          webhook: agents.filter((a) => a.kind === "webhook").length,
+        },
       };
 
       res.json({ agents, kinds: AGENT_KINDS, summary });

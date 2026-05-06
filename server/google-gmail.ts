@@ -304,8 +304,11 @@ async function fetchAndStoreMessage(
       log(`[Gmail Sync] Error logging activity: ${(err as Error).message}`);
     }
 
-    // In-app notification for new INBOUND emails (anti-spam: 1 per contact per 30 min)
-    if (direction === "inbound") {
+    // In-app notification for new INBOUND emails:
+    // - Only for emails received in the last 24h (avoid spam on historical full sync)
+    // - Anti-spam: 1 per contact per 30 min
+    const isRecentEmail = (Date.now() - gmailDate.getTime()) < 24 * 60 * 60 * 1000;
+    if (direction === "inbound" && isRecentEmail) {
       try {
         const [contact] = await db
           .select({ nombre: contacts.nombre, empresa: contacts.empresa })
@@ -770,7 +773,29 @@ export async function sendGmailMessage(input: SendGmailInput): Promise<SendGmail
   if (input.references) headerLines.push(`References: ${input.references}`);
   headerLines.push("MIME-Version: 1.0");
 
-  const plainText = input.text || input.html.replace(/<style[\s\S]*?<\/style>/gi, "").replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim();
+  // Derive plain-text fallback from HTML, preserving block-level line breaks
+  const htmlToPlain = (html: string): string =>
+    html
+      .replace(/<style[\s\S]*?<\/style>/gi, "")
+      .replace(/<script[\s\S]*?<\/script>/gi, "")
+      .replace(/<\/?(p|div|br|h[1-6]|li|tr)[^>]*>/gi, "\n")
+      .replace(/<[^>]+>/g, "")
+      .replace(/&nbsp;/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, "\"")
+      .replace(/[ \t]+/g, " ")
+      .replace(/\n{3,}/g, "\n\n")
+      .trim();
+  const plainText = input.text || htmlToPlain(input.html);
+
+  // Encode part bodies as base64 to safely carry UTF-8 (acentos, ñ, emojis).
+  // Wrap base64 at 76 chars per RFC 2045.
+  const b64 = (s: string): string => {
+    const raw = Buffer.from(s, "utf-8").toString("base64");
+    return raw.replace(/(.{76})/g, "$1\r\n");
+  };
 
   let body: string;
   if (input.html) {
@@ -779,22 +804,23 @@ export async function sendGmailMessage(input: SendGmailInput): Promise<SendGmail
       "",
       `--${boundary}`,
       "Content-Type: text/plain; charset=UTF-8",
-      "Content-Transfer-Encoding: 7bit",
+      "Content-Transfer-Encoding: base64",
       "",
-      plainText,
+      b64(plainText),
       "",
       `--${boundary}`,
       "Content-Type: text/html; charset=UTF-8",
-      "Content-Transfer-Encoding: 7bit",
+      "Content-Transfer-Encoding: base64",
       "",
-      input.html,
+      b64(input.html),
       "",
       `--${boundary}--`,
       "",
     ].join("\r\n");
   } else {
     headerLines.push("Content-Type: text/plain; charset=UTF-8");
-    body = `\r\n${plainText}`;
+    headerLines.push("Content-Transfer-Encoding: base64");
+    body = `\r\n${b64(plainText)}`;
   }
 
   const raw = `${headerLines.join("\r\n")}\r\n${body}`;
