@@ -18,6 +18,10 @@ import {
   Brain,
   Cog,
   Plug,
+  Database,
+  Cloud,
+  Sparkles,
+  FileCode,
 } from "lucide-react";
 
 type AgentHealth = "healthy" | "warning" | "error" | "idle";
@@ -35,6 +39,14 @@ type AgentRun = {
 
 type AgentKind = "ai" | "automation" | "integration" | "webhook";
 
+type AgentConnectionType = "db" | "api" | "llm" | "internal";
+
+type AgentConnection = {
+  type: AgentConnectionType;
+  label: string;
+  detail?: string;
+};
+
 type Agent = {
   name: string;
   displayName: string;
@@ -48,6 +60,9 @@ type Agent = {
   health: AgentHealth;
   lastRun: AgentRun | null;
   stats: { last10Success: number; last10Error: number; last10Total: number };
+  longDescription?: string;
+  connections?: AgentConnection[];
+  sourceFile?: string;
 };
 
 type KindInfo = { label: string; description: string };
@@ -55,7 +70,14 @@ type KindInfo = { label: string; description: string };
 type AgentsResponse = {
   agents: Agent[];
   kinds: Record<AgentKind, KindInfo>;
-  summary: { total: number; healthy: number; warning: number; error: number; idle: number };
+  summary: {
+    total: number;
+    healthy: number;
+    warning: number;
+    error: number;
+    idle: number;
+    byKind: Record<AgentKind, number>;
+  };
 };
 
 type RunsResponse = {
@@ -75,6 +97,13 @@ const kindNoun: Record<AgentKind, string> = {
   automation: "automatizaciones",
   integration: "integraciones",
   webhook: "webhooks",
+};
+
+const connectionStyles: Record<AgentConnectionType, { icon: typeof Database; label: string; bg: string; text: string }> = {
+  db: { icon: Database, label: "BD", bg: "bg-blue-50", text: "text-blue-700" },
+  api: { icon: Cloud, label: "API", bg: "bg-emerald-50", text: "text-emerald-700" },
+  llm: { icon: Sparkles, label: "IA", bg: "bg-purple-50", text: "text-purple-700" },
+  internal: { icon: Cog, label: "Interno", bg: "bg-gray-50", text: "text-gray-700" },
 };
 
 const triggerIcons = {
@@ -159,7 +188,7 @@ export default function AgentsPage() {
         </p>
       </div>
 
-      {/* Summary cards */}
+      {/* Summary — health */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <SummaryCard
           label="Total"
@@ -185,6 +214,23 @@ export default function AgentsPage() {
           color="text-red-600"
           icon={<AlertTriangle className="w-4 h-4 text-red-500" />}
         />
+      </div>
+
+      {/* Summary — by kind (compact pills) */}
+      <div className="flex flex-wrap gap-2">
+        {kindOrder.map((k) => {
+          const Icon = kindIcons[k];
+          return (
+            <div
+              key={k}
+              className="flex items-center gap-2 px-3 py-1.5 rounded-full border border-gray-200 bg-white text-xs"
+            >
+              <Icon className="w-3.5 h-3.5 text-gray-400" />
+              <span className="text-gray-600">{data.kinds[k].label}</span>
+              <span className="font-semibold text-gray-900">{data.summary.byKind[k] ?? 0}</span>
+            </div>
+          );
+        })}
       </div>
 
       {/* Kind sections */}
@@ -358,7 +404,7 @@ function AgentRunsDialog({
           <DialogTitle>{data?.agent?.displayName ?? "Agente"}</DialogTitle>
         </DialogHeader>
         {data && (
-          <div className="space-y-4">
+          <div className="space-y-5">
             <div className="text-sm text-gray-600">{data.agent.description}</div>
 
             <div className="grid grid-cols-3 gap-3 text-xs">
@@ -366,6 +412,60 @@ function AgentRunsDialog({
               <InfoCell label="Horario" value={data.agent.scheduleHuman ?? "—"} />
               <InfoCell label="Criticidad" value={data.agent.criticality} />
             </div>
+
+            {data.agent.longDescription && (
+              <div>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  Cómo funciona
+                </h4>
+                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                  {data.agent.longDescription}
+                </p>
+              </div>
+            )}
+
+            {data.agent.connections && data.agent.connections.length > 0 && (
+              <div>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  Conexiones
+                </h4>
+                <div className="space-y-1.5">
+                  {data.agent.connections.map((conn, i) => {
+                    const style = connectionStyles[conn.type];
+                    const Icon = style.icon;
+                    return (
+                      <div
+                        key={i}
+                        className="flex items-start gap-2.5 p-2 rounded-lg border border-gray-100"
+                      >
+                        <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-medium ${style.bg} ${style.text} shrink-0 mt-0.5`}>
+                          <Icon className="w-3 h-3" />
+                          {style.label}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-900">{conn.label}</p>
+                          {conn.detail && (
+                            <p className="text-xs text-gray-500 mt-0.5">{conn.detail}</p>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {data.agent.sourceFile && (
+              <div>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                  Código
+                </h4>
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-gray-50 border border-gray-100 text-xs font-mono text-gray-700">
+                  <FileCode className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                  {data.agent.sourceFile}
+                </div>
+              </div>
+            )}
 
             <div>
               <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
