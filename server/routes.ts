@@ -1,16 +1,16 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count } from "drizzle-orm";
+import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count, inArray } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback } from "@shared/schema";
-import { AGENT_REGISTRY, AGENT_DOMAINS, findAgent } from "./agents/registry";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback } from "@shared/schema";
+import { AGENT_REGISTRY, AGENT_KINDS, findAgent } from "./agents/registry";
 import { runAgent } from "./agents/runner";
-import { syncGmailEmails, isGmailConfigured } from "./google-gmail";
+import { syncGmailEmails, isGmailConfigured, sendGmailMessage, getOriginalMessageHeaders } from "./google-gmail";
 import { generateBlogContent, improveBlogContent } from "./blog-ai";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive, uploadFileToDrive, createProjectFolder, readGoogleDriveContent, extractFolderIdFromUrl, findOrCreateClientFolder } from "./google-drive";
 import multer from "multer";
-import { createCalendarEvent, deleteCalendarEvent, createProjectMeetingEvent } from "./google-calendar";
+import { createCalendarEvent, deleteCalendarEvent, createProjectMeetingEvent, listCalendarEvents } from "./google-calendar";
 import { isEmailConfigured, sendEmail, sendAdminNotification } from "./email-sender";
 import { generateEmailContent, buildMicroReminderEmail, build6hReminderEmail, buildFollowUpConfirmationEmail, buildNoShowEmail, generateDailyNewsDigest, generateContactInsight, generateWhatsAppMessage, generateNewsletterWelcome, generateMiniAudit, classifyWhatsAppIntent, generateWhatsAppAutoReply, buildWhatsAppNotificationEmail, buildProjectNotificationEmail, escapeHtml } from "./email-ai";
 import { parseFechaCita } from "./date-utils";
@@ -1166,6 +1166,35 @@ export async function registerRoutes(
             }
 
             logActivity(contact.id, "whatsapp_received", `WhatsApp recibido: "${messageText.substring(0, 100)}"`, { intent: intent.type, confidence: intent.confidence });
+
+            // In-app notification for inbound WhatsApp (anti-spam: 1 per contact per 30 min,
+            // skipped for intents that already create their own typed notification)
+            if (!["reschedule", "interest", "rejection"].includes(intent.type)) {
+              try {
+                const thirtyMinAgo = new Date(Date.now() - 30 * 60 * 1000);
+                const [recent] = await db
+                  .select({ id: notifications.id })
+                  .from(notifications)
+                  .where(and(
+                    eq(notifications.contactId, contact.id),
+                    eq(notifications.type, "new_whatsapp"),
+                    gte(notifications.createdAt, thirtyMinAgo),
+                  ))
+                  .orderBy(desc(notifications.createdAt))
+                  .limit(1);
+
+                if (!recent) {
+                  await db.insert(notifications).values({
+                    type: "new_whatsapp",
+                    title: `WhatsApp de ${contact.nombre}`,
+                    description: `${contact.empresa ? `${contact.empresa} · ` : ""}"${messageText.substring(0, 100)}"`,
+                    contactId: contact.id,
+                  });
+                }
+              } catch (notifErr: unknown) {
+                log(`[WhatsApp] Error creating notification: ${(notifErr as Error).message}`);
+              }
+            }
 
             const baseUrl = process.env.BASE_URL || "https://im3systems.com";
 
@@ -2404,6 +2433,50 @@ export async function registerRoutes(
     } catch (err: any) {
       log(`Error fetching calendar: ${err?.message}`);
       res.status(500).json({ error: "Error obteniendo calendario" });
+    }
+  });
+
+  // External Google Calendar events (Phase 3) — reads info@im3systems.com primary calendar.
+  // Surfaces meetings created outside the CRM (manual Google Calendar bookings).
+  app.get("/api/admin/calendar/external-events", requireAuth, async (req, res) => {
+    try {
+      const days = Math.min(parseInt(req.query.days as string) || 60, 365);
+      const lookbackDays = Math.min(parseInt(req.query.lookback as string) || 30, 90);
+      const timeMin = new Date(Date.now() - lookbackDays * 24 * 60 * 60 * 1000);
+      const timeMax = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+
+      const events = await listCalendarEvents({ timeMin, timeMax, maxResults: 250 });
+
+      // Match events to contacts by attendee email (best-effort)
+      if (db && events.length > 0) {
+        const allEmails = Array.from(new Set(
+          events.flatMap(e => e.attendees.map(a => a.email.toLowerCase()).filter(Boolean))
+        ));
+        if (allEmails.length > 0) {
+          const matchedContacts = await db
+            .select({ id: contacts.id, nombre: contacts.nombre, empresa: contacts.empresa, email: contacts.email })
+            .from(contacts)
+            .where(inArray(contacts.email, allEmails));
+
+          const byEmail = new Map(matchedContacts.map(c => [c.email.toLowerCase(), c]));
+
+          // Annotate events with matched contact (if any)
+          for (const ev of events as any[]) {
+            const matchedAttendee = ev.attendees.find((a: any) => byEmail.has(a.email.toLowerCase()));
+            if (matchedAttendee) {
+              const c = byEmail.get(matchedAttendee.email.toLowerCase());
+              ev.matchedContact = c ? { id: c.id, nombre: c.nombre, empresa: c.empresa, email: c.email } : null;
+            } else {
+              ev.matchedContact = null;
+            }
+          }
+        }
+      }
+
+      res.json(events);
+    } catch (err: unknown) {
+      log(`Error fetching external calendar events: ${(err as Error).message}`);
+      res.status(500).json({ error: "Error fetching calendar events" });
     }
   });
 
@@ -5908,7 +5981,7 @@ ${urls}
   // Excludes "/api/portal/projects" (no id) which is handled by the list endpoint above.
   // Acepta sesión de cliente vinculado al proyecto, O sesión de admin (preview mode).
   // Skip endpoints que tienen handlers explícitos abajo (analytics, feedback) — esos hacen su propia auth.
-  const BRIDGE_SKIP_TAILS = new Set(["/analytics", "/feedback"]);
+  const BRIDGE_SKIP_TAILS = new Set(["/analytics", "/feedback", "/meetings"]);
   app.use(async (req, res, next) => {
     const m = req.url.match(/^\/api\/portal\/projects\/([^/?]+)(\/.*)?(\?.*)?$/);
     if (!m) return next();
@@ -7717,11 +7790,21 @@ ${urls}
     try {
       // Excluir propuestas en la papelera (deletedAt no null)
       const allProposals = await db.select().from(proposals).where(isNull(proposals.deletedAt)).orderBy(desc(proposals.createdAt));
-      // Enrich with contact info
+      // Enrich with contact info + brief status
       const enriched = await Promise.all(allProposals.map(async (p) => {
         const [contact] = await db!.select({ nombre: contacts.nombre, empresa: contacts.empresa, email: contacts.email })
           .from(contacts).where(eq(contacts.id, p.contactId)).limit(1);
-        return { ...p, contactName: contact?.nombre || "—", contactEmpresa: contact?.empresa || "—", contactEmail: contact?.email || "—" };
+        const [brief] = await db!.select({ status: proposalBriefs.status })
+          .from(proposalBriefs)
+          .where(and(eq(proposalBriefs.proposalId, p.id), isNull(proposalBriefs.deletedAt)))
+          .limit(1);
+        return {
+          ...p,
+          contactName: contact?.nombre || "—",
+          contactEmpresa: contact?.empresa || "—",
+          contactEmail: contact?.email || "—",
+          briefStatus: brief?.status || null,
+        };
       }));
       res.json(enriched);
     } catch (err: any) {
@@ -7829,6 +7912,20 @@ ${urls}
         .where(eq(proposals.id, req.params.id as string))
         .returning();
       if (!updated) return res.status(404).json({ error: "Propuesta no encontrada" });
+
+      // Si la inicial cambia (sections/pricing/timelineData) y existe un brief generado,
+      // marcarlo como outdated para que el editor del brief muestre el banner.
+      const touchedContent = "sections" in req.body || "pricing" in req.body || "timelineData" in req.body;
+      if (touchedContent) {
+        await db.update(proposalBriefs)
+          .set({ outdatedSinceProposalUpdate: new Date() })
+          .where(and(
+            eq(proposalBriefs.proposalId, updated.id),
+            sql`${proposalBriefs.status} != 'not_generated'`,
+          ))
+          .catch(() => {});
+      }
+
       res.json(updated);
     } catch (err: any) {
       log(`Error updating proposal: ${err?.message}`);
@@ -8716,6 +8813,382 @@ ${urls}
     }
   });
 
+  // ─────────────────────────────────────────────────────────────
+  // Proposal Briefs — material de soporte detallado post-reunión
+  // Documento hermano de proposals (1:1). Lifecycle independiente,
+  // chat IA propio, token público propio, vista pública /brief/:token.
+  // ─────────────────────────────────────────────────────────────
+
+  // GET brief por proposalId — devuelve null si no existe (no 404)
+  app.get("/api/admin/proposals/:id/brief", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [brief] = await db.select().from(proposalBriefs)
+        .where(and(
+          eq(proposalBriefs.proposalId, req.params.id as string),
+          isNull(proposalBriefs.deletedAt),
+        ))
+        .limit(1);
+      if (!brief) return res.json(null);
+      const views = await db.select().from(proposalBriefViews)
+        .where(eq(proposalBriefViews.briefId, brief.id))
+        .orderBy(desc(proposalBriefViews.createdAt));
+      res.json({ ...brief, views, viewCount: views.length });
+    } catch (err: any) {
+      log(`Error getting proposal brief: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo brief" });
+    }
+  });
+
+  // POST crea brief vacío (status=not_generated). Se usa antes de generar con IA o para edición manual.
+  app.post("/api/admin/proposals/:id/brief", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [proposal] = await db.select().from(proposals).where(eq(proposals.id, req.params.id as string)).limit(1);
+      if (!proposal) return res.status(404).json({ error: "Propuesta no encontrada" });
+
+      const [existing] = await db.select().from(proposalBriefs)
+        .where(eq(proposalBriefs.proposalId, proposal.id)).limit(1);
+      if (existing && !existing.deletedAt) {
+        return res.status(409).json({ error: "Ya existe un brief para esta propuesta", brief: existing });
+      }
+
+      const briefTitle = req.body?.title || `Brief técnico — ${proposal.title}`;
+      const [brief] = await db.insert(proposalBriefs).values({
+        proposalId: proposal.id,
+        contactId: proposal.contactId,
+        title: briefTitle,
+        status: "not_generated",
+        sections: {},
+      }).returning();
+
+      res.json(brief);
+    } catch (err: any) {
+      log(`Error creating proposal brief: ${err?.message}`);
+      res.status(500).json({ error: "Error creando brief" });
+    }
+  });
+
+  // PATCH brief (sections, status, title, notes, etc.)
+  app.patch("/api/admin/proposals/:id/brief", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [brief] = await db.select().from(proposalBriefs)
+        .where(eq(proposalBriefs.proposalId, req.params.id as string)).limit(1);
+      if (!brief) return res.status(404).json({ error: "Brief no encontrado" });
+
+      // Si el admin edita el contenido manualmente, ya no está outdated
+      const touchedContent = "sections" in req.body;
+      const patch: Record<string, unknown> = { ...req.body, updatedAt: new Date() };
+      if (touchedContent) patch.outdatedSinceProposalUpdate = null;
+
+      const [updated] = await db.update(proposalBriefs)
+        .set(patch)
+        .where(eq(proposalBriefs.id, brief.id))
+        .returning();
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error updating brief: ${err?.message}`);
+      res.status(500).json({ error: "Error actualizando brief" });
+    }
+  });
+
+  // DELETE soft-delete del brief (no borra propuesta)
+  app.delete("/api/admin/proposals/:id/brief", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [brief] = await db.select().from(proposalBriefs)
+        .where(eq(proposalBriefs.proposalId, req.params.id as string)).limit(1);
+      if (!brief) return res.status(404).json({ error: "Brief no encontrado" });
+      await db.update(proposalBriefs)
+        .set({ deletedAt: new Date() })
+        .where(eq(proposalBriefs.id, brief.id));
+      res.json({ success: true });
+    } catch (err: any) {
+      log(`Error deleting brief: ${err?.message}`);
+      res.status(500).json({ error: "Error eliminando brief" });
+    }
+  });
+
+  // ── Public brief endpoints (token-based, no auth) ──
+
+  // GET brief por token — solo si status === "sent"
+  app.get("/api/brief/:token", async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [brief] = await db.select().from(proposalBriefs)
+        .where(and(
+          eq(proposalBriefs.accessToken, req.params.token as string),
+          isNull(proposalBriefs.deletedAt),
+        ))
+        .limit(1);
+      if (!brief) return res.status(404).json({ error: "Brief no encontrado" });
+      if (brief.status !== "sent") return res.status(403).json({ error: "Brief no disponible aún" });
+
+      // Marca como visto la primera vez
+      if (!brief.viewedAt) {
+        await db.update(proposalBriefs).set({ viewedAt: new Date() }).where(eq(proposalBriefs.id, brief.id));
+      }
+
+      const [contact] = await db.select({ nombre: contacts.nombre, empresa: contacts.empresa })
+        .from(contacts).where(eq(contacts.id, brief.contactId)).limit(1);
+      // Devuelve también el accessToken de la propuesta inicial para link "Ver propuesta original"
+      const [proposal] = await db.select({ accessToken: proposals.accessToken, title: proposals.title })
+        .from(proposals).where(eq(proposals.id, brief.proposalId)).limit(1);
+
+      res.json({
+        ...brief,
+        contactName: contact?.nombre,
+        contactEmpresa: contact?.empresa,
+        proposalAccessToken: proposal?.accessToken,
+        proposalTitle: proposal?.title,
+      });
+    } catch (err: any) {
+      log(`Error getting public brief: ${err?.message}`);
+      res.status(500).json({ error: "Error cargando brief" });
+    }
+  });
+
+  // POST genera el brief con IA — requiere que la propuesta tenga sections.solution.modules
+  app.post("/api/admin/proposals/:id/brief/generate", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const proposalId = req.params.id as string;
+      const [proposal] = await db.select().from(proposals).where(eq(proposals.id, proposalId)).limit(1);
+      if (!proposal) return res.status(404).json({ error: "Propuesta no encontrada" });
+
+      const { generateProposalBrief } = await import("./proposal-brief-ai");
+      const result = await generateProposalBrief(proposalId);
+      if ("error" in result) return res.status(500).json({ error: result.error });
+
+      // Asegurar que existe el row de brief; si no, crearlo
+      const [existing] = await db.select().from(proposalBriefs)
+        .where(eq(proposalBriefs.proposalId, proposalId)).limit(1);
+
+      let brief;
+      if (!existing) {
+        [brief] = await db.insert(proposalBriefs).values({
+          proposalId,
+          contactId: proposal.contactId,
+          title: `Brief técnico — ${proposal.title}`,
+          status: "draft",
+          sections: result.briefData as unknown as Record<string, unknown>,
+          aiSourcesReport: result.sourcesReport,
+          generatedAt: new Date(),
+        }).returning();
+      } else {
+        [brief] = await db.update(proposalBriefs).set({
+          sections: result.briefData as unknown as Record<string, unknown>,
+          aiSourcesReport: result.sourcesReport,
+          status: existing.status === "not_generated" ? "draft" : existing.status,
+          generatedAt: new Date(),
+          outdatedSinceProposalUpdate: null,
+          updatedAt: new Date(),
+        }).where(eq(proposalBriefs.id, existing.id)).returning();
+      }
+
+      res.json(brief);
+    } catch (err: any) {
+      log(`Error generating brief: ${err?.message || err}`);
+      res.status(500).json({ error: err?.message || "Error generando brief" });
+    }
+  });
+
+  // POST regenera UN módulo del brief con instrucción libre
+  app.post("/api/admin/proposals/:id/brief/modules/:moduleKey/regenerate", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [brief] = await db.select().from(proposalBriefs)
+        .where(eq(proposalBriefs.proposalId, req.params.id as string)).limit(1);
+      if (!brief) return res.status(404).json({ error: "Brief no encontrado" });
+
+      const instruction = req.body?.instruction;
+      if (!instruction || typeof instruction !== "string") {
+        return res.status(400).json({ error: "instruction requerida (string)" });
+      }
+
+      const { regenerateBriefModule } = await import("./proposal-brief-ai");
+      const result = await regenerateBriefModule(brief.id, req.params.moduleKey as string, instruction);
+      if ("error" in result) return res.status(500).json({ error: result.error });
+      res.json(result);
+    } catch (err: any) {
+      log(`Error regenerating brief module: ${err?.message || err}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // POST genera 3 variantes de un módulo — NO persiste, el admin elige
+  app.post("/api/admin/proposals/:id/brief/modules/:moduleKey/options", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [brief] = await db.select().from(proposalBriefs)
+        .where(eq(proposalBriefs.proposalId, req.params.id as string)).limit(1);
+      if (!brief) return res.status(404).json({ error: "Brief no encontrado" });
+
+      const instruction = req.body?.instruction || "Mejora este módulo del brief";
+      const { generateBriefModuleOptions } = await import("./proposal-brief-ai");
+      const result = await generateBriefModuleOptions(brief.id, req.params.moduleKey as string, instruction);
+      if ("error" in result) return res.status(500).json({ error: result.error });
+      res.json(result);
+    } catch (err: any) {
+      log(`Error generating brief module options: ${err?.message || err}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // POST aplica una opción elegida al brief
+  app.post("/api/admin/proposals/:id/brief/modules/:moduleKey/apply", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [brief] = await db.select().from(proposalBriefs)
+        .where(eq(proposalBriefs.proposalId, req.params.id as string)).limit(1);
+      if (!brief) return res.status(404).json({ error: "Brief no encontrado" });
+
+      const moduleData = req.body?.module;
+      if (!moduleData) return res.status(400).json({ error: "module requerido" });
+
+      const { applyBriefModuleOption } = await import("./proposal-brief-ai");
+      const result = await applyBriefModuleOption(brief.id, req.params.moduleKey as string, moduleData);
+      if ("error" in result) return res.status(400).json({ error: result.error });
+      res.json(result);
+    } catch (err: any) {
+      log(`Error applying brief module option: ${err?.message || err}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // POST envía el brief al cliente — marca status=sent y dispara email con link público
+  app.post("/api/admin/proposals/:id/brief/send", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [brief] = await db.select().from(proposalBriefs)
+        .where(eq(proposalBriefs.proposalId, req.params.id as string)).limit(1);
+      if (!brief) return res.status(404).json({ error: "Brief no encontrado" });
+      if (!brief.sections || Object.keys(brief.sections as Record<string, unknown>).length === 0) {
+        return res.status(400).json({ error: "El brief está vacío. Genera el contenido antes de enviar." });
+      }
+
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, brief.contactId)).limit(1);
+      if (!contact?.email) return res.status(400).json({ error: "El contacto no tiene email" });
+
+      const [proposal] = await db.select().from(proposals).where(eq(proposals.id, brief.proposalId)).limit(1);
+
+      // Update status
+      const [updated] = await db.update(proposalBriefs)
+        .set({ status: "sent", sentAt: new Date(), updatedAt: new Date() })
+        .where(eq(proposalBriefs.id, brief.id))
+        .returning();
+
+      const baseUrl = process.env.BASE_URL || "https://im3systems.com";
+      const briefUrl = `${baseUrl}/brief/${updated.accessToken}`;
+      const html = buildProjectNotificationEmail({
+        projectName: proposal?.title || updated.title || "Brief técnico",
+        clientName: contact.nombre,
+        title: "Material de soporte detallado",
+        headerEmoji: "📚",
+        headerColor: "linear-gradient(135deg,#0F172A,#1E293B)",
+        bodyLines: [
+          `Te enviamos el <strong>brief técnico detallado</strong> que complementa la propuesta que revisamos en reunión.`,
+          "Este documento profundiza cada módulo: qué problema resuelve, cómo funciona, por qué lo elegimos así, y qué pasaría si no se hace. Está pensado para que cualquier persona del equipo lo pueda leer y entender el alcance.",
+        ],
+        ctaText: "Abrir brief detallado →",
+        ctaUrl: briefUrl,
+        footerNote: "Si surgen preguntas mientras lo lees, responde a este email o agenda una llamada.",
+      });
+
+      await sendEmail(contact.email, `📚 Brief técnico: ${proposal?.title || updated.title}`, html)
+        .catch((err) => log(`Error sending brief email: ${err}`));
+
+      await logActivity(contact.id, "email_sent", `Brief técnico enviado: ${proposal?.title || updated.title}`, { briefId: updated.id, proposalId: brief.proposalId });
+
+      res.json({ success: true, briefUrl });
+    } catch (err: any) {
+      log(`Error sending brief: ${err?.message || err}`);
+      res.status(500).json({ error: err?.message || "Error enviando brief" });
+    }
+  });
+
+  // ── Brief chat IA ──
+
+  // GET historial del chat del brief
+  app.get("/api/admin/proposals/:id/brief/chat", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [brief] = await db.select().from(proposalBriefs)
+        .where(eq(proposalBriefs.proposalId, req.params.id as string)).limit(1);
+      if (!brief) return res.json([]);
+      const { getBriefChatHistory } = await import("./proposal-brief-chat");
+      const history = await getBriefChatHistory(brief.id);
+      res.json(history);
+    } catch (err: any) {
+      log(`Error fetching brief chat history: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // POST mensaje al chat del brief (regular, no streaming — más estable tras issues con proxy)
+  app.post("/api/admin/proposals/:id/brief/chat", requireAuth, chatRateLimiter, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const message = (req.body?.message as string || "").trim();
+    if (!message) return res.status(400).json({ error: "Mensaje requerido" });
+
+    try {
+      const [brief] = await db.select().from(proposalBriefs)
+        .where(eq(proposalBriefs.proposalId, req.params.id as string)).limit(1);
+      if (!brief) return res.status(404).json({ error: "Brief no encontrado. Generalo primero." });
+
+      const { runBriefChat } = await import("./proposal-brief-chat");
+      const { runAgent } = await import("./agents/runner");
+
+      const result = await runAgent(
+        "brief-chat",
+        () => runBriefChat({ briefId: brief.id, userMessage: message }),
+        { triggeredBy: "manual" }
+      );
+      res.json(result);
+    } catch (err: any) {
+      log(`Error in brief chat: ${err?.message}`);
+      res.status(500).json({ error: err?.message || "Error en chat del brief" });
+    }
+  });
+
+  // DELETE limpia historial del chat del brief
+  app.delete("/api/admin/proposals/:id/brief/chat", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [brief] = await db.select().from(proposalBriefs)
+        .where(eq(proposalBriefs.proposalId, req.params.id as string)).limit(1);
+      if (!brief) return res.json({ success: true });
+      const { clearBriefChatHistory } = await import("./proposal-brief-chat");
+      await clearBriefChatHistory(brief.id);
+      res.json({ success: true });
+    } catch (err: any) {
+      log(`Error clearing brief chat: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // POST tracking de vista (mismo patrón que /api/proposal/:token/track)
+  app.post("/api/brief/:token/track", async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [brief] = await db.select().from(proposalBriefs)
+        .where(eq(proposalBriefs.accessToken, req.params.token as string)).limit(1);
+      if (!brief) return res.status(404).json({ error: "Not found" });
+
+      await db.insert(proposalBriefViews).values({
+        briefId: brief.id,
+        module: req.body.module || null,
+        timeSpent: req.body.timeSpent || null,
+        device: req.body.device || null,
+        ip: req.ip || null,
+      });
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
   // ───────────────────────────────────────────────────────────────
   // Contact Files / Documents
   // ───────────────────────────────────────────────────────────────
@@ -9154,6 +9627,268 @@ ${urls}
     }
   });
 
+  // ───────────────────────────────────────────────────────────────
+  // Unified Conversation Timeline (Phase 1)
+  // Merges emails (Gmail + Resend) + WhatsApp (out + in via activityLog)
+  // + appointments + (optional) activity events.
+  // ───────────────────────────────────────────────────────────────
+  app.get("/api/admin/contacts/:id/conversation-timeline", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const contactId = req.params.id as string;
+    const includeEvents = req.query.includeEvents === "true";
+    const limit = Math.min(parseInt(req.query.limit as string) || 200, 500);
+
+    try {
+      type TimelineItem = {
+        id: string;
+        channel: "email" | "whatsapp" | "meeting" | "event";
+        source: string;
+        direction: "inbound" | "outbound" | "system";
+        date: string;
+        subject: string | null;
+        preview: string;
+        bodyHtml: string | null;
+        bodyText: string | null;
+        status: string | null;
+        fromEmail: string | null;
+        gmailThreadId: string | null;
+        hasAttachments: boolean;
+        templateName: string | null;
+        meta: Record<string, unknown>;
+      };
+
+      const stripHtml = (html: string): string =>
+        html.replace(/<style[\s\S]*?<\/style>/gi, "")
+          .replace(/<script[\s\S]*?<\/script>/gi, "")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/&nbsp;/g, " ")
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, "\"")
+          .replace(/\s+/g, " ")
+          .trim();
+
+      const items: TimelineItem[] = [];
+
+      // Emails — Resend (outbound, skip pending drafts)
+      const resendRows = await db
+        .select()
+        .from(sentEmails)
+        .where(eq(sentEmails.contactId, contactId))
+        .orderBy(desc(sentEmails.scheduledFor))
+        .limit(limit);
+      for (const e of resendRows) {
+        if (e.status === "pending") continue;
+        const date = (e.sentAt || e.scheduledFor).toISOString();
+        items.push({
+          id: `resend:${e.id}`,
+          channel: "email",
+          source: "resend",
+          direction: "outbound",
+          date,
+          subject: e.subject,
+          preview: stripHtml(e.body || "").substring(0, 180),
+          bodyHtml: e.body,
+          bodyText: null,
+          status: e.status,
+          fromEmail: null,
+          gmailThreadId: null,
+          hasAttachments: false,
+          templateName: e.templateId,
+          meta: {},
+        });
+      }
+
+      // Emails — Gmail
+      const gmailRows = await db
+        .select()
+        .from(gmailEmails)
+        .where(eq(gmailEmails.contactId, contactId))
+        .orderBy(desc(gmailEmails.gmailDate))
+        .limit(limit);
+      for (const e of gmailRows) {
+        items.push({
+          id: `gmail:${e.id}`,
+          channel: "email",
+          source: "gmail",
+          direction: e.direction as "inbound" | "outbound",
+          date: e.gmailDate.toISOString(),
+          subject: e.subject,
+          preview: e.snippet || stripHtml(e.bodyText || "").substring(0, 180),
+          bodyHtml: e.bodyHtml,
+          bodyText: e.bodyText,
+          status: null,
+          fromEmail: e.fromEmail,
+          gmailThreadId: e.gmailThreadId,
+          hasAttachments: !!e.hasAttachments,
+          templateName: null,
+          meta: { matchMethod: e.matchMethod },
+        });
+      }
+
+      // WhatsApp — outbound (scheduled + sent from whatsappMessages table)
+      const waRows = await db
+        .select()
+        .from(whatsappMessages)
+        .where(eq(whatsappMessages.contactId, contactId))
+        .orderBy(desc(whatsappMessages.scheduledFor))
+        .limit(limit);
+      for (const w of waRows) {
+        // skip cancelled future scheduled? include all — admin may want to see queued
+        const date = (w.sentAt || w.scheduledFor).toISOString();
+        items.push({
+          id: `wa-out:${w.id}`,
+          channel: "whatsapp",
+          source: "whatsapp",
+          direction: "outbound",
+          date,
+          subject: null,
+          preview: w.message.substring(0, 180),
+          bodyHtml: null,
+          bodyText: w.message,
+          status: w.status,
+          fromEmail: null,
+          gmailThreadId: null,
+          hasAttachments: !!w.mediaUrl,
+          templateName: w.templateName,
+          meta: {
+            phone: w.phone,
+            deliveredAt: w.deliveredAt,
+            readAt: w.readAt,
+            mediaUrl: w.mediaUrl,
+            mediaType: w.mediaType,
+          },
+        });
+      }
+
+      // WhatsApp — inbound + auto-replies (live in activityLog)
+      // Also pull all activity entries; we filter into channel buckets.
+      const activityRows = await db
+        .select()
+        .from(activityLog)
+        .where(eq(activityLog.contactId, contactId))
+        .orderBy(desc(activityLog.createdAt))
+        .limit(500);
+
+      const conversationActivityTypes = new Set(["whatsapp_received", "whatsapp_sent"]);
+      for (const a of activityRows) {
+        if (!conversationActivityTypes.has(a.type)) continue;
+        // Strip the leading 'WhatsApp recibido: "' / 'Respuesta automática: "' prefix and trailing quote.
+        const raw = a.description || "";
+        const m = raw.match(/^[^:]+:\s*"(.*)"\s*$/);
+        const messageText = m ? m[1] : raw;
+        items.push({
+          id: `wa-act:${a.id}`,
+          channel: "whatsapp",
+          source: "whatsapp",
+          direction: a.type === "whatsapp_received" ? "inbound" : "outbound",
+          date: a.createdAt.toISOString(),
+          subject: null,
+          preview: messageText.substring(0, 180),
+          bodyHtml: null,
+          bodyText: messageText,
+          status: a.type === "whatsapp_received" ? "received" : "sent",
+          fromEmail: null,
+          gmailThreadId: null,
+          hasAttachments: false,
+          templateName: null,
+          meta: { activityType: a.type, ...(a.metadata || {}) },
+        });
+      }
+
+      // Appointments / Meetings
+      const apptRows = await db
+        .select()
+        .from(appointments)
+        .where(eq(appointments.contactId, contactId))
+        .orderBy(desc(appointments.createdAt));
+      for (const a of apptRows) {
+        // Compose a sensible date: use date+time if present, else createdAt
+        let date: string;
+        try {
+          date = new Date(`${a.date}T${a.time.length === 5 ? a.time : "00:00"}:00`).toISOString();
+        } catch {
+          date = a.createdAt.toISOString();
+        }
+        const statusLabel: Record<string, string> = {
+          scheduled: "Programada",
+          completed: "Completada",
+          no_show: "No asistió",
+          cancelled: "Cancelada",
+        };
+        items.push({
+          id: `meet:${a.id}`,
+          channel: "meeting",
+          source: "appointment",
+          direction: "system",
+          date,
+          subject: a.title,
+          preview: `${statusLabel[a.status || "scheduled"] || a.status} · ${a.duration} min${a.meetLink ? " · Meet" : ""}`,
+          bodyHtml: null,
+          bodyText: a.notes,
+          status: a.status,
+          fromEmail: null,
+          gmailThreadId: null,
+          hasAttachments: false,
+          templateName: null,
+          meta: {
+            meetLink: a.meetLink,
+            duration: a.duration,
+            appointmentType: a.appointmentType,
+            recordingUrl: a.recordingUrl,
+            transcriptUrl: a.transcriptUrl,
+          },
+        });
+      }
+
+      // Optional: include activity events (form_submitted, email_opened, deal_stage_changed, etc.)
+      if (includeEvents) {
+        const eventTypes = new Set([
+          "form_submitted",
+          "email_opened",
+          "email_clicked",
+          "email_bounced",
+          "status_changed",
+          "deal_stage_changed",
+          "score_changed",
+          "task_created",
+          "task_completed",
+          "note_added",
+          "opted_out",
+        ]);
+        for (const a of activityRows) {
+          if (!eventTypes.has(a.type)) continue;
+          items.push({
+            id: `evt:${a.id}`,
+            channel: "event",
+            source: "activity",
+            direction: "system",
+            date: a.createdAt.toISOString(),
+            subject: null,
+            preview: a.description,
+            bodyHtml: null,
+            bodyText: null,
+            status: null,
+            fromEmail: null,
+            gmailThreadId: null,
+            hasAttachments: false,
+            templateName: null,
+            meta: { activityType: a.type, ...(a.metadata || {}) },
+          });
+        }
+      }
+
+      // Sort all items by date descending
+      items.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+
+      res.json(items);
+    } catch (err: unknown) {
+      log(`Error fetching conversation timeline: ${(err as Error).message}`);
+      res.status(500).json({ error: "Error fetching conversation timeline" });
+    }
+  });
+
   // Unlink a Gmail email from a contact
   app.patch("/api/admin/gmail-emails/:emailId/unlink", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
@@ -9264,6 +9999,146 @@ ${urls}
       res.json(state || { lastSyncAt: null, lastHistoryId: null });
     } catch (err: unknown) {
       res.status(500).json({ error: "Error fetching sync status" });
+    }
+  });
+
+  // ───────────────────────────────────────────────────────────────
+  // Gmail SEND (Phase 2) — replies + new emails from CRM
+  // ───────────────────────────────────────────────────────────────
+  app.post("/api/admin/gmail/send", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    if (!isGmailConfigured()) {
+      return res.status(503).json({ error: "Gmail no está configurado en este entorno" });
+    }
+
+    const {
+      contactId,
+      to,
+      cc,
+      subject,
+      body,
+      replyToGmailEmailId,
+    } = req.body as {
+      contactId?: string;
+      to: string[] | string;
+      cc?: string[] | string;
+      subject: string;
+      body: string;
+      replyToGmailEmailId?: string;
+    };
+
+    const toArr = Array.isArray(to) ? to : (typeof to === "string" ? to.split(",").map(s => s.trim()).filter(Boolean) : []);
+    const ccArr = Array.isArray(cc) ? cc : (typeof cc === "string" && cc.trim() ? cc.split(",").map(s => s.trim()).filter(Boolean) : []);
+
+    if (toArr.length === 0) return res.status(400).json({ error: "Destinatario (to) es requerido" });
+    if (!subject || !body) return res.status(400).json({ error: "Asunto y cuerpo son requeridos" });
+
+    try {
+      // If replying, fetch original headers for proper threading
+      let threadId: string | undefined;
+      let inReplyTo: string | undefined;
+      let referencesChain: string | undefined;
+
+      if (replyToGmailEmailId) {
+        const [original] = await db
+          .select({
+            gmailMessageId: gmailEmails.gmailMessageId,
+            gmailThreadId: gmailEmails.gmailThreadId,
+          })
+          .from(gmailEmails)
+          .where(eq(gmailEmails.id, replyToGmailEmailId))
+          .limit(1);
+
+        if (original) {
+          threadId = original.gmailThreadId || undefined;
+          const headers = await getOriginalMessageHeaders(original.gmailMessageId);
+          if (headers?.messageIdHeader) {
+            inReplyTo = headers.messageIdHeader;
+            referencesChain = headers.references
+              ? `${headers.references} ${headers.messageIdHeader}`
+              : headers.messageIdHeader;
+          }
+        }
+      }
+
+      // Convert plain-text body with newlines to simple HTML
+      const isAlreadyHtml = /<[a-z][\s\S]*>/i.test(body);
+      const html = isAlreadyHtml
+        ? body
+        : body
+            .split("\n")
+            .map(line => line.trim() === "" ? "<br/>" : `<p style="margin:0 0 12px 0;">${line.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>`)
+            .join("\n");
+
+      const sendResult = await sendGmailMessage({
+        to: toArr,
+        cc: ccArr.length > 0 ? ccArr : undefined,
+        subject,
+        html,
+        threadId,
+        inReplyTo,
+        references: referencesChain,
+      });
+
+      // Optimistic insert into gmailEmails so the UI shows it immediately.
+      // The next sync will skip it via the unique gmailMessageId constraint.
+      let resolvedContactId: string | null = contactId || null;
+      if (!resolvedContactId) {
+        // Best-effort match by recipient
+        const [match] = await db
+          .select({ id: contacts.id })
+          .from(contacts)
+          .where(eq(contacts.email, toArr[0].toLowerCase()))
+          .limit(1);
+        resolvedContactId = match?.id || null;
+      }
+
+      const [inserted] = await db.insert(gmailEmails).values({
+        gmailMessageId: sendResult.gmailMessageId,
+        gmailThreadId: sendResult.gmailThreadId || null,
+        contactId: resolvedContactId,
+        direction: "outbound",
+        fromEmail: (process.env.GOOGLE_DRIVE_IMPERSONATE || "info@im3systems.com").toLowerCase(),
+        toEmails: toArr.map(e => e.toLowerCase()),
+        subject,
+        bodyText: body,
+        bodyHtml: html,
+        snippet: body.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim().substring(0, 200),
+        labelIds: ["SENT"],
+        hasAttachments: false,
+        gmailDate: new Date(),
+        matchMethod: replyToGmailEmailId ? "manual" : (resolvedContactId ? "exact" : null),
+      }).returning({ id: gmailEmails.id }).catch(err => {
+        // If the unique constraint hits (rare race with sync), don't fail the response
+        log(`[Gmail Send] Optimistic insert failed (likely duplicate): ${(err as Error).message}`);
+        return [{ id: null }];
+      });
+
+      // Activity log
+      if (resolvedContactId) {
+        await db.insert(activityLog).values({
+          contactId: resolvedContactId,
+          type: "gmail_sent",
+          description: `Email enviado: "${(subject || "Sin asunto").substring(0, 80)}"`,
+          metadata: {
+            gmailEmailId: inserted?.id,
+            gmailMessageId: sendResult.gmailMessageId,
+            isReply: !!replyToGmailEmailId,
+          },
+        }).catch(() => {});
+        await db.update(contacts).set({ lastActivityAt: new Date() }).where(eq(contacts.id, resolvedContactId)).catch(() => {});
+      }
+
+      res.json({
+        success: true,
+        gmailMessageId: sendResult.gmailMessageId,
+        gmailThreadId: sendResult.gmailThreadId,
+        gmailEmailId: inserted?.id || null,
+      });
+    } catch (err: unknown) {
+      const msg = (err as Error).message || "Error enviando email";
+      log(`[Gmail Send] Error: ${msg}`);
+      res.status(500).json({ error: msg });
     }
   });
 
@@ -9407,7 +10282,7 @@ ${urls}
         idle: agents.filter((a) => a.health === "idle").length,
       };
 
-      res.json({ agents, domains: AGENT_DOMAINS, summary });
+      res.json({ agents, kinds: AGENT_KINDS, summary });
     } catch (err: any) {
       log(`Error fetching agents: ${err?.message}`);
       res.status(500).json({ error: err?.message });
