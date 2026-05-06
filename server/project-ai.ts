@@ -45,6 +45,156 @@ function parseAIJson<T>(text: string, label: string): T | null {
   }
 }
 
+type ValidationResult = { ok: true } | { ok: false; feedback: string };
+
+/**
+ * Mini-agente loop: llama a Sonnet, parsea, valida estructura. Si falla,
+ * inyecta el feedback puntual al system prompt y reintenta hasta `maxRetries`
+ * veces. Esto convierte la generación AI de un one-shot frágil (cualquier
+ * truncado/malformación → fallback genérico) en algo auto-curativo: cuando
+ * Sonnet emite algo raro, le decimos QUÉ falló específicamente y le damos
+ * otra oportunidad.
+ *
+ * Retorna `null` solo después de agotar todos los reintentos. El caller
+ * decide si tirar error (cae al fallback skeleton) o seguir.
+ */
+async function callSonnetWithRetry<T>(opts: {
+  client: Anthropic;
+  model: string;
+  maxTokens: number;
+  baseSystem: string;
+  userMessage: string;
+  parser: (text: string) => T | null;
+  validator: (parsed: T) => ValidationResult;
+  label: string;
+  maxRetries?: number;
+}): Promise<T | null> {
+  const { client, model, maxTokens, baseSystem, userMessage, parser, validator, label } = opts;
+  const maxRetries = opts.maxRetries ?? 2;
+
+  let lastFeedback: string | null = null;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const system = lastFeedback
+      ? `${baseSystem}\n\n---\nINTENTO ANTERIOR FALLÓ — corrige esto:\n${lastFeedback}\n\nResponde de nuevo cumpliendo EXACTAMENTE el formato pedido.`
+      : baseSystem;
+
+    try {
+      const response = await client.messages.create({ model, max_tokens: maxTokens, system, messages: [{ role: "user", content: userMessage }] });
+      const text = response.content?.[0]?.type === "text" ? response.content[0].text : "";
+      const parsed = parser(text);
+
+      if (parsed === null || parsed === undefined) {
+        lastFeedback = "El JSON no se pudo parsear. Devuelve SOLO un array JSON válido, sin markdown ni texto extra antes o después.";
+        log(`${label}: attempt ${attempt + 1}/${maxRetries + 1} parse failed`);
+        continue;
+      }
+
+      const validation = validator(parsed);
+      if (validation.ok) {
+        if (attempt > 0) log(`${label}: succeeded on retry attempt ${attempt + 1}`);
+        return parsed;
+      }
+
+      lastFeedback = validation.feedback;
+      log(`${label}: attempt ${attempt + 1}/${maxRetries + 1} validation failed: ${validation.feedback}`);
+    } catch (err) {
+      lastFeedback = `Error de API en intento previo: ${err instanceof Error ? err.message : String(err)}. Asegúrate de devolver JSON válido.`;
+      log(`${label}: attempt ${attempt + 1} threw: ${err}`);
+    }
+  }
+
+  log(`${label}: all ${maxRetries + 1} attempts exhausted, returning null`);
+  return null;
+}
+
+/**
+ * Validador para la respuesta del prompt de diseño de fases.
+ * Exige: 3-6 fases, name >=5 chars, weeks 1-20, description >=30 chars
+ * con 2-4 frases, keyOutcomes array con >=2 elementos, deliverables >=1.
+ * Si hasRepo, exige completionPercent entero 0-100.
+ */
+function validatePhaseSpecs(parsed: unknown, hasRepo: boolean): ValidationResult {
+  if (!Array.isArray(parsed)) {
+    return { ok: false, feedback: "La respuesta no es un array. Devuelve un JSON array de fases." };
+  }
+  if (parsed.length < 3 || parsed.length > 6) {
+    return { ok: false, feedback: `El array tiene ${parsed.length} fases pero deben ser entre 3 y 6.` };
+  }
+  for (let i = 0; i < parsed.length; i++) {
+    const p = parsed[i] as Record<string, unknown>;
+    if (!p || typeof p !== "object") {
+      return { ok: false, feedback: `La fase ${i + 1} no es un objeto.` };
+    }
+    if (typeof p.name !== "string" || p.name.length < 5) {
+      return { ok: false, feedback: `La fase ${i + 1} no tiene "name" válido (string >= 5 chars).` };
+    }
+    if (typeof p.weeks !== "number" || p.weeks < 1 || p.weeks > 20) {
+      return { ok: false, feedback: `La fase ${i + 1} ("${p.name}") tiene "weeks" inválido. Debe ser número entre 1 y 20.` };
+    }
+    if (typeof p.description !== "string" || p.description.length < 30) {
+      return { ok: false, feedback: `La fase ${i + 1} ("${p.name}") no tiene "description" suficiente. Necesito 2-4 frases (mínimo 30 chars) explicando qué hace la fase.` };
+    }
+    if (!Array.isArray(p.keyOutcomes) || p.keyOutcomes.length < 2) {
+      return { ok: false, feedback: `La fase ${i + 1} ("${p.name}") tiene menos de 2 keyOutcomes. Necesito 3-5 bullets concretos y verificables.` };
+    }
+    if (!Array.isArray(p.deliverables) || p.deliverables.length < 1) {
+      return { ok: false, feedback: `La fase ${i + 1} ("${p.name}") no tiene "deliverables". Necesito 2-4 entregables.` };
+    }
+    if (hasRepo) {
+      if (typeof p.completionPercent !== "number" || p.completionPercent < 0 || p.completionPercent > 100 || !Number.isInteger(p.completionPercent)) {
+        return { ok: false, feedback: `La fase ${i + 1} ("${p.name}") falta "completionPercent" como entero 0-100. Es OBLIGATORIO cuando hay contexto del repo.` };
+      }
+    }
+  }
+  return { ok: true };
+}
+
+/**
+ * Validador para la respuesta del prompt de tareas por fase.
+ * Exige un objeto con phaseIndex y tasks por cada fase esperada.
+ * tasks debe tener al menos 4 elementos con title no vacío.
+ */
+function validatePhaseTasks(parsed: unknown, expectedPhaseCount: number): ValidationResult {
+  if (!Array.isArray(parsed)) {
+    return { ok: false, feedback: "La respuesta no es un array. Devuelve un JSON array de objetos {phaseIndex, tasks}." };
+  }
+  if (parsed.length < expectedPhaseCount) {
+    return { ok: false, feedback: `Solo recibí tareas para ${parsed.length} fases pero hay ${expectedPhaseCount}. Debes incluir UN objeto por cada fase, con phaseIndex de 0 a ${expectedPhaseCount - 1}.` };
+  }
+  const seenIndexes = new Set<number>();
+  for (let i = 0; i < parsed.length; i++) {
+    const pt = parsed[i] as Record<string, unknown>;
+    if (!pt || typeof pt !== "object") {
+      return { ok: false, feedback: `El elemento ${i} no es un objeto.` };
+    }
+    if (typeof pt.phaseIndex !== "number" || !Number.isInteger(pt.phaseIndex)) {
+      return { ok: false, feedback: `El elemento ${i} no tiene "phaseIndex" como entero. Cada objeto debe tener phaseIndex: 0, 1, 2, ...` };
+    }
+    if (pt.phaseIndex < 0 || pt.phaseIndex >= expectedPhaseCount) {
+      return { ok: false, feedback: `phaseIndex ${pt.phaseIndex} está fuera de rango (válido: 0-${expectedPhaseCount - 1}).` };
+    }
+    if (seenIndexes.has(pt.phaseIndex)) {
+      return { ok: false, feedback: `phaseIndex ${pt.phaseIndex} aparece más de una vez. Cada fase debe tener UN solo objeto.` };
+    }
+    seenIndexes.add(pt.phaseIndex);
+    if (!Array.isArray(pt.tasks) || pt.tasks.length < 4) {
+      return { ok: false, feedback: `La fase phaseIndex ${pt.phaseIndex} tiene ${Array.isArray(pt.tasks) ? pt.tasks.length : 0} tareas. Necesito mínimo 4 (idealmente 6-8).` };
+    }
+    for (let j = 0; j < pt.tasks.length; j++) {
+      const t = pt.tasks[j] as Record<string, unknown>;
+      if (!t || typeof t.title !== "string" || t.title.trim().length < 5) {
+        return { ok: false, feedback: `La tarea ${j + 1} de phaseIndex ${pt.phaseIndex} no tiene "title" válido (>=5 chars).` };
+      }
+    }
+  }
+  for (let i = 0; i < expectedPhaseCount; i++) {
+    if (!seenIndexes.has(i)) {
+      return { ok: false, feedback: `Falta phaseIndex ${i}. Debe haber un objeto por cada índice de 0 a ${expectedPhaseCount - 1}.` };
+    }
+  }
+  return { ok: true };
+}
+
 type CommitInfo = {
   sha: string;
   message: string;
@@ -361,10 +511,7 @@ export async function generateProjectArtifacts(
     try {
       const hasRepo = !!repoContext;
       const designPrompt = `Brief del proyecto:\n${brief}${repoContext ? `\n\nContexto del repositorio:\n${repoContext}` : ""}`;
-      const designRes = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 4000,
-        system: `${IM3_PROJECT_CONTEXT}
+      const designSystem = `${IM3_PROJECT_CONTEXT}
 
 ---
 
@@ -412,13 +559,21 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato:
     "currentStatus": "pending",
     "evidence": ""` : ""}
   }
-]`,
-        messages: [{ role: "user", content: designPrompt }],
+]`;
+
+      const parsed = await callSonnetWithRetry<PhaseSpec[]>({
+        client: anthropic,
+        model: "claude-sonnet-4-6",
+        maxTokens: 4000,
+        baseSystem: designSystem,
+        userMessage: designPrompt,
+        parser: (text) => parseAIJson<PhaseSpec[]>(text, "design-phases-fresh"),
+        validator: (p) => validatePhaseSpecs(p, hasRepo),
+        label: "design-phases-fresh",
+        maxRetries: 2,
       });
 
-      const designText = designRes.content?.[0]?.type === "text" ? designRes.content[0].text : "";
-      const parsed = parseAIJson<PhaseSpec[]>(designText, "design-phases-fresh");
-      if (!parsed || !Array.isArray(parsed) || parsed.length === 0) throw new Error("AI returned empty phases");
+      if (!parsed || !Array.isArray(parsed) || parsed.length === 0) throw new Error("AI returned empty phases after retries");
       phaseSpecs = parsed.map(p => {
         const cs = p.currentStatus;
         const explicitStatus = cs === "completed" || cs === "in_progress" || cs === "pending" ? cs : undefined;
@@ -541,10 +696,7 @@ ${phaseSpecs.map((p, i) => {
 }).join("\n\n")}
 `.trim();
 
-      const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
-        max_tokens: 12000,
-        system: `${IM3_PROJECT_CONTEXT}
+      const tasksSystem = `${IM3_PROJECT_CONTEXT}
 
 ---
 
@@ -563,26 +715,35 @@ Formato EXACTO (no agregues comentarios, explicaciones ni claves extra):
 ]
 
 Reglas estrictas:
-- DEBES generar tareas para TODAS las fases (un objeto por phaseIndex empezando en 0)
-- 4-8 tareas por fase. NO menos de 4.
+- DEBES generar UN objeto por cada fase (phaseIndex 0 a ${insertedPhases.length - 1}, sin saltarte ninguno).
+- 4-8 tareas por fase. NO menos de 4. Idealmente 6-8.
 - La primera tarea de cada fase debe ser el kickoff/planeación
 - La última tarea de cada fase debe ser un milestone (isMilestone: true) con la entrega principal
 - Prioridades realistas: 2-3 high, resto medium/low
 - clientFacingTitle debe ser comprensible para un empresario no técnico
-- Tareas específicas al brief, NO genéricas. Aplica los anti-patrones IM3.
-- Si tienes contexto del repositorio, usa nombres de archivos/módulos reales en las tareas cuando aplique.`,
-        messages: [{ role: "user", content: `Genera tareas para este proyecto:\n\n${taskContext}` }],
-      });
+- Tareas específicas al dominio descrito en el brief, NO genéricas. Usa nombres de archivos/módulos reales mencionados en las descripciones de fase cuando aplique.`;
 
-      const text = response.content?.[0]?.type === "text" ? response.content[0].text : "";
-      const phaseTasks = parseAIJson<Array<{
+      type PhaseTasksPayload = Array<{
         phaseIndex: number;
         tasks: Array<{ title: string; priority: string; isMilestone?: boolean; clientFacingTitle?: string }>;
-      }>>(text, "tasks-fresh");
+      }>;
+
+      const phaseTasks = await callSonnetWithRetry<PhaseTasksPayload>({
+        client: anthropic,
+        model: "claude-sonnet-4-6",
+        maxTokens: 12000,
+        baseSystem: tasksSystem,
+        userMessage: `Genera tareas para este proyecto:\n\n${taskContext}`,
+        parser: (text) => parseAIJson<PhaseTasksPayload>(text, "tasks-fresh"),
+        validator: (p) => validatePhaseTasks(p, insertedPhases.length),
+        label: "tasks-fresh",
+        maxRetries: 2,
+      });
+
       if (!phaseTasks || !Array.isArray(phaseTasks) || phaseTasks.length === 0) {
-        throw new Error("AI returned empty or invalid tasks payload");
+        throw new Error("AI returned empty or invalid tasks payload after retries");
       }
-      log(`generateProjectArtifacts: Sonnet returned tasks for ${phaseTasks.length} phases`);
+      log(`generateProjectArtifacts: Sonnet returned tasks for ${phaseTasks.length} phases (validated)`);
 
       const now = new Date();
       // skippedCount makes the silent-skip visible in Railway logs. If Sonnet
