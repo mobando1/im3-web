@@ -14,6 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { ToastAction } from "@/components/ui/toast";
+import { EditableText } from "@/components/ui/editable-text";
 import { useToast } from "@/hooks/use-toast";
 
 type ProjectDetail = {
@@ -887,12 +888,37 @@ export default function AdminProjectDetail() {
                         onClick={() => togglePhase(phase.id)}
                       >
                         {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2">
+                        <div className="flex-1" onClick={e => e.stopPropagation()}>
+                          <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-xs font-semibold text-gray-400">FASE {idx + 1}</span>
-                            <h3 className="font-medium text-gray-900">{phase.name}</h3>
+                            <h3 className="font-medium text-gray-900">
+                              <EditableText
+                                value={phase.name}
+                                kind="phase-name"
+                                onSave={(name) => new Promise<void>((resolve, reject) => {
+                                  updatePhaseMut.mutate(
+                                    { id: phase.id, data: { name } },
+                                    { onSuccess: () => resolve(), onError: (err) => reject(err) }
+                                  );
+                                })}
+                              />
+                            </h3>
                           </div>
-                          {phase.description && <p className="text-xs text-gray-400 mt-0.5">{phase.description}</p>}
+                          <div className="text-xs text-gray-400 mt-0.5">
+                            <EditableText
+                              value={phase.description || ""}
+                              kind="phase-description"
+                              multiline
+                              placeholder="Sin descripción — clic para añadir"
+                              size="sm"
+                              onSave={(description) => new Promise<void>((resolve, reject) => {
+                                updatePhaseMut.mutate(
+                                  { id: phase.id, data: { description } },
+                                  { onSuccess: () => resolve(), onError: (err) => reject(err) }
+                                );
+                              })}
+                            />
+                          </div>
                           {(phase.startDate || phase.endDate) && (
                             <p className="text-[11px] text-gray-400 mt-0.5">
                               {phase.startDate ? new Date(phase.startDate).toLocaleDateString("es-CO", { day: "numeric", month: "short" }) : "?"} — {phase.endDate ? new Date(phase.endDate).toLocaleDateString("es-CO", { day: "numeric", month: "short" }) : "?"}
@@ -960,32 +986,52 @@ export default function AdminProjectDetail() {
                               onClick={e => e.stopPropagation()}
                             />
                           </div>
+                          {phase.tasks.length > 0 && (
+                            <div className="grid grid-cols-[20px_1fr_120px_72px_24px] items-center gap-3 px-1 pb-1.5 border-b border-gray-50 text-[9px] font-medium uppercase tracking-wider text-gray-400">
+                              <span></span>
+                              <span>Descripción</span>
+                              <span>Fecha de entrega</span>
+                              <span className="text-center">Nivel</span>
+                              <span></span>
+                            </div>
+                          )}
                           {phase.tasks.map(task => {
                             const Icon = TASK_STATUS_ICONS[task.status] || Circle;
                             return (
-                              <div key={task.id} className={`flex items-center gap-3 py-1.5 group ${task.isMilestone ? "bg-amber-50/50 -mx-2 px-2 rounded-lg" : ""}`}>
-                                <button onClick={() => cycleTaskStatus(task)} className="shrink-0">
+                              <div key={task.id} className={`grid grid-cols-[20px_1fr_120px_72px_24px] items-center gap-3 py-1.5 group ${task.isMilestone ? "bg-amber-50/50 -mx-2 px-2 rounded-lg" : ""}`}>
+                                <button onClick={() => cycleTaskStatus(task)} className="shrink-0 justify-self-start">
                                   <Icon className={`w-4 h-4 ${TASK_STATUS_COLORS[task.status]}`} />
                                 </button>
-                                {task.isMilestone && <span className="text-amber-500 text-sm">🏁</span>}
-                                <span className={`text-sm flex-1 ${task.status === "completed" ? "line-through text-gray-400" : "text-gray-700"} ${task.isMilestone ? "font-semibold" : ""}`}>
-                                  {task.title}
+                                <span className={`text-sm min-w-0 flex items-start gap-1.5 ${task.status === "completed" ? "line-through text-gray-400" : "text-gray-700"} ${task.isMilestone ? "font-semibold" : ""}`}>
+                                  {task.isMilestone && <span className="text-amber-500 text-sm shrink-0">🏁</span>}
+                                  <span className="min-w-0 flex-1 break-words">
+                                    <EditableText
+                                      value={task.title}
+                                      kind="task-title"
+                                      onSave={(title) => new Promise<void>((resolve, reject) => {
+                                        updateTaskMut.mutate(
+                                          { id: task.id, data: { title } },
+                                          { onSuccess: () => resolve(), onError: (err) => reject(err) }
+                                        );
+                                      })}
+                                    />
+                                  </span>
                                 </span>
                                 <input
                                   type="date"
                                   value={task.dueDate ? task.dueDate.split("T")[0] : ""}
                                   onChange={e => updateTaskMut.mutate({ id: task.id, data: { dueDate: e.target.value || null } })}
-                                  className={`text-[10px] border rounded px-1.5 py-0.5 outline-none w-28 ${task.dueDate ? "border-gray-200 text-gray-500" : "border-dashed border-gray-300 text-gray-400"} focus:border-[#2FA4A9]`}
+                                  className={`text-[10px] border rounded px-1.5 py-0.5 outline-none w-full ${task.dueDate ? "border-gray-200 text-gray-500" : "border-dashed border-gray-300 text-gray-400"} focus:border-[#2FA4A9]`}
                                   title="Fecha límite"
                                 />
-                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium text-center justify-self-center ${
                                   task.priority === "high" ? "bg-red-50 text-red-600" :
                                   task.priority === "medium" ? "bg-amber-50 text-amber-600" :
                                   "bg-gray-50 text-gray-400"
                                 }`}>{task.priority}</span>
                                 <button
                                   onClick={() => setPendingDelete({ kind: "task", id: task.id, title: task.title })}
-                                  className="p-1 rounded text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
+                                  className="p-1 rounded text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all justify-self-end"
                                   title="Eliminar tarea"
                                 >
                                   <Trash2 className="w-3 h-3" />
@@ -1529,54 +1575,80 @@ export default function AdminProjectDetail() {
             {project.deliverables.length === 0 ? (
               <p className="text-center text-gray-400 py-12">No hay entregas registradas.</p>
             ) : (
-              <div className="space-y-3">
+              <div className="bg-white rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-100">
                 {project.deliverables.map(d => (
-                  <div key={d.id} className="bg-white rounded-xl border border-gray-200 p-5 group">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <h3 className="font-medium text-gray-900">{d.title}</h3>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${DELIVERABLE_COLORS[d.status]}`}>{d.status}</span>
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium">{d.type}</span>
+                  <div key={d.id} className="group flex items-start gap-3 px-4 py-3 hover:bg-gray-50/60 transition-colors">
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start gap-2">
+                        <div className="flex-1 min-w-0 text-sm text-gray-900 leading-snug">
+                          <EditableText
+                            value={d.title}
+                            kind="deliverable-title"
+                            onSave={(title) => new Promise<void>((resolve, reject) => {
+                              updateDelivMut.mutate(
+                                { id: d.id, data: { title } },
+                                { onSuccess: () => resolve(), onError: (err) => reject(err) }
+                              );
+                            })}
+                          />
                         </div>
-                        {d.description && <p className="text-sm text-gray-500 mt-1">{d.description}</p>}
-                        {d.clientComment && (
-                          <p className="text-sm text-amber-600 mt-2 bg-amber-50 px-3 py-1.5 rounded-lg">
-                            Comentario del cliente: {d.clientComment}
-                          </p>
-                        )}
-                        {d.clientRating && (
-                          <p className="text-xs text-gray-400 mt-1">
-                            Rating: {"★".repeat(d.clientRating)}{"☆".repeat(5 - d.clientRating)}
-                          </p>
-                        )}
-                        {d.demoUrl && (
-                          <a href={d.demoUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-[#2FA4A9] hover:underline mt-1 inline-block">
-                            Ver demo
-                          </a>
-                        )}
-                        {d.status === "rejected" && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            className="mt-2 text-xs"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              updateDelivMut.mutate({ id: d.id, data: { status: "delivered", deliveredAt: new Date().toISOString() } });
-                            }}
-                          >
-                            Re-entregar
-                          </Button>
-                        )}
+                        <div className="flex items-center gap-1.5 shrink-0 pt-0.5">
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${DELIVERABLE_COLORS[d.status]}`}>{d.status}</span>
+                          <span className="text-[10px] text-gray-400 uppercase tracking-wide">{d.type}</span>
+                        </div>
                       </div>
-                      <button
-                        onClick={() => setPendingDelete({ kind: "deliverable", id: d.id, title: d.title })}
-                        className="p-1 rounded text-gray-200 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all"
-                        title="Eliminar entrega"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                        <EditableText
+                          value={d.description || ""}
+                          kind="deliverable-description"
+                          multiline
+                          placeholder="Sin descripción — clic para añadir"
+                          onSave={(description) => new Promise<void>((resolve, reject) => {
+                            updateDelivMut.mutate(
+                              { id: d.id, data: { description } },
+                              { onSuccess: () => resolve(), onError: (err) => reject(err) }
+                            );
+                          })}
+                        />
+                      </div>
+                      {d.clientComment && (
+                        <p className="text-xs text-amber-700 mt-1.5 bg-amber-50 px-2 py-1 rounded">
+                          Comentario: {d.clientComment}
+                        </p>
+                      )}
+                      {(d.clientRating || d.demoUrl || d.status === "rejected") && (
+                        <div className="flex items-center gap-3 mt-1.5">
+                          {d.clientRating && (
+                            <span className="text-xs text-gray-400">
+                              {"★".repeat(d.clientRating)}{"☆".repeat(5 - d.clientRating)}
+                            </span>
+                          )}
+                          {d.demoUrl && (
+                            <a href={d.demoUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-[#2FA4A9] hover:underline">
+                              Ver demo
+                            </a>
+                          )}
+                          {d.status === "rejected" && (
+                            <button
+                              className="text-xs text-[#2FA4A9] hover:underline"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                updateDelivMut.mutate({ id: d.id, data: { status: "delivered", deliveredAt: new Date().toISOString() } });
+                              }}
+                            >
+                              Re-entregar
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
+                    <button
+                      onClick={() => setPendingDelete({ kind: "deliverable", id: d.id, title: d.title })}
+                      className="p-1 rounded text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+                      title="Eliminar entrega"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 ))}
               </div>

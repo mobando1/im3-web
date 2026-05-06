@@ -5265,6 +5265,80 @@ ${urls}
     }
   });
 
+  // AI text refinement — reusable across phase names, task titles, deliverable titles, descriptions.
+  // Sonnet refina manteniendo el mismo significado pero aplicando el estilo IM3.
+  // Body: { text: string, kind: "phase-name" | "phase-description" | "task-title" | "task-description" | "deliverable-title" | "deliverable-description" | "project-name" | "project-description" }
+  // Response: { refined: string } o { error }
+  app.post("/api/admin/ai/refine-text", requireAuth, async (req, res) => {
+    const { text, kind } = req.body || {};
+    if (!text || typeof text !== "string" || text.trim().length === 0) {
+      return res.status(400).json({ error: "text requerido" });
+    }
+    if (text.length > 2000) {
+      return res.status(400).json({ error: "text demasiado largo (max 2000 caracteres)" });
+    }
+    const validKinds = ["phase-name", "phase-description", "task-title", "task-description", "deliverable-title", "deliverable-description", "project-name", "project-description"];
+    if (!kind || !validKinds.includes(kind)) {
+      return res.status(400).json({ error: `kind inválido. Válidos: ${validKinds.join(", ")}` });
+    }
+    if (!process.env.ANTHROPIC_API_KEY) {
+      return res.status(500).json({ error: "ANTHROPIC_API_KEY no configurado en el servidor — no se puede refinar texto con IA" });
+    }
+
+    try {
+      const Anthropic = (await import("@anthropic-ai/sdk")).default;
+      const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+      const { IM3_PROJECT_CONTEXT } = await import("./im3-project-context");
+
+      const kindGuide: Record<string, string> = {
+        "phase-name": "Nombre corto de una FASE de proyecto. Conciso, deliverable-oriented, sin palabras vacías. Max 80 caracteres.",
+        "phase-description": "Descripción de una fase: 1-2 frases que expliquen el outcome concreto. Sin lista de tareas internas.",
+        "task-title": "Título de una tarea. Verbo + objeto concreto + criterio verificable cuando aplique. Max 150 caracteres.",
+        "task-description": "Descripción de una tarea: 1-2 frases con detalle técnico relevante. No repetir el título.",
+        "deliverable-title": "Título de un entregable. Sustantivo + estado terminal ('listo', 'aprobado', 'desplegado'). Max 120 caracteres.",
+        "deliverable-description": "Descripción de un entregable: criterio de aceptación claro en 1-2 frases.",
+        "project-name": "Nombre del proyecto. Corto, memorable, sin prefijos como 'Propuesta:'. Max 60 caracteres.",
+        "project-description": "Descripción del proyecto: brief en 2-4 frases que diga el problema, los usuarios y el outcome esperado.",
+      };
+
+      const response = await anthropic.messages.create({
+        model: "claude-sonnet-4-6",
+        max_tokens: 600,
+        system: `${IM3_PROJECT_CONTEXT}
+
+---
+
+Eres un editor senior de IM3. Te dan un fragmento de texto de un proyecto y debes REFINARLO aplicando las reglas IM3 arriba.
+
+Tipo de texto: ${kind}
+Guía específica: ${kindGuide[kind]}
+
+Reglas:
+- Mantené el mismo significado y los hechos concretos del original (nombres propios, números, decisiones).
+- Aplicá el estilo IM3: español, sin terminología scrum genérica, deliverable-oriented.
+- NO inventes información que no estaba en el original.
+- Si el texto ya está bien, devolvelo casi idéntico (solo arreglos menores).
+- Si el texto es ambiguo, hacelo MÁS específico, no más genérico.
+
+Devolvé SOLO el texto refinado. Sin comillas alrededor, sin explicación, sin prefijos como "Refinado:" o "Aquí está...". Solo el texto resultante.`,
+        messages: [{ role: "user", content: `Texto original:\n${text}` }],
+      });
+
+      const refined = response.content?.[0]?.type === "text" ? response.content[0].text.trim() : "";
+      if (!refined) {
+        log(`refine-text: AI returned empty for kind=${kind}`);
+        return res.status(500).json({ error: "La IA devolvió una respuesta vacía. Intenta de nuevo." });
+      }
+
+      // Sonnet a veces envuelve la respuesta en comillas — quitarlas si todo el texto está entre ellas.
+      const cleaned = refined.replace(/^["'`]|["'`]$/g, "").trim();
+      res.json({ refined: cleaned });
+    } catch (err: any) {
+      log(`Error refine-text: ${err?.message}`);
+      res.status(500).json({ error: err?.message || "Error refinando texto con IA" });
+    }
+  });
+
   // Clarifying questions step (one-shot Sonnet call).
   // Body: { brief: string, githubRepoUrl?: string, mode: "fresh" | "append" }
   // Response: { questions: [{ id, question, hint?, options?: string[] }] }
