@@ -20,7 +20,8 @@ import { calculateLeadScore } from "./lead-scoring";
 import { isWhatsAppConfigured, calculateWhatsAppSchedule, WHATSAPP_SEQUENCE, sendWhatsAppText } from "./whatsapp";
 import passport from "passport";
 import { z } from "zod";
-import { analyzeCommitsForProject, generateWeeklySummary, calculateProjectHealth, generateProjectFromProposal } from "./project-ai";
+import { analyzeCommitsForProject, generateWeeklySummary, calculateProjectHealth, generateProjectFromProposal, generateProjectArtifacts } from "./project-ai";
+import { fetchRepoContext } from "./github-repo-context";
 import { syncDriveFilesToProject } from "./drive-file-sync";
 import { generateProposal, regenerateProposalSection, generateSectionOptions, applySectionOption } from "./proposal-ai";
 import crypto from "crypto";
@@ -5190,6 +5191,71 @@ ${urls}
     }
   });
 
+  // Create project from brief — uses AI to design phases + tasks + deliverables
+  // Optional GitHub repo URL enriches the brief with README / docs / recent commits.
+  app.post("/api/admin/projects/from-brief", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const {
+      name,
+      brief,
+      projectType = "client",
+      contactId = null,
+      githubRepoUrl = null,
+      totalBudget = null,
+      currency = "USD",
+      startDate: startDateRaw,
+    } = req.body || {};
+
+    if (!name || typeof name !== "string") return res.status(400).json({ message: "name requerido" });
+    if (!brief || typeof brief !== "string" || brief.trim().length < 20) {
+      return res.status(400).json({ message: "brief requerido (mínimo 20 caracteres)" });
+    }
+    if (projectType !== "client" && projectType !== "internal") {
+      return res.status(400).json({ message: "projectType debe ser 'client' o 'internal'" });
+    }
+    if (projectType === "client" && !contactId) {
+      return res.status(400).json({ message: "contactId requerido para projectType='client'" });
+    }
+
+    const startDate = startDateRaw ? new Date(startDateRaw) : new Date();
+
+    try {
+      const [project] = await db.insert(clientProjects).values({
+        name: name.trim(),
+        description: brief.slice(0, 500),
+        contactId: projectType === "internal" ? null : contactId,
+        projectType,
+        status: "planning",
+        startDate,
+        totalBudget: totalBudget != null ? Number(totalBudget) : null,
+        currency,
+        githubRepoUrl: githubRepoUrl || null,
+        healthStatus: "on_track",
+        healthNote: "Proyecto recién creado — fases generadas por IA.",
+      }).returning();
+
+      let repoContext: string | null = null;
+      if (githubRepoUrl) {
+        try {
+          repoContext = await fetchRepoContext(githubRepoUrl);
+        } catch (err) {
+          log(`from-brief: fetchRepoContext failed for ${githubRepoUrl}: ${err}`);
+        }
+      }
+
+      const artifacts = await generateProjectArtifacts(project.id, {
+        brief: brief.trim(),
+        repoContext: repoContext || undefined,
+        startDate,
+      });
+
+      res.json({ projectId: project.id, ...artifacts });
+    } catch (err: any) {
+      log(`Error creating project from brief: ${err?.message}`);
+      res.status(500).json({ error: "Error creando proyecto desde brief" });
+    }
+  });
+
   // Get project detail
   app.get("/api/admin/projects/:id", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
@@ -6486,7 +6552,10 @@ ${urls}
 
   async function getProjectByToken(token: string) {
     const [project] = await db!.select().from(clientProjects).where(eq(clientProjects.accessToken, token));
-    return project || null;
+    if (!project) return null;
+    // Internal IM3 projects are never accessible through the public portal even if a token leaks.
+    if (project.projectType === "internal") return null;
+    return project;
   }
 
   // Portal overview

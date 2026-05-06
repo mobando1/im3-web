@@ -1,8 +1,8 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
-import { Plus, FolderKanban, ExternalLink, Copy, Sparkles, Trash2, List, LayoutGrid, GanttChart } from "lucide-react";
+import { Plus, FolderKanban, ExternalLink, Copy, Sparkles, Trash2, List, LayoutGrid, GanttChart, Wrench, Building2, Users as UsersIcon, ChevronDown, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -53,7 +53,22 @@ export default function AdminProjects() {
   const [showCreate, setShowCreate] = useState(false);
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"list" | "kanban" | "timeline">(() => (localStorage.getItem("im3_projects_view") as any) || "list");
-  const [form, setForm] = useState({ name: "", description: "", status: "planning", totalBudget: "", currency: "USD", contactId: "" });
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [form, setForm] = useState({
+    name: "",
+    brief: "",
+    projectType: "client" as "client" | "internal",
+    contactId: "",
+    githubRepoUrl: "",
+    totalBudget: "",
+    currency: "USD",
+    useAI: true,
+  });
+
+  const resetForm = () => setForm({
+    name: "", brief: "", projectType: "client", contactId: "",
+    githubRepoUrl: "", totalBudget: "", currency: "USD", useAI: true,
+  });
 
   const { data: projects = [], isLoading } = useQuery<Project[]>({
     queryKey: ["/api/admin/projects"],
@@ -69,11 +84,32 @@ export default function AdminProjects() {
       const res = await apiRequest("POST", "/api/admin/projects", data);
       return res.json();
     },
-    onSuccess: () => {
+    onSuccess: (project: { id?: string }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] });
       setShowCreate(false);
-      setForm({ name: "", description: "", status: "planning", totalBudget: "", currency: "USD", contactId: "" });
+      resetForm();
       toast({ title: "Proyecto creado" });
+      if (project?.id) navigate(`/admin/projects/${project.id}`);
+    },
+  });
+
+  const createFromBriefMutation = useMutation({
+    mutationFn: async (data: Record<string, unknown>) => {
+      const res = await apiRequest("POST", "/api/admin/projects/from-brief", data);
+      return res.json();
+    },
+    onSuccess: (data: { projectId?: string; phasesCreated?: number; tasksCreated?: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] });
+      setShowCreate(false);
+      resetForm();
+      toast({
+        title: "Proyecto generado con IA",
+        description: `${data.phasesCreated ?? 0} fases · ${data.tasksCreated ?? 0} tareas`,
+      });
+      if (data.projectId) navigate(`/admin/projects/${data.projectId}`);
+    },
+    onError: (err: any) => {
+      toast({ title: "Error generando proyecto", description: err?.message, variant: "destructive" });
     },
   });
 
@@ -106,16 +142,60 @@ export default function AdminProjects() {
 
   const filtered = filterStatus === "all" ? projects : projects.filter(p => p.status === filterStatus);
 
+  const groupedProjects = useMemo(() => {
+    const map = new Map<string, Project[]>();
+    for (const p of filtered) {
+      const key = p.projectType === "internal" ? "__internal__" : (p.contactName || "__no_client__");
+      if (!map.has(key)) map.set(key, []);
+      map.get(key)!.push(p);
+    }
+    const groups: Array<{ key: string; label: string; icon: typeof Wrench; items: Project[] }> = [];
+    if (map.has("__internal__")) groups.push({ key: "__internal__", label: "IM3 Interno", icon: Wrench, items: map.get("__internal__")! });
+    Array.from(map.keys())
+      .filter(k => k !== "__internal__" && k !== "__no_client__")
+      .sort((a, b) => a.localeCompare(b, "es"))
+      .forEach(k => groups.push({ key: k, label: k, icon: Building2, items: map.get(k)! }));
+    if (map.has("__no_client__")) groups.push({ key: "__no_client__", label: "Sin cliente", icon: UsersIcon, items: map.get("__no_client__")! });
+    return groups;
+  }, [filtered]);
+
   const handleCreate = () => {
+    const baseContactId = form.projectType === "client" ? (form.contactId || null) : null;
+
+    if (form.useAI) {
+      if (form.brief.trim().length < 20) {
+        toast({ title: "Brief demasiado corto", description: "Escribe al menos 20 caracteres describiendo el proyecto.", variant: "destructive" });
+        return;
+      }
+      if (form.projectType === "client" && !baseContactId) {
+        toast({ title: "Falta cliente", description: "Selecciona un contacto o cambia a tipo Interno.", variant: "destructive" });
+        return;
+      }
+      createFromBriefMutation.mutate({
+        name: form.name,
+        brief: form.brief,
+        projectType: form.projectType,
+        contactId: baseContactId,
+        githubRepoUrl: form.githubRepoUrl.trim() || null,
+        totalBudget: form.totalBudget ? parseInt(form.totalBudget) : null,
+        currency: form.currency,
+      });
+      return;
+    }
+
     createMutation.mutate({
       name: form.name,
-      description: form.description || null,
-      status: form.status,
+      description: form.brief || null,
+      projectType: form.projectType,
+      contactId: baseContactId,
+      githubRepoUrl: form.githubRepoUrl.trim() || null,
+      status: "planning",
       totalBudget: form.totalBudget ? parseInt(form.totalBudget) : null,
       currency: form.currency,
-      contactId: form.contactId || null,
     });
   };
+
+  const isCreating = createMutation.isPending || createFromBriefMutation.isPending;
 
   const copyPortalLink = (token: string) => {
     navigator.clipboard.writeText(`${window.location.origin}/portal/${token}`);
@@ -308,96 +388,186 @@ export default function AdminProjects() {
           })}
         </div>
       ) : (
-        /* ── LIST VIEW (default) ── */
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-100 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                <th className="px-5 py-3">Proyecto</th>
-                <th className="px-5 py-3">Cliente</th>
-                <th className="px-5 py-3">Estado</th>
-                <th className="px-5 py-3">Progreso</th>
-                <th className="px-5 py-3">Portal</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-50">
-              {filtered.map(p => (
-                <tr
-                  key={p.id}
-                  className="hover:bg-gray-50 cursor-pointer transition-colors"
-                  onClick={() => navigate(`/admin/projects/${p.id}`)}
+        /* ── LIST VIEW (default) — agrupada por carpetas ── */
+        <div className="space-y-4">
+          {groupedProjects.map(group => {
+            const isCollapsed = collapsedGroups[group.key];
+            const Icon = group.icon;
+            const isInternal = group.key === "__internal__";
+            const avgProgress = group.items.length > 0
+              ? Math.round(group.items.reduce((sum, p) => sum + p.progress, 0) / group.items.length)
+              : 0;
+
+            return (
+              <div key={group.key} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+                <button
+                  onClick={() => setCollapsedGroups(prev => ({ ...prev, [group.key]: !prev[group.key] }))}
+                  className="w-full flex items-center gap-3 px-5 py-3 border-b border-gray-100 hover:bg-gray-50 transition-colors text-left"
                 >
-                  <td className="px-5 py-4">
-                    <p className="font-medium text-gray-900 text-sm">{p.name}</p>
-                    {p.description && <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{p.description}</p>}
-                  </td>
-                  <td className="px-5 py-4 text-sm text-gray-600">{p.contactName || "—"}</td>
-                  <td className="px-5 py-4">
-                    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[p.status]}`}>
-                      {STATUS_LABELS[p.status]}
-                    </span>
-                  </td>
-                  <td className="px-5 py-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-[#2FA4A9] rounded-full transition-all" style={{ width: `${p.progress}%` }} />
-                      </div>
-                      <span className="text-xs text-gray-500">{p.progress}%</span>
+                  {isCollapsed ? <ChevronRight className="w-4 h-4 text-gray-400" /> : <ChevronDown className="w-4 h-4 text-gray-400" />}
+                  <Icon className={`w-4 h-4 ${isInternal ? "text-purple-500" : "text-[#2FA4A9]"}`} />
+                  <span className="text-sm font-semibold text-gray-900">{group.label}</span>
+                  <span className="text-xs text-gray-400">{group.items.length} proyecto{group.items.length === 1 ? "" : "s"}</span>
+                  <div className="ml-auto flex items-center gap-2">
+                    <div className="w-20 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      <div className="h-full bg-[#2FA4A9] rounded-full" style={{ width: `${avgProgress}%` }} />
                     </div>
-                  </td>
-                  <td className="px-5 py-4" onClick={e => e.stopPropagation()}>
-                    <div className="flex items-center gap-1">
-                      <button
-                        onClick={() => copyPortalLink(p.accessToken)}
-                        className="p-1.5 rounded-md text-gray-400 hover:text-[#2FA4A9] hover:bg-[#2FA4A9]/10 transition-colors"
-                        title="Copiar link del portal"
-                      >
-                        <Copy className="w-4 h-4" />
-                      </button>
-                      <a
-                        href={`/portal/${p.accessToken}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="p-1.5 rounded-md text-gray-400 hover:text-[#2FA4A9] hover:bg-[#2FA4A9]/10 transition-colors"
-                        title="Abrir portal"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                      <button
-                        onClick={() => {
-                          if (confirm(`¿Eliminar "${p.name}" permanentemente?`)) {
-                            deleteProjectMutation.mutate(p.id);
-                          }
-                        }}
-                        className="p-1.5 rounded-md text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors"
-                        title="Eliminar proyecto"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                    <span className="text-[11px] text-gray-400 w-8 text-right">{avgProgress}%</span>
+                  </div>
+                </button>
+                {!isCollapsed && (
+                  <table className="w-full">
+                    <thead>
+                      <tr className="border-b border-gray-100 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                        <th className="px-5 py-2">Proyecto</th>
+                        <th className="px-5 py-2">Estado</th>
+                        <th className="px-5 py-2">Progreso</th>
+                        <th className="px-5 py-2 w-32">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {group.items.map(p => (
+                        <tr
+                          key={p.id}
+                          className="hover:bg-gray-50 cursor-pointer transition-colors"
+                          onClick={() => navigate(`/admin/projects/${p.id}`)}
+                        >
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-2">
+                              <p className="font-medium text-gray-900 text-sm">{p.name}</p>
+                              {p.projectType === "internal" && (
+                                <span className="text-[9px] uppercase tracking-wider font-semibold bg-purple-100 text-purple-700 px-1.5 py-0.5 rounded">Interno</span>
+                              )}
+                            </div>
+                            {p.description && <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{p.description}</p>}
+                          </td>
+                          <td className="px-5 py-3">
+                            <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[p.status]}`}>
+                              {STATUS_LABELS[p.status]}
+                            </span>
+                          </td>
+                          <td className="px-5 py-3">
+                            <div className="flex items-center gap-3">
+                              <div className="w-24 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                <div className="h-full bg-[#2FA4A9] rounded-full transition-all" style={{ width: `${p.progress}%` }} />
+                              </div>
+                              <span className="text-xs text-gray-500">{p.progress}%</span>
+                            </div>
+                          </td>
+                          <td className="px-5 py-3" onClick={e => e.stopPropagation()}>
+                            <div className="flex items-center gap-1">
+                              {!isInternal && (
+                                <>
+                                  <button
+                                    onClick={() => copyPortalLink(p.accessToken)}
+                                    className="p-1.5 rounded-md text-gray-400 hover:text-[#2FA4A9] hover:bg-[#2FA4A9]/10 transition-colors"
+                                    title="Copiar link del portal"
+                                  >
+                                    <Copy className="w-4 h-4" />
+                                  </button>
+                                  <a
+                                    href={`/portal/${p.accessToken}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="p-1.5 rounded-md text-gray-400 hover:text-[#2FA4A9] hover:bg-[#2FA4A9]/10 transition-colors"
+                                    title="Abrir portal"
+                                  >
+                                    <ExternalLink className="w-4 h-4" />
+                                  </a>
+                                </>
+                              )}
+                              <button
+                                onClick={() => {
+                                  if (confirm(`¿Eliminar "${p.name}" permanentemente?`)) {
+                                    deleteProjectMutation.mutate(p.id);
+                                  }
+                                }}
+                                className="p-1.5 rounded-md text-gray-300 hover:text-red-600 hover:bg-red-50 transition-colors"
+                                title="Eliminar proyecto"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
 
       {/* Create dialog */}
-      <Dialog open={showCreate} onOpenChange={setShowCreate}>
-        <DialogContent className="sm:max-w-md">
+      <Dialog open={showCreate} onOpenChange={(open) => { if (!isCreating) setShowCreate(open); }}>
+        <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Nuevo proyecto</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 pt-2">
+            {/* Tipo */}
+            <div className="space-y-2">
+              <Label>Tipo de proyecto</Label>
+              <div className="grid grid-cols-2 gap-2">
+                {([["client", "Cliente", Building2], ["internal", "Interno IM3", Wrench]] as const).map(([value, label, Icon]) => (
+                  <button
+                    key={value}
+                    type="button"
+                    onClick={() => setForm(f => ({ ...f, projectType: value, contactId: value === "internal" ? "" : f.contactId }))}
+                    className={`flex items-center justify-center gap-2 px-3 py-2.5 rounded-lg border text-sm font-medium transition-colors ${
+                      form.projectType === value
+                        ? "border-[#2FA4A9] bg-[#2FA4A9]/5 text-[#2FA4A9]"
+                        : "border-gray-200 text-gray-600 hover:border-gray-300"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4" /> {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             <div className="space-y-2">
               <Label>Nombre del proyecto</Label>
               <Input value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))} placeholder="Ej: App Logística - TransCarga" />
             </div>
+
             <div className="space-y-2">
-              <Label>Descripción</Label>
-              <Textarea value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} placeholder="Breve descripción del proyecto" rows={3} />
+              <Label>Brief — hacia dónde va este proyecto</Label>
+              <Textarea
+                value={form.brief}
+                onChange={e => setForm(f => ({ ...f, brief: e.target.value }))}
+                placeholder="Describe el problema, los usuarios, el alcance, el resultado esperado. Mínimo 2-3 párrafos para que la IA genere fases razonables."
+                rows={6}
+              />
+              <p className="text-[11px] text-gray-400">{form.brief.length} caracteres {form.useAI && form.brief.length < 20 && "· mínimo 20 para generar con IA"}</p>
             </div>
+
+            {form.projectType === "client" && (
+              <div className="space-y-2">
+                <Label>Cliente</Label>
+                <Select value={form.contactId} onValueChange={v => setForm(f => ({ ...f, contactId: v }))}>
+                  <SelectTrigger><SelectValue placeholder="Seleccionar contacto" /></SelectTrigger>
+                  <SelectContent>
+                    {contactsList.map(c => (
+                      <SelectItem key={c.id} value={c.id}>{c.nombre} ({c.empresa})</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <Label>Repo de GitHub (opcional)</Label>
+              <Input
+                value={form.githubRepoUrl}
+                onChange={e => setForm(f => ({ ...f, githubRepoUrl: e.target.value }))}
+                placeholder="https://github.com/owner/repo"
+              />
+              <p className="text-[11px] text-gray-400">Si se conecta, la IA leerá README + docs/ + últimos commits para refinar las fases.</p>
+            </div>
+
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Presupuesto</Label>
@@ -414,19 +584,35 @@ export default function AdminProjects() {
                 </Select>
               </div>
             </div>
-            <div className="space-y-2">
-              <Label>Cliente (opcional)</Label>
-              <Select value={form.contactId} onValueChange={v => setForm(f => ({ ...f, contactId: v }))}>
-                <SelectTrigger><SelectValue placeholder="Seleccionar contacto" /></SelectTrigger>
-                <SelectContent>
-                  {contactsList.map(c => (
-                    <SelectItem key={c.id} value={c.id}>{c.nombre} ({c.empresa})</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <Button onClick={handleCreate} disabled={!form.name || createMutation.isPending} className="w-full bg-[#2FA4A9] hover:bg-[#238b8f]">
-              {createMutation.isPending ? "Creando..." : "Crear proyecto"}
+
+            {/* IA toggle */}
+            <label className="flex items-start gap-3 p-3 rounded-lg border border-gray-200 cursor-pointer hover:border-[#2FA4A9]/50 transition-colors">
+              <input
+                type="checkbox"
+                checked={form.useAI}
+                onChange={e => setForm(f => ({ ...f, useAI: e.target.checked }))}
+                className="mt-0.5 accent-[#2FA4A9]"
+              />
+              <div className="flex-1">
+                <p className="text-sm font-medium text-gray-900 flex items-center gap-1.5">
+                  <Sparkles className="w-3.5 h-3.5 text-[#2FA4A9]" />
+                  Generar fases con IA
+                </p>
+                <p className="text-[11px] text-gray-500 mt-0.5">
+                  Claude diseña 3-6 fases con tareas y entregables a partir del brief. Toma 10-30 segundos.
+                </p>
+              </div>
+            </label>
+
+            <Button
+              onClick={handleCreate}
+              disabled={!form.name || isCreating}
+              className="w-full bg-[#2FA4A9] hover:bg-[#238b8f]"
+            >
+              {isCreating
+                ? (form.useAI ? "Generando fases con IA…" : "Creando…")
+                : (form.useAI ? "Generar proyecto con IA" : "Crear proyecto vacío")
+              }
             </Button>
           </div>
         </DialogContent>
