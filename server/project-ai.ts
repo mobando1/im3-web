@@ -301,7 +301,25 @@ export async function calculateProjectHealth(projectId: string): Promise<{
   return { healthStatus, healthNote };
 }
 
-type PhaseSpec = { name: string; weeks: number; deliverables?: string[]; currentStatus?: "pending" | "in_progress" | "completed" };
+type PhaseSpec = {
+  name: string;
+  weeks: number;
+  deliverables?: string[];
+  currentStatus?: "pending" | "in_progress" | "completed";
+  completionPercent?: number;
+  evidence?: string;
+};
+
+/**
+ * Maps a 0-100 completion percent to one of the three discrete statuses
+ * we store on the phase row. >=90 counts as fully done, <30 as not started,
+ * anything in between is in_progress.
+ */
+function deriveStatusFromPercent(percent: number): "pending" | "in_progress" | "completed" {
+  if (percent >= 90) return "completed";
+  if (percent >= 30) return "in_progress";
+  return "pending";
+}
 
 type GenerateArtifactsOptions = {
   brief: string;
@@ -352,16 +370,32 @@ Eres un project manager senior de IM3 Systems diseñando el plan de un proyecto.
 
 Diseña entre 3 y 6 fases secuenciales. Cada fase debe tener un nombre concreto al dominio del cliente, una duración realista en semanas (2-4 típicamente), y 2-4 entregables verificables.${hasRepo ? `
 
-IMPORTANTE: te di contexto real del repositorio del proyecto (README, docs, manifest, últimos commits). USALO para deducir qué partes ya están implementadas. Para CADA fase devuelve un campo "currentStatus":
-- "completed" si el grueso del trabajo de esa fase ya está en el código (ej: ya hay infraestructura montada, autenticación funcionando, modelos de datos creados, etc.)
-- "in_progress" si está parcialmente hecho
-- "pending" si todavía no se aborda en el repo
+IMPORTANTE — el repo ya tiene avance:
+Te pasé contexto real del repositorio (README, manifest, estructura de archivos, endpoints detectados, schema de DB y los últimos 30 commits). Tu trabajo es deducir qué fases ya están hechas y cuáles faltan. NO seas conservador: si la evidencia del repo muestra que algo ya existe, márcalo como hecho.
 
-Sé honesto: si el repo muestra que ya hay 50% del proyecto, marca las fases tempranas como completed. NO propongas como "pendientes" cosas que claramente ya existen.` : ""}
+Para CADA fase devuelve OBLIGATORIAMENTE estos tres campos:
+
+1. "completionPercent": entero 0-100. Qué porcentaje de la fase ya está implementado en el repo.
+   - 100 = todo lo central de la fase ya existe en código y commits
+   - 70-99 = la mayoría hecho, faltan detalles
+   - 30-69 = parcialmente armado
+   - 1-29 = apenas empezó
+   - 0 = nada de esa fase tocada todavía
+
+2. "currentStatus": "completed" si completionPercent>=90, "in_progress" si está entre 30-89, "pending" si <30. Debe ser consistente con completionPercent.
+
+3. "evidence": frase corta (máx 140 chars) citando QUÉ del repo justifica ese porcentaje. Solo obligatoria cuando completionPercent>0. Ejemplo: "schema Drizzle + endpoints /api/auth ya existen, commit 'auth funcionando' del 14 abril". Si completionPercent=0, omite el campo o pon "".
+
+REGLAS DURAS:
+- Sesgo a marcar COMPLETED las fases tempranas de infraestructura cuando hay evidencia: si el repo ya tiene auth/login operando, schema de DB definido, deploy en producción mencionado o frameworks instalados con código real, esas fases (setup, foundation, scaffolding, base de datos, auth) van como completed por defecto, NO como in_progress.
+- Si ves endpoints reales (app/api/*, pages/api/*, server/routes.*) implementando lo que la fase pide, esa fase está al menos in_progress con completionPercent >= 50.
+- Si ves commits con mensajes que mencionan explícitamente la funcionalidad de la fase, súmalo al porcentaje.
+- NO listes como "pendiente" cosas que ya existen visibles en la estructura del repo.
+- Si el repo tiene >20 commits y el último push es reciente, asume que las primeras 1-2 fases están completed salvo evidencia clara en contra.` : ""}
 
 Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato:
 [
-  { "name": "Nombre de la fase", "weeks": 3, "deliverables": ["Entregable 1", "Entregable 2"]${hasRepo ? `, "currentStatus": "completed" | "in_progress" | "pending"` : ""} }
+  { "name": "Nombre de la fase", "weeks": 3, "deliverables": ["Entregable 1", "Entregable 2"]${hasRepo ? `, "completionPercent": 0, "currentStatus": "pending", "evidence": ""` : ""} }
 ]`,
         messages: [{ role: "user", content: designPrompt }],
       });
@@ -371,12 +405,22 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato:
       if (!parsed || !Array.isArray(parsed) || parsed.length === 0) throw new Error("AI returned empty phases");
       phaseSpecs = parsed.map(p => {
         const cs = p.currentStatus;
-        const validStatus = cs === "completed" || cs === "in_progress" || cs === "pending" ? cs : undefined;
+        const explicitStatus = cs === "completed" || cs === "in_progress" || cs === "pending" ? cs : undefined;
+        // Trust completionPercent over the enum if both are present, since
+        // Claude is consistent with percentages but sometimes drifts the enum.
+        const rawPercent = Number(p.completionPercent);
+        const hasPercent = Number.isFinite(rawPercent);
+        const completionPercent = hasPercent ? Math.max(0, Math.min(100, Math.round(rawPercent))) : undefined;
+        const derivedStatus = completionPercent !== undefined ? deriveStatusFromPercent(completionPercent) : undefined;
+        const finalStatus = derivedStatus ?? explicitStatus;
+        const evidence = typeof p.evidence === "string" ? p.evidence.trim().slice(0, 200) : undefined;
         return {
           name: String(p.name || "Fase").slice(0, 200),
           weeks: Math.max(1, Math.min(20, Number(p.weeks) || 2)),
           deliverables: Array.isArray(p.deliverables) ? p.deliverables.map(String).slice(0, 6) : [],
-          currentStatus: validStatus,
+          currentStatus: finalStatus,
+          completionPercent,
+          evidence,
         };
       });
     } catch (err) {
@@ -396,9 +440,14 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato:
     const phaseStatus = p.currentStatus || "pending";
     const isCompleted = phaseStatus === "completed";
 
+    const evidenceNote = p.evidence && phaseStatus !== "pending"
+      ? `Evidencia (auto-detectada del repo): ${p.evidence}`
+      : null;
+
     const [phase] = await database.insert(projectPhases).values({
       projectId,
       name: p.name,
+      description: evidenceNote,
       orderIndex: i,
       status: phaseStatus,
       startDate: currentDate,
@@ -491,12 +540,24 @@ Reglas estrictas:
         const phase = insertedPhases[pt.phaseIndex];
         if (!phase) continue;
         const phaseIsCompleted = phase.phaseStatus === "completed";
+        const phaseIsInProgress = phase.phaseStatus === "in_progress";
+
+        // When a phase is partially done, mark the leading tasks as completed
+        // proportional to its completionPercent. e.g. 50% in_progress with
+        // 6 tasks → first 3 marked done, last 3 still pending.
+        const percent = phase.spec.completionPercent ?? (phaseIsCompleted ? 100 : phaseIsInProgress ? 50 : 0);
+        const tasksToComplete = phaseIsCompleted
+          ? pt.tasks.length
+          : phaseIsInProgress
+            ? Math.min(pt.tasks.length, Math.floor((pt.tasks.length * percent) / 100))
+            : 0;
 
         const phaseDays = Math.max(1, Math.round((phase.endDate.getTime() - phase.startDate.getTime()) / (24 * 60 * 60 * 1000)));
 
         for (let j = 0; j < pt.tasks.length; j++) {
           const t = pt.tasks[j];
           const taskDueDate = new Date(phase.startDate.getTime() + ((j + 1) / pt.tasks.length) * phaseDays * 24 * 60 * 60 * 1000);
+          const taskIsDone = j < tasksToComplete;
 
           await database.insert(projectTasks).values({
             phaseId: phase.id,
@@ -505,9 +566,9 @@ Reglas estrictas:
             clientFacingTitle: t.clientFacingTitle || t.title,
             priority: t.priority || "medium",
             isMilestone: t.isMilestone || false,
-            status: phaseIsCompleted ? "completed" : "pending",
+            status: taskIsDone ? "completed" : "pending",
             dueDate: taskDueDate,
-            completedAt: phaseIsCompleted ? now : null,
+            completedAt: taskIsDone ? now : null,
           });
           totalTasks++;
         }

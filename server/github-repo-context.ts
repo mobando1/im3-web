@@ -3,7 +3,8 @@ import { log } from "./index";
 const GH_API = "https://api.github.com";
 const MAX_README_CHARS = 4000;
 const MAX_DOC_CHARS = 1500;
-const MAX_TOTAL_CHARS = 8000;
+const MAX_SCHEMA_CHARS = 2000;
+const MAX_TOTAL_CHARS = 12000;
 
 function ghHeaders(oauthToken?: string): Record<string, string> {
   const headers: Record<string, string> = {
@@ -25,6 +26,8 @@ export function parseRepoUrl(url: string): { owner: string; repo: string } | nul
   return { owner: m[1], repo: m[2] };
 }
 
+type DirEntry = { name: string; path: string; type: string; size: number };
+
 async function fetchFileContent(owner: string, repo: string, path: string, token?: string): Promise<string | null> {
   try {
     const res = await fetch(`${GH_API}/repos/${owner}/${repo}/contents/${path}`, { headers: ghHeaders(token) });
@@ -37,7 +40,7 @@ async function fetchFileContent(owner: string, repo: string, path: string, token
   }
 }
 
-async function listDir(owner: string, repo: string, path: string, token?: string): Promise<Array<{ name: string; path: string; type: string; size: number }>> {
+async function listDir(owner: string, repo: string, path: string, token?: string): Promise<DirEntry[]> {
   try {
     const res = await fetch(`${GH_API}/repos/${owner}/${repo}/contents/${path}`, { headers: ghHeaders(token) });
     if (!res.ok) return [];
@@ -57,8 +60,43 @@ async function fetchFirstAvailable(owner: string, repo: string, paths: string[],
 }
 
 /**
- * Reads README, manifest and a few docs from a public/private repo and returns
- * a concatenated text summary suitable to feed Claude as project context.
+ * Light recursive listing of a directory: returns up to `maxEntries` files,
+ * walking up to `depth` levels deep. Stops early once the cap is reached so
+ * a huge repo does not exhaust the GitHub API.
+ */
+async function listFileTree(
+  owner: string,
+  repo: string,
+  path: string,
+  depth: number,
+  token: string | undefined,
+  maxEntries = 60,
+): Promise<string[]> {
+  const collected: string[] = [];
+  async function walk(p: string, level: number): Promise<void> {
+    if (collected.length >= maxEntries || level > depth) return;
+    const entries = await listDir(owner, repo, p, token);
+    // Files first so Claude sees concrete handlers, dirs second
+    const files = entries.filter(e => e.type === "file");
+    const dirs = entries.filter(e => e.type === "dir");
+    for (const f of files) {
+      if (collected.length >= maxEntries) return;
+      collected.push(f.path);
+    }
+    for (const d of dirs) {
+      if (collected.length >= maxEntries) return;
+      // Skip noisy folders that never carry signal
+      if (/^(node_modules|\.git|\.next|dist|build|coverage|\.cache|public)$/i.test(d.name)) continue;
+      await walk(d.path, level + 1);
+    }
+  }
+  await walk(path, 0);
+  return collected;
+}
+
+/**
+ * Reads README, manifest, file tree, key implementation files (API routes,
+ * DB schema) and recent commits so Claude can judge what is already built.
  * Returns null if the repo is inaccessible or empty — caller should continue
  * with whatever brief it already has.
  *
@@ -98,6 +136,54 @@ export async function fetchRepoContext(repoUrl: string, oauthToken?: string): Pr
       sections.push(`\n## Manifest (${manifest.path})\n${manifest.content.slice(0, 1200)}`);
     }
 
+    // Top-level structure — tells Claude which modules exist (auth, db, api, etc.)
+    const root = await listDir(owner, repo, "", oauthToken);
+    const candidateDirs = ["app", "src", "server", "pages", "lib", "components", "prisma", "drizzle", "api"];
+    const presentDirs = root.filter(e => e.type === "dir" && candidateDirs.includes(e.name));
+    if (presentDirs.length > 0) {
+      const treeLines: string[] = [];
+      for (const d of presentDirs) {
+        const files = await listFileTree(owner, repo, d.path, 2, oauthToken, 40);
+        if (files.length > 0) {
+          treeLines.push(`### ${d.path}/`);
+          treeLines.push(files.map(f => `- ${f}`).join("\n"));
+        }
+      }
+      if (treeLines.length > 0) {
+        sections.push(`\n## Estructura del repositorio (resumen)\n${treeLines.join("\n")}`);
+      }
+    }
+
+    // API endpoints — Next.js (app router or pages router) or Express-like
+    const apiPaths = ["app/api", "src/app/api", "pages/api", "src/pages/api"];
+    for (const apiPath of apiPaths) {
+      const apiFiles = await listFileTree(owner, repo, apiPath, 3, oauthToken, 40);
+      if (apiFiles.length > 0) {
+        sections.push(`\n## Endpoints detectados (${apiPath})\n${apiFiles.map(f => `- ${f}`).join("\n")}`);
+        break;
+      }
+    }
+
+    // DB schema — gives Claude the data model in one shot
+    const schema = await fetchFirstAvailable(
+      owner,
+      repo,
+      [
+        "prisma/schema.prisma",
+        "drizzle/schema.ts",
+        "src/db/schema.ts",
+        "src/lib/db/schema.ts",
+        "server/db/schema.ts",
+        "shared/schema.ts",
+        "db/schema.ts",
+        "src/schema.ts",
+      ],
+      oauthToken,
+    );
+    if (schema) {
+      sections.push(`\n## Schema de base de datos (${schema.path})\n${schema.content.slice(0, MAX_SCHEMA_CHARS)}${schema.content.length > MAX_SCHEMA_CHARS ? "\n…(truncado)" : ""}`);
+    }
+
     // Top-level docs/
     const docsListing = await listDir(owner, repo, "docs", oauthToken);
     if (docsListing.length > 0) {
@@ -116,16 +202,16 @@ export async function fetchRepoContext(repoUrl: string, oauthToken?: string): Pr
 
     // Recent commits — gives a sense of momentum
     try {
-      const commitsRes = await fetch(`${GH_API}/repos/${owner}/${repo}/commits?per_page=10`, { headers: ghHeaders(oauthToken) });
+      const commitsRes = await fetch(`${GH_API}/repos/${owner}/${repo}/commits?per_page=30`, { headers: ghHeaders(oauthToken) });
       if (commitsRes.ok) {
         const commits = await commitsRes.json() as Array<{ commit: { message: string; author: { date: string } } }>;
         if (Array.isArray(commits) && commits.length > 0) {
-          const lines = commits.slice(0, 10).map(c => {
+          const lines = commits.slice(0, 30).map(c => {
             const msg = (c.commit.message || "").split("\n")[0].slice(0, 100);
             const date = c.commit.author?.date?.slice(0, 10) || "";
             return `- ${date} — ${msg}`;
           });
-          sections.push(`\n## Últimos 10 commits\n${lines.join("\n")}`);
+          sections.push(`\n## Últimos ${lines.length} commits\n${lines.join("\n")}`);
         }
       }
     } catch {/* ignore */}

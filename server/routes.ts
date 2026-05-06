@@ -179,6 +179,49 @@ async function autoDistributePhaseDates(projectId: string, force = false) {
 }
 
 /**
+ * Computes a project's progress (%) and effective totalHours from phase
+ * status + tasks + manually logged time. The intent: when the AI generator
+ * marks early phases as completed/in_progress based on repo evidence, the
+ * project should already show meaningful progress and hours BEFORE anyone
+ * has manually logged time.
+ *
+ * - Each phase contributes phase.estimatedHours weighted by its completion:
+ *   completed phases count fully, in_progress phases count by the fraction
+ *   of completed tasks (or 50% if no tasks exist), pending phases count 0.
+ * - totalHours is whichever is higher: hours derived from phase status, or
+ *   hours actually logged in projectTimeLog. So real tracked work always
+ *   wins over a stale estimate, and AI-derived work shows up immediately
+ *   even with no logs yet.
+ * - progress is the ratio derived hours / total estimated hours.
+ */
+function computeProjectProgress(
+  phases: Array<{ id: string; status: string | null; estimatedHours: number | null }>,
+  allTasks: Array<{ phaseId: string | null; status: string | null }>,
+  timeLogs: Array<{ hours: unknown }>,
+): { progress: number; totalHours: number } {
+  const totalEstimated = phases.reduce((s, p) => s + (p.estimatedHours || 0), 0);
+  const completedHours = phases.reduce((s, p) => {
+    const est = p.estimatedHours || 0;
+    if (p.status === "completed") return s + est;
+    if (p.status === "in_progress") {
+      const tasks = allTasks.filter(t => t.phaseId === p.id);
+      if (tasks.length === 0) return s + est * 0.5;
+      const done = tasks.filter(t => t.status === "completed").length;
+      return s + est * (done / tasks.length);
+    }
+    return s;
+  }, 0);
+  const loggedHours = timeLogs.reduce((sum, t) => sum + (parseFloat(String(t.hours)) || 0), 0);
+  const totalHours = Math.max(completedHours, loggedHours);
+  const progress = totalEstimated > 0
+    ? Math.round((completedHours / totalEstimated) * 100)
+    : (allTasks.length > 0
+      ? Math.round((allTasks.filter(t => t.status === "completed").length / allTasks.length) * 100)
+      : 0);
+  return { progress, totalHours: Math.round(totalHours * 100) / 100 };
+}
+
+/**
  * COT timezone helpers — Colombia is UTC-5 with no DST.
  */
 function cotDayStartUTC(d: Date): Date {
@@ -5571,7 +5614,9 @@ Responde SOLO con un JSON válido, sin markdown:
       const allTasks = await db.select().from(projectTasks)
         .where(and(eq(projectTasks.projectId, project.id), isNull(projectTasks.deletedAt)))
         .orderBy(asc(projectTasks.orderIndex), asc(projectTasks.createdAt));
-      const deliverables = await db.select().from(projectDeliverables).where(eq(projectDeliverables.projectId, project.id)).orderBy(desc(projectDeliverables.createdAt));
+      const deliverables = await db.select().from(projectDeliverables)
+        .where(and(eq(projectDeliverables.projectId, project.id), isNull(projectDeliverables.deletedAt)))
+        .orderBy(desc(projectDeliverables.createdAt));
       const timeLogs = await db.select().from(projectTimeLog).where(eq(projectTimeLog.projectId, project.id)).orderBy(desc(projectTimeLog.createdAt));
       const messages = await db.select().from(projectMessages).where(eq(projectMessages.projectId, project.id)).orderBy(asc(projectMessages.createdAt));
 
@@ -5581,9 +5626,7 @@ Responde SOLO con un JSON válido, sin markdown:
         if (c) contactName = `${c.nombre} (${c.empresa})`;
       }
 
-      const completedTasks = allTasks.filter(t => t.status === "completed").length;
-      const progress = allTasks.length > 0 ? Math.round((completedTasks / allTasks.length) * 100) : 0;
-      const totalHours = timeLogs.reduce((sum, t) => sum + parseFloat(String(t.hours)), 0);
+      const { progress, totalHours } = computeProjectProgress(phases, allTasks, timeLogs);
 
       res.json({
         ...project,
@@ -5735,8 +5778,10 @@ Responde SOLO con un JSON válido, sin markdown:
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
-  // Soft delete: marks deletedAt on the phase and cascades to its active tasks.
-  // The row stays in DB so /restore can revert it (undo flow in the UI).
+  // Soft delete: marks deletedAt on the phase and cascades to its active tasks
+  // and deliverables. The rows stay in DB so /restore can revert them (undo
+  // flow in the UI). Deliverables are filtered out of GETs once deletedAt is
+  // set, which fixes the "zombie deliverables" bug after regenerating phases.
   app.delete("/api/admin/phases/:id", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
@@ -5748,12 +5793,15 @@ Responde SOLO con un JSON válido, sin markdown:
       await db.update(projectTasks)
         .set({ deletedAt: now, updatedAt: now })
         .where(and(eq(projectTasks.phaseId, phaseId), isNull(projectTasks.deletedAt)));
+      await db.update(projectDeliverables)
+        .set({ deletedAt: now })
+        .where(and(eq(projectDeliverables.phaseId, phaseId), isNull(projectDeliverables.deletedAt)));
       res.json({ success: true, deletedAt: now.toISOString() });
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
-  // Restore a soft-deleted phase + all tasks under it that are currently soft-deleted.
-  // Used by the "Deshacer" toast in the UI.
+  // Restore a soft-deleted phase + all tasks/deliverables under it that are
+  // currently soft-deleted. Used by the "Deshacer" toast in the UI.
   app.post("/api/admin/phases/:id/restore", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
@@ -5767,6 +5815,9 @@ Responde SOLO con un JSON válido, sin markdown:
       await db.update(projectTasks)
         .set({ deletedAt: null, updatedAt: now })
         .where(eq(projectTasks.phaseId, phaseId));
+      await db.update(projectDeliverables)
+        .set({ deletedAt: null })
+        .where(eq(projectDeliverables.phaseId, phaseId));
       res.json({ success: true });
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
@@ -5929,11 +5980,16 @@ Responde SOLO con un JSON válido, sin markdown:
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
+  // Soft delete so manual undo is possible. To purge forever, run a SQL cleanup.
   app.delete("/api/admin/deliverables/:id", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
-      await db.delete(projectDeliverables).where(eq(projectDeliverables.id, req.params.id as string));
-      res.json({ success: true });
+      const [updated] = await db.update(projectDeliverables)
+        .set({ deletedAt: new Date() })
+        .where(eq(projectDeliverables.id, req.params.id as string))
+        .returning();
+      if (!updated) return res.status(404).json({ message: "Entrega no encontrada" });
+      res.json({ success: true, deletedAt: updated.deletedAt?.toISOString() });
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
@@ -6992,8 +7048,7 @@ Responde SOLO con un JSON válido, sin markdown:
     const unreadMessages = await db!.select({ id: projectMessages.id }).from(projectMessages).where(and(eq(projectMessages.projectId, project.id), eq(projectMessages.senderType, "team"), eq(projectMessages.isRead, false)));
 
     const completedTasks = allTasks.filter(t => t.status === "completed").length;
-    const progress = allTasks.length > 0 ? Math.round((completedTasks / allTasks.length) * 100) : 0;
-    const totalHours = timeLogs.reduce((sum, t) => sum + parseFloat(String(t.hours)), 0);
+    const { progress, totalHours } = computeProjectProgress(phases, allTasks, timeLogs);
 
     let contactName = null;
     if (project.contactId) {
@@ -7047,7 +7102,9 @@ Responde SOLO con un JSON válido, sin markdown:
     const project = await getProjectByToken(req.params.token as string, req);
     if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
-    const deliverables = await db!.select().from(projectDeliverables).where(eq(projectDeliverables.projectId, project.id)).orderBy(desc(projectDeliverables.createdAt));
+    const deliverables = await db!.select().from(projectDeliverables)
+      .where(and(eq(projectDeliverables.projectId, project.id), isNull(projectDeliverables.deletedAt)))
+      .orderBy(desc(projectDeliverables.createdAt));
     res.json(deliverables);
   });
 

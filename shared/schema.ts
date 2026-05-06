@@ -486,6 +486,7 @@ export const projectDeliverables = pgTable("project_deliverables", {
   clientRating: integer("client_rating"), // 1-5 stars
   screenshotUrl: text("screenshot_url"),
   demoUrl: text("demo_url"),
+  deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

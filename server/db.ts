@@ -335,6 +335,22 @@ export async function runMigrations() {
 
     // Project deliverables: client rating
     await pool.query(`ALTER TABLE "project_deliverables" ADD COLUMN IF NOT EXISTS "client_rating" integer;`).catch(() => {});
+    // Soft delete on deliverables — cascades from phase delete so undo restores them
+    await pool.query(`ALTER TABLE "project_deliverables" ADD COLUMN IF NOT EXISTS "deleted_at" timestamp;`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_project_deliverables_deleted_at" ON "project_deliverables" ("deleted_at");`).catch(() => {});
+    // One-time cleanup: legacy zombie deliverables whose parent phase was already
+    // soft-deleted before this column existed. Idempotent — only touches rows
+    // where deleted_at is still null AND the parent phase is gone.
+    await pool.query(`
+      UPDATE "project_deliverables" SET "deleted_at" = NOW()
+      WHERE "deleted_at" IS NULL
+        AND "phase_id" IS NOT NULL
+        AND EXISTS (
+          SELECT 1 FROM "project_phases"
+          WHERE "project_phases"."id" = "project_deliverables"."phase_id"
+            AND "project_phases"."deleted_at" IS NOT NULL
+        );
+    `).catch(() => {});
 
     // Proposals
     await pool.query(`
