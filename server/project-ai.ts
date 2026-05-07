@@ -171,7 +171,7 @@ async function callSonnetWithRetry<T>(opts: {
   semanticValidator?: (parsed: T) => Promise<JudgeVerdict | null>;
   label: string;
   maxRetries?: number;
-}): Promise<{ result: T | null; verdict: JudgeVerdict | null }> {
+}): Promise<{ result: T | null; verdict: JudgeVerdict | null; retriesUsed: number }> {
   const { client, model, maxTokens, baseSystem, userMessage, parser, validator, semanticValidator, label } = opts;
   const maxRetries = opts.maxRetries ?? 2;
 
@@ -232,7 +232,7 @@ async function callSonnetWithRetry<T>(opts: {
 
       // Pasó todo (o no hay juez). Éxito.
       if (attempt > 0) log(`${label}: succeeded on retry attempt ${attempt + 1}`);
-      return { result: parsed, verdict: lastVerdict };
+      return { result: parsed, verdict: lastVerdict, retriesUsed: attempt };
     } catch (err) {
       lastFeedback = `Error de API en intento previo: ${err instanceof Error ? err.message : String(err)}. Asegúrate de devolver JSON válido.`;
       log(`${label}: attempt ${attempt + 1} threw: ${err}`);
@@ -244,10 +244,10 @@ async function callSonnetWithRetry<T>(opts: {
   // Mejor un plan con warnings que ningún plan.
   if (lastValidParsed) {
     log(`${label}: all ${maxRetries + 1} attempts exhausted; returning best-effort result with judge issues`);
-    return { result: lastValidParsed, verdict: lastVerdict };
+    return { result: lastValidParsed, verdict: lastVerdict, retriesUsed: maxRetries };
   }
   log(`${label}: all ${maxRetries + 1} attempts exhausted, no valid result`);
-  return { result: null, verdict: lastVerdict };
+  return { result: null, verdict: lastVerdict, retriesUsed: maxRetries };
 }
 
 /**
@@ -788,10 +788,32 @@ type GenerateArtifactsOptions = {
  * - Otherwise asks Claude Sonnet to design 3-6 phases from the brief (+ optional repo context).
  * Then generates 4-8 tasks per phase with Claude Haiku.
  */
+export type GenerateArtifactsResult = {
+  phasesCreated: number;
+  tasksCreated: number;
+  deliverablesCreated: number;
+  // Forma compatible con runAgent / RunResult del runner.ts.
+  // recordsProcessed = total de filas creadas en DB (suma de los tres anteriores).
+  recordsProcessed: number;
+  metadata: {
+    phasesScore: number | null;       // 1-10 del juez semántico, null si no corrió
+    phasesIssues: number;             // count de issues del juez de fases
+    phasesRetries: number;            // 0 = primera vez, 1-2 = reintentó
+    phasesVerdictSummary: string | null;
+    tasksScore: number | null;
+    tasksIssues: number;
+    tasksRetries: number;
+    tasksVerdictSummary: string | null;
+    repoLoaded: boolean;              // si fetchRepoContext devolvió algo
+    aiModel: string;                  // qué modelo usamos
+    fallbackUsed: boolean;            // si caímos al fallback de tareas (skeleton)
+  };
+};
+
 export async function generateProjectArtifacts(
   projectId: string,
   opts: GenerateArtifactsOptions,
-): Promise<{ phasesCreated: number; tasksCreated: number; deliverablesCreated: number }> {
+): Promise<GenerateArtifactsResult> {
   const anthropic = getClient();
   if (!db) throw new Error("Database not configured");
   const database = db;
@@ -800,13 +822,54 @@ export async function generateProjectArtifacts(
   const brief = opts.brief.trim();
   const repoContext = opts.repoContext?.trim() || "";
 
+  // ── Tracking state para metadata del run del agente ──
+  // Se actualiza a medida que avanza el pipeline. Al final se devuelve en
+  // el resultado para que runAgent lo persista en agent_runs.metadata.
+  // Usamos un objeto holder en vez de `let` con null inicial porque
+  // TypeScript narrow las let-with-null a `never` dentro de closures.
+  const tracking: {
+    phasesVerdict: JudgeVerdict | null;
+    phasesRetries: number;
+    tasksVerdict: JudgeVerdict | null;
+    tasksRetries: number;
+    fallbackUsed: boolean;
+  } = {
+    phasesVerdict: null,
+    phasesRetries: 0,
+    tasksVerdict: null,
+    tasksRetries: 0,
+    fallbackUsed: false,
+  };
+  const aiModel = "claude-sonnet-4-6";
+  const repoLoaded = !!repoContext;
+
+  const buildResult = (phasesCreated: number, tasksCreated: number, deliverablesCreated: number): GenerateArtifactsResult => ({
+    phasesCreated,
+    tasksCreated,
+    deliverablesCreated,
+    recordsProcessed: phasesCreated + tasksCreated + deliverablesCreated,
+    metadata: {
+      phasesScore: tracking.phasesVerdict?.score ?? null,
+      phasesIssues: tracking.phasesVerdict?.issues.length ?? 0,
+      phasesRetries: tracking.phasesRetries,
+      phasesVerdictSummary: tracking.phasesVerdict?.summary ?? null,
+      tasksScore: tracking.tasksVerdict?.score ?? null,
+      tasksIssues: tracking.tasksVerdict?.issues.length ?? 0,
+      tasksRetries: tracking.tasksRetries,
+      tasksVerdictSummary: tracking.tasksVerdict?.summary ?? null,
+      repoLoaded,
+      aiModel,
+      fallbackUsed: tracking.fallbackUsed,
+    },
+  });
+
   // 1. Resolve phases — either provided or designed by AI
   let phaseSpecs: PhaseSpec[] = opts.phasesHint ?? [];
 
   if (phaseSpecs.length === 0) {
     if (!anthropic) {
       log(`generateProjectArtifacts: no phasesHint and no Anthropic key — skipping phases`);
-      return { phasesCreated: 0, tasksCreated: 0, deliverablesCreated: 0 };
+      return buildResult(0, 0, 0);
     }
 
     try {
@@ -862,7 +925,7 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato:
   }
 ]`;
 
-      const { result: parsed, verdict: phasesVerdict } = await callSonnetWithRetry<PhaseSpec[]>({
+      const { result: parsed, verdict: pvLocal, retriesUsed: prLocal } = await callSonnetWithRetry<PhaseSpec[]>({
         client: anthropic,
         model: "claude-sonnet-4-6",
         maxTokens: 4000,
@@ -875,9 +938,11 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato:
         maxRetries: 2,
       });
 
+      tracking.phasesVerdict = pvLocal;
+      tracking.phasesRetries = prLocal;
       if (!parsed || !Array.isArray(parsed) || parsed.length === 0) throw new Error("AI returned empty phases after retries");
-      if (phasesVerdict) {
-        log(`design-phases-fresh: final verdict — score=${phasesVerdict.score}/10, ${phasesVerdict.issues.length} issues`);
+      if (pvLocal) {
+        log(`design-phases-fresh: final verdict — score=${pvLocal.score}/10, ${pvLocal.issues.length} issues`);
       }
       phaseSpecs = parsed.map(p => {
         const cs = p.currentStatus;
@@ -1033,7 +1098,7 @@ Reglas estrictas:
         tasks: Array<{ title: string; priority: string; isMilestone?: boolean; clientFacingTitle?: string }>;
       }>;
 
-      const { result: phaseTasks, verdict: tasksVerdict } = await callSonnetWithRetry<PhaseTasksPayload>({
+      const { result: phaseTasks, verdict: tvLocal, retriesUsed: trLocal } = await callSonnetWithRetry<PhaseTasksPayload>({
         client: anthropic,
         model: "claude-sonnet-4-6",
         maxTokens: 12000,
@@ -1046,11 +1111,13 @@ Reglas estrictas:
         maxRetries: 2,
       });
 
+      tracking.tasksVerdict = tvLocal;
+      tracking.tasksRetries = trLocal;
       if (!phaseTasks || !Array.isArray(phaseTasks) || phaseTasks.length === 0) {
         throw new Error("AI returned empty or invalid tasks payload after retries");
       }
-      if (tasksVerdict) {
-        log(`tasks-fresh: final verdict — score=${tasksVerdict.score}/10, ${tasksVerdict.issues.length} issues`);
+      if (tvLocal) {
+        log(`tasks-fresh: final verdict — score=${tvLocal.score}/10, ${tvLocal.issues.length} issues`);
       }
       log(`generateProjectArtifacts: Sonnet returned tasks for ${phaseTasks.length} phases (validated)`);
 
@@ -1117,6 +1184,7 @@ Reglas estrictas:
       }
     } catch (err) {
       log(`AI task generation failed, creating basic tasks: ${err}`);
+      tracking.fallbackUsed = true;
       const now = new Date();
       // Skeleton: kickoff → core → tests → demo. Useful even if AI fails entirely
       // — gives the user an editable structure rather than a single "Complete X"
@@ -1177,18 +1245,33 @@ Reglas estrictas:
 
   log(`Project artifacts generated for ${projectId}: ${insertedPhases.length} fases, ${totalTasks} tareas, ${totalDeliverables} entregas`);
 
-  return { phasesCreated: insertedPhases.length, tasksCreated: totalTasks, deliverablesCreated: totalDeliverables };
+  return buildResult(insertedPhases.length, totalTasks, totalDeliverables);
 }
 
 /**
  * Designs ONE additional phase with AI and appends it to an existing project,
  * preserving all current phases and tasks. Useful for mid-execution course corrections.
  */
+export type AppendPhaseResult = {
+  phaseId: string;
+  tasksCreated: number;
+  deliverablesCreated: number;
+  recordsProcessed: number;
+  metadata: {
+    phaseName: string;
+    phaseWeeks: number;
+    repoLoaded: boolean;
+    aiModel: string;
+    designFailed: boolean;
+    taskGenFailed: boolean;
+  };
+};
+
 export async function appendPhaseArtifact(
   projectId: string,
   brief: string,
   options: { repoContext?: string } = {},
-): Promise<{ phaseId: string; tasksCreated: number; deliverablesCreated: number }> {
+): Promise<AppendPhaseResult> {
   const anthropic = getClient();
   if (!anthropic) throw new Error("ANTHROPIC_API_KEY no configurado");
   if (!db) throw new Error("Database not configured");
@@ -1221,6 +1304,8 @@ ${existingPhases.length === 0 ? "(ninguna todavía)" : existingPhases.map((p, i)
 `.trim();
 
   let phaseSpec: PhaseSpec = { name: "Nueva fase", weeks: 2, deliverables: [] };
+  let designFailed = false;
+  let taskGenFailed = false;
   try {
     const designRes = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
@@ -1245,6 +1330,7 @@ Responde SOLO con un JSON válido (un objeto, no un array), sin markdown:
     };
   } catch (err) {
     log(`appendPhaseArtifact: design failed, using fallback: ${err}`);
+    designFailed = true;
   }
 
   // 2. Insert phase + deliverables
@@ -1322,6 +1408,7 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato EX
     }
   } catch (err) {
     log(`appendPhaseArtifact: task generation failed: ${err}`);
+    taskGenFailed = true;
     await database.insert(projectTasks).values({
       phaseId: phase.id,
       projectId,
@@ -1344,7 +1431,20 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato EX
 
   log(`appendPhaseArtifact: añadida fase "${phaseSpec.name}" a ${projectId} con ${totalTasks} tareas`);
 
-  return { phaseId: phase.id, tasksCreated: totalTasks, deliverablesCreated: totalDeliverables };
+  return {
+    phaseId: phase.id,
+    tasksCreated: totalTasks,
+    deliverablesCreated: totalDeliverables,
+    recordsProcessed: 1 + totalTasks + totalDeliverables, // 1 fase + tareas + entregas
+    metadata: {
+      phaseName: phaseSpec.name,
+      phaseWeeks: phaseSpec.weeks,
+      repoLoaded: !!options.repoContext,
+      aiModel: "claude-sonnet-4-6",
+      designFailed,
+      taskGenFailed,
+    },
+  };
 }
 
 /**

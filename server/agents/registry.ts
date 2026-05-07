@@ -18,6 +18,7 @@ import { runFollowupWriter } from "./followup-writer";
 import { runCostReferenceFreshness } from "./cost-reference-freshness";
 import { runAnalyticsSync } from "./analytics-sync";
 import { runAnalyticsMonthlyReport } from "./analytics-monthly-report";
+import { runOrgPreferencesExtractor } from "../org-preferences";
 
 export type AgentKind = "ai" | "automation" | "integration" | "webhook";
 
@@ -25,7 +26,7 @@ export type AgentTrigger = "cron" | "webhook" | "manual";
 
 export type AgentCriticality = "critical" | "normal" | "low";
 
-export type AgentConnectionType = "db" | "api" | "llm" | "internal";
+export type AgentConnectionType = "db" | "api" | "llm" | "internal" | "webhook";
 
 export type AgentConnection = {
   type: AgentConnectionType;
@@ -343,6 +344,7 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
     schedule: "30 8 * * *",
     scheduleHuman: "diario 3:30 AM COT",
     criticality: "low",
+    runnable: runOrgPreferencesExtractor,
     longDescription:
       "Extrae lecciones de propuestas cerradas (accepted/rejected) en la última semana: qué funcionó, qué no, patrones de clientes exitosos vs rechazos. Guarda los insights como preferencias org en memoria del sistema, que luego alimentan al chat de propuestas y al generador con patrones aprendidos.",
     connections: [
@@ -416,6 +418,97 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
       { type: "api", label: "Resend", detail: "Envía email al cliente" },
     ],
     sourceFile: "server/email-scheduler.ts:1141",
+  },
+  {
+    name: "phase-generator",
+    displayName: "Generador de Fases con IA",
+    kind: "ai",
+    description: "Diseña 3-6 fases + tareas + entregables desde un brief, con doble agente y juez semántico",
+    trigger: "manual",
+    criticality: "critical",
+    longDescription:
+      "Pipeline en 2 etapas con auto-corrección: (1) Sonnet diseña fases con completionPercent + evidence del repo + description rica + keyOutcomes; (2) Sonnet genera 4-8 tareas por fase. Cada etapa se valida estructuralmente (parser + schema check) y semánticamente (un segundo agente Sonnet revisa cobertura del brief, orden lógico, especificidad, credibilidad de completionPercent). Si cualquier validación falla, inyecta el feedback puntual al system prompt y reintenta hasta 2 veces. Solo si todos los intentos fallan, cae al fallback skeleton (kickoff → core → tests → demo). Persiste en agent_runs.metadata: phasesScore, tasksScore, retries, summary del juez, fallbackUsed.",
+    connections: [
+      { type: "llm", label: "Claude Sonnet 4.6", detail: "4 llamadas por gen exitosa: 2 generadores + 2 jueces" },
+      { type: "api", label: "GitHub Contents API", detail: "Lee README, schema, app/api, server/*, 30 commits" },
+      { type: "db", label: "project_phases", detail: "Crea fases con completionPercent + evidence + outcomes" },
+      { type: "db", label: "project_tasks", detail: "Crea 4-8 tareas/fase con prioridades + milestones" },
+      { type: "db", label: "project_deliverables", detail: "Crea entregables verificables por fase" },
+      { type: "db", label: "agent_runs.metadata", detail: "Persiste scores del juez, retries, summary" },
+    ],
+    sourceFile: "server/project-ai.ts:791",
+  },
+  {
+    name: "phase-appender",
+    displayName: "Append de Fase con IA",
+    kind: "ai",
+    description: "Diseña UNA fase nueva al final del proyecto cuando aparece scope adicional",
+    trigger: "manual",
+    criticality: "normal",
+    longDescription:
+      "Cuando un proyecto ya está en marcha y aparece scope adicional (ej: 'también vamos a integrar pagos con Stripe'), este agente diseña UNA sola fase nueva al final con sus tareas + entregables, sin tocar las fases existentes. Lee fases actuales para no duplicar, calcula start_date después de la última fase existente, y extiende project.estimatedEndDate. Usa Sonnet para diseñar fase + Sonnet para tareas. Si AI falla, fallback a 'Completar [nombre]' como única tarea milestone.",
+    connections: [
+      { type: "llm", label: "Claude Sonnet 4.6", detail: "2 llamadas: diseño de fase + tareas" },
+      { type: "api", label: "GitHub Contents API", detail: "Opcional: contexto del repo si hay" },
+      { type: "db", label: "project_phases", detail: "Lee fases existentes, append una nueva" },
+      { type: "db", label: "project_tasks", detail: "Crea tareas para la nueva fase" },
+      { type: "db", label: "project_deliverables", detail: "Crea entregables de la nueva fase" },
+      { type: "db", label: "client_projects", detail: "Extiende estimatedEndDate" },
+    ],
+    sourceFile: "server/project-ai.ts:1271",
+  },
+  {
+    name: "proposal-to-project",
+    displayName: "Convertidor Propuesta → Proyecto",
+    kind: "ai",
+    description: "Convierte una propuesta aceptada en un proyecto con fases y tareas listas para ejecutar",
+    trigger: "manual",
+    criticality: "normal",
+    longDescription:
+      "Cuando una propuesta comercial es aceptada, este agente la convierte en un proyecto operativo: crea registro client_projects vinculado al contacto, deriva las fases del timelineData de la propuesta (si existe) o las genera con AI desde las sections del brief, y dispara phase-generator para llenarlas con tareas + entregables. Resultado: pasar de 'cliente firmó' a 'proyecto activo y trackeable' en un click.",
+    connections: [
+      { type: "llm", label: "Claude Sonnet 4.6", detail: "Vía phase-generator si no hay timelineData" },
+      { type: "db", label: "proposals", detail: "Lee la propuesta aceptada" },
+      { type: "db", label: "client_projects", detail: "Crea el proyecto vinculado al contacto" },
+      { type: "db", label: "project_phases / tasks / deliverables", detail: "Vía phase-generator interno" },
+      { type: "internal", label: "phase-generator agent", detail: "Sub-agente para llenar fases" },
+    ],
+    sourceFile: "server/project-ai.ts:1488",
+  },
+  {
+    name: "commit-analyzer-on-demand",
+    displayName: "Analizador de Commits On-Demand",
+    kind: "ai",
+    description: "Analiza commits con Claude bajo demanda — disparado por webhook GitHub o botón 'Analizar commits'",
+    trigger: "webhook",
+    criticality: "normal",
+    longDescription:
+      "Versión on-demand del commit-analyzer (que también corre como cron diario 6 AM). Disparado por: (a) webhook push de GitHub cuando un proyecto tiene aiTrackingEnabled, (b) admin clickea 'Analizar commits' en el tab Actividad. Trae commits del repo (vía GitHub API con OAuth del admin para repos privados), los pasa por Claude Sonnet para traducir tech-jerga a updates client-facing en 3 niveles, y crea project_activity_entries con summaries + categoría + flag isSignificant. Distinto del cron porque puede correr varias veces al día con un volumen variable.",
+    connections: [
+      { type: "llm", label: "Claude Sonnet 4.6", detail: "Vía project-ai: traduce commits a actividad" },
+      { type: "api", label: "GitHub API (OAuth)", detail: "Fetch commits con scope a repos privados del admin" },
+      { type: "webhook", label: "POST /api/webhooks/github/:projectId", detail: "Recibe push events de GitHub" },
+      { type: "db", label: "project_activity_entries", detail: "Crea entradas con commitShas deduplicadas" },
+      { type: "db", label: "client_projects", detail: "Recalcula health post-análisis" },
+    ],
+    sourceFile: "server/routes.ts:7691",
+  },
+  {
+    name: "weekly-summary-on-demand",
+    displayName: "Resumen Semanal On-Demand",
+    kind: "ai",
+    description: "Genera resumen semanal de un proyecto bajo demanda (botón 'Resumen semanal' en Actividad)",
+    trigger: "manual",
+    criticality: "low",
+    longDescription:
+      "Versión on-demand del weekly-summaries (cron lunes 7:15am). Cuando el admin quiere ver el resumen sin esperar al cron, este agente lo genera al instante usando los últimos 7 días de actividades + tareas completadas + time logs. Combina los 3 con Claude Sonnet en un mensaje narrativo para el cliente. NO envía email automáticamente — solo devuelve el texto al admin para revisar y decidir si publicar como mensaje en el portal.",
+    connections: [
+      { type: "llm", label: "Claude Sonnet 4.6", detail: "Genera resumen narrativo" },
+      { type: "db", label: "project_activity_entries", detail: "Últimos 7 días" },
+      { type: "db", label: "project_tasks", detail: "Tareas completadas esta semana" },
+      { type: "db", label: "project_time_log", detail: "Horas registradas esta semana" },
+    ],
+    sourceFile: "server/project-ai.ts:620",
   },
 
   // ─── Automatizaciones ────────────────────────────────────────

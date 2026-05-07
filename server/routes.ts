@@ -5519,16 +5519,24 @@ Responde SOLO con un JSON válido, sin markdown:
           return res.status(400).json({ message: "El proyecto ya tiene fases. Usa mode='append' para agregar una nueva." });
         }
         const startDate = project.startDate ? new Date(project.startDate) : new Date();
-        const artifacts = await generateProjectArtifacts(projectId, {
-          brief: enrichedBrief,
-          repoContext: repoContext || undefined,
-          startDate,
-        });
+        const artifacts = await runAgent(
+          "phase-generator",
+          () => generateProjectArtifacts(projectId, {
+            brief: enrichedBrief,
+            repoContext: repoContext || undefined,
+            startDate,
+          }),
+          { triggeredBy: "manual" },
+        );
         return res.json({ mode: "fresh", repoLoaded: !!repoContext, ...artifacts });
       }
 
       // mode === "append"
-      const result = await appendPhaseArtifact(projectId, enrichedBrief, { repoContext: repoContext || undefined });
+      const result = await runAgent(
+        "phase-appender",
+        () => appendPhaseArtifact(projectId, enrichedBrief, { repoContext: repoContext || undefined }),
+        { triggeredBy: "manual" },
+      );
       return res.json({ mode: "append", phasesCreated: 1, repoLoaded: !!repoContext, ...result });
     } catch (err: any) {
       log(`Error generate-phases: ${err?.message}`);
@@ -5588,11 +5596,15 @@ Responde SOLO con un JSON válido, sin markdown:
         }
       }
 
-      const artifacts = await generateProjectArtifacts(project.id, {
-        brief: brief.trim(),
-        repoContext: repoContext || undefined,
-        startDate,
-      });
+      const artifacts = await runAgent(
+        "phase-generator",
+        () => generateProjectArtifacts(project.id, {
+          brief: brief.trim(),
+          repoContext: repoContext || undefined,
+          startDate,
+        }),
+        { triggeredBy: "manual" },
+      );
 
       res.json({ projectId: project.id, ...artifacts });
     } catch (err: any) {
@@ -7727,7 +7739,11 @@ Responde SOLO con un JSON válido, sin markdown:
     // Process with AI if enabled
     if (project.aiTrackingEnabled) {
       try {
-        const results = await analyzeCommitsForProject(projectId, commits);
+        const results = await runAgent(
+          "commit-analyzer-on-demand",
+          () => analyzeCommitsForProject(projectId, commits),
+          { triggeredBy: "webhook" },
+        );
 
         for (const result of results) {
           const [entry] = await db!.insert(projectActivityEntries).values({
@@ -7821,7 +7837,11 @@ Responde SOLO con un JSON válido, sin markdown:
         timestamp: c.commit.author.date,
       }));
 
-      const results = await analyzeCommitsForProject(id, commits);
+      const results = await runAgent(
+        "commit-analyzer-on-demand",
+        () => analyzeCommitsForProject(id, commits),
+        { triggeredBy: "manual" },
+      );
 
       for (const result of results) {
         await db!.insert(projectActivityEntries).values({
@@ -7854,7 +7874,11 @@ Responde SOLO con un JSON válido, sin markdown:
       const [project] = await db.select().from(clientProjects).where(eq(clientProjects.id, id));
       if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
-      const summary = await generateWeeklySummary(id);
+      const summary = await runAgent(
+        "weekly-summary-on-demand",
+        () => generateWeeklySummary(id),
+        { triggeredBy: "manual" },
+      );
       if (!summary) {
         return res.status(400).json({
           message: "No hay actividad esta semana para resumir. Registra tareas completadas, time logs o espera a que el análisis de commits corra (6 AM Bogotá diario).",
@@ -8899,14 +8923,18 @@ Responde SOLO con un JSON válido, sin markdown:
 
       const startDate = req.body.startDate ? new Date(req.body.startDate) : new Date();
 
-      const result = await generateProjectFromProposal({
-        id: proposal.id,
-        contactId: proposal.contactId,
-        title: proposal.title,
-        sections: (proposal.sections as Record<string, string>) || {},
-        pricing: proposal.pricing as any,
-        timelineData: proposal.timelineData as any,
-      }, startDate);
+      const result = await runAgent(
+        "proposal-to-project",
+        () => generateProjectFromProposal({
+          id: proposal.id,
+          contactId: proposal.contactId!,
+          title: proposal.title,
+          sections: (proposal.sections as Record<string, string>) || {},
+          pricing: proposal.pricing as any,
+          timelineData: proposal.timelineData as any,
+        }, startDate),
+        { triggeredBy: "manual" },
+      );
 
       res.json({
         message: "Proyecto creado desde propuesta",
