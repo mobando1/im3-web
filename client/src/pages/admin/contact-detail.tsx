@@ -79,6 +79,7 @@ import {
   File,
 } from "lucide-react";
 import { useState } from "react";
+import { ContactDriveFolderBanner } from "@/components/admin/ContactDriveFolderBanner";
 
 type EmailItem = {
   id: string;
@@ -282,6 +283,7 @@ type ContactDetail = {
   contact: {
     id: string;
     nombre: string;
+    apellido?: string | null;
     empresa: string;
     email: string;
     telefono: string | null;
@@ -292,6 +294,7 @@ type ContactDetail = {
     leadScore: number;
     createdAt: string;
     diagnosticId: string;
+    driveFolderId?: string | null;
   };
   diagnostic: {
     industria: string;
@@ -2948,6 +2951,9 @@ export default function ContactDetailPage() {
         </TabsContent>
         {/* ===== TAB: DOCUMENTOS ===== */}
         <TabsContent value="documentos" className="space-y-4 mt-4">
+          {data?.contact && (
+            <ContactDriveFolderBanner contact={{ id: data.contact.id, driveFolderId: data.contact.driveFolderId }} />
+          )}
           <Card className="bg-white border-gray-200 shadow-sm">
             <CardHeader className="pb-3">
               <div className="flex items-center justify-between">

@@ -105,6 +105,10 @@ export const contacts = pgTable("contacts", {
 export type Contact = typeof contacts.$inferSelect;
 export type InsertContact = typeof contacts.$inferInsert;
 
+export function formatContactName(c: { nombre: string; apellido?: string | null }): string {
+  return [c.nombre, c.apellido].filter(Boolean).join(" ").trim();
+}
+
 // Additional email addresses associated with a contact (stakeholders, team members)
 export const contactEmails = pgTable("contact_emails", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

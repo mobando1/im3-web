@@ -1278,6 +1278,12 @@ export function startEmailScheduler() {
     await runAgent("substatus-updater", updateContactSubstatuses).catch(err => log(`Cron error substatus: ${err}`));
     await runAgent("overdue-tasks", checkOverdueTasks).catch(err => log(`Cron error overdue: ${err}`));
     await runAgent("post-meeting-recordings", processPostMeetingRecordings).catch(err => log(`Cron error post-meeting: ${err}`));
+    try {
+      const { runContactDriveSyncCron } = await import("./drive-file-sync");
+      await runAgent("contact-drive-sync", runContactDriveSyncCron).catch(err => log(`Cron error contact-drive-sync: ${err}`));
+    } catch (err: any) {
+      log(`Could not run contact-drive-sync: ${err?.message}`);
+    }
   }, { timezone: "America/Bogota" });
 
   // Fase 2: agentes IA (supervisor + meeting prep + followup writer) cada 30 min

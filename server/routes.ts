@@ -22,7 +22,8 @@ import passport from "passport";
 import { z } from "zod";
 import { analyzeCommitsForProject, generateWeeklySummary, calculateProjectHealth, generateProjectFromProposal, generateProjectArtifacts, appendPhaseArtifact } from "./project-ai";
 import { fetchRepoContext } from "./github-repo-context";
-import { syncDriveFilesToProject } from "./drive-file-sync";
+import { syncDriveFilesToProject, syncDriveFilesToContact, runContactDriveSyncCron } from "./drive-file-sync";
+import { listDriveFolderChildren, searchDriveFolders, createSubfolder, getFolderPath, DriveAccessError } from "./google-drive";
 import { generateProposal, regenerateProposalSection, generateSectionOptions, applySectionOption } from "./proposal-ai";
 import crypto from "crypto";
 import { getIndustriaLabel } from "@shared/industrias";
@@ -2077,9 +2078,9 @@ export async function registerRoutes(
   app.post("/api/admin/contacts", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
-      const { nombre, apellido, empresa, email, telefono, status, tags, nota } = req.body as {
+      const { nombre, apellido, empresa, email, telefono, status, tags, nota, driveFolderId } = req.body as {
         nombre: string; apellido?: string; empresa: string; email: string; telefono?: string;
-        status?: string; tags?: string[]; nota?: string;
+        status?: string; tags?: string[]; nota?: string; driveFolderId?: string;
       };
 
       if (!nombre || !empresa || !email) {
@@ -2100,6 +2101,7 @@ export async function registerRoutes(
         telefono: telefono || null,
         status: status || "contacted",
         tags: tags || [],
+        driveFolderId: driveFolderId?.trim() || null,
         lastActivityAt: new Date(),
       }).returning();
 
@@ -2214,14 +2216,16 @@ export async function registerRoutes(
     if (!db) return res.status(500).json({ error: "DB not configured" });
     const contactId = req.params.id as string;
 
-    const { nombre, empresa, email, telefono, substatus, tags } = req.body;
+    const { nombre, apellido, empresa, email, telefono, substatus, tags, driveFolderId } = req.body;
     const updates: Record<string, any> = {};
     if (nombre !== undefined) updates.nombre = nombre;
+    if (apellido !== undefined) updates.apellido = apellido === "" ? null : apellido;
     if (empresa !== undefined) updates.empresa = empresa;
     if (email !== undefined) updates.email = email;
     if (telefono !== undefined) updates.telefono = telefono;
     if (substatus !== undefined) updates.substatus = substatus;
     if (tags !== undefined) updates.tags = tags;
+    if (driveFolderId !== undefined) updates.driveFolderId = driveFolderId === "" ? null : driveFolderId;
 
     if (Object.keys(updates).length === 0) {
       return res.status(400).json({ error: "No fields to update" });
@@ -8110,6 +8114,106 @@ Responde SOLO con un JSON válido, sin markdown:
       res.json({ message: `${result.synced} archivos nuevos sincronizados`, ...result });
     } catch (err: unknown) {
       res.status(500).json({ message: `Error: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────
+  // Drive folder browser (used by DriveFolderPicker on the contact modal)
+  // ─────────────────────────────────────────────────────────────────
+
+  app.get("/api/admin/drive/status", requireAuth, async (_req, res) => {
+    res.json({ configured: isGoogleDriveConfigured() });
+  });
+
+  app.get("/api/admin/drive/folders", requireAuth, async (req, res) => {
+    if (!isGoogleDriveConfigured()) return res.status(503).json({ message: "Google Drive no configurado" });
+    try {
+      const parentId = typeof req.query.parentId === "string" && req.query.parentId.trim() ? req.query.parentId.trim() : undefined;
+      const listing = await listDriveFolderChildren(parentId);
+      res.json(listing);
+    } catch (err) {
+      if (err instanceof DriveAccessError) {
+        const status = err.code === "not_found" ? 404 : err.code === "forbidden" ? 502 : 500;
+        return res.status(status).json({ message: err.message });
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ message });
+    }
+  });
+
+  app.get("/api/admin/drive/search", requireAuth, async (req, res) => {
+    if (!isGoogleDriveConfigured()) return res.status(503).json({ message: "Google Drive no configurado" });
+    const q = typeof req.query.q === "string" ? req.query.q.trim() : "";
+    if (q.length < 2) return res.json({ folders: [], truncated: false });
+    try {
+      const result = await searchDriveFolders(q);
+      res.json(result);
+    } catch (err) {
+      if (err instanceof DriveAccessError) return res.status(err.status).json({ message: err.message });
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ message });
+    }
+  });
+
+  app.post("/api/admin/drive/folders", requireAuth, async (req, res) => {
+    if (!isGoogleDriveConfigured()) return res.status(503).json({ message: "Google Drive no configurado" });
+    const { parentId, name } = req.body as { parentId?: string; name?: string };
+    if (!name || !name.trim()) return res.status(400).json({ message: "name requerido" });
+    try {
+      const folder = await createSubfolder(parentId || null, name);
+      const path = await getFolderPath(folder.id).catch(() => folder.name);
+      res.json({ id: folder.id, name: folder.name, path });
+    } catch (err) {
+      if (err instanceof DriveAccessError) {
+        const status = err.code === "not_found" ? 404 : err.code === "forbidden" ? 502 : 500;
+        return res.status(status).json({ message: err.message });
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ message });
+    }
+  });
+
+  // Sync Drive files to contact (equivalent del sync de proyectos para contactos)
+  app.post("/api/admin/contacts/:id/sync-drive", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ message: "DB not configured" });
+    const contactId = req.params.id as string;
+    try {
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId));
+      if (!contact) return res.status(404).json({ message: "Contacto no encontrado" });
+      if (!contact.driveFolderId) return res.status(400).json({ message: "El contacto no tiene carpeta de Drive vinculada" });
+
+      const result = await runAgent(
+        "contact-drive-sync-manual",
+        () => syncDriveFilesToContact(contactId, contact.driveFolderId!),
+        { triggeredBy: "manual" }
+      );
+      res.json({ message: `${result.synced} archivos nuevos sincronizados`, ...result });
+    } catch (err: unknown) {
+      if (err instanceof DriveAccessError) {
+        if (err.code === "not_found") {
+          return res.status(410).json({ message: "La carpeta vinculada ya no existe en Drive. Vincula otra." });
+        }
+        return res.status(err.status).json({ message: err.message });
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ message });
+    }
+  });
+
+  // Get path of a Drive folder (helper para mostrar breadcrumbs cuando el cliente ya tiene folderId guardado)
+  app.get("/api/admin/drive/folders/:id/path", requireAuth, async (req, res) => {
+    if (!isGoogleDriveConfigured()) return res.status(503).json({ message: "Google Drive no configurado" });
+    try {
+      const folderId = req.params.id as string;
+      const path = await getFolderPath(folderId);
+      res.json({ id: folderId, path });
+    } catch (err) {
+      if (err instanceof DriveAccessError) {
+        const status = err.code === "not_found" ? 404 : err.code === "forbidden" ? 502 : 500;
+        return res.status(status).json({ message: err.message });
+      }
+      const message = err instanceof Error ? err.message : String(err);
+      res.status(500).json({ message });
     }
   });
 

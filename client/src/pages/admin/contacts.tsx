@@ -37,6 +37,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { List, LayoutGrid, Mail, Filter, Download, X, MessageCircle, Tag, UserX, Trash2, Plus } from "lucide-react";
+import { DriveFolderField } from "@/components/admin/DriveFolderField";
 
 type Contact = {
   id: string;
@@ -117,7 +118,17 @@ export default function Contacts() {
   const [deleteTarget, setDeleteTarget] = useState<Contact | null>(null);
   const { toast } = useToast();
   const [showNewContact, setShowNewContact] = useState(false);
-  const [newContactForm, setNewContactForm] = useState({ nombre: "", apellido: "", empresa: "", email: "", telefono: "", status: "contacted", nota: "" });
+  const [newContactForm, setNewContactForm] = useState<{
+    nombre: string;
+    apellido: string;
+    empresa: string;
+    email: string;
+    telefono: string;
+    status: string;
+    nota: string;
+    driveFolderId: string | null;
+    driveFolderPath: string | null;
+  }>({ nombre: "", apellido: "", empresa: "", email: "", telefono: "", status: "contacted", nota: "", driveFolderId: null, driveFolderPath: null });
   const fullName = (c: { nombre: string; apellido?: string | null }) => [c.nombre, c.apellido].filter(Boolean).join(" ");
 
   useEffect(() => {
@@ -138,7 +149,7 @@ export default function Contacts() {
     onSuccess: (contact: { id: string }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/contacts"] });
       setShowNewContact(false);
-      setNewContactForm({ nombre: "", apellido: "", empresa: "", email: "", telefono: "", status: "contacted", nota: "" });
+      setNewContactForm({ nombre: "", apellido: "", empresa: "", email: "", telefono: "", status: "contacted", nota: "", driveFolderId: null, driveFolderPath: null });
       toast({ title: "Contacto creado" });
       navigate(`/admin/contacts/${contact.id}`);
     },
@@ -815,6 +826,22 @@ export default function Contacts() {
               <Label>Notas iniciales <span className="text-gray-400 font-normal">(cómo llegó, contexto)</span></Label>
               <Textarea value={newContactForm.nota} onChange={e => setNewContactForm(f => ({ ...f, nota: e.target.value }))} rows={3} placeholder="Referido por Sebastián. Ya tuvimos una llamada exploratoria..." />
             </div>
+            <DriveFolderField
+              value={newContactForm.driveFolderId}
+              path={newContactForm.driveFolderPath}
+              onChange={(folder) => setNewContactForm(f => ({
+                ...f,
+                driveFolderId: folder?.id || null,
+                driveFolderPath: folder?.path || null,
+              }))}
+              autoCreateName={(() => {
+                const empresa = newContactForm.empresa.trim();
+                const nombre = [newContactForm.nombre, newContactForm.apellido].filter(Boolean).join(" ").trim();
+                if (empresa && nombre) return `${empresa} - ${nombre}`;
+                if (empresa) return empresa;
+                return nombre;
+              })()}
+            />
             <Button
               className="w-full bg-[#2FA4A9] hover:bg-[#238b8f]"
               disabled={!newContactForm.nombre || !newContactForm.empresa || !newContactForm.email || createContactMut.isPending}
@@ -826,6 +853,7 @@ export default function Contacts() {
                 telefono: newContactForm.telefono || undefined,
                 status: newContactForm.status,
                 nota: newContactForm.nota || undefined,
+                driveFolderId: newContactForm.driveFolderId || undefined,
               })}
             >
               {createContactMut.isPending ? "Creando..." : "Crear contacto"}

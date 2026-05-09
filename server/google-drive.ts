@@ -832,3 +832,223 @@ export async function listFolderFilesRecursive(
 
   return allFiles;
 }
+
+// ──────────────────────────────────────────────────────────────────────────────
+// Folder browser helpers (used by /api/admin/drive/* endpoints + DriveFolderPicker)
+// ──────────────────────────────────────────────────────────────────────────────
+
+export interface DriveFolderEntry {
+  id: string;
+  name: string;
+  modifiedTime: string;
+}
+
+export interface DriveFolderSearchEntry extends DriveFolderEntry {
+  parents: string[];
+  path?: string;
+}
+
+export interface DriveFolderListing {
+  parentId: string;
+  parentName: string;
+  breadcrumbs: Array<{ id: string; name: string }>;
+  folders: DriveFolderEntry[];
+}
+
+export class DriveAccessError extends Error {
+  status: number;
+  code: "not_found" | "forbidden" | "unknown";
+  constructor(message: string, status: number, code: "not_found" | "forbidden" | "unknown") {
+    super(message);
+    this.status = status;
+    this.code = code;
+  }
+}
+
+function classifyDriveError(err: unknown): DriveAccessError {
+  const e = err as { code?: number; message?: string };
+  const code = typeof e?.code === "number" ? e.code : 0;
+  if (code === 404) return new DriveAccessError("Carpeta no encontrada o eliminada", 404, "not_found");
+  if (code === 403) return new DriveAccessError("Service account sin acceso a esta carpeta", 403, "forbidden");
+  return new DriveAccessError(e?.message || "Error desconocido de Drive", 500, "unknown");
+}
+
+function escapeDriveQuery(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
+}
+
+async function getFolderMeta(folderId: string): Promise<{ id: string; name: string; parents: string[] }> {
+  const auth = getAuth();
+  if (!auth) throw new Error("Google Drive no configurado");
+  const drive = google.drive({ version: "v3", auth });
+  try {
+    const res = await drive.files.get({ fileId: folderId, fields: "id,name,parents" });
+    return {
+      id: res.data.id || folderId,
+      name: res.data.name || "(sin nombre)",
+      parents: res.data.parents || [],
+    };
+  } catch (err) {
+    throw classifyDriveError(err);
+  }
+}
+
+/**
+ * Lista subcarpetas (no archivos) de un parent. Si parentId es null/undefined,
+ * usa GOOGLE_DRIVE_FOLDER_ID (root configurado).
+ * Pagina hasta 1000 carpetas máx para evitar runaway.
+ */
+export async function listDriveFolderChildren(parentIdInput?: string | null): Promise<DriveFolderListing> {
+  const auth = getAuth();
+  if (!auth) throw new Error("Google Drive no configurado");
+  const root = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  if (!root) throw new Error("GOOGLE_DRIVE_FOLDER_ID no configurado");
+
+  const parentId = parentIdInput || root;
+  const drive = google.drive({ version: "v3", auth });
+
+  const folders: DriveFolderEntry[] = [];
+  let pageToken: string | undefined = undefined;
+  const HARD_CAP = 1000;
+
+  try {
+    do {
+      const res: { data: { files?: Array<{ id?: string | null; name?: string | null; modifiedTime?: string | null }>; nextPageToken?: string | null } } =
+        await drive.files.list({
+          q: `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+          fields: "nextPageToken, files(id,name,modifiedTime)",
+          pageSize: 100,
+          orderBy: "name",
+          pageToken,
+        });
+      for (const f of res.data.files || []) {
+        if (!f.id || !f.name) continue;
+        folders.push({ id: f.id, name: f.name, modifiedTime: f.modifiedTime || "" });
+        if (folders.length >= HARD_CAP) break;
+      }
+      pageToken = res.data.nextPageToken || undefined;
+    } while (pageToken && folders.length < HARD_CAP);
+  } catch (err) {
+    throw classifyDriveError(err);
+  }
+
+  // Build breadcrumbs (subiendo por parents hasta el root configurado)
+  const breadcrumbs: Array<{ id: string; name: string }> = [];
+  const meta = await getFolderMeta(parentId);
+  let current: { id: string; name: string; parents: string[] } | null = meta;
+  let depth = 0;
+  while (current && depth < 15) {
+    breadcrumbs.unshift({ id: current.id, name: current.name });
+    if (current.id === root) break;
+    const parent = current.parents[0];
+    if (!parent) break;
+    try {
+      current = await getFolderMeta(parent);
+    } catch {
+      break;
+    }
+    depth++;
+  }
+
+  return {
+    parentId,
+    parentName: meta.name,
+    breadcrumbs,
+    folders,
+  };
+}
+
+/**
+ * Busca carpetas por nombre. Devuelve hasta `limit` resultados (default 50).
+ * No restringe scope porque Drive API no soporta scoping recursivo en una sola query.
+ */
+export async function searchDriveFolders(
+  query: string,
+  options: { limit?: number } = {}
+): Promise<{ folders: DriveFolderSearchEntry[]; truncated: boolean }> {
+  const auth = getAuth();
+  if (!auth) throw new Error("Google Drive no configurado");
+  const drive = google.drive({ version: "v3", auth });
+  const limit = Math.min(options.limit ?? 50, 100);
+
+  const safeQuery = escapeDriveQuery(query.trim());
+  if (safeQuery.length < 2) return { folders: [], truncated: false };
+
+  try {
+    const res = await drive.files.list({
+      q: `mimeType='application/vnd.google-apps.folder' and trashed=false and name contains '${safeQuery}'`,
+      fields: "nextPageToken, files(id,name,modifiedTime,parents)",
+      pageSize: limit,
+      orderBy: "name",
+    });
+    const folders: DriveFolderSearchEntry[] = (res.data.files || [])
+      .filter((f): f is { id: string; name: string; modifiedTime?: string | null; parents?: string[] | null } => !!f.id && !!f.name)
+      .map(f => ({
+        id: f.id,
+        name: f.name,
+        modifiedTime: f.modifiedTime || "",
+        parents: f.parents || [],
+      }));
+    return { folders, truncated: !!res.data.nextPageToken };
+  } catch (err) {
+    throw classifyDriveError(err);
+  }
+}
+
+/**
+ * Crea una subcarpeta dentro de parentId (o root si vacío). Devuelve id + name.
+ * NO valida duplicados — confiamos en el caller.
+ */
+export async function createSubfolder(
+  parentIdInput: string | null | undefined,
+  name: string
+): Promise<{ id: string; name: string }> {
+  const auth = getAuth();
+  if (!auth) throw new Error("Google Drive no configurado");
+  const root = process.env.GOOGLE_DRIVE_FOLDER_ID;
+  if (!root) throw new Error("GOOGLE_DRIVE_FOLDER_ID no configurado");
+
+  const parentId = parentIdInput || root;
+  const cleanName = name.trim().replace(/\//g, "-").slice(0, 200);
+  if (!cleanName) throw new Error("Nombre de carpeta vacío");
+
+  const drive = google.drive({ version: "v3", auth });
+  try {
+    const res = await drive.files.create({
+      requestBody: {
+        name: cleanName,
+        mimeType: "application/vnd.google-apps.folder",
+        parents: [parentId],
+      },
+      fields: "id,name",
+    });
+    if (!res.data.id || !res.data.name) throw new Error("Drive no devolvió id/name");
+    return { id: res.data.id, name: res.data.name };
+  } catch (err) {
+    throw classifyDriveError(err);
+  }
+}
+
+/**
+ * Resuelve el path "Mi unidad > X > Y" subiendo por parents hasta stopAtRoot
+ * (o el root configurado). Cap de profundidad 15.
+ */
+export async function getFolderPath(folderId: string, stopAtRootInput?: string): Promise<string> {
+  const stopAt = stopAtRootInput || process.env.GOOGLE_DRIVE_FOLDER_ID || "";
+  const segments: string[] = [];
+  let currentId: string | undefined = folderId;
+  let depth = 0;
+  while (currentId && depth < 15) {
+    let meta: { id: string; name: string; parents: string[] };
+    try {
+      meta = await getFolderMeta(currentId);
+    } catch {
+      break;
+    }
+    segments.unshift(meta.name);
+    if (meta.id === stopAt) break;
+    currentId = meta.parents[0];
+    depth++;
+  }
+  return segments.join(" > ");
+}

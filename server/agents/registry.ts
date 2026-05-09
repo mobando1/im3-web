@@ -19,6 +19,7 @@ import { runCostReferenceFreshness } from "./cost-reference-freshness";
 import { runAnalyticsSync } from "./analytics-sync";
 import { runAnalyticsMonthlyReport } from "./analytics-monthly-report";
 import { runOrgPreferencesExtractor } from "../org-preferences";
+import { runContactDriveSyncCron } from "../drive-file-sync";
 
 export type AgentKind = "ai" | "automation" | "integration" | "webhook";
 
@@ -751,6 +752,25 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
       { type: "db", label: "project_files", detail: "Inserta archivos detectados con type, url, size" },
     ],
     sourceFile: "server/drive-file-sync.ts:40",
+  },
+  {
+    name: "contact-drive-sync",
+    displayName: "Sync Drive → Contactos",
+    kind: "integration",
+    description: "Sincroniza archivos de Drive de cada contacto activo cada 30 min",
+    trigger: "cron",
+    schedule: "*/30 * * * *",
+    scheduleHuman: "cada 30 minutos",
+    criticality: "low",
+    runnable: runContactDriveSyncCron,
+    longDescription:
+      "Cada 30 min itera sobre contactos con driveFolderId y status en (contacted, scheduled, converted), y sincroniza nuevos archivos de su carpeta de Drive hacia contact_files. Deduplica por driveFileId. También se dispara manual desde el botón 'Sincronizar' del banner del perfil del cliente.",
+    connections: [
+      { type: "api", label: "Google Drive API", detail: "Service account; lista archivos no-trashed por contact.driveFolderId" },
+      { type: "db", label: "contacts", detail: "Filtra status IN (contacted,scheduled,converted) AND drive_folder_id NOT NULL" },
+      { type: "db", label: "contact_files", detail: "Inserta archivos detectados, deduplica por drive_file_id" },
+    ],
+    sourceFile: "server/drive-file-sync.ts:155",
   },
   {
     name: "analytics-sync",
