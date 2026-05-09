@@ -2077,8 +2077,8 @@ export async function registerRoutes(
   app.post("/api/admin/contacts", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
-      const { nombre, empresa, email, telefono, status, tags, nota } = req.body as {
-        nombre: string; empresa: string; email: string; telefono?: string;
+      const { nombre, apellido, empresa, email, telefono, status, tags, nota } = req.body as {
+        nombre: string; apellido?: string; empresa: string; email: string; telefono?: string;
         status?: string; tags?: string[]; nota?: string;
       };
 
@@ -2093,7 +2093,8 @@ export async function registerRoutes(
       }
 
       const [contact] = await db.insert(contacts).values({
-        nombre,
+        nombre: nombre.trim(),
+        apellido: apellido?.trim() || null,
         empresa,
         email,
         telefono: telefono || null,
@@ -5557,6 +5558,7 @@ Responde SOLO con un JSON válido, sin markdown:
       totalBudget = null,
       currency = "USD",
       startDate: startDateRaw,
+      createdFrom = "manual",
     } = req.body || {};
 
     if (!name || typeof name !== "string") return res.status(400).json({ message: "name requerido" });
@@ -5566,8 +5568,11 @@ Responde SOLO con un JSON válido, sin markdown:
     if (projectType !== "client" && projectType !== "internal") {
       return res.status(400).json({ message: "projectType debe ser 'client' o 'internal'" });
     }
-    if (projectType === "client" && !contactId) {
+    if (projectType === "client" && !contactId && createdFrom !== "import") {
       return res.status(400).json({ message: "contactId requerido para projectType='client'" });
+    }
+    if (createdFrom !== "manual" && createdFrom !== "proposal" && createdFrom !== "import") {
+      return res.status(400).json({ message: "createdFrom debe ser 'manual', 'proposal' o 'import'" });
     }
 
     const startDate = startDateRaw ? new Date(startDateRaw) : new Date();
@@ -5585,6 +5590,7 @@ Responde SOLO con un JSON válido, sin markdown:
         githubRepoUrl: githubRepoUrl || null,
         healthStatus: "on_track",
         healthNote: "Proyecto recién creado — fases generadas por IA.",
+        createdFrom,
       }).returning();
 
       let repoContext: string | null = null;

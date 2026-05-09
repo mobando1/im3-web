@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { log } from "./index";
 import { db } from "./db";
 import { clientProjects, projectPhases, projectTasks, projectDeliverables, projectActivityEntries, projectTimeLog, projectIdeas } from "@shared/schema";
-import { eq, desc, gte, asc } from "drizzle-orm";
+import { eq, desc, gte, asc, and, isNull } from "drizzle-orm";
 import { IM3_PROJECT_CONTEXT } from "./im3-project-context";
 
 let client: Anthropic | null = null;
@@ -807,6 +807,7 @@ export type GenerateArtifactsResult = {
     repoLoaded: boolean;              // si fetchRepoContext devolvió algo
     aiModel: string;                  // qué modelo usamos
     fallbackUsed: boolean;            // si caímos al fallback de tareas (skeleton)
+    alreadyExists?: boolean;          // true si abortamos porque el proyecto ya tenía fases (idempotency guard)
   };
 };
 
@@ -862,6 +863,21 @@ export async function generateProjectArtifacts(
       fallbackUsed: tracking.fallbackUsed,
     },
   });
+
+  // Idempotency guard: si el proyecto ya tiene fases activas, no regenerar.
+  // Defense-in-depth: el endpoint /generate-phases ya checkea esto, pero si
+  // alguien llama esta función directamente (script, otro endpoint futuro,
+  // partial-failure mid-INSERT que se reintenta) evitamos duplicación.
+  const existingPhases = await database
+    .select({ id: projectPhases.id })
+    .from(projectPhases)
+    .where(and(eq(projectPhases.projectId, projectId), isNull(projectPhases.deletedAt)));
+  if (existingPhases.length > 0) {
+    log(`generateProjectArtifacts: project ${projectId} already has ${existingPhases.length} active phases — skipping (idempotent)`);
+    const result = buildResult(0, 0, 0);
+    result.metadata.alreadyExists = true;
+    return result;
+  }
 
   // 1. Resolve phases — either provided or designed by AI
   let phaseSpecs: PhaseSpec[] = opts.phasesHint ?? [];

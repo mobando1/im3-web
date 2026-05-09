@@ -88,6 +88,7 @@ export const contacts = pgTable("contacts", {
   diagnosticId: varchar("diagnostic_id"),
   email: text("email").notNull(),
   nombre: text("nombre").notNull(),
+  apellido: text("apellido"),
   empresa: text("empresa").notNull(),
   telefono: text("telefono"),
   status: text("status").notNull().default("lead"), // lead | contacted | scheduled | converted
@@ -399,6 +400,8 @@ export const clientProjects = pgTable("client_projects", {
   aiTrackingEnabled: boolean("ai_tracking_enabled").default(false).notNull(),
   lastWeeklySummaryAt: timestamp("last_weekly_summary_at"),
   driveFolderId: text("drive_folder_id"),
+  // Origen del proyecto — para auditar bulk imports y diferenciarlos de creaciones manuales
+  createdFrom: text("created_from").default("manual").notNull(), // manual | proposal | import
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

@@ -134,6 +134,7 @@ export async function runMigrations() {
     // Contacts extra columns
     await pool.query(`ALTER TABLE "contacts" ADD COLUMN IF NOT EXISTS "idioma" varchar(5) DEFAULT 'es';`).catch(() => {});
     await pool.query(`ALTER TABLE "contacts" ADD COLUMN IF NOT EXISTS "last_activity_at" timestamp;`).catch(() => {});
+    await pool.query(`ALTER TABLE "contacts" ADD COLUMN IF NOT EXISTS "apellido" text;`).catch(() => {});
 
     // Diagnostics extra columns
     await pool.query(`ALTER TABLE "diagnostics" ADD COLUMN IF NOT EXISTS "google_calendar_event_id" text;`).catch(() => {});
@@ -146,6 +147,9 @@ export async function runMigrations() {
 
     // Project type — distingue proyectos de cliente (scope fijo) vs internos (evolutivos)
     await pool.query(`ALTER TABLE "client_projects" ADD COLUMN IF NOT EXISTS "project_type" text DEFAULT 'client' NOT NULL;`).catch(() => {});
+
+    // Origen del proyecto — para auditar bulk imports vs creaciones manuales/desde propuesta
+    await pool.query(`ALTER TABLE "client_projects" ADD COLUMN IF NOT EXISTS "created_from" text DEFAULT 'manual' NOT NULL;`).catch(() => {});
 
     // Project feedback — bugs/cambios/sugerencias del cliente con attachments
     await pool.query(`

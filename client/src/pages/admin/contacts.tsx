@@ -117,7 +117,8 @@ export default function Contacts() {
   const [deleteTarget, setDeleteTarget] = useState<Contact | null>(null);
   const { toast } = useToast();
   const [showNewContact, setShowNewContact] = useState(false);
-  const [newContactForm, setNewContactForm] = useState({ nombre: "", empresa: "", email: "", telefono: "", status: "contacted", nota: "" });
+  const [newContactForm, setNewContactForm] = useState({ nombre: "", apellido: "", empresa: "", email: "", telefono: "", status: "contacted", nota: "" });
+  const fullName = (c: { nombre: string; apellido?: string | null }) => [c.nombre, c.apellido].filter(Boolean).join(" ");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -137,7 +138,7 @@ export default function Contacts() {
     onSuccess: (contact: { id: string }) => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/contacts"] });
       setShowNewContact(false);
-      setNewContactForm({ nombre: "", empresa: "", email: "", telefono: "", status: "contacted", nota: "" });
+      setNewContactForm({ nombre: "", apellido: "", empresa: "", email: "", telefono: "", status: "contacted", nota: "" });
       toast({ title: "Contacto creado" });
       navigate(`/admin/contacts/${contact.id}`);
     },
@@ -443,10 +444,10 @@ export default function Contacts() {
                           <TableCell>
                             <div className="flex items-center gap-3">
                               <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#2FA4A9]/20 to-[#2FA4A9]/5 text-[#2FA4A9] flex items-center justify-center text-xs font-semibold shrink-0">
-                                {getInitials(contact.nombre)}
+                                {getInitials(fullName(contact))}
                               </div>
                               <span className="text-gray-900 font-medium">
-                                {contact.nombre}
+                                {fullName(contact)}
                               </span>
                             </div>
                           </TableCell>
@@ -684,10 +685,10 @@ export default function Contacts() {
                       >
                         <div className="flex items-center gap-2.5 mb-1.5">
                           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#2FA4A9]/20 to-[#2FA4A9]/5 text-[#2FA4A9] flex items-center justify-center text-[10px] font-semibold shrink-0">
-                            {getInitials(contact.nombre)}
+                            {getInitials(fullName(contact))}
                           </div>
                           <p className="text-sm font-medium text-gray-900 truncate">
-                            {contact.nombre}
+                            {fullName(contact)}
                           </p>
                         </div>
                         <p className="text-xs text-gray-500 truncate">
@@ -736,17 +737,17 @@ export default function Contacts() {
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar este contacto?</AlertDialogTitle>
             <AlertDialogDescription>
-              Se borrarán todos los emails, notas, tareas, deals y actividad asociada a <strong>{deleteTarget?.nombre}</strong>. Esta acción no se puede deshacer.
+              Se borrarán todos los emails, notas, tareas, deals y actividad asociada a <strong>{deleteTarget ? fullName(deleteTarget) : ""}</strong>. Esta acción no se puede deshacer.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-2">
             <label className="text-sm text-gray-600 mb-1.5 block">
-              Escribe <strong>{deleteTarget?.nombre}</strong> para confirmar:
+              Escribe <strong>{deleteTarget ? fullName(deleteTarget) : ""}</strong> para confirmar:
             </label>
             <Input
               value={deleteConfirmName}
               onChange={(e) => setDeleteConfirmName(e.target.value)}
-              placeholder={deleteTarget?.nombre || ""}
+              placeholder={deleteTarget ? fullName(deleteTarget) : ""}
               className="border-gray-300"
             />
           </div>
@@ -758,7 +759,7 @@ export default function Contacts() {
                 setDeleteTarget(null);
                 setDeleteConfirmName("");
               }}
-              disabled={!deleteTarget || deleteConfirmName.trim().toLowerCase() !== deleteTarget.nombre.trim().toLowerCase() || deleteContactMutation.isPending}
+              disabled={!deleteTarget || deleteConfirmName.trim().toLowerCase() !== fullName(deleteTarget).trim().toLowerCase() || deleteContactMutation.isPending}
               className="bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {deleteContactMutation.isPending ? "Eliminando..." : "Sí, eliminar"}
@@ -776,13 +777,17 @@ export default function Contacts() {
           <div className="space-y-4 pt-2">
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
-                <Label>Nombre *</Label>
-                <Input value={newContactForm.nombre} onChange={e => setNewContactForm(f => ({ ...f, nombre: e.target.value }))} placeholder="Carlos Méndez" />
+                <Label>Nombres *</Label>
+                <Input value={newContactForm.nombre} onChange={e => setNewContactForm(f => ({ ...f, nombre: e.target.value }))} placeholder="Carlos" />
               </div>
               <div className="space-y-1.5">
-                <Label>Empresa *</Label>
-                <Input value={newContactForm.empresa} onChange={e => setNewContactForm(f => ({ ...f, empresa: e.target.value }))} placeholder="TransCarga S.A." />
+                <Label>Apellidos</Label>
+                <Input value={newContactForm.apellido} onChange={e => setNewContactForm(f => ({ ...f, apellido: e.target.value }))} placeholder="Méndez" />
               </div>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Empresa *</Label>
+              <Input value={newContactForm.empresa} onChange={e => setNewContactForm(f => ({ ...f, empresa: e.target.value }))} placeholder="TransCarga S.A." />
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1.5">
@@ -815,6 +820,7 @@ export default function Contacts() {
               disabled={!newContactForm.nombre || !newContactForm.empresa || !newContactForm.email || createContactMut.isPending}
               onClick={() => createContactMut.mutate({
                 nombre: newContactForm.nombre,
+                apellido: newContactForm.apellido || undefined,
                 empresa: newContactForm.empresa,
                 email: newContactForm.email,
                 telefono: newContactForm.telefono || undefined,
