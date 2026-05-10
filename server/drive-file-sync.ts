@@ -12,7 +12,10 @@ function getAuth() {
   return new google.auth.JWT({
     email,
     key: key.replace(/\\n/g, "\n"),
-    scopes: ["https://www.googleapis.com/auth/drive.readonly"],
+    // Use full drive scope — matches what's configured in Google Workspace
+    // domain-wide delegation. drive.readonly is NOT in the delegation list,
+    // so requesting it returns "unauthorized_client".
+    scopes: ["https://www.googleapis.com/auth/drive"],
     subject: process.env.GOOGLE_DRIVE_IMPERSONATE || undefined,
   });
 }
