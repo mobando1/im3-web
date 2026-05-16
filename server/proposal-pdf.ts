@@ -92,6 +92,54 @@ export async function generateProposalPdf(opts: {
   }
 }
 
+/**
+ * Renderiza el BRIEF TÉCNICO DETALLADO como PDF — mismo patrón que la propuesta,
+ * navega a /brief/:token?pdf=1 y deja que la SPA renderice el componente público.
+ */
+export async function generateBriefPdf(opts: {
+  token: string;
+  baseUrl?: string;
+}): Promise<Buffer> {
+  const port = process.env.PORT || "3000";
+  const internal = process.env.BASE_URL_INTERNAL || `http://127.0.0.1:${port}`;
+  const baseUrl = opts.baseUrl || internal;
+
+  console.log("[brief-pdf] Generating PDF", { token: opts.token.slice(0, 8), baseUrl });
+
+  const browser = await getBrowser();
+  const page = await browser.newPage();
+  try {
+    await page.setViewport({ width: 1280, height: 1800, deviceScaleFactor: 1 });
+    await page.emulateMediaType("screen");
+    await page.setUserAgent(
+      "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/127.0.0.0 Safari/537.36",
+    );
+
+    const url = `${baseUrl}/brief/${encodeURIComponent(opts.token)}?pdf=1`;
+    console.log("[brief-pdf] navigating:", url);
+    await page.goto(url, { waitUntil: "load", timeout: 45000 });
+    // Esperamos a que la SPA cargue el componente del brief
+    await page.waitForFunction(
+      () => document.querySelector(".proposal-brief-page") !== null,
+      { timeout: 15000 },
+    ).catch(() => console.warn("[brief-pdf] proposal-brief-page no apareció, continuando"));
+    await page.evaluate(() => (document as any).fonts?.ready);
+    await new Promise((r) => setTimeout(r, 1200));
+
+    console.log("[brief-pdf] generating pdf...");
+    const pdf = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: { top: "12mm", right: "10mm", bottom: "12mm", left: "10mm" },
+      preferCSSPageSize: false,
+    });
+    console.log("[brief-pdf] PDF generated, size:", pdf.length);
+    return Buffer.from(pdf);
+  } finally {
+    await page.close().catch(() => {});
+  }
+}
+
 /** Cleanup utility (cierra el Chrome cacheado) */
 export async function closeProposalPdfBrowser() {
   if (cachedBrowser) {

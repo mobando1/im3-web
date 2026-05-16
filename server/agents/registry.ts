@@ -872,6 +872,43 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
     ],
     sourceFile: "server/routes.ts:7420",
   },
+  {
+    name: "brief-generate",
+    displayName: "Generador de Brief Técnico",
+    kind: "ai",
+    description: "Genera el brief técnico detallado a partir de una propuesta aprobada",
+    trigger: "manual",
+    criticality: "normal",
+    longDescription:
+      "Toma una propuesta inicial ya generada + todo el contexto del cliente (diagnóstico, emails, notas, docs Drive) y produce un brief técnico detallado: un módulo expandido por cada módulo de la propuesta, con problemSolved/howItWorks/meetingContext/whyThisChoice/withoutThis/examples. Sonnet 4, max_tokens 16k, validado con zod.",
+    connections: [
+      { type: "llm", label: "Claude Sonnet 4", detail: "Generación principal (max_tokens 16000, temp 0.4)" },
+      { type: "db", label: "proposals", detail: "Lee la propuesta inicial como fuente primaria" },
+      { type: "db", label: "proposalBriefs", detail: "Persiste el brief generado" },
+      { type: "db", label: "contacts/diagnostics", detail: "Contexto del cliente" },
+      { type: "api", label: "Google Drive", detail: "Lectura de docs del cliente" },
+    ],
+    sourceFile: "server/proposal-brief-ai.ts:70",
+  },
+  {
+    name: "brief-chat",
+    displayName: "Asistente Conversacional del Brief",
+    kind: "ai",
+    description: "Refina el brief técnico conversacionalmente con Claude + tool use",
+    trigger: "manual",
+    criticality: "normal",
+    longDescription:
+      "Chat con tool use para refinar el brief: update_module (con preview/apply), update_intro, update_faqs, update_glossary, add_module/remove_module, audit_brief (checks mecánicos + análisis cualitativo), list_drive_folder, read_drive_file. Snapshots automáticos antes de cada cambio. System prompt particionado con cache_control para reducir costo en mensajes consecutivos.",
+    connections: [
+      { type: "llm", label: "Claude Sonnet 4", detail: "Chat + 11 tools" },
+      { type: "db", label: "proposalBriefs", detail: "Brief actual + persistencia de cambios" },
+      { type: "db", label: "proposalBriefChatMessages", detail: "Historial (últimos 30)" },
+      { type: "db", label: "proposalBriefSnapshots", detail: "Snapshots antes de cada cambio (undo)" },
+      { type: "db", label: "contacts/diagnostics", detail: "Contexto del cliente" },
+      { type: "api", label: "Google Drive", detail: "Lectura de docs del cliente" },
+    ],
+    sourceFile: "server/proposal-brief-chat.ts:223",
+  },
 ];
 
 export function findAgent(name: string): AgentDefinition | undefined {

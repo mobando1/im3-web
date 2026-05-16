@@ -25,6 +25,7 @@ function trackView(token: string, body: { module?: string; timeSpent?: number; d
 
 export default function ProposalBriefView() {
   const { token } = useParams<{ token: string }>();
+  const isPdfMode = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("pdf") === "1";
 
   const { data: brief, isLoading, error } = useQuery<PublicBrief>({
     queryKey: [`/api/brief/${token}`],
@@ -107,9 +108,9 @@ export default function ProposalBriefView() {
   ];
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-amber-50/30">
-      {/* Header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-30 backdrop-blur-md bg-white/90">
+    <div className="proposal-brief-page min-h-screen bg-gradient-to-br from-slate-50 to-amber-50/30">
+      {/* Header — oculto en modo PDF para evitar sticky en la 1ra página */}
+      {!isPdfMode && <header className="bg-white border-b border-gray-200 sticky top-0 z-30 backdrop-blur-md bg-white/90">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between gap-4">
           <div className="flex items-center gap-2 min-w-0">
             <BookOpen className="w-5 h-5 text-amber-700 shrink-0" />
@@ -127,11 +128,11 @@ export default function ProposalBriefView() {
             </a>
           )}
         </div>
-      </header>
+      </header>}
 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 grid grid-cols-1 lg:grid-cols-[220px_1fr] gap-8">
-        {/* Sidebar nav (desktop) */}
-        <nav className="hidden lg:block sticky top-20 self-start max-h-[calc(100vh-6rem)] overflow-y-auto pr-2">
+        {/* Sidebar nav (desktop) — oculto en PDF */}
+        {!isPdfMode && <nav className="hidden lg:block sticky top-20 self-start max-h-[calc(100vh-6rem)] overflow-y-auto pr-2">
           <ul className="space-y-1">
             {navItems.map((item) => (
               <li key={item.id}>
@@ -144,10 +145,10 @@ export default function ProposalBriefView() {
               </li>
             ))}
           </ul>
-        </nav>
+        </nav>}
 
         {/* Content */}
-        <main className="space-y-12 pb-20">
+        <main className={`space-y-12 ${isPdfMode ? "pb-4 lg:col-span-2" : "pb-20"}`}>
           {/* Intro */}
           <section id="__intro__" className="scroll-mt-20">
             <div className="bg-white rounded-2xl border border-gray-200 p-6 sm:p-8 shadow-sm">

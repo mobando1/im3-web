@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, BookOpen, Sparkles, Send, Eye, AlertTriangle, Wand2, ExternalLink, Copy, Loader2, MessageCircle } from "lucide-react";
+import { ArrowLeft, BookOpen, Sparkles, Send, Eye, AlertTriangle, Wand2, ExternalLink, Copy, Loader2, MessageCircle, Download } from "lucide-react";
 import { ProposalBriefChatPanel } from "@/components/proposal/ProposalBriefChatPanel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -311,6 +311,20 @@ export default function ProposalBriefEditor() {
         {hasSections && brief.status !== "sent" && (
           <Button size="sm" onClick={() => setConfirmSendOpen(true)} disabled={sendMut.isPending} className="bg-[#2FA4A9] hover:bg-[#238b8f] gap-1.5">
             <Send className="w-4 h-4" /> {sendMut.isPending ? "Enviando…" : "Enviar al cliente"}
+          </Button>
+        )}
+        {hasSections && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => {
+              const url = `/api/admin/proposals/${id}/brief/pdf`;
+              window.open(url, "_blank");
+              toast({ title: "Generando PDF…", description: "Puede tardar unos segundos." });
+            }}
+          >
+            <Download className="w-4 h-4" /> Descargar PDF
           </Button>
         )}
       </div>

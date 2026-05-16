@@ -9488,6 +9488,31 @@ Responde SOLO con un JSON válido, sin markdown:
     }
   });
 
+  // GET PDF admin del brief — preview antes de enviar (sin guard de status)
+  app.get("/api/admin/proposals/:id/brief/pdf", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [brief] = await db.select().from(proposalBriefs)
+        .where(eq(proposalBriefs.proposalId, req.params.id as string)).limit(1);
+      if (!brief) return res.status(404).json({ error: "Brief no encontrado" });
+
+      const { generateBriefPdf } = await import("./proposal-pdf");
+      const pdf = await generateBriefPdf({ token: brief.accessToken });
+
+      const [contact] = await db.select({ empresa: contacts.empresa, nombre: contacts.nombre })
+        .from(contacts).where(eq(contacts.id, brief.contactId)).limit(1);
+      const filename = `Brief_${(contact?.empresa || contact?.nombre || "IM3").replace(/[^\w-]+/g, "_")}.pdf`;
+
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Length", pdf.length.toString());
+      res.send(pdf);
+    } catch (err: any) {
+      log(`Error generating admin brief PDF: ${err?.message}`);
+      res.status(500).json({ error: err?.message || "Error generando PDF" });
+    }
+  });
+
   // ── Public brief endpoints (token-based, no auth) ──
 
   // GET brief por token — solo si status === "sent"
@@ -9536,7 +9561,12 @@ Responde SOLO con un JSON válido, sin markdown:
       if (!proposal) return res.status(404).json({ error: "Propuesta no encontrada" });
 
       const { generateProposalBrief } = await import("./proposal-brief-ai");
-      const result = await generateProposalBrief(proposalId);
+      const { runAgent } = await import("./agents/runner");
+      const result = await runAgent(
+        "brief-generate",
+        () => generateProposalBrief(proposalId),
+        { triggeredBy: "manual" }
+      );
       if ("error" in result) return res.status(500).json({ error: result.error });
 
       // Asegurar que existe el row de brief; si no, crearlo
@@ -9743,6 +9773,34 @@ Responde SOLO con un JSON válido, sin markdown:
     } catch (err: any) {
       log(`Error clearing brief chat: ${err?.message}`);
       res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // GET PDF del brief — renderiza la vista pública con puppeteer
+  app.get("/api/brief/:token/pdf", async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [brief] = await db.select().from(proposalBriefs)
+        .where(eq(proposalBriefs.accessToken, req.params.token as string)).limit(1);
+      if (!brief) return res.status(404).json({ error: "Brief no encontrado" });
+
+      // Acceso público: solo permitir PDF si está enviado (mismo guard que el GET público)
+      if (brief.status !== "sent") return res.status(403).json({ error: "Brief no disponible aún" });
+
+      const { generateBriefPdf } = await import("./proposal-pdf");
+      const pdf = await generateBriefPdf({ token: req.params.token as string });
+
+      const [contact] = await db.select({ empresa: contacts.empresa, nombre: contacts.nombre })
+        .from(contacts).where(eq(contacts.id, brief.contactId)).limit(1);
+      const filename = `Brief_${(contact?.empresa || contact?.nombre || "IM3").replace(/[^\w-]+/g, "_")}.pdf`;
+
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Length", pdf.length.toString());
+      res.send(pdf);
+    } catch (err: any) {
+      log(`Error generating brief PDF: ${err?.message}`);
+      res.status(500).json({ error: err?.message || "Error generando PDF" });
     }
   });
 
