@@ -1,6 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { eq, asc, isNull, sql, and, gte, lte, ilike, or, desc, count, inArray } from "drizzle-orm";
+import { eq, asc, isNull, isNotNull, sql, and, gte, lte, ilike, or, desc, count, inArray } from "drizzle-orm";
 import { db } from "./db";
 import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback } from "@shared/schema";
 import { AGENT_REGISTRY, AGENT_KINDS, findAgent } from "./agents/registry";
@@ -5673,19 +5673,42 @@ Responde SOLO con un JSON válido, sin markdown:
   app.patch("/api/admin/projects/:id", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
+      const projectId = req.params.id as string;
       const updates = { ...req.body, updatedAt: new Date() };
 
       // Auto-generate webhook secret when AI tracking is enabled for the first time
       if (updates.aiTrackingEnabled) {
         const [existing] = await db.select({ secret: clientProjects.githubWebhookSecret })
-          .from(clientProjects).where(eq(clientProjects.id, req.params.id as string)).limit(1);
+          .from(clientProjects).where(eq(clientProjects.id, projectId)).limit(1);
         if (!existing?.secret) {
           updates.githubWebhookSecret = crypto.randomBytes(32).toString("hex");
         }
       }
 
-      const [updated] = await db.update(clientProjects).set(updates).where(eq(clientProjects.id, req.params.id as string)).returning();
+      // Detect transition INTO completed status — used below to auto-reveal bonus phases.
+      let willTransitionToCompleted = false;
+      if (updates.status === "completed") {
+        const [prev] = await db.select({ status: clientProjects.status }).from(clientProjects).where(eq(clientProjects.id, projectId)).limit(1);
+        willTransitionToCompleted = prev?.status !== "completed";
+      }
+
+      const [updated] = await db.update(clientProjects).set(updates).where(eq(clientProjects.id, projectId)).returning();
       if (!updated) return res.status(404).json({ message: "Proyecto no encontrado" });
+
+      // Auto-reveal pending bonus phases at project completion: the surprise lands
+      // in the client portal the moment we close the project.
+      if (willTransitionToCompleted) {
+        await db.update(projectPhases)
+          .set({ revealedAt: new Date(), updatedAt: new Date() })
+          .where(and(
+            eq(projectPhases.projectId, projectId),
+            eq(projectPhases.isBonus, true),
+            isNull(projectPhases.revealedAt),
+            isNull(projectPhases.deletedAt),
+          ))
+          .catch((err) => log(`auto-reveal bonus phases failed for project ${projectId}: ${err?.message}`));
+      }
+
       res.json(updated);
     } catch (err: any) {
       log(`Error updating project: ${err?.message}`);
@@ -5842,6 +5865,29 @@ Responde SOLO con un JSON válido, sin markdown:
         .where(eq(projectDeliverables.phaseId, phaseId));
       res.json({ success: true });
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
+  });
+
+  // Reveal a bonus phase manually (admin-only). Idempotent — if already revealed
+  // the existing revealedAt is preserved. Useful before the project is marked
+  // completed, e.g. surprise delivery mid-execution.
+  app.post("/api/admin/phases/:id/reveal", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const phaseId = req.params.id as string;
+      const [phase] = await db.select().from(projectPhases).where(eq(projectPhases.id, phaseId)).limit(1);
+      if (!phase) return res.status(404).json({ message: "Fase no encontrada" });
+      if (!phase.isBonus) return res.status(400).json({ message: "Esta fase no es un bonus" });
+      if (phase.revealedAt) return res.json({ success: true, revealedAt: phase.revealedAt, alreadyRevealed: true });
+
+      const [updated] = await db.update(projectPhases)
+        .set({ revealedAt: new Date(), updatedAt: new Date() })
+        .where(eq(projectPhases.id, phaseId))
+        .returning();
+      res.json({ success: true, revealedAt: updated.revealedAt, alreadyRevealed: false });
+    } catch (err: any) {
+      log(`Error revealing bonus phase: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
   });
 
   app.patch("/api/admin/phases/reorder", requireAuth, async (req, res) => {
@@ -7056,16 +7102,30 @@ Responde SOLO con un JSON válido, sin markdown:
     return project;
   }
 
+  // Visibility filter for the client portal: hide bonus phases that haven't been
+  // revealed yet. Combine with the standard deletedAt filter.
+  const portalPhaseVisibility = () => or(
+    eq(projectPhases.isBonus, false),
+    isNotNull(projectPhases.revealedAt),
+  );
+
   // Portal overview
   app.get("/api/portal/:token", async (req, res) => {
     const project = await getProjectByToken(req.params.token as string, req);
     if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
     const phases = await db!.select().from(projectPhases)
-      .where(and(eq(projectPhases.projectId, project.id), isNull(projectPhases.deletedAt)))
+      .where(and(eq(projectPhases.projectId, project.id), isNull(projectPhases.deletedAt), portalPhaseVisibility()))
       .orderBy(asc(projectPhases.orderIndex));
-    const allTasks = await db!.select().from(projectTasks)
-      .where(and(eq(projectTasks.projectId, project.id), isNull(projectTasks.deletedAt)));
+    const visiblePhaseIds = phases.map(p => p.id);
+    const allTasks = visiblePhaseIds.length > 0
+      ? await db!.select().from(projectTasks)
+          .where(and(
+            eq(projectTasks.projectId, project.id),
+            isNull(projectTasks.deletedAt),
+            inArray(projectTasks.phaseId, visiblePhaseIds),
+          ))
+      : [];
     const timeLogs = await db!.select().from(projectTimeLog).where(eq(projectTimeLog.projectId, project.id));
     const unreadMessages = await db!.select({ id: projectMessages.id }).from(projectMessages).where(and(eq(projectMessages.projectId, project.id), eq(projectMessages.senderType, "team"), eq(projectMessages.isRead, false)));
 
@@ -7102,10 +7162,17 @@ Responde SOLO con un JSON válido, sin markdown:
     if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
     const phases = await db!.select().from(projectPhases)
-      .where(and(eq(projectPhases.projectId, project.id), isNull(projectPhases.deletedAt)))
+      .where(and(eq(projectPhases.projectId, project.id), isNull(projectPhases.deletedAt), portalPhaseVisibility()))
       .orderBy(asc(projectPhases.orderIndex));
-    const allTasks = await db!.select().from(projectTasks)
-      .where(and(eq(projectTasks.projectId, project.id), isNull(projectTasks.deletedAt)));
+    const visiblePhaseIds = phases.map(p => p.id);
+    const allTasks = visiblePhaseIds.length > 0
+      ? await db!.select().from(projectTasks)
+          .where(and(
+            eq(projectTasks.projectId, project.id),
+            isNull(projectTasks.deletedAt),
+            inArray(projectTasks.phaseId, visiblePhaseIds),
+          ))
+      : [];
 
     const enriched = phases.map(ph => {
       const phaseTasks = allTasks.filter(t => t.phaseId === ph.id);
@@ -7124,10 +7191,18 @@ Responde SOLO con un JSON válido, sin markdown:
     const project = await getProjectByToken(req.params.token as string, req);
     if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
-    const deliverables = await db!.select().from(projectDeliverables)
+    // Filter out deliverables that belong to bonus phases not yet revealed.
+    const visiblePhases = await db!.select({ id: projectPhases.id })
+      .from(projectPhases)
+      .where(and(eq(projectPhases.projectId, project.id), isNull(projectPhases.deletedAt), portalPhaseVisibility()));
+    const visiblePhaseIds = visiblePhases.map(p => p.id);
+
+    const allDeliverables = await db!.select().from(projectDeliverables)
       .where(and(eq(projectDeliverables.projectId, project.id), isNull(projectDeliverables.deletedAt)))
       .orderBy(desc(projectDeliverables.createdAt));
-    res.json(deliverables);
+    // Keep deliverables without a phase (orphans) and those tied to visible phases.
+    const visible = allDeliverables.filter(d => !d.phaseId || visiblePhaseIds.includes(d.phaseId));
+    res.json(visible);
   });
 
   // Portal: approve/reject deliverable
@@ -9039,7 +9114,7 @@ Responde SOLO con un JSON válido, sin markdown:
           id: proposal.id,
           contactId: proposal.contactId!,
           title: proposal.title,
-          sections: (proposal.sections as Record<string, string>) || {},
+          sections: (proposal.sections as Record<string, unknown>) || {},
           pricing: proposal.pricing as any,
           timelineData: proposal.timelineData as any,
         }, startDate),

@@ -1464,14 +1464,78 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato EX
 }
 
 /**
- * Generate a full project plan from a proposal using AI.
- * Thin wrapper: creates the project row, then delegates to generateProjectArtifacts.
+ * Generate a full project plan from a proposal — STRICT 1:1 fidelity, no AI.
+ *
+ * Reads timeline from the new Zod-schema format (`sections.timeline`) first,
+ * falling back to the legacy `timelineData` column. Creates phases/tasks/
+ * deliverables literal from the proposal — what the client saw and signed is
+ * exactly what the project plan reflects. Zero Anthropic calls.
  */
+type ProposalPhaseNew = {
+  number?: number;
+  title?: string;
+  durationWeeks?: number;
+  items?: string[];
+  outcome?: string;
+};
+
+type ProposalPhaseLegacy = {
+  name?: string;
+  weeks?: number;
+  deliverables?: string[];
+};
+
+type NormalizedPhase = {
+  title: string;
+  weeks: number;
+  items: string[];
+  outcome: string | null;
+  orderIndex: number;
+};
+
+function normalizeProposalTimeline(
+  sections: Record<string, unknown> | null | undefined,
+  timelineData: { phases?: Array<ProposalPhaseLegacy>; totalWeeks?: number } | null | undefined,
+): { phases: NormalizedPhase[]; totalWeeks: number; source: "new" | "legacy" | "none" } {
+  // Prefer the new Zod-schema format stored inside the sections JSON.
+  const newTimeline = (sections as { timeline?: { phases?: ProposalPhaseNew[] } } | null | undefined)?.timeline;
+  if (newTimeline?.phases?.length) {
+    const phases = newTimeline.phases
+      .map((p, idx): NormalizedPhase | null => {
+        const items = Array.isArray(p.items) ? p.items.map((s) => String(s).trim()).filter(Boolean) : [];
+        const weeks = Math.max(1, Math.min(52, Number(p.durationWeeks) || 2));
+        const title = String(p.title || `Fase ${idx + 1}`).trim();
+        const outcome = typeof p.outcome === "string" && p.outcome.trim() ? p.outcome.trim() : null;
+        return { title, weeks, items, outcome, orderIndex: idx };
+      })
+      .filter((p): p is NormalizedPhase => p !== null);
+    if (phases.length > 0) {
+      const totalWeeks = phases.reduce((s, p) => s + p.weeks, 0);
+      return { phases, totalWeeks, source: "new" };
+    }
+  }
+
+  // Legacy format on the dedicated column.
+  if (timelineData?.phases?.length) {
+    const phases = timelineData.phases.map((p, idx): NormalizedPhase => ({
+      title: String(p.name || `Fase ${idx + 1}`).trim(),
+      weeks: Math.max(1, Math.min(52, Number(p.weeks) || 2)),
+      items: Array.isArray(p.deliverables) ? p.deliverables.map((s) => String(s).trim()).filter(Boolean) : [],
+      outcome: null,
+      orderIndex: idx,
+    }));
+    const totalWeeks = timelineData.totalWeeks ?? phases.reduce((s, p) => s + p.weeks, 0);
+    return { phases, totalWeeks, source: "legacy" };
+  }
+
+  return { phases: [], totalWeeks: 0, source: "none" };
+}
+
 export async function generateProjectFromProposal(proposal: {
   id: string;
   contactId: string | null;
   title: string;
-  sections: Record<string, string>;
+  sections: Record<string, unknown>;
   pricing: { total: number; currency: string; includes?: string[] } | null;
   timelineData: { phases: Array<{ name: string; weeks: number; deliverables?: string[] }>; totalWeeks?: number } | null;
 }, startDate: Date = new Date()): Promise<{
@@ -1479,50 +1543,133 @@ export async function generateProjectFromProposal(proposal: {
   phasesCreated: number;
   tasksCreated: number;
   deliverablesCreated: number;
+  recordsProcessed: number;
+  metadata: {
+    timelineSource: "new" | "legacy" | "none";
+    aiUsed: false;
+  };
 }> {
   if (!db) throw new Error("Database not configured");
   const database = db;
 
-  const timeline = proposal.timelineData;
-  const pricing = proposal.pricing;
   const sections = proposal.sections || {};
+  const pricing = proposal.pricing;
 
-  const stripHtml = (html: string) => html?.replace(/<[^>]*>/g, "").replace(/&[^;]+;/g, " ").trim() || "";
-  const resumen = stripHtml(sections.resumen || "");
-  const solucion = stripHtml(sections.solucion || "");
-  const alcance = stripHtml(sections.alcance || "");
+  const stripHtml = (html: unknown): string =>
+    typeof html === "string" ? html.replace(/<[^>]*>/g, "").replace(/&[^;]+;/g, " ").trim() : "";
+
+  // For the project description, prefer the new schema's structured fields,
+  // falling back to legacy HTML-string sections.
+  const summary = (sections as { summary?: { paragraphs?: string[] } }).summary;
+  const solution = (sections as { solution?: { intro?: string } }).solution;
+  const newResumen = Array.isArray(summary?.paragraphs) ? summary?.paragraphs?.join(" ").trim() : "";
+  const newSolucion = solution?.intro?.trim() || "";
+  const legacyResumen = stripHtml((sections as Record<string, unknown>).resumen);
+  const legacySolucion = stripHtml((sections as Record<string, unknown>).solucion);
+
+  const description =
+    (newResumen || legacyResumen || newSolucion || legacySolucion || "Proyecto generado desde propuesta").substring(0, 500);
+
+  const { phases: normalizedPhases, totalWeeks, source } = normalizeProposalTimeline(
+    sections,
+    proposal.timelineData as { phases?: Array<ProposalPhaseLegacy>; totalWeeks?: number } | null,
+  );
+
+  const estimatedEndDate = totalWeeks > 0
+    ? new Date(startDate.getTime() + totalWeeks * 7 * 24 * 60 * 60 * 1000)
+    : new Date(startDate.getTime() + 90 * 24 * 60 * 60 * 1000);
 
   const [project] = await database.insert(clientProjects).values({
     contactId: proposal.contactId,
     name: proposal.title.replace(/^Propuesta:?\s*/i, "").trim() || "Nuevo proyecto",
-    description: resumen.substring(0, 500) || solucion.substring(0, 500) || "Proyecto generado desde propuesta",
+    description,
     status: "planning",
     startDate,
-    estimatedEndDate: timeline?.totalWeeks
-      ? new Date(startDate.getTime() + (timeline.totalWeeks * 7 * 24 * 60 * 60 * 1000))
-      : new Date(startDate.getTime() + 90 * 24 * 60 * 60 * 1000),
+    estimatedEndDate,
     totalBudget: pricing?.total || 0,
     currency: pricing?.currency || "USD",
     healthStatus: "on_track",
     healthNote: "Proyecto recién creado — pendiente de activación.",
+    createdFrom: "proposal",
   }).returning();
 
-  const brief = [
-    `Propuesta: ${proposal.title}`,
-    resumen && `Resumen: ${resumen}`,
-    solucion && `Solución: ${solucion}`,
-    alcance && `Alcance: ${alcance}`,
-    pricing && `Presupuesto: ${pricing.total} ${pricing.currency || "USD"}`,
-  ].filter(Boolean).join("\n");
+  // No timeline available: return the empty shell so the admin can build phases
+  // manually. Don't reinvent fases with AI — that's the whole point of this fix.
+  if (normalizedPhases.length === 0) {
+    log(`generateProjectFromProposal: propuesta ${proposal.id} sin timeline — proyecto ${project.id} creado vacío`);
+    return {
+      projectId: project.id,
+      phasesCreated: 0,
+      tasksCreated: 0,
+      deliverablesCreated: 0,
+      recordsProcessed: 0,
+      metadata: { timelineSource: source, aiUsed: false },
+    };
+  }
 
-  const artifacts = await generateProjectArtifacts(project.id, {
-    brief,
-    phasesHint: timeline?.phases,
-    startDate,
-    totalWeeksHint: timeline?.totalWeeks,
-  });
+  // Insert phases + tasks + deliverables 1:1 from the proposal.
+  let phasesCreated = 0;
+  let tasksCreated = 0;
+  let deliverablesCreated = 0;
+  let cursor = new Date(startDate);
 
-  log(`Proyecto generado desde propuesta ${proposal.id}: ${project.id} — ${artifacts.phasesCreated} fases, ${artifacts.tasksCreated} tareas, ${artifacts.deliverablesCreated} entregas`);
+  for (const phase of normalizedPhases) {
+    const phaseEnd = new Date(cursor.getTime() + phase.weeks * 7 * 24 * 60 * 60 * 1000);
 
-  return { projectId: project.id, ...artifacts };
+    const [insertedPhase] = await database.insert(projectPhases).values({
+      projectId: project.id,
+      name: phase.title,
+      description: phase.outcome,
+      orderIndex: phase.orderIndex,
+      status: "pending",
+      startDate: new Date(cursor),
+      endDate: phaseEnd,
+      estimatedHours: phase.weeks * 40,
+    }).returning();
+    phasesCreated++;
+
+    const phaseDays = Math.max(1, Math.round((phaseEnd.getTime() - cursor.getTime()) / (24 * 60 * 60 * 1000)));
+    const itemCount = phase.items.length;
+
+    for (let j = 0; j < itemCount; j++) {
+      const item = phase.items[j];
+      const dueDate = new Date(cursor.getTime() + ((j + 1) / itemCount) * phaseDays * 24 * 60 * 60 * 1000);
+      const isLast = j === itemCount - 1;
+
+      await database.insert(projectTasks).values({
+        phaseId: insertedPhase.id,
+        projectId: project.id,
+        title: item,
+        clientFacingTitle: item,
+        priority: isLast ? "high" : "medium",
+        isMilestone: isLast,
+        status: "pending",
+        orderIndex: j,
+        dueDate,
+      });
+      tasksCreated++;
+
+      await database.insert(projectDeliverables).values({
+        projectId: project.id,
+        phaseId: insertedPhase.id,
+        title: item,
+        type: "feature",
+        status: "pending",
+      });
+      deliverablesCreated++;
+    }
+
+    cursor = phaseEnd;
+  }
+
+  log(`generateProjectFromProposal: propuesta ${proposal.id} → proyecto ${project.id} — ${phasesCreated} fases, ${tasksCreated} tareas, ${deliverablesCreated} entregas (source=${source}, literal)`);
+
+  return {
+    projectId: project.id,
+    phasesCreated,
+    tasksCreated,
+    deliverablesCreated,
+    recordsProcessed: phasesCreated + tasksCreated + deliverablesCreated,
+    metadata: { timelineSource: source, aiUsed: false },
+  };
 }

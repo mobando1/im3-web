@@ -34,6 +34,9 @@ type Phase = {
   startDate: string | null;
   endDate: string | null;
   progress: number;
+  isBonus?: boolean;
+  bonusLabel?: string | null;
+  revealedAt?: string | null;
   tasks: Array<{ id: string; title: string; clientFacingTitle: string | null; status: string; priority: string; isMilestone?: boolean; dueDate?: string | null }>;
 };
 
@@ -985,57 +988,80 @@ export default function Portal() {
               );
             })()}
 
-            {/* Phase cards */}
-            {phases.map((phase, idx) => {
-              const isExpanded = expandedPhases.has(phase.id);
-              return (
-                <div key={phase.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+            {/* Phase cards — regular phases first, bonus revealed phases at the end */}
+            {(() => {
+              const regular = phases.filter(p => !p.isBonus);
+              const bonusRevealed = phases.filter(p => p.isBonus && p.revealedAt);
+              return [...regular, ...bonusRevealed].map((phase, idx) => {
+                const isExpanded = expandedPhases.has(phase.id);
+                const isBonus = !!phase.isBonus;
+                return (
                   <div
-                    className="flex items-center gap-3 px-5 py-4 cursor-pointer hover:bg-gray-50 transition-colors"
-                    onClick={() => togglePhase(phase.id)}
+                    key={phase.id}
+                    className={`rounded-xl overflow-hidden ${
+                      isBonus
+                        ? "bg-gradient-to-br from-amber-50 to-amber-50/30 border-2 border-amber-400 shadow-sm"
+                        : "bg-white border border-gray-200"
+                    }`}
                   >
-                    {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
-                    <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${PHASE_DOT_COLORS[phase.status] || "bg-gray-300"}`} />
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-semibold text-gray-300">FASE {idx + 1}</span>
-                        <h3 className="font-medium text-gray-900 truncate">{phase.name}</h3>
+                    {isBonus && (
+                      <div className="bg-amber-100 px-5 py-2 flex items-center gap-2 border-b border-amber-200">
+                        <span className="text-lg">🎁</span>
+                        <span className="text-xs font-bold uppercase tracking-wider text-amber-900">
+                          {phase.bonusLabel || "Regalo del equipo IM3"}
+                        </span>
+                        <span className="text-[10px] text-amber-700 ml-auto">Incluido como sorpresa</span>
                       </div>
-                      {phase.startDate && phase.endDate && (
-                        <p className="text-[10px] text-gray-400">{formatDate(phase.startDate)} — {formatDate(phase.endDate)}</p>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                        <div className="h-full bg-[#2FA4A9] rounded-full" style={{ width: `${phase.progress}%` }} />
+                    )}
+                    <div
+                      className={`flex items-center gap-3 px-5 py-4 cursor-pointer transition-colors ${
+                        isBonus ? "hover:bg-amber-50/60" : "hover:bg-gray-50"
+                      }`}
+                      onClick={() => togglePhase(phase.id)}
+                    >
+                      {isExpanded ? <ChevronDown className="w-4 h-4 text-gray-400" /> : <ChevronRight className="w-4 h-4 text-gray-400" />}
+                      <div className={`w-2.5 h-2.5 rounded-full shrink-0 ${isBonus ? "bg-amber-500" : (PHASE_DOT_COLORS[phase.status] || "bg-gray-300")}`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          {!isBonus && <span className="text-[10px] font-semibold text-gray-300">FASE {idx + 1}</span>}
+                          <h3 className="font-medium text-gray-900 truncate">{phase.name}</h3>
+                        </div>
+                        {phase.startDate && phase.endDate && (
+                          <p className="text-[10px] text-gray-400">{formatDate(phase.startDate)} — {formatDate(phase.endDate)}</p>
+                        )}
                       </div>
-                      <span className="text-xs text-gray-400 w-8 text-right">{phase.progress}%</span>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="w-16 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                          <div className={`h-full rounded-full ${isBonus ? "bg-amber-500" : "bg-[#2FA4A9]"}`} style={{ width: `${phase.progress}%` }} />
+                        </div>
+                        <span className="text-xs text-gray-400 w-8 text-right">{phase.progress}%</span>
+                      </div>
                     </div>
-                  </div>
 
-                  {isExpanded && phase.tasks.length > 0 && (
-                    <div className="border-t border-gray-100 px-5 py-3 space-y-1.5">
-                      {phase.tasks.map(task => {
-                        const Icon = TASK_ICONS[task.status] || Circle;
-                        return (
-                          <div key={task.id} className={`flex items-center gap-3 py-1 ${task.isMilestone ? "bg-amber-50/60 -mx-1 px-1 rounded" : ""}`}>
-                            {task.isMilestone ? <span className="text-amber-500 shrink-0">🏁</span> : <Icon className={`w-4 h-4 shrink-0 ${TASK_COLORS[task.status]}`} />}
-                            <span className={`text-sm flex-1 ${task.status === "completed" ? "line-through text-gray-400" : "text-gray-700"} ${task.isMilestone ? "font-semibold" : ""}`}>
-                              {task.clientFacingTitle || task.title}
-                            </span>
-                            {task.dueDate && (
-                              <span className="text-[10px] text-gray-400 shrink-0">
-                                {new Date(task.dueDate).toLocaleDateString("es-CO", { day: "numeric", month: "short" })}
+                    {isExpanded && phase.tasks.length > 0 && (
+                      <div className={`border-t px-5 py-3 space-y-1.5 ${isBonus ? "border-amber-200" : "border-gray-100"}`}>
+                        {phase.tasks.map(task => {
+                          const Icon = TASK_ICONS[task.status] || Circle;
+                          return (
+                            <div key={task.id} className={`flex items-center gap-3 py-1 ${task.isMilestone ? "bg-amber-50/60 -mx-1 px-1 rounded" : ""}`}>
+                              {task.isMilestone ? <span className="text-amber-500 shrink-0">🏁</span> : <Icon className={`w-4 h-4 shrink-0 ${TASK_COLORS[task.status]}`} />}
+                              <span className={`text-sm flex-1 ${task.status === "completed" ? "line-through text-gray-400" : "text-gray-700"} ${task.isMilestone ? "font-semibold" : ""}`}>
+                                {task.clientFacingTitle || task.title}
                               </span>
-                            )}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
+                              {task.dueDate && (
+                                <span className="text-[10px] text-gray-400 shrink-0">
+                                  {new Date(task.dueDate).toLocaleDateString("es-CO", { day: "numeric", month: "short" })}
+                                </span>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              });
+            })()}
           </div>
         )}
 

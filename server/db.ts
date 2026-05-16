@@ -337,6 +337,11 @@ export async function runMigrations() {
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_project_phases_deleted_at" ON "project_phases" ("deleted_at");`).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_project_tasks_deleted_at" ON "project_tasks" ("deleted_at");`).catch(() => {});
 
+    // Bonus phases (surprise gifts): hidden from client portal until revealedAt is set
+    await pool.query(`ALTER TABLE "project_phases" ADD COLUMN IF NOT EXISTS "is_bonus" boolean DEFAULT false NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "project_phases" ADD COLUMN IF NOT EXISTS "bonus_label" text;`).catch(() => {});
+    await pool.query(`ALTER TABLE "project_phases" ADD COLUMN IF NOT EXISTS "revealed_at" timestamp;`).catch(() => {});
+
     // Project deliverables: client rating
     await pool.query(`ALTER TABLE "project_deliverables" ADD COLUMN IF NOT EXISTS "client_rating" integer;`).catch(() => {});
     // Soft delete on deliverables — cascades from phase delete so undo restores them

@@ -291,6 +291,8 @@ export default function ProposalEditor() {
   const [confirmSendOpen, setConfirmSendOpen] = useState(false);
   const [confirmRegenOpen, setConfirmRegenOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+  const [convertOpen, setConvertOpen] = useState(false);
+  const [convertStartDate, setConvertStartDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
 
   const { data: proposal, isLoading } = useQuery<any>({
     queryKey: [`/api/admin/proposals/${id}`],
@@ -440,11 +442,12 @@ export default function ProposalEditor() {
 
   // Convert to project
   const convertMut = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("POST", `/api/admin/proposals/${id}/convert-to-project`, { startDate: new Date().toISOString() });
+    mutationFn: async (startDateIso: string) => {
+      const res = await apiRequest("POST", `/api/admin/proposals/${id}/convert-to-project`, { startDate: startDateIso });
       return res.json();
     },
     onSuccess: (data) => {
+      setConvertOpen(false);
       toast({ title: `Proyecto creado: ${data.phasesCreated} fases, ${data.tasksCreated} tareas` });
       navigate(`/admin/projects/${data.projectId}`);
     },
@@ -659,7 +662,10 @@ export default function ProposalEditor() {
           <Button
             size="sm"
             variant="outline"
-            onClick={() => convertMut.mutate()}
+            onClick={() => {
+              setConvertStartDate(new Date().toISOString().slice(0, 10));
+              setConvertOpen(true);
+            }}
             disabled={convertMut.isPending}
             className="gap-1.5"
           >
@@ -1139,6 +1145,84 @@ export default function ProposalEditor() {
                 <RotateCcw className="w-4 h-4" /> Nuevas opciones
               </Button>
             )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={convertOpen} onOpenChange={setConvertOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Crear proyecto desde propuesta</DialogTitle>
+            <DialogDescription>
+              Las fases, tareas y entregables se copiarán <strong>1:1</strong> desde la propuesta — sin cambios por IA.
+            </DialogDescription>
+          </DialogHeader>
+
+          {(() => {
+            const timeline: any = (sections as any)?.timeline;
+            const phasesPreview: Array<{ title: string; durationWeeks: number; items: string[]; outcome?: string }> = Array.isArray(timeline?.phases)
+              ? timeline.phases.map((p: any) => ({
+                  title: String(p.title || p.name || "Fase"),
+                  durationWeeks: Number(p.durationWeeks || p.weeks || 0),
+                  items: Array.isArray(p.items) ? p.items : Array.isArray(p.deliverables) ? p.deliverables : [],
+                  outcome: p.outcome,
+                }))
+              : [];
+            const totalWeeks = phasesPreview.reduce((s, p) => s + p.durationWeeks, 0);
+            const totalItems = phasesPreview.reduce((s, p) => s + p.items.length, 0);
+
+            if (phasesPreview.length === 0) {
+              return (
+                <div className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded p-3">
+                  Esta propuesta no tiene cronograma definido (sección Timeline). Se creará un proyecto vacío y podrás añadir las fases manualmente.
+                </div>
+              );
+            }
+
+            return (
+              <div className="space-y-3">
+                <div className="text-sm text-gray-600">
+                  Se crearán <strong>{phasesPreview.length} fases</strong>, <strong>{totalItems} tareas</strong> y <strong>{totalItems} entregables</strong> en <strong>{totalWeeks} semanas</strong>.
+                </div>
+                <div className="max-h-64 overflow-y-auto border rounded divide-y">
+                  {phasesPreview.map((p, idx) => (
+                    <div key={idx} className="p-3 text-sm">
+                      <div className="flex justify-between gap-2">
+                        <div className="font-medium text-gray-900">Fase {idx + 1}: {p.title}</div>
+                        <div className="text-xs text-gray-500 whitespace-nowrap">{p.durationWeeks} sem · {p.items.length} items</div>
+                      </div>
+                      {p.outcome && <div className="text-xs text-gray-600 mt-1 italic">Al finalizar: {p.outcome}</div>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+
+          <div className="space-y-2">
+            <Label htmlFor="convert-start-date">Fecha de inicio del proyecto</Label>
+            <Input
+              id="convert-start-date"
+              type="date"
+              value={convertStartDate}
+              onChange={(e) => setConvertStartDate(e.target.value)}
+            />
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setConvertOpen(false)} disabled={convertMut.isPending}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                const iso = new Date(`${convertStartDate}T09:00:00`).toISOString();
+                convertMut.mutate(iso);
+              }}
+              disabled={convertMut.isPending || !convertStartDate}
+              className="bg-[#2FA4A9] hover:bg-[#238b8f]"
+            >
+              {convertMut.isPending ? "Creando..." : "Crear proyecto"}
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

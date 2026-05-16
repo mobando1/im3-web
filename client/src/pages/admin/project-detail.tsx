@@ -47,6 +47,9 @@ type ProjectDetail = {
     startDate: string | null;
     endDate: string | null;
     estimatedHours: number | null;
+    isBonus?: boolean;
+    bonusLabel?: string | null;
+    revealedAt?: string | null;
     tasks: Array<{
       id: string;
       title: string;
@@ -480,7 +483,7 @@ export default function AdminProjectDetail() {
 
   // Phase creation
   const [showAddPhase, setShowAddPhase] = useState(false);
-  const [phaseForm, setPhaseForm] = useState({ name: "", description: "", estimatedHours: "", startDate: "", endDate: "" });
+  const [phaseForm, setPhaseForm] = useState({ name: "", description: "", estimatedHours: "", startDate: "", endDate: "", isBonus: false, bonusLabel: "" });
 
   // Task creation
   const [addingTaskPhase, setAddingTaskPhase] = useState<string | null>(null);
@@ -637,7 +640,16 @@ export default function AdminProjectDetail() {
   // Mutations
   const addPhaseMut = useMutation({
     mutationFn: async (data: Record<string, unknown>) => { await apiRequest("POST", `/api/admin/projects/${params.id}/phases`, data); },
-    onSuccess: () => { invalidate(); setShowAddPhase(false); setPhaseForm({ name: "", description: "", estimatedHours: "", startDate: "", endDate: "" }); },
+    onSuccess: () => { invalidate(); setShowAddPhase(false); setPhaseForm({ name: "", description: "", estimatedHours: "", startDate: "", endDate: "", isBonus: false, bonusLabel: "" }); },
+  });
+
+  const revealBonusMut = useMutation({
+    mutationFn: async (phaseId: string) => {
+      const res = await apiRequest("POST", `/api/admin/phases/${phaseId}/reveal`);
+      return res.json();
+    },
+    onSuccess: () => { invalidate(); toast({ title: "🎁 Sorpresa revelada al cliente" }); },
+    onError: (err: any) => toast({ title: "Error revelando sorpresa", description: err?.message, variant: "destructive" }),
   });
 
   const clarifyBriefMut = useMutation({
@@ -1383,6 +1395,20 @@ export default function AdminProjectDetail() {
                         <div className="flex-1 min-w-0" onClick={e => e.stopPropagation()}>
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className={`inline-flex items-center justify-center min-w-[42px] px-1.5 py-0.5 text-[10px] sm:text-[11px] font-bold rounded ${statusVisual.chipBg} ${statusVisual.chipText} tracking-wide`}>FASE {idx + 1}</span>
+                            {phase.isBonus && (
+                              <span
+                                className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold rounded tracking-wide ${
+                                  phase.revealedAt
+                                    ? "bg-amber-100 text-amber-800"
+                                    : "bg-amber-50 text-amber-700 border border-amber-200"
+                                }`}
+                                title={phase.revealedAt
+                                  ? `Revelada al cliente el ${new Date(phase.revealedAt).toLocaleDateString("es-CO")}`
+                                  : "Oculta al cliente hasta que el proyecto se complete o reveles manualmente"}
+                              >
+                                🎁 {phase.revealedAt ? "BONUS REVELADO" : "BONUS OCULTO"}
+                              </span>
+                            )}
                             <h3 className="font-medium text-gray-900 break-words">
                               <EditableText
                                 value={phase.name}
@@ -1395,6 +1421,20 @@ export default function AdminProjectDetail() {
                                 })}
                               />
                             </h3>
+                            {phase.isBonus && !phase.revealedAt && (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (confirm(`¿Revelar la fase "${phase.name}" al cliente ahora? El cliente la verá en su portal con badge 🎁.`)) {
+                                    revealBonusMut.mutate(phase.id);
+                                  }
+                                }}
+                                disabled={revealBonusMut.isPending}
+                                className="text-[10px] font-medium text-amber-700 hover:text-amber-900 underline underline-offset-2 disabled:opacity-50"
+                              >
+                                Revelar ahora
+                              </button>
+                            )}
                           </div>
                           <div className="text-xs text-gray-400 mt-0.5 break-words">
                             <EditableText
@@ -1769,10 +1809,45 @@ export default function AdminProjectDetail() {
                     <Label>Horas estimadas</Label>
                     <Input type="number" value={phaseForm.estimatedHours} onChange={e => setPhaseForm(f => ({ ...f, estimatedHours: e.target.value }))} placeholder="40" />
                   </div>
+                  <div className="border-t pt-3 mt-1 space-y-2">
+                    <label className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={phaseForm.isBonus}
+                        onChange={e => setPhaseForm(f => ({ ...f, isBonus: e.target.checked }))}
+                        className="mt-0.5"
+                      />
+                      <span className="text-sm">
+                        🎁 <strong>Fase sorpresa</strong>
+                        <span className="block text-xs text-gray-500 mt-0.5">
+                          Oculta para el cliente hasta que el proyecto se marque como completado (o se revele manualmente)
+                        </span>
+                      </span>
+                    </label>
+                    {phaseForm.isBonus && (
+                      <div className="space-y-1.5 pl-6">
+                        <Label className="text-xs">Etiqueta del regalo (opcional)</Label>
+                        <Input
+                          value={phaseForm.bonusLabel}
+                          onChange={e => setPhaseForm(f => ({ ...f, bonusLabel: e.target.value }))}
+                          placeholder="Regalo del equipo IM3"
+                        />
+                      </div>
+                    )}
+                  </div>
                   <Button
                     className="w-full bg-[#2FA4A9] hover:bg-[#238b8f]"
                     disabled={!phaseForm.name}
-                    onClick={() => addPhaseMut.mutate({ name: phaseForm.name, description: phaseForm.description || null, estimatedHours: phaseForm.estimatedHours ? parseInt(phaseForm.estimatedHours) : null, startDate: phaseForm.startDate || null, endDate: phaseForm.endDate || null, orderIndex: project.phases.length })}
+                    onClick={() => addPhaseMut.mutate({
+                      name: phaseForm.name,
+                      description: phaseForm.description || null,
+                      estimatedHours: phaseForm.estimatedHours ? parseInt(phaseForm.estimatedHours) : null,
+                      startDate: phaseForm.startDate || null,
+                      endDate: phaseForm.endDate || null,
+                      orderIndex: project.phases.length,
+                      isBonus: phaseForm.isBonus,
+                      bonusLabel: phaseForm.isBonus ? (phaseForm.bonusLabel || null) : null,
+                    })}
                   >
                     Crear fase
                   </Button>

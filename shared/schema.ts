@@ -430,6 +430,10 @@ export const projectPhases = pgTable("project_phases", {
   startDate: timestamp("start_date"),
   endDate: timestamp("end_date"),
   estimatedHours: integer("estimated_hours"),
+  // Bonus phase: hidden from client portal until revealedAt is set.
+  isBonus: boolean("is_bonus").default(false).notNull(),
+  bonusLabel: text("bonus_label"),
+  revealedAt: timestamp("revealed_at"),
   // Soft delete: nulls = active; timestamp = removed but recoverable via /restore endpoint.
   deletedAt: timestamp("deleted_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
