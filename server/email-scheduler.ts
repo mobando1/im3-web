@@ -1053,7 +1053,7 @@ export async function autoAnalyzeProjectCommits() {
 
   try {
     const { analyzeCommitsForProject } = await import("./project-ai");
-    const { projectActivityEntries, users } = await import("@shared/schema");
+    const { projectActivityEntries, projectGithubRepos, users } = await import("@shared/schema");
     const { isNotNull } = await import("drizzle-orm");
 
     // Pull any admin's stored OAuth token. Cron has no req.user, so we fall
@@ -1065,7 +1065,6 @@ export async function autoAnalyzeProjectCommits() {
       .limit(1);
     const fallbackToken = adminWithOAuth?.token || process.env.GITHUB_TOKEN || "";
 
-    // Get projects with AI tracking enabled and a GitHub repo configured
     const projects = await db.select().from(clientProjects)
       .where(and(
         eq(clientProjects.aiTrackingEnabled, true),
@@ -1077,63 +1076,75 @@ export async function autoAnalyzeProjectCommits() {
     let totalEntries = 0;
 
     for (const project of projects) {
-      if (!project.githubRepoUrl) continue;
+      // Source of truth: projectGithubRepos. Fall back to the legacy single-repo
+      // column for projects that haven't been re-connected after the migration.
+      const repos = await db.select().from(projectGithubRepos)
+        .where(and(eq(projectGithubRepos.projectId, project.id), eq(projectGithubRepos.isActive, true)));
+      type RepoLike = { id: string | null; repoFullName: string };
+      const effectiveRepos: RepoLike[] = repos.length > 0
+        ? repos.map(r => ({ id: r.id, repoFullName: r.repoFullName }))
+        : (project.githubRepoUrl
+            ? [{ id: null, repoFullName: project.githubRepoUrl.replace(/^https?:\/\/github\.com\//, "").replace(/\/$/, "") }]
+            : []);
+      if (effectiveRepos.length === 0) continue;
 
-      try {
-        const repoPath = project.githubRepoUrl.replace("https://github.com/", "").replace(/\/$/, "");
-        const ghHeaders: Record<string, string> = { "Accept": "application/vnd.github.v3+json", "User-Agent": "IM3-Systems-CRM" };
-        if (fallbackToken) ghHeaders["Authorization"] = `Bearer ${fallbackToken}`;
+      for (const repo of effectiveRepos) {
+        try {
+          const ghHeaders: Record<string, string> = { "Accept": "application/vnd.github.v3+json", "User-Agent": "IM3-Systems-CRM" };
+          if (fallbackToken) ghHeaders["Authorization"] = `Bearer ${fallbackToken}`;
 
-        const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-        const ghRes = await fetch(`https://api.github.com/repos/${repoPath}/commits?per_page=30&since=${sinceIso}`, { headers: ghHeaders });
-        if (!ghRes.ok) {
-          log(`Auto-analyze: GitHub API error ${ghRes.status} for ${repoPath} (token: ${adminWithOAuth?.token ? "OAuth" : process.env.GITHUB_TOKEN ? "PAT" : "anonymous"})`);
-          continue;
+          const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+          const ghRes = await fetch(`https://api.github.com/repos/${repo.repoFullName}/commits?per_page=30&since=${sinceIso}`, { headers: ghHeaders });
+          if (!ghRes.ok) {
+            log(`Auto-analyze: GitHub API error ${ghRes.status} for ${repo.repoFullName} (token: ${adminWithOAuth?.token ? "OAuth" : process.env.GITHUB_TOKEN ? "PAT" : "anonymous"})`);
+            continue;
+          }
+
+          const ghCommits = await ghRes.json() as any[];
+          if (!ghCommits.length) continue;
+
+          // Deduplicate against entries we already created for this project+repo.
+          const existingEntries = await db.select({ commitShas: projectActivityEntries.commitShas })
+            .from(projectActivityEntries)
+            .where(eq(projectActivityEntries.projectId, project.id));
+          const processedShas = new Set<string>();
+          for (const e of existingEntries) {
+            const shas = e.commitShas as string[] | null;
+            if (shas) shas.forEach(s => processedShas.add(s));
+          }
+
+          const newCommits = ghCommits.filter((c: any) => !processedShas.has(c.sha));
+          if (newCommits.length === 0) continue;
+
+          const commits = newCommits.map((c: any) => ({
+            sha: c.sha as string,
+            message: (c.commit?.message || "") as string,
+            filesChanged: [] as string[],
+            timestamp: (c.commit?.author?.date || new Date().toISOString()) as string,
+          }));
+
+          const results = await analyzeCommitsForProject(project.id, commits);
+          const commitShas = commits.map(c => c.sha);
+
+          for (const result of results) {
+            await db.insert(projectActivityEntries).values({
+              projectId: project.id,
+              repoId: repo.id,
+              repoFullName: repo.repoFullName,
+              source: "github_webhook",
+              commitShas: commitShas,
+              summaryLevel1: result.summaryLevel1,
+              summaryLevel2: result.summaryLevel2 || null,
+              summaryLevel3: result.summaryLevel3 || null,
+              category: result.category,
+              aiGenerated: true,
+              isSignificant: result.isSignificant,
+            });
+            totalEntries++;
+          }
+        } catch (err: any) {
+          log(`Auto-analyze error for ${repo.repoFullName} (project ${project.name}): ${err?.message}`);
         }
-
-        const ghCommits = await ghRes.json() as any[];
-        if (!ghCommits.length) continue;
-
-        // Check which commits we've already processed
-        const existingEntries = await db.select({ commitShas: projectActivityEntries.commitShas })
-          .from(projectActivityEntries)
-          .where(eq(projectActivityEntries.projectId, project.id));
-
-        const processedShas = new Set<string>();
-        for (const e of existingEntries) {
-          const shas = e.commitShas as string[] | null;
-          if (shas) shas.forEach(s => processedShas.add(s));
-        }
-
-        const newCommits = ghCommits.filter((c: any) => !processedShas.has(c.sha));
-        if (newCommits.length === 0) continue;
-
-        const commits = newCommits.map((c: any) => ({
-          sha: c.sha as string,
-          message: (c.commit?.message || "") as string,
-          filesChanged: [] as string[],
-          timestamp: (c.commit?.author?.date || new Date().toISOString()) as string,
-        }));
-
-        const results = await analyzeCommitsForProject(project.id, commits);
-        const commitShas = commits.map(c => c.sha);
-
-        for (const result of results) {
-          await db.insert(projectActivityEntries).values({
-            projectId: project.id,
-            source: "github_webhook",
-            commitShas: commitShas,
-            summaryLevel1: result.summaryLevel1,
-            summaryLevel2: result.summaryLevel2 || null,
-            summaryLevel3: result.summaryLevel3 || null,
-            category: result.category,
-            aiGenerated: true,
-            isSignificant: result.isSignificant,
-          });
-          totalEntries++;
-        }
-      } catch (err: any) {
-        log(`Auto-analyze error for project ${project.name}: ${err?.message}`);
       }
     }
 

@@ -552,6 +552,9 @@ export const projectActivityEntries = pgTable("project_activity_entries", {
   projectId: varchar("project_id").notNull(),
   taskId: varchar("task_id"),
   phaseId: varchar("phase_id"),
+  // When source=github_webhook, repoId points to projectGithubRepos; repoFullName denormalized for cheap queries.
+  repoId: varchar("repo_id"),
+  repoFullName: text("repo_full_name"),
   source: text("source").notNull().default("manual"), // manual | github_webhook | system
   commitShas: json("commit_shas").$type<string[]>().default([]),
   summaryLevel1: text("summary_level1").notNull(), // 1 line, always visible
@@ -570,6 +573,7 @@ export type InsertProjectActivityEntry = typeof projectActivityEntries.$inferIns
 export const githubWebhookEvents = pgTable("github_webhook_events", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   projectId: varchar("project_id").notNull(),
+  repoId: varchar("repo_id"),
   payload: json("payload").$type<Record<string, unknown>>().notNull(),
   processed: boolean("processed").default(false).notNull(),
   activityEntryId: varchar("activity_entry_id"),
@@ -577,6 +581,25 @@ export const githubWebhookEvents = pgTable("github_webhook_events", {
 });
 
 export type GithubWebhookEvent = typeof githubWebhookEvents.$inferSelect;
+
+// GitHub repositories connected to a project (N:1 with clientProjects).
+// Replaces the legacy single-repo columns on clientProjects.
+export const projectGithubRepos = pgTable("project_github_repos", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull(),
+  repoFullName: text("repo_full_name").notNull(), // owner/repo
+  repoUrl: text("repo_url").notNull(),
+  webhookSecret: text("webhook_secret").notNull(),
+  webhookId: integer("webhook_id"), // GitHub webhook ID; null when imported from legacy column
+  label: text("label"),
+  isActive: boolean("is_active").default(true).notNull(),
+  disconnectedAt: timestamp("disconnected_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type ProjectGithubRepo = typeof projectGithubRepos.$inferSelect;
+export type InsertProjectGithubRepo = typeof projectGithubRepos.$inferInsert;
 
 // Project sessions (meeting recordings & transcriptions)
 export const projectSessions = pgTable("project_sessions", {

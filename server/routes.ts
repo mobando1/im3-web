@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, isNotNull, sql, and, gte, lte, ilike, or, desc, count, inArray } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectGithubRepos, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback } from "@shared/schema";
 import { AGENT_REGISTRY, AGENT_KINDS, findAgent } from "./agents/registry";
 import { runAgent } from "./agents/runner";
 import { syncGmailEmails, isGmailConfigured, sendGmailMessage, getOriginalMessageHeaders } from "./google-gmail";
@@ -21,7 +21,7 @@ import { isWhatsAppConfigured, calculateWhatsAppSchedule, WHATSAPP_SEQUENCE, sen
 import passport from "passport";
 import { z } from "zod";
 import { analyzeCommitsForProject, generateWeeklySummary, calculateProjectHealth, generateProjectFromProposal, generateProjectArtifacts, appendPhaseArtifact } from "./project-ai";
-import { fetchRepoContext } from "./github-repo-context";
+import { fetchRepoContext, fetchMultiRepoContext } from "./github-repo-context";
 import { syncDriveFilesToProject, syncDriveFilesToContact, runContactDriveSyncCron } from "./drive-file-sync";
 import { listDriveFolderChildren, searchDriveFolders, createSubfolder, getFolderPath, DriveAccessError } from "./google-drive";
 import { generateProposal, regenerateProposalSection, generateSectionOptions, applySectionOption } from "./proposal-ai";
@@ -5406,11 +5406,25 @@ Devolvé SOLO el texto refinado. Sin comillas alrededor, sin explicación, sin p
       if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
       let repoContext: string | null = null;
-      const repoToRead = (githubRepoUrl || "").trim() || project.githubRepoUrl;
-      if (repoToRead) {
-        const adminUser = req.user as { githubAccessToken?: string } | undefined;
-        try { repoContext = await fetchRepoContext(repoToRead, adminUser?.githubAccessToken); }
+      const adminUser = req.user as { githubAccessToken?: string } | undefined;
+      const explicitRepo = (githubRepoUrl || "").trim();
+      if (explicitRepo) {
+        // Caller provided a specific URL (legacy UI, ad-hoc).
+        try { repoContext = await fetchRepoContext(explicitRepo, adminUser?.githubAccessToken); }
         catch (err) { log(`clarify-brief: fetchRepoContext failed: ${err}`); }
+      } else {
+        // Multi-repo: read all active repos connected to the project.
+        const repos = await db.select({ repoUrl: projectGithubRepos.repoUrl, label: projectGithubRepos.label })
+          .from(projectGithubRepos)
+          .where(and(eq(projectGithubRepos.projectId, projectId), eq(projectGithubRepos.isActive, true)));
+        if (repos.length > 0) {
+          try { repoContext = await fetchMultiRepoContext(repos, adminUser?.githubAccessToken); }
+          catch (err) { log(`clarify-brief: fetchMultiRepoContext failed: ${err}`); }
+        } else if (project.githubRepoUrl) {
+          // Final fallback to the legacy single-repo column.
+          try { repoContext = await fetchRepoContext(project.githubRepoUrl, adminUser?.githubAccessToken); }
+          catch (err) { log(`clarify-brief: legacy fetchRepoContext failed: ${err}`); }
+        }
       }
 
       const Anthropic = (await import("@anthropic-ai/sdk")).default;
@@ -5494,23 +5508,31 @@ Responde SOLO con un JSON válido, sin markdown:
       }
 
       let repoContext: string | null = null;
-      const repoToRead = cleanRepoUrl || project.githubRepoUrl;
-      if (repoToRead) {
-        const adminUser = req.user as { githubAccessToken?: string } | undefined;
-        const tokenSource = adminUser?.githubAccessToken ? "OAuth token" : (process.env.GITHUB_TOKEN ? "fallback PAT" : "anonymous");
-        log(`generate-phases: attempting to fetch repo context for ${repoToRead} using ${tokenSource}`);
-        try {
-          repoContext = await fetchRepoContext(repoToRead, adminUser?.githubAccessToken);
-          if (repoContext) {
-            log(`generate-phases: repo loaded — ${repoContext.length} chars from ${repoToRead}`);
-          } else {
-            log(`generate-phases: fetchRepoContext returned null for ${repoToRead} (private/inaccessible/empty) — try reconnecting GitHub if this is unexpected`);
-          }
-        }
+      const adminUser = req.user as { githubAccessToken?: string } | undefined;
+      const tokenSource = adminUser?.githubAccessToken ? "OAuth token" : (process.env.GITHUB_TOKEN ? "fallback PAT" : "anonymous");
+
+      if (cleanRepoUrl) {
+        // Caller specified a particular repo URL — use just that one.
+        log(`generate-phases: fetching single repo context for ${cleanRepoUrl} using ${tokenSource}`);
+        try { repoContext = await fetchRepoContext(cleanRepoUrl, adminUser?.githubAccessToken); }
         catch (err) { log(`generate-phases: fetchRepoContext threw: ${err}`); }
       } else {
-        log(`generate-phases: no repo configured for project ${projectId} — skipping repo context`);
+        const repos = await db.select({ repoUrl: projectGithubRepos.repoUrl, label: projectGithubRepos.label })
+          .from(projectGithubRepos)
+          .where(and(eq(projectGithubRepos.projectId, projectId), eq(projectGithubRepos.isActive, true)));
+        if (repos.length > 0) {
+          log(`generate-phases: fetching ${repos.length} repo(s) for project ${projectId} using ${tokenSource}`);
+          try { repoContext = await fetchMultiRepoContext(repos, adminUser?.githubAccessToken); }
+          catch (err) { log(`generate-phases: fetchMultiRepoContext threw: ${err}`); }
+        } else if (project.githubRepoUrl) {
+          log(`generate-phases: fetching legacy single repo context for ${project.githubRepoUrl} using ${tokenSource}`);
+          try { repoContext = await fetchRepoContext(project.githubRepoUrl, adminUser?.githubAccessToken); }
+          catch (err) { log(`generate-phases: legacy fetchRepoContext threw: ${err}`); }
+        } else {
+          log(`generate-phases: no repo configured for project ${projectId} — skipping repo context`);
+        }
       }
+      if (repoContext) log(`generate-phases: repo context loaded — ${repoContext.length} chars`);
 
       // Merge clarifications into the brief so Claude has full context
       const enrichedBrief = Array.isArray(clarifications) && clarifications.length > 0
@@ -5726,6 +5748,7 @@ Responde SOLO con un JSON válido, sin markdown:
       await db.delete(projectFiles).where(eq(projectFiles.projectId, id)).catch(() => {});
       await db.delete(projectIdeas).where(eq(projectIdeas.projectId, id)).catch(() => {});
       await db.delete(githubWebhookEvents).where(eq(githubWebhookEvents.projectId, id)).catch(() => {});
+      await db.delete(projectGithubRepos).where(eq(projectGithubRepos.projectId, id)).catch(() => {});
       await db.delete(projectActivityEntries).where(eq(projectActivityEntries.projectId, id)).catch(() => {});
       await db.delete(projectMessages).where(eq(projectMessages.projectId, id)).catch(() => {});
       await db.delete(projectTimeLog).where(eq(projectTimeLog.projectId, id)).catch(() => {});
@@ -5752,6 +5775,95 @@ Responde SOLO con un JSON válido, sin markdown:
       res.json({ message: "Fechas distribuidas", phases });
     } catch (err: any) {
       res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Realign timeline: shifts ALL phase + task dates so the first phase starts on
+  // newStartDate, preserving each phase's original duration (in days). Used when
+  // the actual project kick-off date differs from the proposal's hypothetical
+  // startDate (e.g. first payment landed weeks after the proposal was sent).
+  // Overwrites manual edits — the UI dialog warns the admin before calling this.
+  app.post("/api/admin/projects/:id/realign-timeline", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const projectId = req.params.id as string;
+    const { newStartDate } = req.body as { newStartDate?: string };
+    if (!newStartDate) return res.status(400).json({ message: "newStartDate requerido (formato YYYY-MM-DD)" });
+
+    const parsed = new Date(`${newStartDate}T09:00:00`);
+    if (Number.isNaN(parsed.getTime())) return res.status(400).json({ message: "newStartDate inválido" });
+
+    try {
+      const result = await runAgent("timeline-realign", async () => {
+        const [project] = await db!.select().from(clientProjects).where(eq(clientProjects.id, projectId)).limit(1);
+        if (!project) throw new Error("Proyecto no encontrado");
+
+        const phases = await db!.select().from(projectPhases)
+          .where(and(eq(projectPhases.projectId, projectId), isNull(projectPhases.deletedAt)))
+          .orderBy(asc(projectPhases.orderIndex));
+        if (phases.length === 0) {
+          await db!.update(clientProjects)
+            .set({ startDate: parsed, updatedAt: new Date() })
+            .where(eq(clientProjects.id, projectId));
+          return { phasesUpdated: 0, tasksUpdated: 0, newStartDate: parsed.toISOString(), newEstimatedEndDate: project.estimatedEndDate?.toISOString() ?? null };
+        }
+
+        const dayMs = 24 * 60 * 60 * 1000;
+        let cursor = new Date(parsed);
+        let tasksUpdated = 0;
+
+        for (const phase of phases) {
+          // Determine duration: prefer (endDate - startDate); fall back to estimatedHours / 40 weeks.
+          let durationDays: number;
+          if (phase.startDate && phase.endDate) {
+            const diff = Math.round((phase.endDate.getTime() - phase.startDate.getTime()) / dayMs);
+            durationDays = Math.max(1, diff);
+          } else if (phase.estimatedHours && phase.estimatedHours > 0) {
+            durationDays = Math.max(1, Math.round((phase.estimatedHours / 40) * 7));
+          } else {
+            durationDays = 14; // 2-week default — same heuristic as autoDistribute when nothing's set
+          }
+
+          const phaseStart = new Date(cursor);
+          const phaseEnd = new Date(cursor.getTime() + durationDays * dayMs);
+
+          await db!.update(projectPhases)
+            .set({ startDate: phaseStart, endDate: phaseEnd, updatedAt: new Date() })
+            .where(eq(projectPhases.id, phase.id));
+
+          // Distribute task dueDates pro-rata across the phase window, preserving orderIndex.
+          const tasks = await db!.select().from(projectTasks)
+            .where(and(eq(projectTasks.phaseId, phase.id), isNull(projectTasks.deletedAt)))
+            .orderBy(asc(projectTasks.orderIndex));
+          const n = tasks.length;
+          for (let j = 0; j < n; j++) {
+            const t = tasks[j];
+            const dueDate = new Date(phaseStart.getTime() + ((j + 1) / n) * durationDays * dayMs);
+            await db!.update(projectTasks)
+              .set({ dueDate, updatedAt: new Date() })
+              .where(eq(projectTasks.id, t.id));
+            tasksUpdated++;
+          }
+
+          cursor = phaseEnd;
+        }
+
+        await db!.update(clientProjects)
+          .set({ startDate: parsed, estimatedEndDate: cursor, updatedAt: new Date() })
+          .where(eq(clientProjects.id, projectId));
+
+        return {
+          phasesUpdated: phases.length,
+          tasksUpdated,
+          newStartDate: parsed.toISOString(),
+          newEstimatedEndDate: cursor.toISOString(),
+          recordsProcessed: phases.length + tasksUpdated,
+        };
+      }, { triggeredBy: "manual" });
+
+      res.json({ message: "Timeline realineado", ...result });
+    } catch (err: any) {
+      log(`Error realign-timeline: ${err?.message}`);
+      res.status(500).json({ error: err?.message || "Error realineando timeline" });
     }
   });
 
@@ -7128,6 +7240,8 @@ Responde SOLO con un JSON válido, sin markdown:
       : [];
     const timeLogs = await db!.select().from(projectTimeLog).where(eq(projectTimeLog.projectId, project.id));
     const unreadMessages = await db!.select({ id: projectMessages.id }).from(projectMessages).where(and(eq(projectMessages.projectId, project.id), eq(projectMessages.senderType, "team"), eq(projectMessages.isRead, false)));
+    const activeReposCount = (await db!.select({ id: projectGithubRepos.id }).from(projectGithubRepos)
+      .where(and(eq(projectGithubRepos.projectId, project.id), eq(projectGithubRepos.isActive, true)))).length;
 
     const completedTasks = allTasks.filter(t => t.status === "completed").length;
     const { progress, totalHours } = computeProjectProgress(phases, allTasks, timeLogs);
@@ -7148,6 +7262,7 @@ Responde SOLO con un JSON válido, sin markdown:
       contactName,
       progress,
       totalHours,
+      repoCount: activeReposCount,
       taskCount: allTasks.length,
       completedTaskCount: completedTasks,
       unreadMessageCount: unreadMessages.length,
@@ -7786,79 +7901,274 @@ Responde SOLO con un JSON válido, sin markdown:
   // GitHub Webhook — receives push events
   // ─────────────────────────────────────────────────────────────
 
-  app.post("/api/webhooks/github/:projectId", async (req, res) => {
-    const projectId = req.params.projectId as string;
-    const [project] = await db!.select().from(clientProjects).where(eq(clientProjects.id, projectId));
+  /**
+   * Shared handler for both the new per-repo webhook URL and the legacy shim.
+   * `repo` is the row from project_github_repos (already validated by signature
+   * upstream). Persists the raw event, runs commit analysis if AI tracking is on,
+   * and writes activity entries tagged with repoId + repoFullName.
+   */
+  async function processGithubWebhook(
+    repo: typeof projectGithubRepos.$inferSelect,
+    payload: Record<string, unknown>,
+    res: import("express").Response,
+  ) {
+    const project = (await db!.select().from(clientProjects).where(eq(clientProjects.id, repo.projectId)).limit(1))[0];
     if (!project) return res.status(404).json({ message: "Project not found" });
 
-    // Verify webhook secret if configured
-    if (project.githubWebhookSecret) {
-      const signature = req.headers["x-hub-signature-256"] as string;
-      if (signature) {
-        const body = JSON.stringify(req.body);
-        const expected = "sha256=" + crypto.createHmac("sha256", project.githubWebhookSecret).update(body).digest("hex");
-        if (signature !== expected) {
-          return res.status(401).json({ message: "Invalid signature" });
-        }
-      }
-    }
-
-    // Store raw event
     const [event] = await db!.insert(githubWebhookEvents).values({
-      projectId,
-      payload: req.body,
+      projectId: repo.projectId,
+      repoId: repo.id,
+      payload,
     }).returning();
 
-    // Extract commits from push event
-    const commits = (req.body.commits || []).map((c: { id: string; message: string; added: string[]; modified: string[]; removed: string[]; timestamp: string }) => ({
-      sha: c.id,
-      message: c.message,
-      filesChanged: [...(c.added || []), ...(c.modified || []), ...(c.removed || [])],
-      timestamp: c.timestamp,
+    const rawCommits = Array.isArray((payload as { commits?: unknown }).commits) ? (payload as { commits: Array<Record<string, unknown>> }).commits : [];
+    const commits = rawCommits.map((c) => ({
+      sha: String(c.id || ""),
+      message: String(c.message || ""),
+      filesChanged: [
+        ...(Array.isArray(c.added) ? (c.added as string[]) : []),
+        ...(Array.isArray(c.modified) ? (c.modified as string[]) : []),
+        ...(Array.isArray(c.removed) ? (c.removed as string[]) : []),
+      ],
+      timestamp: String(c.timestamp || ""),
     }));
 
     if (commits.length === 0) {
-      return res.json({ message: "No commits to process", eventId: event.id });
+      return res.json({ message: "No commits to process", eventId: event.id, repoId: repo.id });
     }
 
-    // Process with AI if enabled
-    if (project.aiTrackingEnabled) {
-      try {
-        const results = await runAgent(
-          "commit-analyzer-on-demand",
-          () => analyzeCommitsForProject(projectId, commits),
-          { triggeredBy: "webhook" },
-        );
+    if (!project.aiTrackingEnabled) {
+      return res.json({ message: "Event stored (AI tracking disabled)", eventId: event.id, repoId: repo.id });
+    }
 
-        for (const result of results) {
-          const [entry] = await db!.insert(projectActivityEntries).values({
-            projectId,
-            source: "github_webhook",
-            commitShas: commits.map((c: { sha: string }) => c.sha),
-            summaryLevel1: result.summaryLevel1,
-            summaryLevel2: result.summaryLevel2,
-            summaryLevel3: result.summaryLevel3,
-            category: result.category,
-            aiGenerated: true,
-            isSignificant: result.isSignificant,
-          }).returning();
+    try {
+      const results = await runAgent(
+        "commit-analyzer-on-demand",
+        () => analyzeCommitsForProject(repo.projectId, commits),
+        { triggeredBy: "webhook" },
+      );
 
-          // Update webhook event with activity entry link
-          await db!.update(githubWebhookEvents).set({ processed: true, activityEntryId: entry.id }).where(eq(githubWebhookEvents.id, event.id));
-        }
-
-        // Recalculate health
-        await calculateProjectHealth(projectId);
-
-        res.json({ message: `Processed ${results.length} activity entries`, eventId: event.id });
-      } catch (err: unknown) {
-        const message = err instanceof Error ? err.message : String(err);
-        log(`Webhook AI processing error: ${message}`);
-        res.json({ message: "Event stored but AI processing failed", eventId: event.id });
+      for (const result of results) {
+        const [entry] = await db!.insert(projectActivityEntries).values({
+          projectId: repo.projectId,
+          repoId: repo.id,
+          repoFullName: repo.repoFullName,
+          source: "github_webhook",
+          commitShas: commits.map(c => c.sha),
+          summaryLevel1: result.summaryLevel1,
+          summaryLevel2: result.summaryLevel2,
+          summaryLevel3: result.summaryLevel3,
+          category: result.category,
+          aiGenerated: true,
+          isSignificant: result.isSignificant,
+        }).returning();
+        await db!.update(githubWebhookEvents).set({ processed: true, activityEntryId: entry.id }).where(eq(githubWebhookEvents.id, event.id));
       }
-    } else {
-      res.json({ message: "Event stored (AI tracking disabled)", eventId: event.id });
+
+      await calculateProjectHealth(repo.projectId);
+      return res.json({ message: `Processed ${results.length} activity entries`, eventId: event.id, repoId: repo.id });
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      log(`Webhook AI processing error (repo ${repo.repoFullName}): ${message}`);
+      return res.json({ message: "Event stored but AI processing failed", eventId: event.id, repoId: repo.id });
     }
+  }
+
+  // New per-repo webhook URL — used for all repos connected after multi-repo support landed.
+  app.post("/api/webhooks/github/repo/:repoId", async (req, res) => {
+    const repoId = req.params.repoId as string;
+    const [repo] = await db!.select().from(projectGithubRepos)
+      .where(and(eq(projectGithubRepos.id, repoId), eq(projectGithubRepos.isActive, true))).limit(1);
+    if (!repo) return res.status(404).json({ message: "Repository not connected" });
+
+    const signature = req.headers["x-hub-signature-256"] as string;
+    if (signature) {
+      const body = JSON.stringify(req.body);
+      const expected = "sha256=" + crypto.createHmac("sha256", repo.webhookSecret).update(body).digest("hex");
+      if (signature !== expected) return res.status(401).json({ message: "Invalid signature" });
+    }
+
+    // Defense-in-depth: the payload's repo must match the row we resolved by id.
+    const payloadFullName = (req.body?.repository as { full_name?: string } | undefined)?.full_name;
+    if (payloadFullName && payloadFullName !== repo.repoFullName) {
+      return res.status(400).json({ message: "Payload repo does not match" });
+    }
+
+    return processGithubWebhook(repo, req.body as Record<string, unknown>, res);
+  });
+
+  // Legacy shim — webhooks created before multi-repo support keep this URL in
+  // GitHub. We resolve the matching repo row by payload.repository.full_name
+  // and validate against its secret, so the row's secret (not the project's
+  // legacy column) is the source of truth.
+  app.post("/api/webhooks/github/:projectId", async (req, res) => {
+    const projectId = req.params.projectId as string;
+    const payloadFullName = (req.body?.repository as { full_name?: string } | undefined)?.full_name;
+
+    // Try to find the matching row in projectGithubRepos.
+    let repo: typeof projectGithubRepos.$inferSelect | undefined;
+    if (payloadFullName) {
+      const rows = await db!.select().from(projectGithubRepos)
+        .where(and(
+          eq(projectGithubRepos.projectId, projectId),
+          eq(projectGithubRepos.repoFullName, payloadFullName),
+          eq(projectGithubRepos.isActive, true),
+        )).limit(1);
+      repo = rows[0];
+    }
+    if (!repo) {
+      // Fallback: if there's exactly one active repo on the project, use it (covers payloads without repo info).
+      const rows = await db!.select().from(projectGithubRepos)
+        .where(and(eq(projectGithubRepos.projectId, projectId), eq(projectGithubRepos.isActive, true))).limit(2);
+      if (rows.length === 1) repo = rows[0];
+    }
+    if (!repo) return res.status(404).json({ message: "Repository not connected to this project" });
+
+    const signature = req.headers["x-hub-signature-256"] as string;
+    if (signature) {
+      const body = JSON.stringify(req.body);
+      const expected = "sha256=" + crypto.createHmac("sha256", repo.webhookSecret).update(body).digest("hex");
+      if (signature !== expected) return res.status(401).json({ message: "Invalid signature" });
+    }
+
+    return processGithubWebhook(repo, req.body as Record<string, unknown>, res);
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Multi-repo admin endpoints
+  // ─────────────────────────────────────────────────────────────
+
+  app.get("/api/admin/projects/:id/repos", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const rows = await db.select().from(projectGithubRepos)
+        .where(and(eq(projectGithubRepos.projectId, req.params.id as string), eq(projectGithubRepos.isActive, true)))
+        .orderBy(asc(projectGithubRepos.createdAt));
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.post("/api/admin/projects/:id/repos", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const projectId = req.params.id as string;
+    const { repoFullName, label } = req.body as { repoFullName?: string; label?: string };
+    if (!repoFullName || !/^[\w.-]+\/[\w.-]+$/.test(repoFullName)) {
+      return res.status(400).json({ message: "repoFullName inválido (esperado: owner/repo)" });
+    }
+
+    try {
+      // Reject duplicates per-project (re-add a soft-deleted one by reactivating).
+      const [existing] = await db.select().from(projectGithubRepos)
+        .where(and(eq(projectGithubRepos.projectId, projectId), eq(projectGithubRepos.repoFullName, repoFullName))).limit(1);
+      if (existing && existing.isActive) return res.status(409).json({ message: "Este repo ya está conectado" });
+
+      const webhookSecret = crypto.randomBytes(32).toString("hex");
+      const repoUrl = `https://github.com/${repoFullName}`;
+
+      let row: typeof projectGithubRepos.$inferSelect;
+      if (existing) {
+        const [reactivated] = await db.update(projectGithubRepos)
+          .set({ isActive: true, disconnectedAt: null, webhookSecret, label: label || existing.label, updatedAt: new Date() })
+          .where(eq(projectGithubRepos.id, existing.id))
+          .returning();
+        row = reactivated;
+      } else {
+        const [inserted] = await db.insert(projectGithubRepos).values({
+          projectId, repoFullName, repoUrl, webhookSecret, label: label || null,
+        }).returning();
+        row = inserted;
+      }
+
+      // Try to create the webhook on GitHub using the admin's OAuth token.
+      const adminUser = req.user as { githubAccessToken?: string } | undefined;
+      const token = adminUser?.githubAccessToken || process.env.GITHUB_TOKEN || "";
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
+      const webhookUrl = `${baseUrl}/api/webhooks/github/repo/${row.id}`;
+      let webhookId: number | null = null;
+      if (token) {
+        try {
+          const ghRes = await fetch(`https://api.github.com/repos/${repoFullName}/hooks`, {
+            method: "POST",
+            headers: {
+              "Authorization": `Bearer ${token}`,
+              "Accept": "application/vnd.github.v3+json",
+              "Content-Type": "application/json",
+              "User-Agent": "IM3-Systems-CRM",
+            },
+            body: JSON.stringify({
+              name: "web",
+              active: true,
+              events: ["push"],
+              config: { url: webhookUrl, content_type: "json", secret: webhookSecret },
+            }),
+          });
+          if (ghRes.ok) {
+            const hook = await ghRes.json() as { id?: number };
+            webhookId = hook.id ?? null;
+            await db.update(projectGithubRepos).set({ webhookId, updatedAt: new Date() }).where(eq(projectGithubRepos.id, row.id));
+          } else {
+            log(`connect-repo: GitHub hook creation failed for ${repoFullName}: ${ghRes.status} ${await ghRes.text()}`);
+          }
+        } catch (err) {
+          log(`connect-repo: GitHub hook creation error for ${repoFullName}: ${err}`);
+        }
+      }
+
+      // Enable AI tracking on the project (idempotent — if already on, no-op).
+      await db.update(clientProjects)
+        .set({ aiTrackingEnabled: true, updatedAt: new Date() })
+        .where(eq(clientProjects.id, projectId));
+
+      res.json({ ...row, webhookId, webhookUrl, webhookConfigured: webhookId !== null });
+    } catch (err: any) {
+      log(`Error connecting repo: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.patch("/api/admin/repos/:repoId", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { label } = req.body as { label?: string | null };
+      const [updated] = await db.update(projectGithubRepos)
+        .set({ label: label ?? null, updatedAt: new Date() })
+        .where(eq(projectGithubRepos.id, req.params.repoId as string))
+        .returning();
+      if (!updated) return res.status(404).json({ message: "Repo no encontrado" });
+      res.json(updated);
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
+  });
+
+  app.delete("/api/admin/repos/:repoId", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const repoId = req.params.repoId as string;
+      const [repo] = await db.select().from(projectGithubRepos).where(eq(projectGithubRepos.id, repoId)).limit(1);
+      if (!repo) return res.status(404).json({ message: "Repo no encontrado" });
+
+      // Best-effort delete the GitHub webhook so we don't leave it firing into a dead endpoint.
+      if (repo.webhookId) {
+        const adminUser = req.user as { githubAccessToken?: string } | undefined;
+        const token = adminUser?.githubAccessToken || process.env.GITHUB_TOKEN || "";
+        if (token) {
+          try {
+            await fetch(`https://api.github.com/repos/${repo.repoFullName}/hooks/${repo.webhookId}`, {
+              method: "DELETE",
+              headers: { "Authorization": `Bearer ${token}`, "Accept": "application/vnd.github.v3+json", "User-Agent": "IM3-Systems-CRM" },
+            });
+          } catch (err) {
+            log(`disconnect-repo: failed to delete GitHub hook ${repo.webhookId} for ${repo.repoFullName}: ${err}`);
+          }
+        }
+      }
+
+      await db.update(projectGithubRepos)
+        .set({ isActive: false, disconnectedAt: new Date(), updatedAt: new Date() })
+        .where(eq(projectGithubRepos.id, repoId));
+      res.json({ success: true });
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
   });
 
   // Admin: update health status manually
@@ -7891,60 +8201,81 @@ Responde SOLO con un JSON válido, sin markdown:
     }
   });
 
-  // Admin: trigger manual analysis (fetch recent commits from GitHub API)
+  // Admin: trigger manual analysis (fetch recent commits from GitHub API).
+  // Iterates over all active repos connected to the project.
   app.post("/api/admin/projects/:id/analyze", requireAuth, async (req, res) => {
     const id = req.params.id as string;
     const [project] = await db!.select().from(clientProjects).where(eq(clientProjects.id, id));
     if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
-    if (!project.githubRepoUrl) return res.status(400).json({ message: "No hay repositorio de GitHub configurado" });
+
+    // Pull all active repos. Fall back to the legacy column for projects that
+    // haven't been re-connected yet.
+    const repos = await db!.select().from(projectGithubRepos)
+      .where(and(eq(projectGithubRepos.projectId, id), eq(projectGithubRepos.isActive, true)));
+    type RepoLike = { id: string | null; repoFullName: string; repoUrl: string };
+    const effectiveRepos: RepoLike[] = repos.length > 0
+      ? repos.map(r => ({ id: r.id, repoFullName: r.repoFullName, repoUrl: r.repoUrl }))
+      : (project.githubRepoUrl
+          ? [{ id: null, repoFullName: project.githubRepoUrl.replace(/^https?:\/\/github\.com\//, "").replace(/\/$/, ""), repoUrl: project.githubRepoUrl }]
+          : []);
+    if (effectiveRepos.length === 0) return res.status(400).json({ message: "No hay repositorio de GitHub configurado" });
 
     try {
-      // Prefer the admin's OAuth token (covers their private repos), fall back
-      // to GITHUB_TOKEN PAT (limited to public/explicitly granted repos).
       const adminUser = req.user as { githubAccessToken?: string } | undefined;
       const token = adminUser?.githubAccessToken || process.env.GITHUB_TOKEN || "";
       const tokenSource = adminUser?.githubAccessToken ? "OAuth" : process.env.GITHUB_TOKEN ? "PAT" : "anonymous";
 
-      // Fetch last 20 commits from GitHub API
-      const repoPath = project.githubRepoUrl.replace("https://github.com/", "").replace(/\/$/, "");
       const ghHeaders: Record<string, string> = { "Accept": "application/vnd.github.v3+json", "User-Agent": "IM3-Systems-CRM" };
       if (token) ghHeaders["Authorization"] = `Bearer ${token}`;
-      const ghRes = await fetch(`https://api.github.com/repos/${repoPath}/commits?per_page=20`, { headers: ghHeaders });
 
-      if (!ghRes.ok) return res.status(400).json({ message: `GitHub API error ${ghRes.status} (token: ${tokenSource}). Si el repo es privado, reconecta GitHub desde el panel.` });
+      let totalEntries = 0;
+      const errors: string[] = [];
 
-      const ghCommits = await ghRes.json() as Array<{ sha: string; commit: { message: string; author: { date: string } }; files?: Array<{ filename: string }> }>;
+      for (const repo of effectiveRepos) {
+        const ghRes = await fetch(`https://api.github.com/repos/${repo.repoFullName}/commits?per_page=20`, { headers: ghHeaders });
+        if (!ghRes.ok) {
+          errors.push(`${repo.repoFullName}: ${ghRes.status} (token: ${tokenSource})`);
+          continue;
+        }
+        const ghCommits = await ghRes.json() as Array<{ sha: string; commit: { message: string; author: { date: string } }; files?: Array<{ filename: string }> }>;
+        const commits = ghCommits.map(c => ({
+          sha: c.sha,
+          message: c.commit.message,
+          filesChanged: (c.files || []).map(f => f.filename),
+          timestamp: c.commit.author.date,
+        }));
+        if (commits.length === 0) continue;
 
-      const commits = ghCommits.map(c => ({
-        sha: c.sha,
-        message: c.commit.message,
-        filesChanged: (c.files || []).map(f => f.filename),
-        timestamp: c.commit.author.date,
-      }));
+        const results = await runAgent(
+          "commit-analyzer-on-demand",
+          () => analyzeCommitsForProject(id, commits),
+          { triggeredBy: "manual" },
+        );
 
-      const results = await runAgent(
-        "commit-analyzer-on-demand",
-        () => analyzeCommitsForProject(id, commits),
-        { triggeredBy: "manual" },
-      );
-
-      for (const result of results) {
-        await db!.insert(projectActivityEntries).values({
-          projectId: id,
-          source: "github_webhook",
-          commitShas: commits.map(c => c.sha),
-          summaryLevel1: result.summaryLevel1,
-          summaryLevel2: result.summaryLevel2,
-          summaryLevel3: result.summaryLevel3,
-          category: result.category,
-          aiGenerated: true,
-          isSignificant: result.isSignificant,
-        });
+        for (const result of results) {
+          await db!.insert(projectActivityEntries).values({
+            projectId: id,
+            repoId: repo.id,
+            repoFullName: repo.repoFullName,
+            source: "github_webhook",
+            commitShas: commits.map(c => c.sha),
+            summaryLevel1: result.summaryLevel1,
+            summaryLevel2: result.summaryLevel2,
+            summaryLevel3: result.summaryLevel3,
+            category: result.category,
+            aiGenerated: true,
+            isSignificant: result.isSignificant,
+          });
+          totalEntries++;
+        }
       }
 
       await calculateProjectHealth(id);
 
-      res.json({ message: `Análisis completado: ${results.length} entradas generadas`, results: results.length });
+      if (errors.length > 0 && totalEntries === 0) {
+        return res.status(400).json({ message: `Sin commits analizables. Errores: ${errors.join("; ")}` });
+      }
+      res.json({ message: `Análisis completado: ${totalEntries} entradas en ${effectiveRepos.length} repo(s)`, results: totalEntries, repos: effectiveRepos.length, errors });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
       res.status(500).json({ message: `Error: ${message}` });

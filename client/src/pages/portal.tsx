@@ -24,6 +24,7 @@ type PortalOverview = {
   unreadMessageCount: number;
   healthStatus: string;
   healthNote: string | null;
+  repoCount?: number;
 };
 
 type Phase = {
@@ -60,6 +61,7 @@ type ActivityEntry = {
   summaryLevel3: string | null;
   category: string;
   isSignificant: boolean;
+  repoFullName?: string | null;
   createdAt: string;
 };
 
@@ -209,9 +211,12 @@ function formatWeekday(dateStr: string): string {
 
 // ── Expandable Activity Entry ──
 
-function ActivityItem({ entry }: { entry: ActivityEntry }) {
+function ActivityItem({ entry, showRepoBadge }: { entry: ActivityEntry; showRepoBadge?: boolean }) {
   const [expanded, setExpanded] = useState(false);
   const [showLevel3, setShowLevel3] = useState(false);
+
+  // Render the repo as "shortName" (last segment after /) so it stays compact.
+  const repoShort = entry.repoFullName ? entry.repoFullName.split("/").pop() : null;
 
   return (
     <div className="group">
@@ -222,7 +227,14 @@ function ActivityItem({ entry }: { entry: ActivityEntry }) {
         <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 mt-0.5 ${CATEGORY_COLORS[entry.category] || "bg-gray-100 text-gray-600"}`}>
           {CATEGORY_LABELS[entry.category] || entry.category}
         </span>
-        <p className="text-sm text-gray-700 flex-1">{entry.summaryLevel1}</p>
+        <div className="flex-1 min-w-0">
+          {showRepoBadge && repoShort && (
+            <span className="text-[10px] text-gray-400 mr-1.5" title={`Repositorio: ${entry.repoFullName}`}>
+              📦 {repoShort}
+            </span>
+          )}
+          <p className="text-sm text-gray-700 inline">{entry.summaryLevel1}</p>
+        </div>
         <span className="text-[10px] text-gray-300 shrink-0 mt-0.5">{timeAgo(entry.createdAt)}</span>
       </div>
 
@@ -740,7 +752,7 @@ export default function Portal() {
               ) : (
                 <div className="space-y-1">
                   {pulse!.recentActivity.map(entry => (
-                    <ActivityItem key={entry.id} entry={entry} />
+                    <ActivityItem key={entry.id} entry={entry} showRepoBadge={(overview?.repoCount ?? 0) > 1} />
                   ))}
                 </div>
               )}
@@ -939,7 +951,7 @@ export default function Portal() {
                       </h3>
                       <div className="bg-white rounded-xl border border-gray-200 p-4 space-y-1">
                         {entries.map(entry => (
-                          <ActivityItem key={entry.id} entry={entry} />
+                          <ActivityItem key={entry.id} entry={entry} showRepoBadge={(overview?.repoCount ?? 0) > 1} />
                         ))}
                       </div>
                     </div>

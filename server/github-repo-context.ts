@@ -223,3 +223,34 @@ export async function fetchRepoContext(repoUrl: string, oauthToken?: string): Pr
     return null;
   }
 }
+
+/**
+ * Wrapper for multi-repo projects. Calls fetchRepoContext for each repo and
+ * merges the result, prefixed with the repo's label or fullName so Claude can
+ * tell them apart. Failures on a single repo don't block the others.
+ */
+export async function fetchMultiRepoContext(
+  repos: Array<{ repoUrl: string; label?: string | null }>,
+  oauthToken?: string,
+): Promise<string | null> {
+  if (repos.length === 0) return null;
+
+  const sections: string[] = [];
+  for (const r of repos) {
+    const parsed = parseRepoUrl(r.repoUrl);
+    const heading = r.label?.trim() || (parsed ? `${parsed.owner}/${parsed.repo}` : r.repoUrl);
+    try {
+      const ctx = await fetchRepoContext(r.repoUrl, oauthToken);
+      if (ctx) {
+        sections.push(`# Repositorio: ${heading}\n\n${ctx}`);
+      } else {
+        sections.push(`# Repositorio: ${heading}\n\n(no fue posible cargar contexto — el repo puede ser privado o no existir)`);
+      }
+    } catch (err) {
+      log(`fetchMultiRepoContext error for ${heading}: ${err}`);
+    }
+  }
+
+  if (sections.length === 0) return null;
+  return sections.join("\n\n---\n\n");
+}

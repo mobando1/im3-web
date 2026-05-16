@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { DndContext, closestCenter, PointerSensor, TouchSensor, KeyboardSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
@@ -190,6 +190,8 @@ type ActivityEntry = {
   phaseId: string | null;
   source: string;
   commitShas: string[] | null;
+  repoId?: string | null;
+  repoFullName?: string | null;
   summaryLevel1: string;
   summaryLevel2: string | null;
   summaryLevel3: string | null;
@@ -299,7 +301,17 @@ function AssigneeChip({ value, onSave }: { value: string | null; onSave: (next: 
   );
 }
 
-function GitHubRepoSelector({ projectId, currentRepo, aiEnabled, onConnected }: {
+type ConnectedRepo = {
+  id: string;
+  repoFullName: string;
+  repoUrl: string;
+  label: string | null;
+  webhookId: number | null;
+  isActive: boolean;
+  createdAt: string;
+};
+
+function GitHubRepoSelector({ projectId, onConnected }: {
   projectId: string;
   currentRepo: string | null;
   aiEnabled: boolean;
@@ -307,52 +319,207 @@ function GitHubRepoSelector({ projectId, currentRepo, aiEnabled, onConnected }: 
 }) {
   const { toast } = useToast();
   const [search, setSearch] = useState("");
+  const [showPicker, setShowPicker] = useState(false);
 
   const { data: ghStatus } = useQuery<{ configured: boolean; connected: boolean; githubUsername: string | null }>({
     queryKey: ["/api/admin/github/status"],
   });
 
-  const { data: repos = [], isLoading: loadingRepos } = useQuery<GithubRepo[]>({
+  const { data: connectedRepos = [] } = useQuery<ConnectedRepo[]>({
+    queryKey: [`/api/admin/projects/${projectId}/repos`],
+  });
+
+  const { data: availableRepos = [], isLoading: loadingRepos } = useQuery<GithubRepo[]>({
     queryKey: ["/api/admin/github/repos"],
-    enabled: !!ghStatus?.connected,
+    enabled: !!ghStatus?.connected && showPicker,
   });
 
   const connectRepoMut = useMutation({
-    mutationFn: async (repoFullName: string) => {
-      const res = await apiRequest("POST", `/api/admin/projects/${projectId}/connect-repo`, { repoFullName });
+    mutationFn: async ({ repoFullName, label }: { repoFullName: string; label?: string }) => {
+      const res = await apiRequest("POST", `/api/admin/projects/${projectId}/repos`, { repoFullName, label });
       return res.json();
     },
-    onSuccess: () => {
-      toast({ title: "Repositorio conectado con webhook automático" });
+    onSuccess: (data: { webhookConfigured?: boolean; repoFullName?: string }) => {
+      toast({
+        title: data?.webhookConfigured
+          ? `Repo conectado con webhook: ${data.repoFullName}`
+          : `Repo guardado (webhook no se pudo crear automáticamente — verificá permisos OAuth)`,
+      });
+      setShowPicker(false);
+      setSearch("");
       onConnected();
     },
-    onError: () => {
-      toast({ title: "Error conectando repositorio", variant: "destructive" });
+    onError: (err: any) => {
+      toast({ title: "Error conectando repositorio", description: err?.message, variant: "destructive" });
     },
   });
 
-  const disconnectMut = useMutation({
-    mutationFn: async () => {
-      await apiRequest("POST", "/api/admin/github/disconnect");
+  const disconnectRepoMut = useMutation({
+    mutationFn: async (repoId: string) => {
+      await apiRequest("DELETE", `/api/admin/repos/${repoId}`);
     },
+    onSuccess: () => {
+      toast({ title: "Repo desconectado" });
+      onConnected();
+    },
+  });
+
+  const updateLabelMut = useMutation({
+    mutationFn: async ({ repoId, label }: { repoId: string; label: string }) => {
+      await apiRequest("PATCH", `/api/admin/repos/${repoId}`, { label });
+    },
+    onSuccess: () => onConnected(),
+  });
+
+  const disconnectGithubMut = useMutation({
+    mutationFn: async () => { await apiRequest("POST", "/api/admin/github/disconnect"); },
     onSuccess: () => {
       toast({ title: "GitHub desconectado" });
       onConnected();
     },
   });
 
-  // Already connected to a repo
-  if (currentRepo && aiEnabled) {
+  if (ghStatus && !ghStatus.configured) {
+    return (
+      <p className="text-xs text-gray-400">
+        GitHub OAuth no está configurado. Agrega GITHUB_CLIENT_ID y GITHUB_CLIENT_SECRET en las variables de entorno.
+      </p>
+    );
+  }
+
+  if (ghStatus && !ghStatus.connected) {
     return (
       <div className="space-y-3">
-        <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-          <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0" />
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium text-emerald-800">Conectado</p>
-            <p className="text-xs text-emerald-600 truncate">{currentRepo}</p>
+        <a
+          href="/api/github/authorize"
+          className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
+        >
+          <Github className="w-4 h-4" />
+          Conectar con GitHub
+        </a>
+        <p className="text-xs text-gray-400">Autoriza acceso para seleccionar tus repositorios automáticamente.</p>
+      </div>
+    );
+  }
+
+  const filteredRepos = search
+    ? availableRepos.filter(r => r.fullName.toLowerCase().includes(search.toLowerCase()))
+    : availableRepos;
+  const connectedFullNames = new Set(connectedRepos.map(r => r.repoFullName));
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-xs text-gray-500">
+          Conectado como <span className="font-medium text-gray-700">@{ghStatus?.githubUsername}</span>
+        </p>
+        <button onClick={() => disconnectGithubMut.mutate()} className="text-xs text-gray-400 hover:text-red-500 transition-colors">
+          Desconectar GitHub
+        </button>
+      </div>
+
+      {/* Connected repos list */}
+      {connectedRepos.length === 0 ? (
+        <p className="text-xs text-gray-400 italic">Ningún repositorio conectado todavía.</p>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-gray-600">
+            Repositorios conectados ({connectedRepos.length})
+          </p>
+          {connectedRepos.map(repo => (
+            <div key={repo.id} className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg p-2.5">
+              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-emerald-900 truncate">{repo.repoFullName}</p>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <input
+                    type="text"
+                    defaultValue={repo.label || ""}
+                    placeholder="Etiqueta (ej: Frontend)"
+                    onBlur={(e) => {
+                      const next = e.target.value.trim();
+                      if (next !== (repo.label || "")) updateLabelMut.mutate({ repoId: repo.id, label: next });
+                    }}
+                    className="text-xs bg-white border border-emerald-200 rounded px-2 py-0.5 max-w-[140px] focus:outline-none focus:border-emerald-400"
+                  />
+                  {repo.webhookId === null && (
+                    <span className="text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded" title="Webhook no fue creado automáticamente (probablemente repo legacy o sin permisos)">
+                      sin webhook auto
+                    </span>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  if (confirm(`¿Desconectar el repo ${repo.repoFullName} de este proyecto?`)) {
+                    disconnectRepoMut.mutate(repo.id);
+                  }
+                }}
+                className="text-xs text-gray-400 hover:text-red-500 transition-colors shrink-0"
+                title="Desconectar este repo"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Add repo picker */}
+      {!showPicker ? (
+        <Button variant="outline" size="sm" onClick={() => setShowPicker(true)} className="w-full">
+          <Plus className="w-3.5 h-3.5 mr-1.5" /> Conectar repositorio
+        </Button>
+      ) : (
+        <div className="border border-gray-200 rounded-lg p-3 space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs font-medium text-gray-700">Elegí un repositorio</p>
+            <button onClick={() => { setShowPicker(false); setSearch(""); }} className="text-xs text-gray-400 hover:text-gray-600">
+              Cancelar
+            </button>
+          </div>
+          <Input
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Buscar repositorio..."
+            className="h-8 text-sm"
+            autoFocus
+          />
+          <div className="max-h-48 overflow-y-auto border border-gray-100 rounded divide-y divide-gray-50">
+            {loadingRepos ? (
+              <p className="text-xs text-gray-400 text-center py-6">Cargando repositorios...</p>
+            ) : filteredRepos.length === 0 ? (
+              <p className="text-xs text-gray-400 text-center py-6">No se encontraron repositorios</p>
+            ) : (
+              filteredRepos.map(r => {
+                const alreadyConnected = connectedFullNames.has(r.fullName);
+                return (
+                  <button
+                    key={r.id}
+                    onClick={() => {
+                      if (!alreadyConnected) connectRepoMut.mutate({ repoFullName: r.fullName });
+                    }}
+                    disabled={connectRepoMut.isPending || alreadyConnected}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{r.fullName}</p>
+                      {r.description && <p className="text-xs text-gray-400 truncate">{r.description}</p>}
+                    </div>
+                    {alreadyConnected && <span className="text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded shrink-0">conectado</span>}
+                    {r.isPrivate && !alreadyConnected && (
+                      <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded font-medium shrink-0">privado</span>
+                    )}
+                  </button>
+                );
+              })
+            )}
           </div>
         </div>
-        <div className="flex gap-2 flex-wrap">
+      )}
+
+      {connectedRepos.length > 0 && (
+        <div className="flex gap-2 flex-wrap pt-1">
           <Button variant="outline" size="sm" onClick={async () => {
             try {
               const res = await apiRequest("POST", `/api/admin/projects/${projectId}/analyze`);
@@ -386,82 +553,7 @@ function GitHubRepoSelector({ projectId, currentRepo, aiEnabled, onConnected }: 
             Resumen semanal
           </Button>
         </div>
-      </div>
-    );
-  }
-
-  // GitHub OAuth not configured on server
-  if (ghStatus && !ghStatus.configured) {
-    return (
-      <p className="text-xs text-gray-400">
-        GitHub OAuth no está configurado. Agrega GITHUB_CLIENT_ID y GITHUB_CLIENT_SECRET en las variables de entorno.
-      </p>
-    );
-  }
-
-  // Not connected to GitHub yet
-  if (ghStatus && !ghStatus.connected) {
-    return (
-      <div className="space-y-3">
-        <a
-          href="/api/github/authorize"
-          className="inline-flex items-center gap-2 px-4 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
-        >
-          <Github className="w-4 h-4" />
-          Conectar con GitHub
-        </a>
-        <p className="text-xs text-gray-400">Autoriza acceso para seleccionar tus repositorios automáticamente.</p>
-      </div>
-    );
-  }
-
-  // Connected to GitHub — show repo selector
-  const filteredRepos = search
-    ? repos.filter(r => r.fullName.toLowerCase().includes(search.toLowerCase()))
-    : repos;
-
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-xs text-gray-500">
-          Conectado como <span className="font-medium text-gray-700">@{ghStatus?.githubUsername}</span>
-        </p>
-        <button onClick={() => disconnectMut.mutate()} className="text-xs text-gray-400 hover:text-red-500 transition-colors">
-          Desconectar
-        </button>
-      </div>
-
-      <Input
-        value={search}
-        onChange={e => setSearch(e.target.value)}
-        placeholder="Buscar repositorio..."
-        className="h-9 text-sm"
-      />
-
-      <div className="max-h-48 overflow-y-auto border border-gray-200 rounded-lg divide-y divide-gray-50">
-        {loadingRepos ? (
-          <p className="text-xs text-gray-400 text-center py-6">Cargando repositorios...</p>
-        ) : filteredRepos.length === 0 ? (
-          <p className="text-xs text-gray-400 text-center py-6">No se encontraron repositorios</p>
-        ) : (
-          filteredRepos.map(repo => (
-            <button
-              key={repo.id}
-              onClick={() => connectRepoMut.mutate(repo.fullName)}
-              disabled={connectRepoMut.isPending}
-              className="w-full flex items-center gap-3 px-3 py-2.5 text-left hover:bg-gray-50 transition-colors disabled:opacity-50"
-            >
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">{repo.fullName}</p>
-                {repo.description && <p className="text-xs text-gray-400 truncate">{repo.description}</p>}
-              </div>
-              {repo.isPrivate && (
-                <span className="text-[10px] px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded font-medium shrink-0">privado</span>
-              )}
-            </button>
-          ))
-        )}
-      </div>
+      )}
     </div>
   );
 }
@@ -484,6 +576,10 @@ export default function AdminProjectDetail() {
   // Phase creation
   const [showAddPhase, setShowAddPhase] = useState(false);
   const [phaseForm, setPhaseForm] = useState({ name: "", description: "", estimatedHours: "", startDate: "", endDate: "", isBonus: false, bonusLabel: "" });
+
+  // Realign timeline dialog
+  const [realignOpen, setRealignOpen] = useState(false);
+  const [realignDate, setRealignDate] = useState<string>("");
 
   // Task creation
   const [addingTaskPhase, setAddingTaskPhase] = useState<string | null>(null);
@@ -650,6 +746,19 @@ export default function AdminProjectDetail() {
     },
     onSuccess: () => { invalidate(); toast({ title: "🎁 Sorpresa revelada al cliente" }); },
     onError: (err: any) => toast({ title: "Error revelando sorpresa", description: err?.message, variant: "destructive" }),
+  });
+
+  const realignTimelineMut = useMutation({
+    mutationFn: async (newStartDate: string) => {
+      const res = await apiRequest("POST", `/api/admin/projects/${params.id}/realign-timeline`, { newStartDate });
+      return res.json();
+    },
+    onSuccess: (data: { phasesUpdated?: number; tasksUpdated?: number }) => {
+      invalidate();
+      setRealignOpen(false);
+      toast({ title: `Timeline realineado: ${data?.phasesUpdated ?? 0} fases, ${data?.tasksUpdated ?? 0} tareas` });
+    },
+    onError: (err: any) => toast({ title: "Error realineando timeline", description: err?.message, variant: "destructive" }),
   });
 
   const clarifyBriefMut = useMutation({
@@ -1274,6 +1383,19 @@ export default function AdminProjectDetail() {
               <Button
                 size="sm"
                 variant="outline"
+                className="group hover:border-gray-400 hover:bg-gray-50 hover:shadow-sm active:scale-[0.97] transition-all"
+                onClick={() => {
+                  const current = project.startDate ? new Date(project.startDate).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+                  setRealignDate(current);
+                  setRealignOpen(true);
+                }}
+              >
+                <CalendarDays className="w-3.5 h-3.5 sm:mr-1.5 group-hover:rotate-12 transition-transform" />
+                <span className="hidden sm:inline">Realinear timeline</span>
+              </Button>
+              <Button
+                size="sm"
+                variant="outline"
                 onClick={() => setShowAIPhase("append")}
                 className="group border-[#2FA4A9]/30 text-[#2FA4A9] hover:bg-[#2FA4A9]/10 hover:border-[#2FA4A9] hover:shadow-sm active:scale-[0.97] transition-all"
               >
@@ -1854,6 +1976,98 @@ export default function AdminProjectDetail() {
                 </div>
               </DialogContent>
             </Dialog>
+
+            {/* Realign timeline dialog */}
+            <Dialog open={realignOpen} onOpenChange={setRealignOpen}>
+              <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                  <DialogTitle>Realinear timeline del proyecto</DialogTitle>
+                  <DialogDescription>
+                    Movés todas las fechas en cascada desde la nueva fecha de inicio. Las duraciones de cada fase se preservan.
+                  </DialogDescription>
+                </DialogHeader>
+
+                {(() => {
+                  if (!project) return null;
+                  // Compute new dates client-side for preview using the same logic as the backend.
+                  const dayMs = 24 * 60 * 60 * 1000;
+                  const parsed = realignDate ? new Date(`${realignDate}T09:00:00`) : null;
+                  let cursor = parsed ? new Date(parsed) : new Date();
+                  const previewRows: Array<{ id: string; name: string; oldRange: string; newRange: string }> = [];
+                  for (const ph of project.phases) {
+                    let durationDays = 14;
+                    if (ph.startDate && ph.endDate) {
+                      durationDays = Math.max(1, Math.round((new Date(ph.endDate).getTime() - new Date(ph.startDate).getTime()) / dayMs));
+                    } else if (ph.estimatedHours && ph.estimatedHours > 0) {
+                      durationDays = Math.max(1, Math.round((ph.estimatedHours / 40) * 7));
+                    }
+                    const newStart = new Date(cursor);
+                    const newEnd = new Date(cursor.getTime() + durationDays * dayMs);
+                    const fmt = (d: Date | string | null) => d ? new Date(d).toLocaleDateString("es-CO", { day: "numeric", month: "short" }) : "?";
+                    previewRows.push({
+                      id: ph.id,
+                      name: ph.name,
+                      oldRange: `${fmt(ph.startDate)} → ${fmt(ph.endDate)}`,
+                      newRange: `${fmt(newStart)} → ${fmt(newEnd)}`,
+                    });
+                    cursor = newEnd;
+                  }
+                  const completedTasksCount = project.phases.flatMap(p => p.tasks).filter(t => t.status === "completed").length;
+
+                  return (
+                    <div className="space-y-3 pt-2">
+                      <div className="space-y-1.5">
+                        <Label htmlFor="realign-date">Nueva fecha de inicio</Label>
+                        <Input
+                          id="realign-date"
+                          type="date"
+                          value={realignDate}
+                          onChange={e => setRealignDate(e.target.value)}
+                        />
+                      </div>
+
+                      {previewRows.length > 0 ? (
+                        <div className="border rounded-lg max-h-64 overflow-y-auto divide-y text-sm">
+                          {previewRows.map((row, idx) => (
+                            <div key={row.id} className="px-3 py-2">
+                              <div className="font-medium text-gray-900">Fase {idx + 1}: {row.name}</div>
+                              <div className="text-xs text-gray-500 mt-0.5">
+                                <span className="line-through">{row.oldRange}</span>
+                                <span className="mx-2">→</span>
+                                <span className="text-gray-900 font-medium">{row.newRange}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-gray-500 italic">Este proyecto no tiene fases todavía — solo se actualizará la fecha de inicio.</p>
+                      )}
+
+                      <div className="bg-amber-50 border border-amber-200 rounded-lg p-2.5 text-xs text-amber-900">
+                        ⚠️ Esto sobrescribe todas las fechas que hayas editado a mano en fases y tareas.
+                        {completedTasksCount > 0 && (
+                          <span> Las {completedTasksCount} tareas ya completadas mantienen su estado pero sus fechas se mueven.</span>
+                        )}
+                      </div>
+
+                      <div className="flex justify-end gap-2 pt-1">
+                        <Button variant="outline" size="sm" onClick={() => setRealignOpen(false)} disabled={realignTimelineMut.isPending}>
+                          Cancelar
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={!realignDate || realignTimelineMut.isPending}
+                          onClick={() => realignTimelineMut.mutate(realignDate)}
+                          className="bg-[#2FA4A9] hover:bg-[#238b8f]"
+                        >
+                          {realignTimelineMut.isPending ? "Realineando..." : "Realinear"}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </DialogContent>
+            </Dialog>
           </div>
         )}
 
@@ -2161,6 +2375,15 @@ export default function AdminProjectDetail() {
                                       <SourceIcon className="w-3 h-3" />
                                       {sourceMeta.label}
                                     </span>
+                                    {entry.repoFullName && (
+                                      <>
+                                        <span className="text-gray-300">·</span>
+                                        <span className="inline-flex items-center gap-1 text-gray-500" title={`Repositorio: ${entry.repoFullName}`}>
+                                          <Github className="w-3 h-3" />
+                                          <code className="text-[10px]">{entry.repoFullName.split("/").pop()}</code>
+                                        </span>
+                                      </>
+                                    )}
                                     {entry.aiGenerated && (
                                       <>
                                         <span className="text-gray-300">·</span>

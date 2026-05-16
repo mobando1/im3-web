@@ -342,6 +342,48 @@ export async function runMigrations() {
     await pool.query(`ALTER TABLE "project_phases" ADD COLUMN IF NOT EXISTS "bonus_label" text;`).catch(() => {});
     await pool.query(`ALTER TABLE "project_phases" ADD COLUMN IF NOT EXISTS "revealed_at" timestamp;`).catch(() => {});
 
+    // Multi-repo GitHub support: one project can have N github repos connected.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "project_github_repos" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "project_id" varchar NOT NULL,
+        "repo_full_name" text NOT NULL,
+        "repo_url" text NOT NULL,
+        "webhook_secret" text NOT NULL,
+        "webhook_id" integer,
+        "label" text,
+        "is_active" boolean DEFAULT true NOT NULL,
+        "disconnected_at" timestamp,
+        "created_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_project_github_repos_project" ON "project_github_repos" ("project_id");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_project_github_repos_active" ON "project_github_repos" ("project_id", "is_active");`).catch(() => {});
+    await pool.query(`ALTER TABLE "github_webhook_events" ADD COLUMN IF NOT EXISTS "repo_id" varchar;`).catch(() => {});
+    await pool.query(`ALTER TABLE "project_activity_entries" ADD COLUMN IF NOT EXISTS "repo_id" varchar;`).catch(() => {});
+    await pool.query(`ALTER TABLE "project_activity_entries" ADD COLUMN IF NOT EXISTS "repo_full_name" text;`).catch(() => {});
+
+    // Data migration: copy legacy single-repo columns into the new table.
+    // Idempotent — only inserts if no equivalent row exists yet. Webhook secret
+    // is preserved when present (so the legacy webhook URL in GitHub still works
+    // via the shim endpoint); generated only if the legacy row had it null.
+    await pool.query(`
+      INSERT INTO "project_github_repos" ("project_id", "repo_full_name", "repo_url", "webhook_secret", "label")
+      SELECT
+        cp."id",
+        REGEXP_REPLACE(cp."github_repo_url", '^https?://github\\.com/', ''),
+        cp."github_repo_url",
+        COALESCE(cp."github_webhook_secret", encode(gen_random_bytes(32), 'hex')),
+        'Legacy (auto-migrado)'
+      FROM "client_projects" cp
+      WHERE cp."github_repo_url" IS NOT NULL
+        AND NOT EXISTS (
+          SELECT 1 FROM "project_github_repos" pgr
+          WHERE pgr."project_id" = cp."id" AND pgr."repo_url" = cp."github_repo_url"
+        );
+    `).catch((err) => console.error(`legacy github repo migration: ${err?.message}`));
+
     // Project deliverables: client rating
     await pool.query(`ALTER TABLE "project_deliverables" ADD COLUMN IF NOT EXISTS "client_rating" integer;`).catch(() => {});
     // Soft delete on deliverables — cascades from phase delete so undo restores them
