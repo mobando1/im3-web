@@ -38,13 +38,13 @@ try {
     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
       value = value.slice(1, -1);
     }
-    if (!(key in process.env)) process.env[key] = value;
+    if (!process.env[key]) process.env[key] = value;
   }
 } catch (_) { /* .env optional */ }
 
 const BASE_URL = process.env.IMPORT_BASE_URL || "http://localhost:3000";
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "im3admin2024";
 const PROJECTS_ROOT = "/Users/mateoobandoangel/projects/claude code projects";
 
 // ── CLI flags ──

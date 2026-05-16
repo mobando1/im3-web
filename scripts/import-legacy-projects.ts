@@ -36,13 +36,15 @@ try {
     if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
       value = value.slice(1, -1);
     }
-    if (!(key in process.env)) process.env[key] = value;
+    if (!process.env[key]) process.env[key] = value;
   }
 } catch (_) { /* .env optional */ }
 
 const BASE_URL = process.env.IMPORT_BASE_URL || "http://localhost:3000";
-const ADMIN_USERNAME = process.env.ADMIN_USERNAME;
-const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+// Mismo fallback que server/db.ts:688 — si .env no los tiene, el server tampoco
+// los tendrá y estará usando estos defaults.
+const ADMIN_USERNAME = process.env.ADMIN_USERNAME || "admin";
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || "im3admin2024";
 const PROJECTS_ROOT = "/Users/mateoobandoangel/projects/claude code projects";
 
 // ── CLI flags ──
@@ -277,12 +279,32 @@ async function main() {
 
   if (!dryRun) await login();
 
+  // Idempotency: pedir al CRM la lista de proyectos ya importados y skip por nombre
+  let alreadyImported = new Set<string>();
+  if (!dryRun) {
+    try {
+      const res = await fetch(`${BASE_URL}/api/admin/projects`, { headers: { "Cookie": sessionCookie || "" } });
+      if (res.ok) {
+        const list = (await res.json() as Array<{ name: string }>);
+        alreadyImported = new Set(list.map(p => p.name));
+        const willSkip = filtered.filter(p => alreadyImported.has(p.displayName));
+        if (willSkip.length > 0) {
+          console.log(`\nSe saltarán ${willSkip.length} proyecto(s) ya existentes en el CRM:`);
+          for (const p of willSkip) console.log(`    - ${p.displayName}`);
+        }
+      }
+    } catch (e) {
+      console.log(`! No se pudo consultar lista existente (${(e as Error).message}). Continuando sin filtro de idempotencia.`);
+    }
+  }
+  const toProcess = filtered.filter(p => !alreadyImported.has(p.displayName));
+
   const results: ImportResult[] = [];
-  for (let i = 0; i < filtered.length; i++) {
-    const entry = filtered[i];
+  for (let i = 0; i < toProcess.length; i++) {
+    const entry = toProcess[i];
     const r = await importProject(entry);
     results.push(r);
-    if (i < filtered.length - 1 && !dryRun) {
+    if (i < toProcess.length - 1 && !dryRun) {
       await new Promise(r => setTimeout(r, 3000));
     }
   }

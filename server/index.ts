@@ -130,7 +130,8 @@ app.use((req, res, next) => {
     {
       port,
       host: "0.0.0.0",
-      reusePort: true,
+      // reusePort throws ENOTSUP on macOS — solo activar en Linux (Replit/Railway prod)
+      reusePort: process.platform === "linux",
     },
     () => {
       log(`serving on port ${port}`);
