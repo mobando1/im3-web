@@ -14,9 +14,19 @@
  *
  * Uso:
  *   npx tsx scripts/create-github-repos.ts                 # interactivo
+ *   npx tsx scripts/create-github-repos.ts --yes           # no-interactivo, usa --visibility para todos
  *   npx tsx scripts/create-github-repos.ts --dry-run       # solo lista, no ejecuta
  *   npx tsx scripts/create-github-repos.ts --owner=OWNER   # default mobando1
  *   npx tsx scripts/create-github-repos.ts --visibility=private  # default private
+ *
+ * Notas:
+ *   - Folders sin git: este script invoca gh repo create --source --push. Pero gh
+ *     NO hace git init + commit automaticamente — si la carpeta no tiene commits,
+ *     el push falla. Para folders nuevos, primero hacer `cd <folder> && git init &&
+ *     git add . && git commit -m "Initial commit"` antes de correr este script.
+ *   - Folders con .env: VERIFICA que el .gitignore los excluya antes de correr.
+ *     gh repo create --push respeta .gitignore pero si el .env ya esta en un commit
+ *     anterior, se va a pushear.
  */
 
 import { execSync, spawnSync } from "child_process";
@@ -50,6 +60,7 @@ const PROJECTS_ROOT = "/Users/mateoobandoangel/projects/claude code projects";
 // ── CLI flags ──
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
+const autoYes = args.includes("--yes") || args.includes("-y");  // skip prompts, usa defaults
 const ownerArg = args.find(a => a.startsWith("--owner="))?.slice("--owner=".length);
 const visibilityArg = args.find(a => a.startsWith("--visibility="))?.slice("--visibility=".length);
 const OWNER = ownerArg || "mobando1";
@@ -189,10 +200,18 @@ async function main() {
     return;
   }
 
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  // Con --yes (-y): skip readline entirely, usa DEFAULT_VISIBILITY para todos.
+  // Importante: spawnSync(gh) con stdio:inherit puede dejar stdin en estado raro
+  // si el script tambien usa readline para leer del mismo stdin (pipe drained,
+  // readline cuelga). El modo --yes evita ese path completo y es lo que se debe
+  // usar en bash scripts no-interactivos.
+  const rl = autoYes ? null : readline.createInterface({ input: process.stdin, output: process.stdout });
   const results: Array<{ name: string; ok: boolean; url?: string; error?: string }> = [];
 
   try {
+    if (autoYes) {
+      console.log(`\n[--yes] modo no-interactivo: visibility=${DEFAULT_VISIBILITY} para todos\n`);
+    }
     for (const p of candidates) {
       const folder = PROJECT_FOLDERS[p.name];
       if (!folder) {
@@ -203,16 +222,18 @@ async function main() {
 
       console.log(`\n── ${p.name} ──`);
       const slug = slugify(p.name);
+      let visibility: "public" | "private" = DEFAULT_VISIBILITY;
 
-      const proceed = await ask(rl, `¿Crear repo ${OWNER}/${slug}? [Y/n] `);
-      if (proceed.toLowerCase() === "n") {
-        console.log("  skip");
-        results.push({ name: p.name, ok: false, error: "skipped por usuario" });
-        continue;
+      if (!autoYes && rl) {
+        const proceed = await ask(rl, `¿Crear repo ${OWNER}/${slug}? [Y/n] `);
+        if (proceed.toLowerCase() === "n") {
+          console.log("  skip");
+          results.push({ name: p.name, ok: false, error: "skipped por usuario" });
+          continue;
+        }
+        const visAns = await ask(rl, `Visibilidad [private/public] (default ${DEFAULT_VISIBILITY}): `);
+        visibility = visAns === "public" ? "public" : visAns === "private" ? "private" : DEFAULT_VISIBILITY;
       }
-
-      const visAns = await ask(rl, `Visibilidad [private/public] (default ${DEFAULT_VISIBILITY}): `);
-      const visibility = visAns === "public" ? "public" : visAns === "private" ? "private" : DEFAULT_VISIBILITY;
 
       try {
         const url = await createRepo(folder, slug, visibility);
@@ -226,7 +247,7 @@ async function main() {
       }
     }
   } finally {
-    rl.close();
+    if (rl) rl.close();
   }
 
   console.log("\n=== Summary ===");

@@ -159,7 +159,15 @@ async function login(): Promise<void> {
   console.log("✓ Login OK");
 }
 
-async function postWithRetry(url: string, payload: unknown, attempts = 2): Promise<{ status: number; body: any }> {
+// IMPORTANTE: NO se reintenta automaticamente en 5xx.
+// Razon: from-brief crea el proyecto en DB ANTES de generar fases con Claude.
+// Si Railway devuelve 502 por timeout del gateway durante la generacion de fases,
+// el proyecto YA fue creado server-side. Reintentar = crear un proyecto duplicado.
+// Lecion aprendida: la corrida del 2026-05-16 cre6 un duplicado fantasma de DMV
+// por exactamente este bug; lo arreglamos haciendo el script no-retry y dejando
+// que el usuario re-corra con --only para los que fallaron (el idempotency check
+// del inicio los va a saltar si ya existen).
+async function postWithRetry(url: string, payload: unknown, attempts = 1): Promise<{ status: number; body: any }> {
   let lastErr: any = null;
   for (let i = 0; i < attempts; i++) {
     try {
@@ -174,11 +182,7 @@ async function postWithRetry(url: string, payload: unknown, attempts = 2): Promi
       const text = await res.text();
       let body: any;
       try { body = JSON.parse(text); } catch { body = text; }
-      if (res.status >= 500 && i < attempts - 1) {
-        console.log(`  ↺ ${res.status} — retry en 5s...`);
-        await new Promise(r => setTimeout(r, 5000));
-        continue;
-      }
+      // No retry on 5xx — ver comentario arriba
       return { status: res.status, body };
     } catch (err) {
       lastErr = err;
