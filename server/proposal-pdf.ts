@@ -2,7 +2,7 @@ import puppeteer, { type Browser } from "puppeteer";
 
 let cachedBrowser: Browser | null = null;
 
-async function getBrowser(): Promise<Browser> {
+export async function getBrowser(): Promise<Browser> {
   if (cachedBrowser && cachedBrowser.connected) return cachedBrowser;
   console.log("[proposal-pdf] Launching browser...", {
     executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || "(auto)",

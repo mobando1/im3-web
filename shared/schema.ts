@@ -871,6 +871,95 @@ export const proposalBriefViews = pgTable("proposal_brief_views", {
 export type ProposalBriefView = typeof proposalBriefViews.$inferSelect;
 
 // ───────────────────────────────────────────────────────────────
+// Stack Services — catálogo normalizado del stack tecnológico
+// que IM3 cobra a clientes (Supabase, Anthropic, Resend, etc.)
+// con tarifas fijas + tiers + overage por uso variable.
+// Alimenta la calculadora de costos operativos por propuesta.
+// ───────────────────────────────────────────────────────────────
+export const stackServices = pgTable("stack_services", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),                     // "Supabase", "Anthropic Claude Sonnet 4"
+  vendor: text("vendor"),                           // "Supabase Inc.", "Anthropic"
+  category: text("category").notNull(),             // database | storage | ai | messaging | hosting | payments | email | other
+  description: text("description"),                 // qué hace y por qué lo usamos
+  url: text("url"),                                 // pricing page del vendor
+  // Cómo IM3 le cobra al cliente final por este servicio:
+  //   fixed                  — tarifa fija mensual (Resend, dominios)
+  //   tiered                 — tier base + overage (Supabase 1GB free, $0.021/GB extra)
+  //   usage                  — solo cobro por uso (Claude tokens)
+  //   passthrough            — IM3 paga al proveedor y cobra al cliente con markup
+  //   passthrough-with-cap   — pass-through con tope mensual + alertas (LLMs)
+  //   client-direct          — cliente paga directo al proveedor (BYO API key)
+  billingModel: text("billing_model").notNull(),
+  baseFeeUSD: numeric("base_fee_usd", { precision: 10, scale: 4 }).default("0"),
+  markupPercent: numeric("markup_percent", { precision: 5, scale: 2 }).default("0"),
+  // Tarifas variables por unidad de uso. Cada item es una unidad cobrable.
+  pricingUnits: json("pricing_units").$type<Array<{
+    unit: string;                  // "GB storage", "1M tokens (Sonnet input)", "mensaje WhatsApp"
+    includedQuantity: number;      // cuántas vienen incluidas en baseFeeUSD (0 si todo es overage)
+    overageUnitCostUSD: number;    // costo por unidad adicional
+    note?: string;
+  }>>().default([]),
+  internalNotes: text("internal_notes"),            // notas para el admin (no se muestran al cliente)
+  lastPriceUpdate: timestamp("last_price_update"),  // disparador "revisar tarifas" cada N meses
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type StackService = typeof stackServices.$inferSelect;
+export type InsertStackService = typeof stackServices.$inferInsert;
+
+// ───────────────────────────────────────────────────────────────
+// Contract Templates — plantillas Markdown con variables Handlebars-like
+// ({{cliente.nombre}}, {{pricing.totalUSD}}, etc.) que se materializan
+// en contratos individuales por propuesta aceptada.
+// ───────────────────────────────────────────────────────────────
+export const contractTemplates = pgTable("contract_templates", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),                     // "Contrato estándar de desarrollo"
+  description: text("description"),
+  bodyMarkdown: text("body_markdown").notNull(),
+  expectedVariables: json("expected_variables").$type<string[]>().default([]),
+  isDefault: boolean("is_default").default(false).notNull(),
+  isActive: boolean("is_active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type ContractTemplate = typeof contractTemplates.$inferSelect;
+export type InsertContractTemplate = typeof contractTemplates.$inferInsert;
+
+// ───────────────────────────────────────────────────────────────
+// Contracts — documentos generados por propuesta aceptada.
+// 1:1 con proposals.id (unique). Lifecycle: draft → locked → signed.
+// ───────────────────────────────────────────────────────────────
+export const contracts = pgTable("contracts", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  proposalId: varchar("proposal_id").notNull().unique(),
+  contactId: varchar("contact_id").notNull(),
+  templateId: varchar("template_id").notNull(),
+  title: text("title").notNull(),
+  // Snapshot del Markdown ya con variables resueltas. Editable mientras status=draft.
+  bodyMarkdown: text("body_markdown").notNull(),
+  // Auditoría: qué valores se inyectaron al generar (para comparar después si la propuesta cambia)
+  resolvedVariables: json("resolved_variables").$type<Record<string, unknown>>(),
+  status: text("status").notNull().default("draft"),  // draft | locked | signed | cancelled
+  lockedAt: timestamp("locked_at"),
+  signedAt: timestamp("signed_at"),
+  signedBy: text("signed_by"),
+  signedNotes: text("signed_notes"),
+  accessToken: varchar("access_token").default(sql`gen_random_uuid()`).notNull().unique(),
+  notes: text("notes"),
+  deletedAt: timestamp("deleted_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type Contract = typeof contracts.$inferSelect;
+export type InsertContract = typeof contracts.$inferInsert;
+
+// ───────────────────────────────────────────────────────────────
 // Gmail Email Sync
 // ───────────────────────────────────────────────────────────────
 

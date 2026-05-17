@@ -728,6 +728,320 @@ export async function runMigrations() {
     `).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_proposal_brief_views_brief" ON "proposal_brief_views" ("brief_id", "created_at" DESC);`).catch(() => {});
 
+    // Stack Services — catálogo del stack tecnológico cobrable
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "stack_services" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "name" text NOT NULL,
+        "vendor" text,
+        "category" text NOT NULL,
+        "description" text,
+        "url" text,
+        "billing_model" text NOT NULL,
+        "base_fee_usd" numeric(10, 4) DEFAULT '0',
+        "markup_percent" numeric(5, 2) DEFAULT '0',
+        "pricing_units" json DEFAULT '[]'::json,
+        "internal_notes" text,
+        "last_price_update" timestamp,
+        "is_active" boolean DEFAULT true NOT NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "updated_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_stack_services_category" ON "stack_services" ("category");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_stack_services_active" ON "stack_services" ("is_active");`).catch(() => {});
+
+    // Contract Templates — plantillas Markdown con variables
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "contract_templates" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "name" text NOT NULL,
+        "description" text,
+        "body_markdown" text NOT NULL,
+        "expected_variables" json DEFAULT '[]'::json,
+        "is_default" boolean DEFAULT false NOT NULL,
+        "is_active" boolean DEFAULT true NOT NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "updated_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+
+    // Contracts — documentos generados (1:1 con propuestas aceptadas)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "contracts" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "proposal_id" varchar NOT NULL,
+        "contact_id" varchar NOT NULL,
+        "template_id" varchar NOT NULL,
+        "title" text NOT NULL,
+        "body_markdown" text NOT NULL,
+        "resolved_variables" json,
+        "status" text DEFAULT 'draft' NOT NULL,
+        "locked_at" timestamp,
+        "signed_at" timestamp,
+        "signed_by" text,
+        "signed_notes" text,
+        "access_token" varchar DEFAULT gen_random_uuid() NOT NULL,
+        "notes" text,
+        "deleted_at" timestamp,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "updated_at" timestamp DEFAULT now() NOT NULL,
+        CONSTRAINT "contracts_proposal_id_unique" UNIQUE("proposal_id"),
+        CONSTRAINT "contracts_access_token_unique" UNIQUE("access_token")
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_contracts_contact_id" ON "contracts" ("contact_id");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_contracts_status" ON "contracts" ("status");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_contracts_deleted_at" ON "contracts" ("deleted_at");`).catch(() => {});
+
+    // Seed inicial del catálogo de stack — 10 servicios reales que IM3 usa hoy
+    // Solo inserta si la tabla está vacía (idempotente). Tras seed, admin edita en /admin/stack-catalog.
+    try {
+      const { rows } = await pool.query(`SELECT COUNT(*)::int AS n FROM stack_services`);
+      const count = rows[0]?.n ?? 0;
+      if (count === 0) {
+        const now = new Date();
+        const seed = [
+          {
+            name: "Railway", vendor: "Railway Corporation", category: "hosting",
+            description: "Hosting de Node.js + Postgres para el backend del CRM y el sitio.",
+            url: "https://railway.app/pricing",
+            billing_model: "fixed", base_fee_usd: "20", markup_percent: "0",
+            pricing_units: JSON.stringify([]),
+            internal_notes: "Plan Hobby cubre proyectos chicos. Pro $20/mes para producción.",
+          },
+          {
+            name: "Supabase", vendor: "Supabase Inc.", category: "database",
+            description: "Postgres managed + storage + auth para proyectos cliente.",
+            url: "https://supabase.com/pricing",
+            billing_model: "tiered", base_fee_usd: "25", markup_percent: "0",
+            pricing_units: JSON.stringify([
+              { unit: "GB storage", includedQuantity: 100, overageUnitCostUSD: 0.021, note: "Pro tier" },
+              { unit: "GB transferencia", includedQuantity: 250, overageUnitCostUSD: 0.09 },
+              { unit: "MAU (auth)", includedQuantity: 100000, overageUnitCostUSD: 0.00325 },
+            ]),
+            internal_notes: "Pro tier $25/mes. Free tier funciona para PoC.",
+          },
+          {
+            name: "Anthropic Claude Sonnet 4", vendor: "Anthropic", category: "ai",
+            description: "LLM principal para generación de contenido, agentes y chat.",
+            url: "https://www.anthropic.com/pricing",
+            billing_model: "passthrough-with-cap", base_fee_usd: "0", markup_percent: "10",
+            pricing_units: JSON.stringify([
+              { unit: "1M input tokens", includedQuantity: 0, overageUnitCostUSD: 3 },
+              { unit: "1M output tokens", includedQuantity: 0, overageUnitCostUSD: 15 },
+              { unit: "1M cached input tokens (5min TTL)", includedQuantity: 0, overageUnitCostUSD: 0.3, note: "90% off lectura tras cache hit" },
+            ]),
+            internal_notes: "Markup 10% sobre uso real. Cap mensual configurable por cliente.",
+          },
+          {
+            name: "Anthropic Claude Haiku 4.5", vendor: "Anthropic", category: "ai",
+            description: "LLM rápido y económico para validaciones y clasificación.",
+            url: "https://www.anthropic.com/pricing",
+            billing_model: "passthrough-with-cap", base_fee_usd: "0", markup_percent: "10",
+            pricing_units: JSON.stringify([
+              { unit: "1M input tokens", includedQuantity: 0, overageUnitCostUSD: 1 },
+              { unit: "1M output tokens", includedQuantity: 0, overageUnitCostUSD: 5 },
+            ]),
+            internal_notes: "Usar para quality gates y clasificación rápida.",
+          },
+          {
+            name: "Resend", vendor: "Resend", category: "email",
+            description: "Envío transaccional de emails (notificaciones, newsletter, propuestas).",
+            url: "https://resend.com/pricing",
+            billing_model: "tiered", base_fee_usd: "20", markup_percent: "0",
+            pricing_units: JSON.stringify([
+              { unit: "emails/mes", includedQuantity: 50000, overageUnitCostUSD: 0.0004 },
+            ]),
+            internal_notes: "Pro $20/mes incluye 50k emails. Free tier 3k/mes para PoC.",
+          },
+          {
+            name: "Meta WhatsApp Cloud API", vendor: "Meta", category: "messaging",
+            description: "Mensajería WhatsApp Business para clientes finales (recordatorios, notificaciones).",
+            url: "https://developers.facebook.com/docs/whatsapp/pricing",
+            billing_model: "passthrough", base_fee_usd: "0", markup_percent: "15",
+            pricing_units: JSON.stringify([
+              { unit: "conversación marketing (Colombia)", includedQuantity: 1000, overageUnitCostUSD: 0.0252, note: "Tras free tier mensual" },
+              { unit: "conversación utility (Colombia)", includedQuantity: 0, overageUnitCostUSD: 0.005 },
+              { unit: "conversación authentication", includedQuantity: 0, overageUnitCostUSD: 0.005 },
+            ]),
+            internal_notes: "Tarifas varían por país. Markup 15% sobre uso real.",
+          },
+          {
+            name: "Stripe", vendor: "Stripe Inc.", category: "payments",
+            description: "Procesamiento de pagos para clientes que cobran online.",
+            url: "https://stripe.com/pricing",
+            billing_model: "client-direct", base_fee_usd: "0", markup_percent: "0",
+            pricing_units: JSON.stringify([
+              { unit: "% por transacción exitosa", includedQuantity: 0, overageUnitCostUSD: 0.029, note: "2.9% + $0.30 USD por charge en Colombia" },
+            ]),
+            internal_notes: "Cliente paga directo a Stripe. IM3 no toca el flujo de dinero.",
+          },
+          {
+            name: "Google Workspace", vendor: "Google", category: "other",
+            description: "Gmail, Drive, Calendar, Meet — usado para impersonación con service account.",
+            url: "https://workspace.google.com/pricing",
+            billing_model: "client-direct", base_fee_usd: "0", markup_percent: "0",
+            pricing_units: JSON.stringify([
+              { unit: "usuario/mes (Business Starter)", includedQuantity: 0, overageUnitCostUSD: 7.2 },
+            ]),
+            internal_notes: "Cliente paga su propio Workspace. IM3 configura service account.",
+          },
+          {
+            name: "Vercel", vendor: "Vercel Inc.", category: "hosting",
+            description: "Hosting de frontends estáticos / Next.js para clientes que requieren CDN global.",
+            url: "https://vercel.com/pricing",
+            billing_model: "tiered", base_fee_usd: "20", markup_percent: "0",
+            pricing_units: JSON.stringify([
+              { unit: "GB bandwidth", includedQuantity: 1000, overageUnitCostUSD: 0.15 },
+              { unit: "invocaciones serverless", includedQuantity: 1000000, overageUnitCostUSD: 0.0000006 },
+            ]),
+            internal_notes: "Pro $20/usuario/mes. Solo si el cliente requiere CDN global o ISR.",
+          },
+          {
+            name: "ElevenLabs", vendor: "ElevenLabs", category: "ai",
+            description: "Text-to-speech para módulos de voz / asistentes telefónicos.",
+            url: "https://elevenlabs.io/pricing",
+            billing_model: "passthrough", base_fee_usd: "22", markup_percent: "15",
+            pricing_units: JSON.stringify([
+              { unit: "1M characters TTS", includedQuantity: 100000, overageUnitCostUSD: 180, note: "Plan Creator incluye 100k chars" },
+            ]),
+            internal_notes: "Solo cuando el módulo requiere voz sintética premium.",
+          },
+        ];
+        for (const s of seed) {
+          await pool.query(
+            `INSERT INTO stack_services (name, vendor, category, description, url, billing_model, base_fee_usd, markup_percent, pricing_units, internal_notes, last_price_update)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9::json,$10,$11)
+             ON CONFLICT DO NOTHING`,
+            [s.name, s.vendor, s.category, s.description, s.url, s.billing_model, s.base_fee_usd, s.markup_percent, s.pricing_units, s.internal_notes, now]
+          );
+        }
+        console.log(`✓ Stack services seeded (${seed.length})`);
+      }
+    } catch (err) {
+      console.error("⚠ Could not seed stack_services:", err);
+    }
+
+    // Seed plantilla default de contrato — solo si la tabla está vacía
+    try {
+      const { rows } = await pool.query(`SELECT COUNT(*)::int AS n FROM contract_templates`);
+      const count = rows[0]?.n ?? 0;
+      if (count === 0) {
+        const defaultBody = `# CONTRATO DE PRESTACIÓN DE SERVICIOS TECNOLÓGICOS
+
+**Fecha de elaboración:** {{fecha.hoy}}
+
+## Entre las partes
+
+Por una parte, **IM3 SYSTEMS S.A.S.** (en adelante, "EL PRESTADOR"), identificada con NIT [NIT pendiente], con domicilio principal en Colombia, representada legalmente por {{im3.representante}}, mayor de edad, identificado con cédula de ciudadanía No. [pendiente].
+
+Por la otra parte, **{{cliente.empresa}}** (en adelante, "EL CLIENTE"), representada por {{cliente.nombre}}, mayor de edad, identificado con cédula de ciudadanía No. [pendiente], con correo electrónico {{cliente.email}}.
+
+## Cláusula primera — Objeto
+
+EL PRESTADOR se obliga a desarrollar e implementar para EL CLIENTE el siguiente proyecto: **{{proposal.titulo}}**.
+
+El alcance detallado se describe en la propuesta comercial adjunta, que forma parte integral de este contrato.
+
+{{proposal.alcance}}
+
+## Cláusula segunda — Valor y forma de pago
+
+El valor total del proyecto es de **{{pricing.totalUSD}}** USD (o su equivalente en pesos colombianos al momento del pago).
+
+La forma de pago será por hitos, según el siguiente cronograma:
+
+{{pricing.milestones}}
+
+## Cláusula tercera — Costos operativos recurrentes
+
+Adicionalmente al valor del desarrollo, EL CLIENTE asumirá los siguientes costos operativos mensuales asociados al stack tecnológico:
+
+- **Estimado mensual:** {{costos.totalMensualUSD}} USD
+- **Estimado anual:** {{costos.totalAnualUSD}} USD
+
+Desglose por servicio:
+
+{{costos.desglose}}
+
+Estos costos pueden variar según el uso real del CLIENTE. EL PRESTADOR notificará con anticipación cualquier cambio significativo.
+
+## Cláusula cuarta — Cronograma
+
+EL PRESTADOR estima entregar el proyecto en **{{timeline.semanas}} semanas** a partir de la firma del presente contrato.
+
+- Fecha de inicio estimada: {{timeline.fechaInicio}}
+- Fecha de entrega estimada: {{timeline.fechaFin}}
+
+## Cláusula quinta — Propiedad intelectual
+
+Todo el código fuente, documentación y entregables desarrollados específicamente para EL CLIENTE en el marco de este contrato serán de propiedad exclusiva de EL CLIENTE una vez completado el pago total.
+
+Las herramientas, frameworks y bibliotecas open-source utilizadas mantienen su licencia original.
+
+## Cláusula sexta — Confidencialidad
+
+Las partes se obligan a mantener confidencialidad sobre la información comercial, técnica y operativa intercambiada en el marco de este contrato, durante la vigencia del mismo y por dos (2) años posteriores a su terminación.
+
+## Cláusula séptima — Terminación
+
+Cualquiera de las partes podrá dar por terminado este contrato con un preaviso de treinta (30) días calendario. En tal caso, EL CLIENTE pagará a EL PRESTADOR el valor proporcional al avance del proyecto a la fecha de terminación.
+
+## Cláusula octava — Ley aplicable y jurisdicción
+
+El presente contrato se rige por las leyes de la República de Colombia. Cualquier controversia derivada del mismo será resuelta ante los jueces competentes de Bogotá D.C.
+
+## Firma
+
+En constancia de lo anterior, las partes firman el presente contrato el día {{fecha.firma}}.
+
+\\
+\\
+\\
+\\
+
+___________________________________
+**Por IM3 SYSTEMS S.A.S.**
+{{im3.representante}}
+{{im3.email}}
+
+\\
+\\
+\\
+\\
+
+___________________________________
+**Por {{cliente.empresa}}**
+{{cliente.nombre}}
+{{cliente.email}}
+`;
+        await pool.query(
+          `INSERT INTO contract_templates (name, description, body_markdown, expected_variables, is_default, is_active)
+           VALUES ($1, $2, $3, $4::json, $5, $6)`,
+          [
+            "Contrato estándar de prestación de servicios IM3",
+            "Plantilla base con cláusulas estándar: objeto, valor, costos operativos, cronograma, IP, confidencialidad, terminación.",
+            defaultBody,
+            JSON.stringify([
+              "fecha.hoy", "fecha.firma",
+              "cliente.nombre", "cliente.empresa", "cliente.email", "cliente.telefono",
+              "im3.representante", "im3.email",
+              "proposal.titulo", "proposal.alcance",
+              "pricing.totalUSD", "pricing.milestones",
+              "costos.totalMensualUSD", "costos.totalAnualUSD", "costos.desglose",
+              "timeline.semanas", "timeline.fechaInicio", "timeline.fechaFin",
+            ]),
+            true,
+            true,
+          ]
+        );
+        console.log("✓ Contract template seeded (default IM3)");
+      }
+    } catch (err) {
+      console.error("⚠ Could not seed contract_templates:", err);
+    }
+
     console.log("✓ Database tables and indexes ensured");
 
     // Ensure admin user exists with correct password

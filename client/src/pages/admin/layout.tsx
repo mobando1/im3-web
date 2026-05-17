@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { LayoutDashboard, Users, CalendarDays, CheckSquare, LogOut, Bell, Search, Briefcase, FileText, BookOpen, Columns3, FolderKanban, Mic, FileSignature, ClipboardCheck, Activity, Wrench } from "lucide-react";
+import { LayoutDashboard, Users, CalendarDays, CheckSquare, LogOut, Bell, Search, Briefcase, FileText, BookOpen, Columns3, FolderKanban, Mic, FileSignature, ClipboardCheck, Activity, Wrench, Layers, FileCheck } from "lucide-react";
 import { CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 
 const navItems = [
@@ -13,6 +13,8 @@ const navItems = [
   { label: "Proyectos", path: "/admin/projects", icon: FolderKanban },
   { label: "Auditorías", path: "/admin/auditorias", icon: ClipboardCheck },
   { label: "Propuestas", path: "/admin/proposals", icon: FileSignature },
+  { label: "Contratos", path: "/admin/contracts", icon: FileCheck },
+  { label: "Stack & Costos", path: "/admin/stack-catalog", icon: Layers },
   { label: "Acta", path: "https://acta.im3systems.com", icon: Mic, external: true },
   { label: "Blog", path: "/admin/blog", icon: BookOpen },
   { label: "Tareas", path: "/admin/tasks", icon: CheckSquare, showBadge: true },

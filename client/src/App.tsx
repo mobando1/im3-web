@@ -69,6 +69,11 @@ const AdminProposals = lazy(() => import("@/pages/admin/proposals-list"));
 const AdminProposalEditor = lazy(() => import("@/pages/admin/proposal-editor"));
 const AdminProposalBriefEditor = lazy(() => import("@/pages/admin/proposal-brief-editor"));
 const ProposalBriefView = lazy(() => import("@/pages/proposal-brief"));
+const AdminStackCatalog = lazy(() => import("@/pages/admin/stack-catalog"));
+const AdminContracts = lazy(() => import("@/pages/admin/contracts"));
+const AdminContractEditor = lazy(() => import("@/pages/admin/contract-editor"));
+const AdminContractTemplates = lazy(() => import("@/pages/admin/contract-templates"));
+const AdminContractPreview = lazy(() => import("@/pages/admin/contract-preview"));
 const AdminBlog = lazy(() => import("@/pages/admin/blog"));
 const AdminBlogEditor = lazy(() => import("@/pages/admin/blog-editor"));
 const AdminAgents = lazy(() => import("@/pages/admin/agents"));
@@ -113,6 +118,7 @@ function Router() {
         <Route path="/reschedule/:contactId" component={Reschedule} />
         <Route path="/proposal/:token" component={ProposalView} />
         <Route path="/brief/:token" component={ProposalBriefView} />
+        <Route path="/contract-preview/:token" component={AdminContractPreview} />
         {/* Portal del cliente — auth (login + multi-proyecto) */}
         <Route path="/portal/login" component={PortalLogin} />
         <Route path="/portal/forgot-password" component={PortalForgotPassword} />
@@ -195,6 +201,28 @@ function Router() {
               <AdminProposalBriefEditor />
             </ProtectedAdmin>
           )}
+        </Route>
+        <Route path="/admin/stack-catalog">
+          <ProtectedAdmin>
+            <AdminStackCatalog />
+          </ProtectedAdmin>
+        </Route>
+        <Route path="/admin/contract-templates">
+          <ProtectedAdmin>
+            <AdminContractTemplates />
+          </ProtectedAdmin>
+        </Route>
+        <Route path="/admin/contracts/:id">
+          {() => (
+            <ProtectedAdmin>
+              <AdminContractEditor />
+            </ProtectedAdmin>
+          )}
+        </Route>
+        <Route path="/admin/contracts">
+          <ProtectedAdmin>
+            <AdminContracts />
+          </ProtectedAdmin>
         </Route>
         <Route path="/admin/proposals/:id">
           {() => (

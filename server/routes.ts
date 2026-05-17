@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, isNotNull, sql, and, gte, lte, ilike, or, desc, count, inArray } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectGithubRepos, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectGithubRepos, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, stackServices, contractTemplates, contracts, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback } from "@shared/schema";
 import { AGENT_REGISTRY, AGENT_KINDS, findAgent } from "./agents/registry";
 import { runAgent } from "./agents/runner";
 import { syncGmailEmails, isGmailConfigured, sendGmailMessage, getOriginalMessageHeaders } from "./google-gmail";
@@ -10228,6 +10228,433 @@ Responde SOLO con un JSON válido, sin markdown:
       res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Stack Services — catálogo de servicios tecnológicos
+  // (DB nueva normalizada que alimenta la calculadora + contratos)
+  // ─────────────────────────────────────────────────────────────
+
+  app.get("/api/admin/stack-services", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const category = req.query.category as string | undefined;
+      const includeInactive = req.query.includeInactive === "true";
+      const conditions = [] as any[];
+      if (!includeInactive) conditions.push(eq(stackServices.isActive, true));
+      if (category) conditions.push(eq(stackServices.category, category));
+      const rows = await db.select().from(stackServices)
+        .where(conditions.length > 0 ? and(...conditions) : undefined)
+        .orderBy(asc(stackServices.category), asc(stackServices.name));
+      res.json(rows);
+    } catch (err: any) {
+      log(`Error listing stack services: ${err?.message}`);
+      res.status(500).json({ error: "Error listando servicios" });
+    }
+  });
+
+  app.get("/api/admin/stack-services/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [row] = await db.select().from(stackServices).where(eq(stackServices.id, req.params.id as string)).limit(1);
+      if (!row) return res.status(404).json({ error: "Servicio no encontrado" });
+      res.json(row);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.post("/api/admin/stack-services", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { name, category, billingModel } = req.body;
+      if (!name || !category || !billingModel) {
+        return res.status(400).json({ error: "name, category, billingModel son requeridos" });
+      }
+      const [created] = await db.insert(stackServices).values({
+        ...req.body,
+        lastPriceUpdate: new Date(),
+      }).returning();
+      res.json(created);
+    } catch (err: any) {
+      log(`Error creating stack service: ${err?.message}`);
+      res.status(500).json({ error: err?.message || "Error creando servicio" });
+    }
+  });
+
+  app.patch("/api/admin/stack-services/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const patch: Record<string, unknown> = { ...req.body, updatedAt: new Date() };
+      // Si cambia el precio, actualizar lastPriceUpdate para disparar el warning de "revisar tarifas"
+      if ("baseFeeUSD" in req.body || "pricingUnits" in req.body || "markupPercent" in req.body) {
+        patch.lastPriceUpdate = new Date();
+      }
+      const [updated] = await db.update(stackServices)
+        .set(patch)
+        .where(eq(stackServices.id, req.params.id as string))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Servicio no encontrado" });
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error updating stack service: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Soft delete (set is_active=false)
+  app.delete("/api/admin/stack-services/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [deleted] = await db.update(stackServices)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(eq(stackServices.id, req.params.id as string))
+        .returning();
+      if (!deleted) return res.status(404).json({ error: "Servicio no encontrado" });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // ── Calculadora de costos por propuesta ──
+
+  // POST calcula breakdown (no persiste)
+  app.post("/api/admin/proposals/:id/stack-cost/calculate", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const items = Array.isArray(req.body?.items) ? req.body.items : [];
+      const { calculateStackCost } = await import("./stack-calculator");
+      const result = await calculateStackCost(items);
+      if ("error" in result) return res.status(400).json({ error: result.error });
+      res.json(result);
+    } catch (err: any) {
+      log(`Error calculating stack cost: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // POST aplica el breakdown a proposal.sections.operationalCosts
+  app.post("/api/admin/proposals/:id/stack-cost/apply", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const items = Array.isArray(req.body?.items) ? req.body.items : [];
+      if (items.length === 0) return res.status(400).json({ error: "items requeridos" });
+      const { calculateStackCost, applyStackCostToProposal } = await import("./stack-calculator");
+      const calc = await calculateStackCost(items);
+      if ("error" in calc) return res.status(400).json({ error: calc.error });
+      const result = await applyStackCostToProposal(req.params.id as string, calc);
+      if ("error" in result) return res.status(404).json({ error: result.error });
+      res.json({ success: true, calc });
+    } catch (err: any) {
+      log(`Error applying stack cost: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Contract Templates — plantillas Markdown con variables
+  // ─────────────────────────────────────────────────────────────
+
+  app.get("/api/admin/contract-templates", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const includeInactive = req.query.includeInactive === "true";
+      const rows = await db.select().from(contractTemplates)
+        .where(includeInactive ? undefined : eq(contractTemplates.isActive, true))
+        .orderBy(desc(contractTemplates.isDefault), asc(contractTemplates.name));
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.get("/api/admin/contract-templates/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [row] = await db.select().from(contractTemplates).where(eq(contractTemplates.id, req.params.id as string)).limit(1);
+      if (!row) return res.status(404).json({ error: "Template no encontrado" });
+      res.json(row);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.post("/api/admin/contract-templates", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { name, bodyMarkdown } = req.body;
+      if (!name || !bodyMarkdown) return res.status(400).json({ error: "name y bodyMarkdown requeridos" });
+
+      // Si el nuevo es default, desmarcar los demás
+      if (req.body.isDefault === true) {
+        await db.update(contractTemplates).set({ isDefault: false }).where(eq(contractTemplates.isDefault, true));
+      }
+
+      const [created] = await db.insert(contractTemplates).values(req.body).returning();
+      res.json(created);
+    } catch (err: any) {
+      log(`Error creating contract template: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.patch("/api/admin/contract-templates/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      // Si el patch marca como default, desmarcar los otros
+      if (req.body.isDefault === true) {
+        await db.update(contractTemplates).set({ isDefault: false }).where(eq(contractTemplates.isDefault, true));
+      }
+      const [updated] = await db.update(contractTemplates)
+        .set({ ...req.body, updatedAt: new Date() })
+        .where(eq(contractTemplates.id, req.params.id as string))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Template no encontrado" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.delete("/api/admin/contract-templates/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [t] = await db.select().from(contractTemplates).where(eq(contractTemplates.id, req.params.id as string)).limit(1);
+      if (!t) return res.status(404).json({ error: "Template no encontrado" });
+      if (t.isDefault) return res.status(400).json({ error: "No se puede archivar la plantilla default. Marca otra como default primero." });
+      await db.update(contractTemplates)
+        .set({ isActive: false, updatedAt: new Date() })
+        .where(eq(contractTemplates.id, req.params.id as string));
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Contracts — documentos generados por propuesta aceptada
+  // ─────────────────────────────────────────────────────────────
+
+  // GET listar contratos (filtros: status, contactId, proposalId)
+  app.get("/api/admin/contracts", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const conditions: any[] = [isNull(contracts.deletedAt)];
+      if (req.query.status) conditions.push(eq(contracts.status, req.query.status as string));
+      if (req.query.contactId) conditions.push(eq(contracts.contactId, req.query.contactId as string));
+      if (req.query.proposalId) conditions.push(eq(contracts.proposalId, req.query.proposalId as string));
+
+      const rows = await db.select().from(contracts)
+        .where(and(...conditions))
+        .orderBy(desc(contracts.createdAt));
+
+      const enriched = await Promise.all(rows.map(async (c) => {
+        const [contact] = await db!.select({ nombre: contacts.nombre, empresa: contacts.empresa })
+          .from(contacts).where(eq(contacts.id, c.contactId)).limit(1);
+        const [proposal] = await db!.select({ title: proposals.title })
+          .from(proposals).where(eq(proposals.id, c.proposalId)).limit(1);
+        return { ...c, contactName: contact?.nombre, contactEmpresa: contact?.empresa, proposalTitle: proposal?.title };
+      }));
+
+      res.json(enriched);
+    } catch (err: any) {
+      log(`Error listing contracts: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // GET por proposalId — para que proposal-editor sepa si ya existe contrato
+  app.get("/api/admin/proposals/:id/contract", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [contract] = await db.select().from(contracts)
+        .where(and(eq(contracts.proposalId, req.params.id as string), isNull(contracts.deletedAt)))
+        .limit(1);
+      res.json(contract || null);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // GET por id
+  app.get("/api/admin/contracts/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [contract] = await db.select().from(contracts).where(eq(contracts.id, req.params.id as string)).limit(1);
+      if (!contract) return res.status(404).json({ error: "Contrato no encontrado" });
+
+      const [contact] = await db.select({ nombre: contacts.nombre, empresa: contacts.empresa, email: contacts.email })
+        .from(contacts).where(eq(contacts.id, contract.contactId)).limit(1);
+      const [proposal] = await db.select({ title: proposals.title, accessToken: proposals.accessToken, status: proposals.status })
+        .from(proposals).where(eq(proposals.id, contract.proposalId)).limit(1);
+
+      res.json({ ...contract, contact, proposal });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // POST genera contrato desde propuesta — body { templateId? }
+  app.post("/api/admin/proposals/:id/contracts/generate", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { generateContractFromProposal } = await import("./contract-generator");
+      const result = await generateContractFromProposal(req.params.id as string, req.body?.templateId);
+      if ("error" in result) return res.status(400).json({ error: result.error });
+      res.json(result);
+    } catch (err: any) {
+      log(`Error generating contract: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // PATCH editar bodyMarkdown / notes / title (solo si status === draft)
+  app.patch("/api/admin/contracts/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [contract] = await db.select().from(contracts).where(eq(contracts.id, req.params.id as string)).limit(1);
+      if (!contract) return res.status(404).json({ error: "Contrato no encontrado" });
+
+      // Si el contrato está lockeado, solo permitir editar notes/signedNotes
+      const allowedFieldsAfterLock = new Set(["notes", "signedNotes"]);
+      const fields = Object.keys(req.body);
+      if (contract.status !== "draft" && fields.some(f => !allowedFieldsAfterLock.has(f))) {
+        return res.status(400).json({ error: "Contrato lockeado — solo notes editables. Para reabrir, contacta soporte." });
+      }
+
+      const [updated] = await db.update(contracts)
+        .set({ ...req.body, updatedAt: new Date() })
+        .where(eq(contracts.id, req.params.id as string))
+        .returning();
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // POST regenerar body desde la propuesta actual (re-resuelve variables)
+  app.post("/api/admin/contracts/:id/regenerate", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { regenerateContractBody } = await import("./contract-generator");
+      const result = await regenerateContractBody(req.params.id as string);
+      if ("error" in result) return res.status(400).json({ error: result.error });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // POST lock — congela el bodyMarkdown
+  app.post("/api/admin/contracts/:id/lock", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [contract] = await db.select().from(contracts).where(eq(contracts.id, req.params.id as string)).limit(1);
+      if (!contract) return res.status(404).json({ error: "Contrato no encontrado" });
+      if (contract.status !== "draft") return res.status(400).json({ error: "Solo contratos en draft pueden lockearse" });
+      const [updated] = await db.update(contracts)
+        .set({ status: "locked", lockedAt: new Date(), updatedAt: new Date() })
+        .where(eq(contracts.id, req.params.id as string))
+        .returning();
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // POST marcar como firmado
+  app.post("/api/admin/contracts/:id/sign", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { signedBy, signedAt, signedNotes } = req.body;
+      if (!signedBy) return res.status(400).json({ error: "signedBy requerido" });
+      const [contract] = await db.select().from(contracts).where(eq(contracts.id, req.params.id as string)).limit(1);
+      if (!contract) return res.status(404).json({ error: "Contrato no encontrado" });
+      if (contract.status === "cancelled") return res.status(400).json({ error: "Contrato cancelado, no se puede firmar" });
+
+      const signDate = signedAt ? new Date(signedAt) : new Date();
+      const [updated] = await db.update(contracts)
+        .set({
+          status: "signed",
+          signedAt: signDate,
+          signedBy,
+          signedNotes: signedNotes || null,
+          updatedAt: new Date(),
+        })
+        .where(eq(contracts.id, req.params.id as string))
+        .returning();
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // DELETE soft
+  app.delete("/api/admin/contracts/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      await db.update(contracts)
+        .set({ deletedAt: new Date() })
+        .where(eq(contracts.id, req.params.id as string));
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // GET público por token (sin auth) — usado por puppeteer para generar PDF
+  // y opcionalmente por el cliente final si se le manda el link
+  app.get("/api/contract/:token", async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [contract] = await db.select().from(contracts)
+        .where(and(eq(contracts.accessToken, req.params.token as string), isNull(contracts.deletedAt)))
+        .limit(1);
+      if (!contract) return res.status(404).json({ error: "Contrato no encontrado" });
+
+      const [contact] = await db.select({ nombre: contacts.nombre, empresa: contacts.empresa })
+        .from(contacts).where(eq(contacts.id, contract.contactId)).limit(1);
+
+      // Para puppeteer no requerimos guard de status — el endpoint admin /pdf
+      // ya verificó auth antes de redirigir aquí. Para uso externo, se puede agregar guard.
+      res.json({
+        id: contract.id,
+        title: contract.title,
+        bodyMarkdown: contract.bodyMarkdown,
+        status: contract.status,
+        signedAt: contract.signedAt,
+        signedBy: contract.signedBy,
+        contactName: contact?.nombre,
+        contactEmpresa: contact?.empresa,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // GET PDF — genera con puppeteer
+  app.get("/api/admin/contracts/:id/pdf", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [contract] = await db.select().from(contracts).where(eq(contracts.id, req.params.id as string)).limit(1);
+      if (!contract) return res.status(404).json({ error: "Contrato no encontrado" });
+
+      const { generateContractPdf } = await import("./contract-pdf");
+      const pdf = await generateContractPdf({ contractId: contract.id });
+
+      const [contact] = await db.select({ empresa: contacts.empresa, nombre: contacts.nombre })
+        .from(contacts).where(eq(contacts.id, contract.contactId)).limit(1);
+      const filename = `Contrato_${(contact?.empresa || contact?.nombre || "IM3").replace(/[^\w-]+/g, "_")}.pdf`;
+
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      res.setHeader("Content-Length", pdf.length.toString());
+      res.send(pdf);
+    } catch (err: any) {
+      log(`Error generating contract PDF: ${err?.message}`);
+      res.status(500).json({ error: err?.message || "Error generando PDF" });
     }
   });
 

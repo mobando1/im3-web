@@ -2,9 +2,10 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Copy, ExternalLink, Send, Sparkles, Save, Eye, FolderKanban, FileSearch, X, Wand2, Check, RotateCcw, Trash2, MessageCircle, BookOpen, Pencil } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Send, Sparkles, Save, Eye, FolderKanban, FileSearch, X, Wand2, Check, RotateCcw, Trash2, MessageCircle, BookOpen, Pencil, Calculator, FileCheck } from "lucide-react";
 import { SectionForm, hasTypedForm } from "@/components/proposal/SectionForm";
 import { ProposalChatPanel } from "@/components/proposal/ProposalChatPanel";
+import { StackCostCalculatorDialog } from "@/components/proposal/StackCostCalculatorDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -288,6 +289,7 @@ export default function ProposalEditor() {
   const [aiInstruction, setAiInstruction] = useState("");
   const [aiOptions, setAiOptions] = useState<Array<{ label: string; description: string; section: unknown }> | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
+  const [calculatorOpen, setCalculatorOpen] = useState(false);
   const [confirmSendOpen, setConfirmSendOpen] = useState(false);
   const [confirmRegenOpen, setConfirmRegenOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
@@ -627,6 +629,20 @@ export default function ProposalEditor() {
           >
             <BookOpen className="w-4 h-4" /> Brief técnico
           </Button>
+        )}
+        {hasSections && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 border-[#2FA4A9]/30 text-[#2FA4A9] hover:bg-[#2FA4A9]/10"
+            onClick={() => setCalculatorOpen(true)}
+            title="Calcular costos operativos exactos con catálogo de stack"
+          >
+            <Calculator className="w-4 h-4" /> Calculadora costos
+          </Button>
+        )}
+        {hasSections && (proposal.status === "accepted" || proposal.status === "viewed" || proposal.status === "sent") && (
+          <ContractButton proposalId={proposal.id} />
         )}
         {hasSections && (
           <a
@@ -1351,6 +1367,60 @@ export default function ProposalEditor() {
           onClose={() => setChatOpen(false)}
         />
       )}
+
+      {hasSections && proposal && (
+        <StackCostCalculatorDialog
+          proposalId={proposal.id}
+          open={calculatorOpen}
+          onClose={() => setCalculatorOpen(false)}
+        />
+      )}
     </div>
+  );
+}
+
+// Botón inteligente "Generar contrato" / "Ver contrato" según si ya existe
+function ContractButton({ proposalId }: { proposalId: string }) {
+  const [, navigate] = useLocation();
+  const { toast } = useToast();
+  const { data: existing } = useQuery<{ id: string } | null>({
+    queryKey: [`/api/admin/proposals/${proposalId}/contract`],
+  });
+
+  const genMut = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/proposals/${proposalId}/contracts/generate`);
+      return res.json() as Promise<{ contractId: string }>;
+    },
+    onSuccess: (data) => {
+      toast({ title: "✓ Contrato generado" });
+      navigate(`/admin/contracts/${data.contractId}`);
+    },
+    onError: (err: any) => toast({ title: "Error generando contrato", description: err?.message, variant: "destructive" }),
+  });
+
+  if (existing && (existing as any).id) {
+    return (
+      <Button
+        size="sm"
+        variant="outline"
+        className="gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+        onClick={() => navigate(`/admin/contracts/${(existing as any).id}`)}
+      >
+        <FileCheck className="w-4 h-4" /> Ver contrato →
+      </Button>
+    );
+  }
+
+  return (
+    <Button
+      size="sm"
+      variant="outline"
+      className="gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
+      onClick={() => genMut.mutate()}
+      disabled={genMut.isPending}
+    >
+      <FileCheck className="w-4 h-4" /> {genMut.isPending ? "Generando…" : "Generar contrato"}
+    </Button>
   );
 }
