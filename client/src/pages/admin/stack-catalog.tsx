@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
@@ -12,6 +12,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Plus, Pencil, ExternalLink, Trash2, Layers, AlertTriangle, Calculator } from "lucide-react";
 import { SimulatorCalculator } from "@/components/stack/SimulatorCalculator";
 import { SimulatorChatPanel } from "@/components/stack/SimulatorChatPanel";
+import { StackDriftBanner } from "@/components/stack/StackDriftBanner";
 
 type PricingUnit = {
   unit: string;
@@ -185,6 +186,9 @@ export default function StackCatalogPage() {
         )}
       </div>
 
+      {/* Banner de deriva de precios — solo aparece si hay propuestas afectadas */}
+      <StackDriftBanner />
+
       {/* Tab switcher */}
       <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
         <button
@@ -202,16 +206,7 @@ export default function StackCatalogPage() {
       </div>
 
       {tab === "simulator" && (
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4 min-h-[600px]">
-          <div className="bg-white border border-gray-200 rounded-xl p-5">
-            <h2 className="text-sm font-semibold text-gray-700 mb-1">Calculadora estructurada</h2>
-            <p className="text-xs text-gray-500 mb-4">Selecciona servicios + teclea uso → resultado en tiempo real. Para preguntas precisas con números.</p>
-            <SimulatorCalculator />
-          </div>
-          <div className="min-h-[500px]">
-            <SimulatorChatPanel />
-          </div>
-        </div>
+        <SimulatorView />
       )}
 
       {tab === "catalog" && <>
@@ -497,6 +492,76 @@ export default function StackCatalogPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// SimulatorView: vista del tab "Simulador" con selector de cliente opcional
+// ──────────────────────────────────────────────────────────────────────────
+
+type ContactLite = { id: string; nombre: string; empresa: string; status: string };
+type ContactsResponse = { contacts?: ContactLite[] } | ContactLite[];
+
+function SimulatorView() {
+  const [contactId, setContactId] = useState<string | null>(null);
+
+  // Cargar contactos activos (no incluye lost/converted)
+  const { data: rawContacts } = useQuery<ContactsResponse>({
+    queryKey: ["/api/admin/contacts"],
+  });
+
+  const contacts: ContactLite[] = useMemo(() => {
+    const list = Array.isArray(rawContacts) ? rawContacts : (rawContacts?.contacts || []);
+    // Filtrar a activos (sin rechazados/perdidos)
+    return list.filter(c => !["lost", "rejected"].includes(c.status));
+  }, [rawContacts]);
+
+  const selectedContact = contacts.find(c => c.id === contactId);
+  const contactLabel = selectedContact ? `${selectedContact.empresa || selectedContact.nombre}` : null;
+
+  return (
+    <div className="space-y-3">
+      {/* Selector de cliente */}
+      <div className="bg-white border border-gray-200 rounded-lg p-3 flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-gray-700">Cliente:</span>
+          <Select
+            value={contactId || "__none__"}
+            onValueChange={(v) => setContactId(v === "__none__" ? null : v)}
+          >
+            <SelectTrigger className="w-[280px] h-8 text-xs">
+              <SelectValue placeholder="Sin contexto (modo genérico)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="__none__">— Sin contexto (modo genérico) —</SelectItem>
+              {contacts.map(c => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.empresa || c.nombre} {c.empresa && c.nombre ? `· ${c.nombre}` : ""}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <p className="text-[11px] text-gray-500 flex-1">
+          Opcional. Si seleccionas un cliente, el chat IA usará su contexto (industria, tamaño, presupuesto) para respuestas más precisas.
+        </p>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4 min-h-[600px]">
+        <div className="bg-white border border-gray-200 rounded-xl p-5">
+          <h2 className="text-sm font-semibold text-gray-700 mb-1">Calculadora estructurada</h2>
+          <p className="text-xs text-gray-500 mb-4">Selecciona servicios + teclea uso → resultado en tiempo real. Para preguntas precisas con números.</p>
+          <SimulatorCalculator />
+        </div>
+        <div className="min-h-[500px]">
+          <SimulatorChatPanel
+            contactId={contactId}
+            contactLabel={contactLabel}
+            onClearContact={() => setContactId(null)}
+          />
+        </div>
+      </div>
     </div>
   );
 }

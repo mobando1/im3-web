@@ -1,10 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "./db";
-import { stackServices, stackSimulatorChatMessages } from "@shared/schema";
+import { stackServices, stackSimulatorChatMessages, contacts, diagnostics } from "@shared/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { log } from "./index";
 import { calculateStackCost, type CalculatorInput } from "./stack-calculator";
 import { buildStackReferenceFromDB } from "./stack-reference";
+import { getIndustriaLabel } from "@shared/industrias";
 
 let client: Anthropic | null = null;
 function getClient(): Anthropic | null {
@@ -114,8 +115,46 @@ EJEMPLO DE PRESENTACIÓN BUENA:
 EJEMPLO DE PRESENTACIÓN MALA (no hagas):
 "Más o menos costaría $30 al mes aproximadamente."`;
 
+async function buildClientContextBlock(contactId: string): Promise<string> {
+  if (!db) return "";
+  const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId)).limit(1);
+  if (!contact) return "";
+
+  const lines: string[] = [];
+  lines.push(`═══════════════════════════════════════════════════════`);
+  lines.push(`CONTEXTO DEL CLIENTE — Considera esto en cada respuesta`);
+  lines.push(`═══════════════════════════════════════════════════════`);
+  lines.push(``);
+  lines.push(`Cliente: ${contact.nombre}${contact.apellido ? ` ${contact.apellido}` : ""}`);
+  lines.push(`Empresa: ${contact.empresa}`);
+  if (contact.telefono) lines.push(`Teléfono: ${contact.telefono}`);
+  lines.push(`Status comercial: ${contact.status}`);
+
+  if (contact.diagnosticId) {
+    const [diag] = await db.select().from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId)).limit(1);
+    if (diag) {
+      lines.push(``);
+      lines.push(`Del diagnóstico:`);
+      lines.push(`  - Industria: ${getIndustriaLabel(diag.industria)}`);
+      if (diag.empleados) lines.push(`  - Empleados: ${diag.empleados}`);
+      if (diag.presupuesto) lines.push(`  - Presupuesto declarado: ${diag.presupuesto}`);
+      if (diag.areaPrioridad && diag.areaPrioridad.length > 0) lines.push(`  - Áreas prioridad: ${diag.areaPrioridad.join(", ")}`);
+      if (diag.productos) lines.push(`  - Productos: ${diag.productos.substring(0, 200)}`);
+      if (diag.volumenMensual) lines.push(`  - Volumen mensual: ${diag.volumenMensual}`);
+      if (diag.herramientas) lines.push(`  - Herramientas actuales: ${diag.herramientas.substring(0, 200)}`);
+      if (diag.nivelTech) lines.push(`  - Nivel técnico: ${diag.nivelTech}`);
+    }
+  }
+
+  lines.push(``);
+  lines.push(`USA este contexto para personalizar respuestas: si el cliente es chico (5 empleados) sugiere tiers más pequeños; si su presupuesto es bajo, sé conservador; menciona explícitamente cómo el costo se relaciona con su escala.`);
+
+  return lines.join("\n");
+}
+
 export async function runSimulatorChat(params: {
   userMessage: string;
+  contactId?: string | null;
 }): Promise<{ assistantMessage: string; toolCalls: ToolCallSummary[] }> {
   if (!db) throw new Error("DB no disponible");
   const anthropic = getClient();
@@ -140,6 +179,11 @@ export async function runSimulatorChat(params: {
   // Inyectar el catálogo en el system prompt (cacheado para reutilizar entre mensajes)
   const stackRef = await buildStackReferenceFromDB().catch(() => "");
 
+  // Contexto del cliente si se especificó uno
+  const clientContextBlock = params.contactId
+    ? await buildClientContextBlock(params.contactId).catch(() => "")
+    : "";
+
   const systemBlocks: Array<{ type: "text"; text: string; cache_control?: { type: "ephemeral" } }> = [
     { type: "text", text: SYSTEM_PROMPT, cache_control: { type: "ephemeral" } },
     {
@@ -152,6 +196,10 @@ ${stackRef || "(El catálogo está vacío. Indica al usuario que agregue servici
       cache_control: { type: "ephemeral" },
     },
   ];
+
+  if (clientContextBlock) {
+    systemBlocks.push({ type: "text", text: clientContextBlock });
+  }
 
   const dbRef = db;
   const toolCalls: ToolCallSummary[] = [];

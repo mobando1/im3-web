@@ -39,7 +39,7 @@ const BILLING_LABELS: Record<string, string> = {
 };
 
 let cached: { text: string; ts: number } | null = null;
-const TTL_MS = 60_000; // 1 min — refresca casi en tiempo real pero evita query por mensaje
+const TTL_MS = 300_000; // 5 min — invalidate hook ya garantiza freshness en editar catálogo
 
 export async function buildStackReferenceFromDB(opts?: { skipCache?: boolean }): Promise<string> {
   if (!db) return "";

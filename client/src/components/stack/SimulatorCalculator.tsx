@@ -4,7 +4,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Calculator, Plus, Trash2, ExternalLink, Loader2 } from "lucide-react";
+import { Calculator, Plus, Trash2, ExternalLink, Loader2, Copy, Check } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
 
 type PricingUnit = { unit: string; includedQuantity: number; overageUnitCostUSD: number; note?: string };
 type StackService = {
@@ -71,12 +72,14 @@ function fmtUSD(n: number): string {
  * No está atada a propuesta. Perfecta para presentación en vivo: "¿cuánto cuestan 500 mensajes?".
  */
 export function SimulatorCalculator() {
+  const { toast } = useToast();
   const { data: services = [], isLoading } = useQuery<StackService[]>({
     queryKey: ["/api/admin/stack-services"],
   });
 
   // Modo simple: 1 servicio + 1 unidad + cantidad. Modo avanzado: array de servicios.
   const [mode, setMode] = useState<"quick" | "stack">("quick");
+  const [copiedSummary, setCopiedSummary] = useState(false);
 
   // Modo quick
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
@@ -141,19 +144,26 @@ export function SimulatorCalculator() {
   return (
     <div className="space-y-4">
       {/* Mode tabs */}
-      <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
-        <button
-          onClick={() => setMode("quick")}
-          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${mode === "quick" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}
-        >
-          Rápida (1 servicio)
-        </button>
-        <button
-          onClick={() => setMode("stack")}
-          className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${mode === "stack" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}
-        >
-          Stack completo
-        </button>
+      <div>
+        <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+          <button
+            onClick={() => setMode("quick")}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${mode === "quick" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}
+          >
+            Rápida (1 servicio)
+          </button>
+          <button
+            onClick={() => setMode("stack")}
+            className={`px-3 py-1.5 rounded-md text-xs font-medium transition-colors ${mode === "stack" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500"}`}
+          >
+            Avanzado
+          </button>
+        </div>
+        {mode === "stack" && (
+          <p className="text-[11px] text-gray-500 mt-1.5">
+            Arma un escenario con varios servicios para explorar "qué pasa si…". Para la propuesta real, déjalo a Claude.
+          </p>
+        )}
       </div>
 
       {mode === "quick" ? (
@@ -315,6 +325,29 @@ export function SimulatorCalculator() {
                   <div className="font-bold text-xl text-[#2FA4A9]">{fmtUSD(breakdown.totals.monthlyClientPaysUSD)}</div>
                   <div className="text-[10px] text-gray-500">{fmtUSD(breakdown.totals.annualClientPaysUSD)}/año</div>
                 </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-[#2FA4A9]/20 text-center">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="gap-1.5 text-xs h-7 border-[#2FA4A9]/40 text-[#2FA4A9] hover:bg-[#2FA4A9]/10"
+                  onClick={() => {
+                    const lines: string[] = ["**Stack mensual estimado:**"];
+                    for (const svc of breakdown.services) {
+                      lines.push(`- ${svc.serviceName}: ${fmtUSD(svc.clientPaysMonthlyUSD)}/mes`);
+                    }
+                    lines.push("");
+                    lines.push(`**Total: ${fmtUSD(breakdown.totals.monthlyClientPaysUSD)}/mes** (${fmtUSD(breakdown.totals.annualClientPaysUSD)}/año)`);
+                    navigator.clipboard.writeText(lines.join("\n")).then(() => {
+                      setCopiedSummary(true);
+                      toast({ title: "Resumen copiado como Markdown" });
+                      setTimeout(() => setCopiedSummary(false), 2000);
+                    });
+                  }}
+                >
+                  {copiedSummary ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+                  {copiedSummary ? "Copiado" : "Copiar resumen como Markdown"}
+                </Button>
               </div>
             </div>
           )}

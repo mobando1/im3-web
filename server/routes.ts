@@ -10276,9 +10276,11 @@ Responde SOLO con un JSON válido, sin markdown:
         ...req.body,
         lastPriceUpdate: new Date(),
       }).returning();
-      // Invalidar cache para que Claude vea el cambio en la próxima generación
+      // Invalidar caches para que Claude y el banner de deriva vean el cambio
       const { invalidateStackReferenceCache } = await import("./stack-reference");
+      const { invalidateDriftCache } = await import("./stack-drift");
       invalidateStackReferenceCache();
+      invalidateDriftCache();
       res.json(created);
     } catch (err: any) {
       log(`Error creating stack service: ${err?.message}`);
@@ -10300,7 +10302,9 @@ Responde SOLO con un JSON válido, sin markdown:
         .returning();
       if (!updated) return res.status(404).json({ error: "Servicio no encontrado" });
       const { invalidateStackReferenceCache } = await import("./stack-reference");
+      const { invalidateDriftCache } = await import("./stack-drift");
       invalidateStackReferenceCache();
+      invalidateDriftCache();
       res.json(updated);
     } catch (err: any) {
       log(`Error updating stack service: ${err?.message}`);
@@ -10318,9 +10322,23 @@ Responde SOLO con un JSON válido, sin markdown:
         .returning();
       if (!deleted) return res.status(404).json({ error: "Servicio no encontrado" });
       const { invalidateStackReferenceCache } = await import("./stack-reference");
+      const { invalidateDriftCache } = await import("./stack-drift");
       invalidateStackReferenceCache();
+      invalidateDriftCache();
       res.json({ success: true });
     } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // GET reporte de deriva de precios — propuestas activas con servicios actualizados después de generarse
+  app.get("/api/admin/stack-drift", requireAuth, async (_req, res) => {
+    try {
+      const { detectStackDriftReport } = await import("./stack-drift");
+      const result = await detectStackDriftReport();
+      res.json(result);
+    } catch (err: any) {
+      log(`Error computing drift report: ${err?.message}`);
       res.status(500).json({ error: err?.message });
     }
   });
@@ -10354,13 +10372,14 @@ Responde SOLO con un JSON válido, sin markdown:
 
   app.post("/api/admin/stack-simulator/chat", requireAuth, chatRateLimiter, async (req, res) => {
     const message = (req.body?.message as string || "").trim();
+    const contactId = typeof req.body?.contactId === "string" ? req.body.contactId : null;
     if (!message) return res.status(400).json({ error: "Mensaje requerido" });
     try {
       const { runSimulatorChat } = await import("./stack-simulator-chat");
       const { runAgent } = await import("./agents/runner");
       const result = await runAgent(
         "stack-simulator-chat",
-        () => runSimulatorChat({ userMessage: message }),
+        () => runSimulatorChat({ userMessage: message, contactId }),
         { triggeredBy: "manual" }
       );
       res.json(result);
