@@ -2,10 +2,9 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Copy, ExternalLink, Send, Sparkles, Save, Eye, FolderKanban, FileSearch, X, Wand2, Check, RotateCcw, Trash2, MessageCircle, BookOpen, Pencil, Calculator, FileCheck } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Send, Sparkles, Save, Eye, FolderKanban, FileSearch, X, Wand2, Check, RotateCcw, Trash2, MessageCircle, BookOpen, Pencil, FileCheck } from "lucide-react";
 import { SectionForm, hasTypedForm } from "@/components/proposal/SectionForm";
 import { ProposalChatPanel } from "@/components/proposal/ProposalChatPanel";
-import { StackCostCalculatorDialog } from "@/components/proposal/StackCostCalculatorDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -289,7 +288,6 @@ export default function ProposalEditor() {
   const [aiInstruction, setAiInstruction] = useState("");
   const [aiOptions, setAiOptions] = useState<Array<{ label: string; description: string; section: unknown }> | null>(null);
   const [chatOpen, setChatOpen] = useState(false);
-  const [calculatorOpen, setCalculatorOpen] = useState(false);
   const [confirmSendOpen, setConfirmSendOpen] = useState(false);
   const [confirmRegenOpen, setConfirmRegenOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
@@ -628,17 +626,6 @@ export default function ProposalEditor() {
             title="Brief técnico detallado — material de soporte post-reunión"
           >
             <BookOpen className="w-4 h-4" /> Brief técnico
-          </Button>
-        )}
-        {hasSections && (
-          <Button
-            size="sm"
-            variant="outline"
-            className="gap-1.5 border-[#2FA4A9]/30 text-[#2FA4A9] hover:bg-[#2FA4A9]/10"
-            onClick={() => setCalculatorOpen(true)}
-            title="Calcular costos operativos exactos con catálogo de stack"
-          >
-            <Calculator className="w-4 h-4" /> Calculadora costos
           </Button>
         )}
         {hasSections && (proposal.status === "accepted" || proposal.status === "viewed" || proposal.status === "sent") && (
@@ -1368,13 +1355,6 @@ export default function ProposalEditor() {
         />
       )}
 
-      {hasSections && proposal && (
-        <StackCostCalculatorDialog
-          proposalId={proposal.id}
-          open={calculatorOpen}
-          onClose={() => setCalculatorOpen(false)}
-        />
-      )}
     </div>
   );
 }

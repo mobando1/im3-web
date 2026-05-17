@@ -12,6 +12,7 @@ import {
 } from "@shared/proposal-template/types";
 import type { ZodSchema } from "zod";
 import { VOICE_GUIDE, COST_REFERENCE, HARDWARE_CATALOG, CASE_STUDIES, gatherContactContext } from "./proposal-ai";
+import { buildStackReferenceFromDB } from "./stack-reference";
 import { runAllValidators, formatIssuesAsText } from "./proposal-validators";
 import { validateSemanticChange } from "./proposal-semantic-validator";
 import { getOrgPreferencesContext } from "./org-preferences";
@@ -703,6 +704,11 @@ async function runProposalChatInner(params: {
     log(`[proposal-chat] could not load global memory: ${(err as Error).message}`);
   }
 
+  // Stack & Costos: fuente de verdad es la tabla `stack_services` (editable en /admin/stack-catalog).
+  // Si la DB tiene servicios, usa esa referencia; si no, fallback al .md legacy.
+  const stackRefFromDB = await buildStackReferenceFromDB().catch(() => "");
+  const costReferenceBlock = stackRefFromDB || COST_REFERENCE.substring(0, 8000);
+
   // System prompt particionado en bloques con cache_control:
   // - Bloque 1 (cacheado): SYSTEM_PROMPT_BASE + SCHEMA_DOCS — totalmente estático.
   // - Bloque 2 (cacheado): VOICE_GUIDE + COST_REFERENCE + HARDWARE_CATALOG + CASE_STUDIES — estático mientras los archivos no cambien.
@@ -727,7 +733,7 @@ ${VOICE_GUIDE.substring(0, 8000)}
 COST REFERENCE (precios reales — respeta estos rangos)
 ═══════════════════════════════════════════════════════
 
-${COST_REFERENCE.substring(0, 8000)}
+${costReferenceBlock}
 
 ═══════════════════════════════════════════════════════
 HARDWARE CATALOG (productos y precios)

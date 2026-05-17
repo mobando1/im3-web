@@ -10276,6 +10276,9 @@ Responde SOLO con un JSON válido, sin markdown:
         ...req.body,
         lastPriceUpdate: new Date(),
       }).returning();
+      // Invalidar cache para que Claude vea el cambio en la próxima generación
+      const { invalidateStackReferenceCache } = await import("./stack-reference");
+      invalidateStackReferenceCache();
       res.json(created);
     } catch (err: any) {
       log(`Error creating stack service: ${err?.message}`);
@@ -10296,6 +10299,8 @@ Responde SOLO con un JSON válido, sin markdown:
         .where(eq(stackServices.id, req.params.id as string))
         .returning();
       if (!updated) return res.status(404).json({ error: "Servicio no encontrado" });
+      const { invalidateStackReferenceCache } = await import("./stack-reference");
+      invalidateStackReferenceCache();
       res.json(updated);
     } catch (err: any) {
       log(`Error updating stack service: ${err?.message}`);
@@ -10312,6 +10317,63 @@ Responde SOLO con un JSON válido, sin markdown:
         .where(eq(stackServices.id, req.params.id as string))
         .returning();
       if (!deleted) return res.status(404).json({ error: "Servicio no encontrado" });
+      const { invalidateStackReferenceCache } = await import("./stack-reference");
+      invalidateStackReferenceCache();
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // ── Simulador independiente (no atado a propuesta) ──
+
+  // Calculadora estructurada ad-hoc — mismo cálculo, sin requerir proposalId
+  app.post("/api/admin/stack-simulator/calculate", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const items = Array.isArray(req.body?.items) ? req.body.items : [];
+      const { calculateStackCost } = await import("./stack-calculator");
+      const result = await calculateStackCost(items);
+      if ("error" in result) return res.status(400).json({ error: result.error });
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Chat IA del simulador — para preguntas naturales en vivo con cliente
+  app.get("/api/admin/stack-simulator/chat", requireAuth, async (_req, res) => {
+    try {
+      const { getSimulatorChatHistory } = await import("./stack-simulator-chat");
+      const history = await getSimulatorChatHistory();
+      res.json(history);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.post("/api/admin/stack-simulator/chat", requireAuth, chatRateLimiter, async (req, res) => {
+    const message = (req.body?.message as string || "").trim();
+    if (!message) return res.status(400).json({ error: "Mensaje requerido" });
+    try {
+      const { runSimulatorChat } = await import("./stack-simulator-chat");
+      const { runAgent } = await import("./agents/runner");
+      const result = await runAgent(
+        "stack-simulator-chat",
+        () => runSimulatorChat({ userMessage: message }),
+        { triggeredBy: "manual" }
+      );
+      res.json(result);
+    } catch (err: any) {
+      log(`Error in simulator chat: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.delete("/api/admin/stack-simulator/chat", requireAuth, async (_req, res) => {
+    try {
+      const { clearSimulatorChatHistory } = await import("./stack-simulator-chat");
+      await clearSimulatorChatHistory();
       res.json({ success: true });
     } catch (err: any) {
       res.status(500).json({ error: err?.message });

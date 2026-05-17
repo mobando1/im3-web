@@ -1,5 +1,5 @@
 import { db } from "./db";
-import { proposals, contacts, contracts, contractTemplates } from "@shared/schema";
+import { proposals, contacts, contracts, contractTemplates, stackServices } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import type { ProposalData, OperationalCostsData } from "@shared/proposal-template/types";
 
@@ -85,21 +85,59 @@ export async function buildVariablesForContract(proposalId: string): Promise<Con
     ? pricing.milestones.map(m => `${m.step}. **${m.name}** — ${m.desc} (${m.amount})`).join("\n")
     : "(Forma de pago por definir con EL CLIENTE)";
 
-  // Operational costs: derivar totales y desglose en tabla markdown
+  // Operational costs: derivar totales y desglose en tabla markdown.
+  // Enriquecemos cada item consultando el catálogo `stack_services` por nombre
+  // para incluir vendor, billing model, unidades incluidas y overage rates reales.
   let totalMensualUSD = "(por calcular)";
   let totalAnualUSD = "(por calcular)";
-  let costosDesglose = "(Sin desglose registrado. Usa la calculadora de costos para llenar esta sección antes de generar el contrato.)";
+  let costosDesglose = "(Sin desglose registrado. Genera la propuesta primero para que se autollene desde el catálogo Stack & Costos.)";
+
   if (operationalCosts) {
     totalMensualUSD = `${operationalCosts.monthlyRangeLow || "0"} a ${operationalCosts.monthlyRangeHigh || "0"}`;
     totalAnualUSD = operationalCosts.annualEstimate || "(por calcular)";
 
-    // Construir tabla markdown
-    const lines: string[] = ["| Servicio | Costo mensual | Modelo de cobro |", "|---|---|---|"];
+    // Cargar catálogo completo (solo activos) — para hacer match por nombre
+    const catalogServices = await db.select().from(stackServices)
+      .where(eq(stackServices.isActive, true))
+      .catch(() => []);
+    const catalogByName = new Map(catalogServices.map(s => [s.name.toLowerCase(), s]));
+
+    // Tabla enriquecida: Servicio | Vendor | Modelo | Incluido | Overage | Costo mensual
+    const lines: string[] = [
+      "| Servicio | Vendor | Modelo | Incluido en plan base | Costo si excede | Costo mensual |",
+      "|---|---|---|---|---|---|",
+    ];
+
     for (const group of operationalCosts.groups || []) {
       for (const cat of group.categories || []) {
         for (const item of cat.items || []) {
-          const note = item.note ? ` _(${item.note})_` : "";
-          lines.push(`| ${item.service}${note} | ${item.cost} | ${group.billingModel} |`);
+          // Buscar en catálogo por nombre (case-insensitive, prefijo si no match exacto)
+          const exact = catalogByName.get(item.service.toLowerCase());
+          const fuzzy = exact || catalogServices.find(s =>
+            item.service.toLowerCase().includes(s.name.toLowerCase()) ||
+            s.name.toLowerCase().includes(item.service.toLowerCase())
+          );
+
+          const vendor = fuzzy?.vendor || "—";
+          const billing = fuzzy ? translateBillingModel(fuzzy.billingModel) : translateBillingModel(group.billingModel);
+
+          // Construir columnas Incluido y Overage desde pricingUnits del catálogo
+          let incluidoCell = "—";
+          let overageCell = "—";
+          const units = fuzzy?.pricingUnits || [];
+          if (units.length > 0) {
+            const incluidoParts: string[] = [];
+            const overageParts: string[] = [];
+            for (const pu of units) {
+              if (pu.includedQuantity > 0) incluidoParts.push(`${pu.includedQuantity} ${pu.unit}`);
+              overageParts.push(`$${pu.overageUnitCostUSD}/${pu.unit}${pu.note ? ` (${pu.note})` : ""}`);
+            }
+            if (incluidoParts.length) incluidoCell = incluidoParts.join("; ");
+            if (overageParts.length) overageCell = overageParts.join("; ");
+          }
+
+          const noteSuffix = item.note ? ` _${item.note}_` : "";
+          lines.push(`| ${item.service}${noteSuffix} | ${vendor} | ${billing} | ${incluidoCell} | ${overageCell} | ${item.cost} |`);
         }
       }
     }
@@ -226,4 +264,16 @@ export async function regenerateContractBody(contractId: string): Promise<{ succ
     .where(eq(contracts.id, contractId));
 
   return { success: true };
+}
+
+function translateBillingModel(model: string): string {
+  const map: Record<string, string> = {
+    fixed: "Tarifa fija mensual",
+    tiered: "Tier base + overage",
+    usage: "Solo uso",
+    passthrough: "Pass-through con markup",
+    "passthrough-with-cap": "Pass-through con tope",
+    "client-direct": "Cliente paga directo",
+  };
+  return map[model] || model;
 }

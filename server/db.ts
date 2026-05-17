@@ -751,6 +751,18 @@ export async function runMigrations() {
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_stack_services_category" ON "stack_services" ("category");`).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_stack_services_active" ON "stack_services" ("is_active");`).catch(() => {});
 
+    // Chat del simulador de costos — herramienta independiente
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "stack_simulator_chat_messages" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "role" text NOT NULL,
+        "content" text NOT NULL,
+        "tool_calls" json,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_stack_sim_chat_created" ON "stack_simulator_chat_messages" ("created_at");`).catch(() => {});
+
     // Contract Templates — plantillas Markdown con variables
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "contract_templates" (

@@ -910,6 +910,20 @@ export const stackServices = pgTable("stack_services", {
 export type StackService = typeof stackServices.$inferSelect;
 export type InsertStackService = typeof stackServices.$inferInsert;
 
+// Chat del simulador de costos — caja conversacional para responder preguntas
+// ad-hoc tipo "¿cuánto cuestan 500 WhatsApp?" durante presentaciones con clientes.
+// No está atado a propuesta ni a proyecto — es una herramienta independiente.
+// Una sola conversación global (admin puede limpiarla cuando quiera).
+export const stackSimulatorChatMessages = pgTable("stack_simulator_chat_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  role: text("role").notNull(),       // "user" | "assistant"
+  content: text("content").notNull(),
+  toolCalls: json("tool_calls").$type<Array<{ tool: string; summary: string }>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type StackSimulatorChatMessage = typeof stackSimulatorChatMessages.$inferSelect;
+
 // ───────────────────────────────────────────────────────────────
 // Contract Templates — plantillas Markdown con variables Handlebars-like
 // ({{cliente.nombre}}, {{pricing.totalUSD}}, etc.) que se materializan

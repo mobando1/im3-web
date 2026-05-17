@@ -8,6 +8,7 @@ import { getIndustriaLabel } from "@shared/industrias";
 import { proposalDataSchema, type ProposalData, type ProposalSectionKey, type ProposalSourcesReport } from "@shared/proposal-template/types";
 import { readFileSync } from "fs";
 import { resolve } from "path";
+import { buildStackReferenceFromDB } from "./stack-reference";
 
 // Load voice guide, cost reference, hardware catalog and case studies once at module load.
 // Exportados para que proposal-chat.ts use los mismos referentes que el generador.
@@ -180,6 +181,11 @@ export async function generateProposal(contactId: string, adminNotes?: string): 
   const todayStr = today.toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
   const validUntilStr = validUntil.toLocaleDateString("es-CO", { day: "2-digit", month: "long", year: "numeric" });
 
+  // Stack & Costos: fuente de verdad es la tabla `stack_services` (editable en /admin/stack-catalog).
+  // Si la DB tiene servicios, usar SOLO esa referencia. Si está vacía o falla, fallback al .md legacy.
+  const stackRefFromDB = await buildStackReferenceFromDB().catch(() => "");
+  const costReferenceBlock = stackRefFromDB || COST_REFERENCE;
+
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-20250514",
     max_tokens: 10000,
@@ -198,7 +204,7 @@ ${VOICE_GUIDE}
 COST REFERENCE — úsalo para calcular la sección operationalCosts:
 ═══════════════════════════════════════════════════════════════
 
-${COST_REFERENCE}
+${costReferenceBlock}
 
 ═══════════════════════════════════════════════════════════════
 HARDWARE CATALOG — úsalo para decidir si incluir la sección hardware:

@@ -9,7 +9,9 @@ import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, Pencil, ExternalLink, Trash2, Layers, AlertTriangle } from "lucide-react";
+import { Plus, Pencil, ExternalLink, Trash2, Layers, AlertTriangle, Calculator } from "lucide-react";
+import { SimulatorCalculator } from "@/components/stack/SimulatorCalculator";
+import { SimulatorChatPanel } from "@/components/stack/SimulatorChatPanel";
 
 type PricingUnit = {
   unit: string;
@@ -92,6 +94,7 @@ export default function StackCatalogPage() {
   const [showInactive, setShowInactive] = useState(false);
   const [editing, setEditing] = useState<Partial<StackService> | null>(null);
   const [isNew, setIsNew] = useState(false);
+  const [tab, setTab] = useState<"catalog" | "simulator">("catalog");
 
   const { data: services = [], isLoading } = useQuery<StackService[]>({
     queryKey: [`/api/admin/stack-services?includeInactive=${showInactive}`],
@@ -173,12 +176,45 @@ export default function StackCatalogPage() {
             <Layers className="w-6 h-6 text-[#2FA4A9]" />
             Stack & Costos Operativos
           </h1>
-          <p className="text-sm text-gray-500 mt-1">Catálogo de servicios tecnológicos con tarifas fijas + variables. Alimenta la calculadora de costos en propuestas y los contratos.</p>
+          <p className="text-sm text-gray-500 mt-1">Catálogo con precios oficiales que Claude usa para llenar propuestas y contratos. Simulador para responder dudas en vivo.</p>
         </div>
-        <Button onClick={openNew} className="bg-[#2FA4A9] hover:bg-[#238b8f] gap-1.5">
-          <Plus className="w-4 h-4" /> Agregar servicio
-        </Button>
+        {tab === "catalog" && (
+          <Button onClick={openNew} className="bg-[#2FA4A9] hover:bg-[#238b8f] gap-1.5">
+            <Plus className="w-4 h-4" /> Agregar servicio
+          </Button>
+        )}
       </div>
+
+      {/* Tab switcher */}
+      <div className="inline-flex rounded-lg border border-gray-200 bg-gray-50 p-0.5">
+        <button
+          onClick={() => setTab("catalog")}
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${tab === "catalog" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+        >
+          <Layers className="w-3.5 h-3.5" /> Catálogo
+        </button>
+        <button
+          onClick={() => setTab("simulator")}
+          className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-1.5 ${tab === "simulator" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"}`}
+        >
+          <Calculator className="w-3.5 h-3.5" /> Simulador
+        </button>
+      </div>
+
+      {tab === "simulator" && (
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr_380px] gap-4 min-h-[600px]">
+          <div className="bg-white border border-gray-200 rounded-xl p-5">
+            <h2 className="text-sm font-semibold text-gray-700 mb-1">Calculadora estructurada</h2>
+            <p className="text-xs text-gray-500 mb-4">Selecciona servicios + teclea uso → resultado en tiempo real. Para preguntas precisas con números.</p>
+            <SimulatorCalculator />
+          </div>
+          <div className="min-h-[500px]">
+            <SimulatorChatPanel />
+          </div>
+        </div>
+      )}
+
+      {tab === "catalog" && <>
 
       <div className="flex items-center gap-3 flex-wrap">
         <Select value={filter} onValueChange={setFilter}>
@@ -275,6 +311,7 @@ export default function StackCatalogPage() {
           ))}
         </div>
       )}
+      </>}
 
       {/* Editor dialog */}
       <Dialog open={!!editing} onOpenChange={(open) => { if (!open) { setEditing(null); setIsNew(false); } }}>
