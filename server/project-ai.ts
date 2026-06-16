@@ -591,7 +591,7 @@ SOLO devuelve el JSON, nada más.`;
 
   try {
     const response = await ai.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 4000,
       messages: [{ role: "user", content: prompt }],
     });
@@ -689,7 +689,7 @@ NO uses markdown. Texto plano con saltos de línea. NO incluyas emojis.`;
 
   try {
     const response = await ai.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 500,
       messages: [{ role: "user", content: prompt }],
     });

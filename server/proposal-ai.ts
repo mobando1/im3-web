@@ -187,7 +187,7 @@ export async function generateProposal(contactId: string, adminNotes?: string): 
   const costReferenceBlock = stackRefFromDB || COST_REFERENCE;
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-20250514",
+    model: "claude-sonnet-4-6",
     max_tokens: 10000,
     temperature: 0.35,
     system: `Eres un consultor senior de IM3 Systems, agencia de tecnología especializada en IA, automatización y desarrollo de software para empresas en Latinoamérica.
@@ -683,7 +683,7 @@ export async function regenerateProposalSection(
 
   try {
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 2000,
       temperature: 0.4,
       system: `Eres un consultor senior de IM3 Systems reescribiendo UNA sección estructurada de una propuesta comercial.
@@ -795,7 +795,7 @@ export async function generateSectionOptions(
 
   try {
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-sonnet-4-6",
       max_tokens: 6000,
       temperature: 0.6,
       system: `Eres un consultor senior de IM3 Systems. El admin te pide reescribir UNA sección de una propuesta, dándote contexto de POR QUÉ quiere el cambio.

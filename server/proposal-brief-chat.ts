@@ -26,7 +26,7 @@ function getClient(): Anthropic | null {
   return client;
 }
 
-const MODEL = "claude-sonnet-4-20250514";
+const MODEL = "claude-sonnet-4-6";
 const MAX_HISTORY = 30;
 const MAX_ITERATIONS = 12;
 
