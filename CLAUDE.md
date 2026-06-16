@@ -12,7 +12,7 @@ Dominio CRM admin: `hub.im3systems.com`
 - **Base de datos:** PostgreSQL en **Railway** (`maglev.proxy.rlwy.net`) + Drizzle ORM
 - **Migraciones:** SQL crudo en `server/db.ts` (bloque `runMigrations()` con `CREATE TABLE IF NOT EXISTS`) + carpeta `migrations/` con `.sql` numerados
 - **Auth admin:** Passport.js + passport-local + sesiones en Postgres (`connect-pg-simple`)
-- **IA:** Anthropic Claude (`@anthropic-ai/sdk`) — modelos `claude-sonnet-4-20250514` (generación) y `claude-haiku-4-5-20251001` (clasificación rápida)
+- **IA:** Anthropic Claude (`@anthropic-ai/sdk`) — modelos `claude-sonnet-4-6` (generación) y `claude-haiku-4-5-20251001` (clasificación rápida). Nota: `claude-sonnet-4-20250514` (Sonnet 4) fue retirado por Anthropic el 15-jun-2026 (404); migrado a `claude-sonnet-4-6` el 16-jun-2026.
 - **Email:** Resend
 - **WhatsApp:** Meta WhatsApp Business Cloud API
 - **Google Workspace:** Service Account con domain-wide delegation, impersona `info@im3systems.com`
