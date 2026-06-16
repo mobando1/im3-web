@@ -11,6 +11,8 @@ import {
   ScrollText,
   UserSearch,
   Wrench,
+  Headphones,
+  Download,
 } from "lucide-react";
 
 type ToolStatus = "active" | "idea";
@@ -20,6 +22,10 @@ type Tool = {
   description: string;
   icon: typeof Wrench;
   status: ToolStatus;
+  /** If set, renders a "Descargar para Mac" button (e.g. a GitHub Release .dmg). */
+  downloadUrl?: string;
+  /** If set, renders a "Ver instrucciones" link (setup / install guide). */
+  infoUrl?: string;
 };
 
 type ToolGroup = {
@@ -33,6 +39,16 @@ const toolGroups: ToolGroup[] = [
     label: "Apps existentes",
     description: "Herramientas propias que ya están corriendo",
     tools: [
+      {
+        name: "IM3 Meeting Copilot",
+        description:
+          "Copiloto en vivo para reuniones: transcribe a la contraparte y te sugiere tu respuesta en inglés, en tu tono. Captura streaming + metodología de ventas NEPQ. App de Mac.",
+        icon: Headphones,
+        status: "active",
+        downloadUrl:
+          "https://github.com/mobando1/im3-meeting-copilot-releases/releases/latest/download/IM3-Meeting-Copilot.dmg",
+        infoUrl: "https://github.com/mobando1/im3-meeting-copilot-releases",
+      },
       {
         name: "Acta",
         description: "Grabación + transcripción de reuniones con detección de hablantes.",
@@ -153,6 +169,27 @@ function ToolCard({ tool }: { tool: Tool }) {
               </Badge>
             </div>
             <p className="text-xs text-gray-500 mt-1 line-clamp-3">{tool.description}</p>
+            {tool.downloadUrl && (
+              <div className="flex items-center gap-3 mt-3">
+                <a
+                  href={tool.downloadUrl}
+                  className="inline-flex items-center gap-1.5 rounded-md bg-[#2FA4A9] px-2.5 py-1 text-xs font-medium text-white hover:bg-[#268d92] transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Descargar para Mac
+                </a>
+                {tool.infoUrl && (
+                  <a
+                    href={tool.infoUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-xs text-[#2FA4A9] hover:underline"
+                  >
+                    Ver instrucciones
+                  </a>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </CardContent>
