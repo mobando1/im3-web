@@ -10,15 +10,19 @@ import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { SimpleMarkdown } from "@/lib/simple-markdown";
-import { ArrowLeft, Lock, Pen, Download, RotateCcw, Save, Loader2, ExternalLink } from "lucide-react";
+import { ArrowLeft, Lock, Pen, Download, RotateCcw, Save, Loader2, ExternalLink, FileText, FileUp } from "lucide-react";
 
 type ContractDetail = {
   id: string;
-  proposalId: string;
+  proposalId: string | null;
   contactId: string;
-  templateId: string;
+  templateId: string | null;
   title: string;
-  bodyMarkdown: string;
+  bodyMarkdown: string | null;
+  source: "generated" | "uploaded";
+  fileUrl: string | null;
+  fileName: string | null;
+  fileSize: number | null;
   resolvedVariables: Record<string, unknown> | null;
   status: "draft" | "locked" | "signed" | "cancelled";
   lockedAt: string | null;
@@ -29,7 +33,7 @@ type ContractDetail = {
   notes: string | null;
   createdAt: string;
   contact: { nombre: string; empresa: string; email: string };
-  proposal: { title: string; accessToken: string; status: string };
+  proposal: { title: string; accessToken: string; status: string } | null;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -55,13 +59,15 @@ export default function AdminContractEditor() {
   const [signOpen, setSignOpen] = useState(false);
   const [signForm, setSignForm] = useState({ signedBy: "", signedAt: new Date().toISOString().slice(0, 10), signedNotes: "" });
   const [lockOpen, setLockOpen] = useState(false);
+  const [tplOpen, setTplOpen] = useState(false);
+  const [tplName, setTplName] = useState("");
 
   const { data: contract, isLoading } = useQuery<ContractDetail>({
     queryKey: [`/api/admin/contracts/${id}`],
   });
 
   useEffect(() => {
-    if (contract) setDraft(contract.bodyMarkdown);
+    if (contract) setDraft(contract.bodyMarkdown ?? "");
   }, [contract?.id]);
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: [`/api/admin/contracts/${id}`] });
@@ -102,12 +108,26 @@ export default function AdminContractEditor() {
     onError: (err: any) => toast({ title: "Error", description: err?.message, variant: "destructive" }),
   });
 
+  const tplMut = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/contracts/${id}/save-as-template`, tplName.trim() ? { name: tplName.trim() } : undefined);
+      return res.json();
+    },
+    onSuccess: () => {
+      toast({ title: "✓ Plantilla creada", description: "Edítala y agrega variables {{...}} en Plantillas." });
+      setTplOpen(false);
+      navigate("/admin/contract-templates");
+    },
+    onError: (err: any) => toast({ title: "No se pudo crear la plantilla", description: err?.message, variant: "destructive" }),
+  });
+
   if (isLoading || !contract) {
     return <div className="text-center py-20 text-gray-400">Cargando contrato…</div>;
   }
 
-  const isDraft = contract.status === "draft";
-  const dirty = isDraft && draft !== contract.bodyMarkdown;
+  const isUploaded = contract.source === "uploaded";
+  const isDraft = !isUploaded && contract.status === "draft";
+  const dirty = isDraft && draft !== (contract.bodyMarkdown ?? "");
   const previewUrl = `${window.location.origin}/contract-preview/${contract.accessToken}`;
 
   return (
@@ -119,10 +139,17 @@ export default function AdminContractEditor() {
         <div className="flex-1 min-w-0">
           <h1 className="text-2xl font-bold text-gray-900 truncate">{contract.title}</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            {contract.contact?.nombre} — {contract.contact?.empresa} ·
-            <a href={`/admin/proposals/${contract.proposalId}`} className="text-[#2FA4A9] hover:underline ml-1">
-              {contract.proposal?.title}
-            </a>
+            {contract.contact?.nombre} — {contract.contact?.empresa}
+            {contract.proposalId && contract.proposal ? (
+              <>
+                {" · "}
+                <a href={`/admin/proposals/${contract.proposalId}`} className="text-[#2FA4A9] hover:underline ml-1">
+                  {contract.proposal.title}
+                </a>
+              </>
+            ) : (
+              <span className="ml-1 text-indigo-500">· Contrato subido</span>
+            )}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -143,58 +170,78 @@ export default function AdminContractEditor() {
       )}
 
       <div className="flex flex-wrap gap-2">
-        {isDraft && (
+        {isUploaded ? (
           <>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => saveMut.mutate({ bodyMarkdown: draft })}
-              disabled={!dirty || saveMut.isPending}
-              className="gap-1.5"
-            >
-              {saveMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-              Guardar cambios
+            {contract.fileUrl && (
+              <a href={contract.fileUrl} target="_blank" rel="noopener noreferrer">
+                <Button size="sm" variant="outline" className="gap-1.5">
+                  <ExternalLink className="w-3.5 h-3.5" /> Ver PDF en Drive
+                </Button>
+              </a>
+            )}
+            <Button size="sm" variant="outline" onClick={() => { setTplName(`${contract.title} (plantilla)`); setTplOpen(true); }} className="gap-1.5">
+              <FileText className="w-3.5 h-3.5" /> Guardar como plantilla
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => { if (confirm("¿Re-resolver variables desde la propuesta actual? Pierde cambios manuales.")) regenMut.mutate(); }}
-              disabled={regenMut.isPending}
-              className="gap-1.5"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              Re-renderizar variables
+          </>
+        ) : (
+          <>
+            {isDraft && (
+              <>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => saveMut.mutate({ bodyMarkdown: draft })}
+                  disabled={!dirty || saveMut.isPending}
+                  className="gap-1.5"
+                >
+                  {saveMut.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                  Guardar cambios
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => { if (confirm("¿Re-resolver variables desde la propuesta actual? Pierde cambios manuales.")) regenMut.mutate(); }}
+                  disabled={regenMut.isPending}
+                  className="gap-1.5"
+                >
+                  <RotateCcw className="w-3.5 h-3.5" />
+                  Re-renderizar variables
+                </Button>
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setLockOpen(true)}
+                  className="gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-50"
+                >
+                  <Lock className="w-3.5 h-3.5" />
+                  Bloquear (no más edición)
+                </Button>
+              </>
+            )}
+            {contract.status === "locked" && (
+              <Button size="sm" onClick={() => setSignOpen(true)} className="gap-1.5 bg-emerald-600 hover:bg-emerald-700">
+                <Pen className="w-3.5 h-3.5" />
+                Marcar como firmado
+              </Button>
+            )}
+            <a href={`/api/admin/contracts/${id}/pdf`}>
+              <Button size="sm" variant="outline" className="gap-1.5">
+                <Download className="w-3.5 h-3.5" /> Descargar PDF
+              </Button>
+            </a>
+            <a href={previewUrl} target="_blank" rel="noopener noreferrer">
+              <Button size="sm" variant="outline" className="gap-1.5">
+                <ExternalLink className="w-3.5 h-3.5" /> Preview público
+              </Button>
+            </a>
+            <Button size="sm" variant="outline" onClick={() => setShowVars(!showVars)} className="gap-1.5">
+              {showVars ? "Ocultar variables" : "Ver variables resueltas"}
             </Button>
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => setLockOpen(true)}
-              className="gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-50"
-            >
-              <Lock className="w-3.5 h-3.5" />
-              Bloquear (no más edición)
+            <Button size="sm" variant="outline" onClick={() => { setTplName(`${contract.title} (plantilla)`); setTplOpen(true); }} className="gap-1.5">
+              <FileText className="w-3.5 h-3.5" /> Guardar como plantilla
             </Button>
           </>
         )}
-        {contract.status === "locked" && (
-          <Button size="sm" onClick={() => setSignOpen(true)} className="gap-1.5 bg-emerald-600 hover:bg-emerald-700">
-            <Pen className="w-3.5 h-3.5" />
-            Marcar como firmado
-          </Button>
-        )}
-        <a href={`/api/admin/contracts/${id}/pdf`}>
-          <Button size="sm" variant="outline" className="gap-1.5">
-            <Download className="w-3.5 h-3.5" /> Descargar PDF
-          </Button>
-        </a>
-        <a href={previewUrl} target="_blank" rel="noopener noreferrer">
-          <Button size="sm" variant="outline" className="gap-1.5">
-            <ExternalLink className="w-3.5 h-3.5" /> Preview público
-          </Button>
-        </a>
-        <Button size="sm" variant="outline" onClick={() => setShowVars(!showVars)} className="gap-1.5">
-          {showVars ? "Ocultar variables" : "Ver variables resueltas"}
-        </Button>
       </div>
 
       {showVars && contract.resolvedVariables && (
@@ -204,25 +251,45 @@ export default function AdminContractEditor() {
         </div>
       )}
 
-      <div className={`grid gap-4 ${isDraft ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1"}`}>
-        {isDraft && (
+      {isUploaded ? (
+        <div className="bg-white border border-gray-200 rounded-lg p-8 flex flex-col items-center justify-center text-center gap-3">
+          <FileUp className="w-10 h-10 text-indigo-400" />
           <div>
-            <div className="text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wide">Markdown editable</div>
-            <Textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              className="font-mono text-xs h-[70vh] resize-none"
-              spellCheck={false}
-            />
+            <div className="font-medium text-gray-900">{contract.fileName || "Contrato firmado"}</div>
+            {contract.fileSize != null && (
+              <div className="text-xs text-gray-400 mt-0.5">{(contract.fileSize / 1024 / 1024).toFixed(2)} MB · PDF subido a Drive</div>
+            )}
           </div>
-        )}
-        <div>
-          <div className="text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wide">{isDraft ? "Preview" : "Contrato"}</div>
-          <div className="bg-white border border-gray-200 rounded-lg p-8 overflow-y-auto h-[70vh]">
-            <SimpleMarkdown source={isDraft ? draft : contract.bodyMarkdown} className="text-sm" />
+          {contract.fileUrl && (
+            <a href={contract.fileUrl} target="_blank" rel="noopener noreferrer">
+              <Button size="sm" className="gap-1.5 bg-[#2FA4A9] hover:bg-[#238b8f] text-white">
+                <ExternalLink className="w-3.5 h-3.5" /> Abrir contrato en Drive
+              </Button>
+            </a>
+          )}
+          {contract.signedNotes && <p className="text-xs text-gray-500 max-w-md">{contract.signedNotes}</p>}
+        </div>
+      ) : (
+        <div className={`grid gap-4 ${isDraft ? "grid-cols-1 xl:grid-cols-2" : "grid-cols-1"}`}>
+          {isDraft && (
+            <div>
+              <div className="text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wide">Markdown editable</div>
+              <Textarea
+                value={draft}
+                onChange={(e) => setDraft(e.target.value)}
+                className="font-mono text-xs h-[70vh] resize-none"
+                spellCheck={false}
+              />
+            </div>
+          )}
+          <div>
+            <div className="text-xs text-gray-500 mb-1.5 font-semibold uppercase tracking-wide">{isDraft ? "Preview" : "Contrato"}</div>
+            <div className="bg-white border border-gray-200 rounded-lg p-8 overflow-y-auto h-[70vh]">
+              <SimpleMarkdown source={isDraft ? draft : (contract.bodyMarkdown ?? "")} className="text-sm" />
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       {/* Lock confirmation */}
       <AlertDialog open={lockOpen} onOpenChange={setLockOpen}>
@@ -285,6 +352,32 @@ export default function AdminContractEditor() {
               className="bg-emerald-600 hover:bg-emerald-700"
             >
               {signMut.isPending ? "Guardando…" : "Marcar firmado"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Save as template dialog */}
+      <Dialog open={tplOpen} onOpenChange={setTplOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Guardar como plantilla</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-gray-500">
+              {isUploaded
+                ? "Extraemos el texto del PDF (OCR) como punto de partida. Luego edítala y agrega variables {{cliente.nombre}}, {{pricing.totalUSD}}, etc."
+                : "Se copia el contenido actual como plantilla. Luego edítala y ajusta las variables {{...}}."}
+            </p>
+            <div>
+              <Label className="text-xs">Nombre de la plantilla</Label>
+              <Input value={tplName} onChange={(e) => setTplName(e.target.value)} placeholder="Ej: Contrato de desarrollo (base)" />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setTplOpen(false)}>Cancelar</Button>
+            <Button onClick={() => tplMut.mutate()} disabled={tplMut.isPending} className="gap-1.5 bg-[#2FA4A9] hover:bg-[#238b8f] text-white">
+              {tplMut.isPending ? <><Loader2 className="w-4 h-4 animate-spin" /> Creando…</> : <><FileText className="w-4 h-4" /> Crear plantilla</>}
             </Button>
           </DialogFooter>
         </DialogContent>

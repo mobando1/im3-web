@@ -250,6 +250,7 @@ export async function regenerateContractBody(contractId: string): Promise<{ succ
   const [contract] = await db.select().from(contracts).where(eq(contracts.id, contractId)).limit(1);
   if (!contract) return { error: "Contrato no encontrado" };
   if (contract.status !== "draft") return { error: "Solo contratos en draft pueden regenerarse" };
+  if (!contract.templateId || !contract.proposalId) return { error: "Este contrato no tiene plantilla/propuesta — no se puede regenerar (¿es un contrato subido?)" };
 
   const [template] = await db.select().from(contractTemplates).where(eq(contractTemplates.id, contract.templateId)).limit(1);
   if (!template) return { error: "Template no encontrado" };

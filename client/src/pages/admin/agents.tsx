@@ -46,6 +46,8 @@ import {
   Minus,
   Zap,
   RefreshCcw,
+  List,
+  LayoutGrid,
 } from "lucide-react";
 
 type AgentHealth = "healthy" | "warning" | "error" | "idle";
@@ -200,6 +202,9 @@ export default function AgentsPage() {
   const [filterHealth, setFilterHealth] = useState<"all" | AgentHealth>("all");
   const [filterTrigger, setFilterTrigger] = useState<"all" | "cron" | "webhook" | "manual">("all");
   const [filterCriticality, setFilterCriticality] = useState<"all" | "critical" | "normal" | "low">("all");
+  const [viewMode, setViewMode] = useState<"list" | "grouped">(
+    () => (localStorage.getItem("im3_agents_view") as "list" | "grouped") || "grouped",
+  );
 
   const { data, isLoading, refetch, isFetching } = useQuery<AgentsResponse>({
     queryKey: ["/api/admin/agents"],
@@ -230,6 +235,18 @@ export default function AgentsPage() {
       return true;
     });
   }, [data, search, filterKind, filterHealth, filterTrigger, filterCriticality]);
+
+  const KIND_ORDER: AgentKind[] = ["ai", "automation", "integration", "webhook"];
+  const grouped = useMemo(() => {
+    const map: Record<AgentKind, Agent[]> = { ai: [], automation: [], integration: [], webhook: [] };
+    for (const a of filtered) map[a.kind].push(a);
+    return KIND_ORDER.map((kind) => ({ kind, agents: map[kind] })).filter((g) => g.agents.length > 0);
+  }, [filtered]);
+
+  const setView = (v: "list" | "grouped") => {
+    setViewMode(v);
+    localStorage.setItem("im3_agents_view", v);
+  };
 
   const hasActiveFilters =
     !!search ||
@@ -380,13 +397,29 @@ export default function AgentsPage() {
         </div>
       </div>
 
-      {/* Result count */}
-      <div className="text-xs text-gray-500">
-        Mostrando <span className="font-semibold text-gray-700">{filtered.length}</span> de{" "}
-        <span className="font-semibold text-gray-700">{data.summary.total}</span> agentes
+      {/* Result count + view toggle */}
+      <div className="flex items-center justify-between gap-3">
+        <div className="text-xs text-gray-500">
+          Mostrando <span className="font-semibold text-gray-700">{filtered.length}</span> de{" "}
+          <span className="font-semibold text-gray-700">{data.summary.total}</span> agentes
+        </div>
+        <div className="flex bg-gray-100 rounded-lg p-0.5">
+          {([["grouped", LayoutGrid, "Agrupado por tipo"], ["list", List, "Lista"]] as const).map(([mode, Icon, label]) => (
+            <button
+              key={mode}
+              onClick={() => setView(mode)}
+              className={`p-1.5 rounded-md transition-colors ${
+                viewMode === mode ? "bg-white text-[#2FA4A9] shadow-sm" : "text-gray-400 hover:text-gray-600"
+              }`}
+              title={label}
+            >
+              <Icon className="w-4 h-4" />
+            </button>
+          ))}
+        </div>
       </div>
 
-      {/* List */}
+      {/* List / Grouped */}
       {filtered.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
@@ -397,7 +430,7 @@ export default function AgentsPage() {
             </Button>
           </CardContent>
         </Card>
-      ) : (
+      ) : viewMode === "list" ? (
         <div className="bg-white rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-100">
           {filtered.map((agent) => (
             <AgentRow
@@ -408,6 +441,40 @@ export default function AgentsPage() {
               isRunning={runMutation.isPending && runMutation.variables === agent.name}
             />
           ))}
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {grouped.map(({ kind, agents }) => {
+            const KindIcon = kindIcons[kind];
+            const c = kindColors[kind];
+            return (
+              <div key={kind}>
+                <div className="flex items-center gap-2.5 mb-2 px-1">
+                  <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${c.bg} ${c.text}`}>
+                    <KindIcon className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      <h2 className="text-sm font-semibold text-gray-900">{data.kinds[kind].label}</h2>
+                      <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded-full ${c.bg} ${c.text}`}>{agents.length}</span>
+                    </div>
+                    <p className="text-[11px] text-gray-400 truncate">{data.kinds[kind].description}</p>
+                  </div>
+                </div>
+                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-100">
+                  {agents.map((agent) => (
+                    <AgentRow
+                      key={agent.name}
+                      agent={agent}
+                      onClick={() => setSelectedAgent(agent.name)}
+                      onRun={() => runMutation.mutate(agent.name)}
+                      isRunning={runMutation.isPending && runMutation.variables === agent.name}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </div>
       )}
 

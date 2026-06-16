@@ -495,6 +495,22 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
     sourceFile: "server/routes.ts:7691",
   },
   {
+    name: "task-suggester",
+    displayName: "Sugeridor de Tareas",
+    kind: "automation",
+    description: "Propone tareas en la bandeja 'Sugeridas' a partir del trabajo significativo detectado en commits",
+    trigger: "webhook",
+    criticality: "low",
+    longDescription:
+      "Tras analizar los commits de un push (cuando el proyecto tiene aiTrackingEnabled), reutiliza el resultado de la IA (suggestedTaskTitle + isSignificant) — sin llamada extra a Claude — y crea filas en task_suggestions para el trabajo significativo que aún no tiene tarea. Mapea el autor del push (sender.login de GitHub) a un miembro del equipo por github_username para sugerir el arquitecto. Las sugerencias se revisan en la bandeja 'Sugeridas' de /admin/tasks y se aceptan (crea la tarea) o se descartan. Es best-effort: si falla, nunca rompe el webhook.",
+    connections: [
+      { type: "webhook", label: "POST /api/webhooks/github/repo/:repoId", detail: "Corre dentro del flujo del push" },
+      { type: "db", label: "task_suggestions", detail: "Crea sugerencias deduplicadas (pendientes)" },
+      { type: "db", label: "team_members", detail: "Mapea autor del commit → arquitecto sugerido" },
+    ],
+    sourceFile: "server/routes.ts:8126",
+  },
+  {
     name: "weekly-summary-on-demand",
     displayName: "Resumen Semanal On-Demand",
     kind: "ai",

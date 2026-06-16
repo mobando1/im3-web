@@ -2,7 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { eq, asc, isNull, isNotNull, sql, and, gte, lte, ilike, or, desc, count, inArray } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectGithubRepos, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, stackServices, contractTemplates, contracts, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, teamMembers, taskSuggestions, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectGithubRepos, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, stackServices, contractTemplates, contracts, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback } from "@shared/schema";
 import { AGENT_REGISTRY, AGENT_KINDS, findAgent } from "./agents/registry";
 import { runAgent } from "./agents/runner";
 import { syncGmailEmails, isGmailConfigured, sendGmailMessage, getOriginalMessageHeaders } from "./google-gmail";
@@ -2587,7 +2587,7 @@ export async function registerRoutes(
   app.post("/api/admin/tasks", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
 
-    const { title, description, dueDate, priority, contactId } = req.body;
+    const { title, description, dueDate, priority, contactId, projectId, assigneeId, status } = req.body;
     if (!title || !title.trim()) {
       return res.status(400).json({ error: "Titulo requerido" });
     }
@@ -2598,7 +2598,10 @@ export async function registerRoutes(
         description: description || null,
         dueDate: dueDate ? new Date(dueDate) : null,
         priority: priority || "medium",
+        status: status || "pending",
         contactId: contactId || null,
+        projectId: projectId || null,
+        assigneeId: assigneeId || null,
       }).returning();
 
       if (task.contactId) {
@@ -2620,15 +2623,18 @@ export async function registerRoutes(
     const taskId = req.params.id as string;
 
     const updates: Record<string, any> = {};
-    const { title, description, dueDate, priority, status } = req.body;
+    const { title, description, dueDate, priority, status, assigneeId, projectId, contactId } = req.body;
     if (title !== undefined) updates.title = title;
     if (description !== undefined) updates.description = description;
     if (dueDate !== undefined) updates.dueDate = dueDate ? new Date(dueDate) : null;
     if (priority !== undefined) updates.priority = priority;
+    if (assigneeId !== undefined) updates.assigneeId = assigneeId || null;
+    if (projectId !== undefined) updates.projectId = projectId || null;
+    if (contactId !== undefined) updates.contactId = contactId || null;
     if (status !== undefined) {
       updates.status = status;
-      if (status === "completed") updates.completedAt = new Date();
-      if (status === "pending") updates.completedAt = null;
+      // completedAt solo se setea al completar; cualquier otro estado lo limpia.
+      updates.completedAt = status === "completed" ? new Date() : null;
     }
 
     try {
@@ -2665,6 +2671,255 @@ export async function registerRoutes(
     } catch (err: any) {
       log(`Error deleting task: ${err?.message}`);
       res.status(500).json({ error: "Error eliminando tarea" });
+    }
+  });
+
+  // ───────────────────────────────────────────────────────────────
+  // Team members — equipo interno para asignar tareas (etiquetas)
+  // ───────────────────────────────────────────────────────────────
+  app.get("/api/admin/team-members", requireAuth, async (req, res) => {
+    if (!db) return res.json([]);
+    try {
+      const includeInactive = req.query.includeInactive === "true";
+      const rows = await db.select().from(teamMembers)
+        .where(includeInactive ? undefined : eq(teamMembers.active, true))
+        .orderBy(asc(teamMembers.name));
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.post("/api/admin/team-members", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const { name, email, color, role, githubUsername } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: "Nombre requerido" });
+    try {
+      const [member] = await db.insert(teamMembers).values({
+        name: name.trim(),
+        email: email?.trim() || null,
+        color: color || "#2FA4A9",
+        role: role || "member",
+        githubUsername: githubUsername?.trim() || null,
+      }).returning();
+      res.json(member);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.patch("/api/admin/team-members/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const ALLOWED = ["name", "email", "color", "role", "githubUsername", "active"] as const;
+      const updates: Record<string, unknown> = {};
+      for (const k of ALLOWED) if (k in req.body) updates[k] = req.body[k];
+      const [updated] = await db.update(teamMembers).set(updates)
+        .where(eq(teamMembers.id, req.params.id as string)).returning();
+      if (!updated) return res.status(404).json({ error: "Miembro no encontrado" });
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // ───────────────────────────────────────────────────────────────
+  // Tablero unificado de tareas — normaliza CRM tasks + projectTasks
+  // en un solo shape. Filtros: assigneeId, projectId, status, source.
+  // ───────────────────────────────────────────────────────────────
+  app.get("/api/admin/tasks/board", requireAuth, async (req, res) => {
+    if (!db) return res.json([]);
+    try {
+      const { assigneeId, projectId, status, source } = req.query as Record<string, string>;
+
+      // Para no inundar el tablero con follow-ups CRM viejos, ocultamos las completadas
+      // de hace +30 días por defecto. Si el usuario filtra explícitamente por estado
+      // "completed" (o pasa includeOldCompleted=true), se muestran todas.
+      const showAllCompleted = req.query.includeOldCompleted === "true" || status === "completed";
+      const doneCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+      const keepByCompletion = (st: string, completedAt: Date | null) =>
+        st !== "completed" || showAllCompleted || !completedAt || completedAt.getTime() >= doneCutoff;
+
+      const [members, crmRows, projRows, projectRows, phaseRows] = await Promise.all([
+        db.select().from(teamMembers),
+        db.select().from(tasks),
+        db.select().from(projectTasks).where(isNull(projectTasks.deletedAt)),
+        db.select({ id: clientProjects.id, name: clientProjects.name, contactId: clientProjects.contactId }).from(clientProjects),
+        db.select({ id: projectPhases.id, name: projectPhases.name }).from(projectPhases),
+      ]);
+
+      const memberMap = new Map(members.map(m => [m.id, { id: m.id, name: m.name, color: m.color }]));
+      const projectMap = new Map(projectRows.map(p => [p.id, p]));
+      const phaseMap = new Map(phaseRows.map(p => [p.id, p.name]));
+
+      // contact names (de tasks CRM + de proyectos)
+      const contactIdSet = new Set<string>();
+      for (const t of crmRows) if (t.contactId) contactIdSet.add(t.contactId);
+      for (const p of projectRows) if (p.contactId) contactIdSet.add(p.contactId);
+      const contactNameMap = new Map<string, string>();
+      if (contactIdSet.size > 0) {
+        const cids = Array.from(contactIdSet);
+        const cs = await db.select({ id: contacts.id, nombre: contacts.nombre })
+          .from(contacts)
+          .where(sql`${contacts.id} IN (${sql.join(cids.map(id => sql`${id}`), sql`, `)})`);
+        for (const c of cs) contactNameMap.set(c.id, c.nombre);
+      }
+
+      type UnifiedTask = {
+        id: string; source: "crm" | "project"; title: string; description: string | null;
+        status: string; priority: string; assigneeId: string | null;
+        assignee: { id: string; name: string; color: string } | null;
+        dueDate: string | null; startDate: string | null;
+        projectId: string | null; projectName: string | null;
+        contactId: string | null; contactName: string | null;
+        phaseId: string | null; phaseName: string | null; isMilestone: boolean;
+      };
+
+      const unified: UnifiedTask[] = [];
+
+      for (const t of crmRows) {
+        if (!keepByCompletion(t.status, t.completedAt)) continue;
+        const proj = t.projectId ? projectMap.get(t.projectId) : undefined;
+        unified.push({
+          id: t.id, source: "crm", title: t.title, description: t.description,
+          status: t.status, priority: t.priority, assigneeId: t.assigneeId,
+          assignee: t.assigneeId ? (memberMap.get(t.assigneeId) ?? null) : null,
+          dueDate: t.dueDate ? t.dueDate.toISOString() : null, startDate: null,
+          projectId: t.projectId ?? null, projectName: proj?.name ?? null,
+          contactId: t.contactId ?? null, contactName: t.contactId ? (contactNameMap.get(t.contactId) ?? null) : null,
+          phaseId: null, phaseName: null, isMilestone: false,
+        });
+      }
+
+      for (const t of projRows) {
+        if (!keepByCompletion(t.status, t.completedAt)) continue;
+        const proj = projectMap.get(t.projectId);
+        const projContactId = proj?.contactId ?? null;
+        unified.push({
+          id: t.id, source: "project", title: t.title, description: t.description,
+          status: t.status, priority: t.priority, assigneeId: t.assigneeId,
+          assignee: t.assigneeId ? (memberMap.get(t.assigneeId) ?? null) : null,
+          dueDate: t.dueDate ? t.dueDate.toISOString() : null,
+          startDate: t.startDate ? t.startDate.toISOString() : null,
+          projectId: t.projectId, projectName: proj?.name ?? null,
+          contactId: projContactId, contactName: projContactId ? (contactNameMap.get(projContactId) ?? null) : null,
+          phaseId: t.phaseId, phaseName: phaseMap.get(t.phaseId) ?? null, isMilestone: t.isMilestone,
+        });
+      }
+
+      let result = unified;
+      if (assigneeId) result = result.filter(t => assigneeId === "none" ? !t.assigneeId : t.assigneeId === assigneeId);
+      if (projectId) result = result.filter(t => projectId === "none" ? !t.projectId : t.projectId === projectId);
+      if (status) result = result.filter(t => t.status === status);
+      if (source) result = result.filter(t => t.source === source);
+
+      result.sort((a, b) => {
+        const da = a.dueDate ? new Date(a.dueDate).getTime() : Infinity;
+        const dbb = b.dueDate ? new Date(b.dueDate).getTime() : Infinity;
+        return da - dbb;
+      });
+
+      res.json(result);
+    } catch (err: any) {
+      log(`Error building task board: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // ───────────────────────────────────────────────────────────────
+  // Sugerencias de tareas — bandeja de auto-creación (desde GitHub)
+  // ───────────────────────────────────────────────────────────────
+  app.get("/api/admin/task-suggestions", requireAuth, async (req, res) => {
+    if (!db) return res.json([]);
+    try {
+      const status = (req.query.status as string) || "pending";
+      const conds = [eq(taskSuggestions.status, status)];
+      if (req.query.projectId) conds.push(eq(taskSuggestions.projectId, req.query.projectId as string));
+      const rows = await db.select().from(taskSuggestions).where(and(...conds)).orderBy(desc(taskSuggestions.createdAt));
+
+      const projIds = Array.from(new Set(rows.map(r => r.projectId)));
+      const projMap = new Map<string, string>();
+      if (projIds.length) {
+        const ps = await db.select({ id: clientProjects.id, name: clientProjects.name }).from(clientProjects)
+          .where(sql`${clientProjects.id} IN (${sql.join(projIds.map(id => sql`${id}`), sql`, `)})`);
+        for (const p of ps) projMap.set(p.id, p.name);
+      }
+      const memberIds = Array.from(new Set(rows.map(r => r.suggestedAssigneeId).filter(Boolean) as string[]));
+      const memMap = new Map<string, { name: string; color: string }>();
+      if (memberIds.length) {
+        const ms = await db.select().from(teamMembers).where(sql`${teamMembers.id} IN (${sql.join(memberIds.map(id => sql`${id}`), sql`, `)})`);
+        for (const m of ms) memMap.set(m.id, { name: m.name, color: m.color });
+      }
+      res.json(rows.map(r => ({
+        ...r,
+        projectName: projMap.get(r.projectId) ?? null,
+        suggestedAssignee: r.suggestedAssigneeId ? (memMap.get(r.suggestedAssigneeId) ?? null) : null,
+      })));
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Aceptar — crea la tarea y marca la sugerencia como aceptada.
+  // Si el proyecto tiene fases, la crea como projectTask en la fase activa (suma al progreso);
+  // si no tiene fases, cae a una tarea CRM ligada al proyecto.
+  // Body opcional: { assigneeId?, priority?, dueDate? } para ajustar antes de crear.
+  app.post("/api/admin/task-suggestions/:id/accept", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [sug] = await db.select().from(taskSuggestions).where(eq(taskSuggestions.id, req.params.id as string)).limit(1);
+      if (!sug) return res.status(404).json({ error: "Sugerencia no encontrada" });
+      if (sug.status !== "pending") return res.status(400).json({ error: "Sugerencia ya procesada" });
+
+      const assigneeId = req.body?.assigneeId !== undefined ? (req.body.assigneeId || null) : sug.suggestedAssigneeId;
+      const priority = req.body?.priority || sug.suggestedPriority || "medium";
+      const dueDate = req.body?.dueDate ? new Date(req.body.dueDate) : null;
+
+      // Resolver fase: la de la sugerencia, o una fase activa del proyecto (in_progress → pending → primera).
+      let phaseId: string | null = sug.phaseId ?? null;
+      if (!phaseId) {
+        const phases = await db.select().from(projectPhases)
+          .where(and(eq(projectPhases.projectId, sug.projectId), isNull(projectPhases.deletedAt)))
+          .orderBy(asc(projectPhases.orderIndex));
+        const pick = phases.find(p => p.status === "in_progress") || phases.find(p => p.status === "pending") || phases[0];
+        phaseId = pick?.id ?? null;
+      }
+
+      let createdId: string;
+      let createdAs: "project" | "crm";
+      if (phaseId) {
+        const existing = await db.select({ orderIndex: projectTasks.orderIndex }).from(projectTasks)
+          .where(and(eq(projectTasks.phaseId, phaseId), isNull(projectTasks.deletedAt)));
+        const nextOrder = existing.reduce((m, t) => Math.max(m, t.orderIndex ?? 0), -1) + 1;
+        const [pt] = await db.insert(projectTasks).values({
+          phaseId, projectId: sug.projectId, title: sug.title, description: sug.description,
+          priority, assigneeId, dueDate, status: "pending", orderIndex: nextOrder,
+        }).returning();
+        createdId = pt.id; createdAs = "project";
+      } else {
+        const [t] = await db.insert(tasks).values({
+          title: sug.title, description: sug.description, projectId: sug.projectId,
+          assigneeId, priority, dueDate, status: "pending",
+        }).returning();
+        createdId = t.id; createdAs = "crm";
+      }
+
+      await db.update(taskSuggestions).set({ status: "accepted", acceptedTaskId: createdId }).where(eq(taskSuggestions.id, sug.id));
+      res.json({ success: true, taskId: createdId, createdAs });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.post("/api/admin/task-suggestions/:id/dismiss", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [updated] = await db.update(taskSuggestions).set({ status: "dismissed" })
+        .where(eq(taskSuggestions.id, req.params.id as string)).returning();
+      if (!updated) return res.status(404).json({ error: "Sugerencia no encontrada" });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
     }
   });
 
@@ -6035,7 +6290,7 @@ Responde SOLO con un JSON válido, sin markdown:
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
       // Whitelist only mutable fields to avoid clients overwriting id/projectId/createdAt/etc.
-      const ALLOWED = ["title", "description", "clientFacingTitle", "clientFacingDescription", "status", "priority", "assigneeName", "startDate", "dueDate", "isMilestone", "estimatedHours", "actualHours", "orderIndex"] as const;
+      const ALLOWED = ["title", "description", "clientFacingTitle", "clientFacingDescription", "status", "priority", "assigneeName", "assigneeId", "startDate", "dueDate", "isMilestone", "estimatedHours", "actualHours", "orderIndex"] as const;
       const updates: Record<string, unknown> = { updatedAt: new Date() };
       for (const k of ALLOWED) {
         if (k in req.body) updates[k] = req.body[k];
@@ -7966,6 +8221,54 @@ Responde SOLO con un JSON válido, sin markdown:
       }
 
       await calculateProjectHealth(repo.projectId);
+
+      // Fase D — auto-sugerencias de tareas desde el análisis (best-effort, NUNCA rompe el webhook).
+      // Reusa el resultado de la IA (suggestedTaskTitle) — sin llamada extra. Mapea el autor
+      // del push (sender.login) → team_members.githubUsername para sugerir el arquitecto.
+      try {
+        await runAgent("task-suggester", async () => {
+          const significant = results.filter(r => r.isSignificant && r.suggestedTaskTitle && r.suggestedTaskTitle.trim());
+          if (significant.length === 0) return { recordsProcessed: 0 };
+
+          const login = (payload.sender as { login?: string } | undefined)?.login
+            || (payload.pusher as { name?: string } | undefined)?.name || null;
+          let suggestedAssigneeId: string | null = null;
+          if (login) {
+            const [member] = await db!.select().from(teamMembers).where(eq(teamMembers.githubUsername, login)).limit(1);
+            suggestedAssigneeId = member?.id ?? null;
+          }
+
+          const existingTasks = await db!.select({ title: projectTasks.title }).from(projectTasks)
+            .where(and(eq(projectTasks.projectId, repo.projectId), isNull(projectTasks.deletedAt)));
+          const existingTitles = new Set(existingTasks.map(t => t.title.trim().toLowerCase()));
+          // Dedup contra TODAS las sugerencias (pending/accepted/dismissed) para no re-proponer
+          // un título ya aceptado o descartado en un push posterior.
+          const existingSug = await db!.select({ title: taskSuggestions.title }).from(taskSuggestions)
+            .where(eq(taskSuggestions.projectId, repo.projectId));
+          const seen = new Set(existingSug.map(s => s.title.trim().toLowerCase()));
+
+          let created = 0;
+          for (const r of significant) {
+            const title = r.suggestedTaskTitle!.trim();
+            const key = title.toLowerCase();
+            if (existingTitles.has(key) || seen.has(key)) continue;
+            seen.add(key);
+            await db!.insert(taskSuggestions).values({
+              projectId: repo.projectId,
+              title,
+              description: r.summaryLevel1 || null,
+              suggestedAssigneeId,
+              suggestedPriority: "medium",
+              status: "pending",
+            });
+            created++;
+          }
+          return { recordsProcessed: created };
+        }, { triggeredBy: "webhook" });
+      } catch (sugErr) {
+        log(`Task suggestion generation failed (repo ${repo.repoFullName}): ${sugErr instanceof Error ? sugErr.message : String(sugErr)}`);
+      }
+
       return res.json({ message: `Processed ${results.length} activity entries`, eventId: event.id, repoId: repo.id });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -8937,7 +9240,13 @@ Responde SOLO con un JSON válido, sin markdown:
       const [proposal] = await db.select().from(proposals).where(eq(proposals.id, req.params.id as string)).limit(1);
       if (!proposal) return res.status(404).json({ error: "Propuesta no encontrada" });
 
-      const result = await generateProposal(proposal.contactId, proposal.notes || req.body?.notes);
+      // Envuelto en runAgent → cada generación y sus errores quedan en agent_runs,
+      // visibles en /admin/agents con errorMessage/errorStack (antes era invisible).
+      const result = await runAgent(
+        "proposal-ai",
+        () => generateProposal(proposal.contactId, proposal.notes || req.body?.notes),
+        { triggeredBy: "manual" }
+      );
       if (!result) return res.status(500).json({ error: "Error generando propuesta con IA" });
 
       // Nuevo formato: toda la ProposalData va dentro de `sections` (campo JSON libre)
@@ -8951,7 +9260,9 @@ Responde SOLO con un JSON válido, sin markdown:
       res.json(updated);
     } catch (err: any) {
       log(`Error generating proposal: ${err?.message}`);
-      res.status(500).json({ error: "Error generando propuesta" });
+      // Exponemos el detalle real al admin (endpoint con requireAuth) para diagnóstico:
+      // antes el error verdadero (ej. modelo retirado → 404) quedaba oculto tras el genérico.
+      res.status(500).json({ error: "Error generando propuesta", detail: err?.message });
     }
   });
 
@@ -10534,8 +10845,10 @@ Responde SOLO con un JSON válido, sin markdown:
       const enriched = await Promise.all(rows.map(async (c) => {
         const [contact] = await db!.select({ nombre: contacts.nombre, empresa: contacts.empresa })
           .from(contacts).where(eq(contacts.id, c.contactId)).limit(1);
-        const [proposal] = await db!.select({ title: proposals.title })
-          .from(proposals).where(eq(proposals.id, c.proposalId)).limit(1);
+        const [proposal] = c.proposalId
+          ? await db!.select({ title: proposals.title })
+              .from(proposals).where(eq(proposals.id, c.proposalId)).limit(1)
+          : [undefined];
         return { ...c, contactName: contact?.nombre, contactEmpresa: contact?.empresa, proposalTitle: proposal?.title };
       }));
 
@@ -10568,8 +10881,10 @@ Responde SOLO con un JSON válido, sin markdown:
 
       const [contact] = await db.select({ nombre: contacts.nombre, empresa: contacts.empresa, email: contacts.email })
         .from(contacts).where(eq(contacts.id, contract.contactId)).limit(1);
-      const [proposal] = await db.select({ title: proposals.title, accessToken: proposals.accessToken, status: proposals.status })
-        .from(proposals).where(eq(proposals.id, contract.proposalId)).limit(1);
+      const [proposal] = contract.proposalId
+        ? await db.select({ title: proposals.title, accessToken: proposals.accessToken, status: proposals.status })
+            .from(proposals).where(eq(proposals.id, contract.proposalId)).limit(1)
+        : [undefined];
 
       res.json({ ...contract, contact, proposal });
     } catch (err: any) {
@@ -10703,7 +11018,9 @@ Responde SOLO con un JSON válido, sin markdown:
       res.json({
         id: contract.id,
         title: contract.title,
+        source: contract.source,
         bodyMarkdown: contract.bodyMarkdown,
+        fileUrl: contract.fileUrl,
         status: contract.status,
         signedAt: contract.signedAt,
         signedBy: contract.signedBy,
@@ -10722,6 +11039,12 @@ Responde SOLO con un JSON válido, sin markdown:
       const [contract] = await db.select().from(contracts).where(eq(contracts.id, req.params.id as string)).limit(1);
       if (!contract) return res.status(404).json({ error: "Contrato no encontrado" });
 
+      // Contratos subidos no tienen bodyMarkdown — el PDF vive en Drive.
+      if (contract.source === "uploaded") {
+        if (contract.fileUrl) return res.redirect(contract.fileUrl);
+        return res.status(400).json({ error: "Contrato subido sin archivo asociado" });
+      }
+
       const { generateContractPdf } = await import("./contract-pdf");
       const pdf = await generateContractPdf({ contractId: contract.id });
 
@@ -10736,6 +11059,128 @@ Responde SOLO con un JSON válido, sin markdown:
     } catch (err: any) {
       log(`Error generating contract PDF: ${err?.message}`);
       res.status(500).json({ error: err?.message || "Error generando PDF" });
+    }
+  });
+
+  // POST subir un contrato firmado externo (PDF) y amarrarlo al contacto.
+  // Crea un registro de contrato source='uploaded' status='signed' + sube a Drive
+  // (subcarpeta "Contratos" del cliente). Form-data: file, signedBy?, signedAt?, signedNotes?, title?
+  app.post("/api/admin/contacts/:id/contracts/upload", requireAuth, upload.single("file"), async (req, res) => {
+    const contactId = req.params.id as string;
+    if (!req.file) return res.status(400).json({ message: "No se recibió archivo" });
+    if (!db) return res.status(500).json({ message: "DB no disponible" });
+
+    try {
+      const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId));
+      if (!contact) return res.status(404).json({ message: "Contacto no encontrado" });
+
+      // Resolve Drive folder: cached → diagnostic → search/create by empresa
+      let folderId: string | null = contact.driveFolderId || null;
+      if (!folderId && contact.diagnosticId) {
+        const [diag] = await db.select({ googleDriveUrl: diagnostics.googleDriveUrl }).from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId));
+        if (diag?.googleDriveUrl) folderId = extractFolderIdFromUrl(diag.googleDriveUrl);
+      }
+      if (!folderId) folderId = await findOrCreateClientFolder(contact.empresa);
+      if (folderId && folderId !== contact.driveFolderId) {
+        db.update(contacts).set({ driveFolderId: folderId }).where(eq(contacts.id, contactId)).catch(() => {});
+      }
+
+      // Find-or-create "Contratos" subfolder inside the client's folder
+      let targetFolderId = folderId;
+      if (folderId) {
+        const { google } = await import("googleapis");
+        const auth = new google.auth.JWT({
+          email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+          key: (process.env.GOOGLE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
+          scopes: ["https://www.googleapis.com/auth/drive"],
+          subject: process.env.GOOGLE_DRIVE_IMPERSONATE || undefined,
+        });
+        const drive = google.drive({ version: "v3", auth });
+        const existing = await drive.files.list({
+          q: `'${folderId}' in parents and name='Contratos' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+          fields: "files(id)",
+        });
+        if (existing.data.files && existing.data.files.length > 0) {
+          targetFolderId = existing.data.files[0].id!;
+        } else {
+          const folder = await drive.files.create({
+            requestBody: { name: "Contratos", mimeType: "application/vnd.google-apps.folder", parents: [folderId] },
+            fields: "id",
+          });
+          targetFolderId = folder.data.id!;
+        }
+      }
+
+      const { fileId, webViewLink } = await uploadFileToDrive(targetFolderId!, req.file.originalname, req.file.mimetype, req.file.buffer);
+
+      const signedAt = req.body.signedAt ? new Date(req.body.signedAt) : new Date();
+      const title = (req.body.title as string)?.trim() || `Contrato firmado — ${contact.empresa || contact.nombre}`;
+
+      const [contract] = await db.insert(contracts).values({
+        contactId,
+        source: "uploaded",
+        status: "signed",
+        title,
+        fileUrl: webViewLink,
+        driveFileId: fileId,
+        fileName: req.file.originalname,
+        fileSize: req.file.size,
+        signedAt,
+        signedBy: (req.body.signedBy as string)?.trim() || null,
+        signedNotes: (req.body.signedNotes as string)?.trim() || null,
+      }).returning();
+
+      await logActivity(contactId, "contact_edited", `Contrato firmado subido: ${title}`);
+      res.json(contract);
+    } catch (err: unknown) {
+      res.status(500).json({ message: `Error: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  });
+
+  // POST guardar un contrato como plantilla reutilizable.
+  // Para subidos: extrae texto del PDF (OCR) como semilla. Para generados: usa el bodyMarkdown.
+  // El admin luego edita la plantilla y le agrega {{variables}}.
+  app.post("/api/admin/contracts/:id/save-as-template", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [contract] = await db.select().from(contracts).where(eq(contracts.id, req.params.id as string)).limit(1);
+      if (!contract) return res.status(404).json({ error: "Contrato no encontrado" });
+
+      let seedMarkdown = contract.bodyMarkdown || contract.extractedText || "";
+
+      // Si es subido y no tenemos texto, intentar OCR del PDF en Drive (best-effort)
+      if (!seedMarkdown && contract.fileUrl) {
+        try {
+          const { content } = await readGoogleDriveContent(contract.fileUrl);
+          seedMarkdown = content || "";
+          if (seedMarkdown) {
+            await db.update(contracts).set({ extractedText: seedMarkdown, updatedAt: new Date() })
+              .where(eq(contracts.id, contract.id));
+          }
+        } catch (ocrErr) {
+          log(`OCR fallido para contrato ${contract.id}: ${ocrErr instanceof Error ? ocrErr.message : String(ocrErr)}`);
+        }
+      }
+
+      if (!seedMarkdown.trim()) {
+        return res.status(422).json({ error: "No se pudo extraer texto del contrato. Edita la plantilla manualmente después de crearla." });
+      }
+
+      const name = (req.body?.name as string)?.trim() || `${contract.title} (plantilla)`;
+      const description = (req.body?.description as string)?.trim() || "Plantilla creada desde un contrato existente. Edita el texto y agrega variables {{...}}.";
+
+      const [template] = await db.insert(contractTemplates).values({
+        name,
+        description,
+        bodyMarkdown: seedMarkdown,
+        isActive: true,
+        isDefault: false,
+      }).returning();
+
+      res.json(template);
+    } catch (err: any) {
+      log(`Error saving contract as template: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
     }
   });
 

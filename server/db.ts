@@ -806,6 +806,67 @@ export async function runMigrations() {
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_contracts_status" ON "contracts" ("status");`).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_contracts_deleted_at" ON "contracts" ("deleted_at");`).catch(() => {});
 
+    // Contratos subibles — contratos firmados externos (PDF) amarrados al cliente.
+    // Hacemos nullable lo que un contrato subido no tiene (propuesta/plantilla/markdown)
+    // y agregamos metadatos del archivo en Drive + texto OCR para reuso como plantilla.
+    await pool.query(`ALTER TABLE "contracts" ALTER COLUMN "proposal_id" DROP NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "contracts" ALTER COLUMN "template_id" DROP NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "contracts" ALTER COLUMN "body_markdown" DROP NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "contracts" ADD COLUMN IF NOT EXISTS "source" text DEFAULT 'generated' NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "contracts" ADD COLUMN IF NOT EXISTS "file_url" text;`).catch(() => {});
+    await pool.query(`ALTER TABLE "contracts" ADD COLUMN IF NOT EXISTS "drive_file_id" text;`).catch(() => {});
+    await pool.query(`ALTER TABLE "contracts" ADD COLUMN IF NOT EXISTS "file_name" text;`).catch(() => {});
+    await pool.query(`ALTER TABLE "contracts" ADD COLUMN IF NOT EXISTS "file_size" integer;`).catch(() => {});
+    await pool.query(`ALTER TABLE "contracts" ADD COLUMN IF NOT EXISTS "extracted_text" text;`).catch(() => {});
+
+    // ── Módulo de Tareas — equipo interno + asignación + link a proyecto ──
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "team_members" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "name" text NOT NULL,
+        "email" text,
+        "color" varchar(9) DEFAULT '#2FA4A9' NOT NULL,
+        "role" text DEFAULT 'member' NOT NULL,
+        "github_username" text,
+        "active" boolean DEFAULT true NOT NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    // tasks: responsable + link opcional a proyecto + status más ancho
+    await pool.query(`ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "project_id" varchar;`).catch(() => {});
+    await pool.query(`ALTER TABLE "tasks" ADD COLUMN IF NOT EXISTS "assignee_id" varchar;`).catch(() => {});
+    // project_tasks: responsable como FK (conservando assignee_name legacy)
+    await pool.query(`ALTER TABLE "project_tasks" ADD COLUMN IF NOT EXISTS "assignee_id" varchar;`).catch(() => {});
+    // Seed idempotente del equipo base (Mateo + Isabela)
+    await pool.query(`
+      INSERT INTO "team_members" ("name", "email", "color", "role")
+      SELECT 'Mateo', NULL, '#2FA4A9', 'owner'
+      WHERE NOT EXISTS (SELECT 1 FROM "team_members" WHERE "name" = 'Mateo');
+    `).catch(() => {});
+    await pool.query(`
+      INSERT INTO "team_members" ("name", "email", "color", "role")
+      SELECT 'Isabela', NULL, '#7C3AED', 'member'
+      WHERE NOT EXISTS (SELECT 1 FROM "team_members" WHERE "name" = 'Isabela');
+    `).catch(() => {});
+
+    // Sugerencias de tareas (Fase D — auto-creación desde GitHub)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "task_suggestions" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "project_id" varchar NOT NULL,
+        "phase_id" varchar,
+        "source_activity_id" varchar,
+        "title" text NOT NULL,
+        "description" text,
+        "suggested_assignee_id" varchar,
+        "suggested_priority" text DEFAULT 'medium' NOT NULL,
+        "status" text DEFAULT 'pending' NOT NULL,
+        "accepted_task_id" varchar,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_task_suggestions_project" ON "task_suggestions" ("project_id", "status");`).catch(() => {});
+
     // Seed inicial del catálogo de stack — 10 servicios reales que IM3 usa hoy
     // Solo inserta si la tabla está vacía (idempotente). Tras seed, admin edita en /admin/stack-catalog.
     try {

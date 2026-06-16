@@ -19,6 +19,25 @@ export const insertUserSchema = createInsertSchema(users).pick({
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type User = typeof users.$inferSelect;
 
+// ───────────────────────────────────────────────────────────────
+// Team members — equipo interno para asignar tareas.
+// Son etiquetas/responsables (color + avatar), NO logins separados.
+// Todos siguen entrando con el login admin compartido.
+// ───────────────────────────────────────────────────────────────
+export const teamMembers = pgTable("team_members", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  email: text("email"),
+  color: varchar("color", { length: 9 }).default("#2FA4A9").notNull(), // hex para avatar/chip
+  role: text("role").notNull().default("member"), // owner | member | collaborator
+  githubUsername: text("github_username"), // mapear autor de commit → arquitecto (Fase D)
+  active: boolean("active").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type TeamMember = typeof teamMembers.$inferSelect;
+export type InsertTeamMember = typeof teamMembers.$inferInsert;
+
 // Diagnostic form submissions — "Commit progresivo" (Fase 1 obligatoria + Fase 2 opcional)
 export const diagnostics = pgTable("diagnostics", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
@@ -202,21 +221,42 @@ export const contactNotes = pgTable("contact_notes", {
 export type ContactNote = typeof contactNotes.$inferSelect;
 export type InsertContactNote = typeof contactNotes.$inferInsert;
 
-// Tasks (follow-up reminders)
+// Tasks (follow-up reminders + tareas ad-hoc del equipo)
 export const tasks = pgTable("tasks", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   contactId: varchar("contact_id"),
+  projectId: varchar("project_id"), // opcional — amarra la tarea a un proyecto sin pasar por una fase
+  assigneeId: varchar("assignee_id"), // FK lógica a team_members (responsable)
   title: text("title").notNull(),
   description: text("description"),
   dueDate: timestamp("due_date"),
   priority: text("priority").notNull().default("medium"), // low | medium | high
-  status: text("status").notNull().default("pending"), // pending | completed
+  status: text("status").notNull().default("pending"), // pending | in_progress | blocked | completed
   completedAt: timestamp("completed_at"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
 export type Task = typeof tasks.$inferSelect;
 export type InsertTask = typeof tasks.$inferInsert;
+
+// Task suggestions — tareas propuestas automáticamente (ej: desde commits de GitHub).
+// Se revisan en la bandeja "Sugeridas" y se aceptan (→ crea tarea) o descartan.
+export const taskSuggestions = pgTable("task_suggestions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull(),
+  phaseId: varchar("phase_id"),
+  sourceActivityId: varchar("source_activity_id"), // → project_activity_entries
+  title: text("title").notNull(),
+  description: text("description"),
+  suggestedAssigneeId: varchar("suggested_assignee_id"), // → team_members (arquitecto por autor de commit)
+  suggestedPriority: text("suggested_priority").notNull().default("medium"),
+  status: text("status").notNull().default("pending"), // pending | accepted | dismissed
+  acceptedTaskId: varchar("accepted_task_id"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type TaskSuggestion = typeof taskSuggestions.$inferSelect;
+export type InsertTaskSuggestion = typeof taskSuggestions.$inferInsert;
 
 // Activity log (audit trail for contact journey)
 export const activityLog = pgTable("activity_log", {
@@ -459,7 +499,8 @@ export const projectTasks = pgTable("project_tasks", {
   clientFacingDescription: text("client_facing_description"), // plain-language explanation
   status: text("status").notNull().default("pending"), // pending | in_progress | completed | blocked
   priority: text("priority").notNull().default("medium"), // low | medium | high
-  assigneeName: text("assignee_name"), // free-text owner (no relation to users table)
+  assigneeName: text("assignee_name"), // legacy free-text owner (fallback si no hay assigneeId)
+  assigneeId: varchar("assignee_id"), // FK lógica a team_members (responsable)
   startDate: timestamp("start_date"),
   dueDate: timestamp("due_date"),
   isMilestone: boolean("is_milestone").default(false).notNull(),
@@ -945,19 +986,32 @@ export type ContractTemplate = typeof contractTemplates.$inferSelect;
 export type InsertContractTemplate = typeof contractTemplates.$inferInsert;
 
 // ───────────────────────────────────────────────────────────────
-// Contracts — documentos generados por propuesta aceptada.
-// 1:1 con proposals.id (unique). Lifecycle: draft → locked → signed.
+// Contracts — documentos de contrato amarrados a un cliente.
+// source='generated': generado desde una propuesta aceptada (1:1 con proposals.id).
+//   Lifecycle: draft → locked → signed.
+// source='uploaded': contrato firmado externo subido como PDF (sin propuesta/plantilla).
+//   Se guarda directo como signed con enlace a Drive.
 // ───────────────────────────────────────────────────────────────
 export const contracts = pgTable("contracts", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  proposalId: varchar("proposal_id").notNull().unique(),
+  // Nullables para soportar contratos subidos (sin propuesta/plantilla/markdown).
+  proposalId: varchar("proposal_id").unique(),
   contactId: varchar("contact_id").notNull(),
-  templateId: varchar("template_id").notNull(),
+  templateId: varchar("template_id"),
   title: text("title").notNull(),
   // Snapshot del Markdown ya con variables resueltas. Editable mientras status=draft.
-  bodyMarkdown: text("body_markdown").notNull(),
+  // null para contratos subidos (el contenido vive como PDF en Drive).
+  bodyMarkdown: text("body_markdown"),
   // Auditoría: qué valores se inyectaron al generar (para comparar después si la propuesta cambia)
   resolvedVariables: json("resolved_variables").$type<Record<string, unknown>>(),
+  source: text("source").notNull().default("generated"), // generated | uploaded
+  // Solo para source='uploaded' — archivo firmado en Drive
+  fileUrl: text("file_url"),
+  driveFileId: text("drive_file_id"),
+  fileName: text("file_name"),
+  fileSize: integer("file_size"),
+  // Texto extraído del PDF (OCR) — semilla para "guardar como plantilla"
+  extractedText: text("extracted_text"),
   status: text("status").notNull().default("draft"),  // draft | locked | signed | cancelled
   lockedAt: timestamp("locked_at"),
   signedAt: timestamp("signed_at"),

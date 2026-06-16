@@ -50,6 +50,7 @@ import {
   RefreshCw,
   Sparkles,
   FileText,
+  Upload,
   Activity,
   CheckSquare,
   Square,
@@ -80,6 +81,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { ContactDriveFolderBanner } from "@/components/admin/ContactDriveFolderBanner";
+import { UploadContractDialog } from "@/components/admin/UploadContractDialog";
 
 type EmailItem = {
   id: string;
@@ -529,6 +531,7 @@ export default function ContactDetailPage() {
   const [newAssocNombre, setNewAssocNombre] = useState("");
   const [newAssocRole, setNewAssocRole] = useState("");
   const [showAssocForm, setShowAssocForm] = useState(false);
+  const [uploadContractOpen, setUploadContractOpen] = useState(false);
 
   const contactId = params?.id;
 
@@ -569,6 +572,14 @@ export default function ContactDetailPage() {
 
   const { data: contactProposals = [] } = useQuery<ProposalItem[]>({
     queryKey: [`/api/admin/contacts/${contactId}/proposals`],
+    enabled: !!contactId,
+  });
+
+  const { data: contactContracts = [] } = useQuery<Array<{
+    id: string; title: string; source: "generated" | "uploaded"; status: string;
+    signedAt: string | null; signedBy: string | null; fileUrl: string | null; createdAt: string;
+  }>>({
+    queryKey: [`/api/admin/contracts?contactId=${contactId}`],
     enabled: !!contactId,
   });
 
@@ -2776,6 +2787,67 @@ export default function ContactDetailPage() {
 
         {/* ===== TAB: PROPUESTAS ===== */}
         <TabsContent value="propuestas" className="space-y-4 mt-4">
+          {/* Contratos amarrados a este cliente — trazabilidad (generados + subidos) */}
+          <Card className="bg-white border-gray-200 shadow-sm">
+            <CardHeader className="pb-2">
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle className="text-sm font-medium text-gray-900 flex items-center gap-2">
+                  <FileText className="w-4 h-4 text-[#2FA4A9]" /> Contratos {contactContracts.length > 0 ? `(${contactContracts.length})` : ""}
+                </CardTitle>
+                <Button size="sm" variant="outline" className="h-7 px-2.5 text-xs gap-1" onClick={() => setUploadContractOpen(true)}>
+                  <Upload className="w-3.5 h-3.5" /> Subir contrato
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {contactContracts.length === 0 ? (
+                <p className="text-xs text-gray-400 py-2">No hay contratos para este cliente. Súbelos firmados o genéralos desde una propuesta aceptada.</p>
+              ) : (
+                contactContracts.map(c => {
+                  const statusLabels: Record<string, string> = { draft: "Borrador", locked: "Bloqueado", signed: "Firmado", cancelled: "Cancelado" };
+                  const statusColors: Record<string, string> = {
+                    draft: "bg-gray-50 text-gray-600 border-gray-200", locked: "bg-amber-50 text-amber-600 border-amber-200",
+                    signed: "bg-emerald-50 text-emerald-600 border-emerald-200", cancelled: "bg-red-50 text-red-600 border-red-200",
+                  };
+                  return (
+                    <div key={c.id} className="flex items-center gap-3 p-2.5 rounded-lg bg-gray-50 hover:bg-gray-100 transition-colors">
+                      <FileText className="w-4 h-4 shrink-0 text-[#2FA4A9]" />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm text-gray-800 font-medium truncate">{c.title}</span>
+                          <span className={`inline-flex px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wide ${c.source === "uploaded" ? "bg-indigo-50 text-indigo-600" : "bg-gray-100 text-gray-500"}`}>
+                            {c.source === "uploaded" ? "Subido" : "Generado"}
+                          </span>
+                          <Badge variant="outline" className={`text-[9px] shrink-0 ${statusColors[c.status] || ""}`}>{statusLabels[c.status] || c.status}</Badge>
+                        </div>
+                        <div className="text-[10px] text-gray-400 mt-0.5">
+                          {c.signedAt ? `Firmado ${new Date(c.signedAt).toLocaleDateString("es-CO")}${c.signedBy ? ` · ${c.signedBy}` : ""}` : `Creado ${new Date(c.createdAt).toLocaleDateString("es-CO")}`}
+                        </div>
+                      </div>
+                      {c.source === "uploaded" && c.fileUrl && (
+                        <a href={c.fileUrl} target="_blank" rel="noopener noreferrer" className="text-gray-400 hover:text-[#2FA4A9] p-1" title="Ver PDF en Drive">
+                          <ExternalLink className="w-3.5 h-3.5" />
+                        </a>
+                      )}
+                      <Button variant="ghost" size="sm" className="h-7 px-2 text-xs text-[#2FA4A9]" onClick={() => navigate(`/admin/contracts/${c.id}`)}>Abrir</Button>
+                    </div>
+                  );
+                })
+              )}
+            </CardContent>
+          </Card>
+
+          <UploadContractDialog
+            open={uploadContractOpen}
+            onClose={() => setUploadContractOpen(false)}
+            presetContactId={contact.id}
+            presetContactLabel={`${contact.empresa} — ${contact.nombre}`}
+            onUploaded={() => {
+              queryClient.invalidateQueries({ predicate: (q) => typeof q.queryKey[0] === "string" && (q.queryKey[0] as string).startsWith("/api/admin/contracts") });
+              setUploadContractOpen(false);
+            }}
+          />
+
           {contactProposals.length === 0 ? (
             <Card className="bg-white border-gray-200 shadow-sm">
               <CardContent className="py-12 text-center">

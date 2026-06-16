@@ -5,7 +5,9 @@ import { SimpleMarkdown } from "@/lib/simple-markdown";
 type PublicContract = {
   id: string;
   title: string;
-  bodyMarkdown: string;
+  source: "generated" | "uploaded";
+  bodyMarkdown: string | null;
+  fileUrl: string | null;
   status: string;
   signedAt: string | null;
   signedBy: string | null;
@@ -55,9 +57,21 @@ export default function AdminContractPreview() {
             ✓ Firmado por <strong>{contract.signedBy}</strong> el {new Date(contract.signedAt).toLocaleDateString("es-CO", { day: "numeric", month: "long", year: "numeric" })}
           </div>
         )}
-        <article className="prose max-w-none">
-          <SimpleMarkdown source={contract.bodyMarkdown} className="text-[15px] leading-relaxed text-gray-900" />
-        </article>
+        {contract.source === "uploaded" ? (
+          <div className="text-center py-12">
+            <h1 className="text-xl font-bold text-gray-900 mb-2">{contract.title}</h1>
+            <p className="text-sm text-gray-500 mb-5">Contrato firmado disponible como documento.</p>
+            {contract.fileUrl && (
+              <a href={contract.fileUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-[#2FA4A9] text-white text-sm hover:bg-[#238b8f]">
+                Abrir documento
+              </a>
+            )}
+          </div>
+        ) : (
+          <article className="prose max-w-none">
+            <SimpleMarkdown source={contract.bodyMarkdown ?? ""} className="text-[15px] leading-relaxed text-gray-900" />
+          </article>
+        )}
       </div>
     </div>
   );
