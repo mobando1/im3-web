@@ -627,12 +627,15 @@ export async function readGoogleDriveContent(fileUrl: string): Promise<{ content
  * Returns the Google Drive folder URL and sheet URL.
  */
 export async function createDiagnosticInDrive(
-  data: DiagnosticData
+  data: DiagnosticData,
+  targetFolderId?: string,
 ): Promise<{ folderUrl: string; sheetUrl: string }> {
   log(`[Drive] Iniciando para ${data.empresa}...`);
 
-  const folderId = await createClientFolder(data.empresa, data.fechaCita);
-  log(`[Drive] Carpeta creada: ${folderId}`);
+  // Preferir la subcarpeta canónica (01.propuestas-diagnosticos) si el caller la resolvió;
+  // solo como fallback legacy se crea la carpeta "Empresa — fecha".
+  const folderId = targetFolderId || await createClientFolder(data.empresa, data.fechaCita);
+  log(`[Drive] Carpeta usada: ${folderId}`);
 
   const sheetUrl = await createDiagnosticSheet(folderId, data);
   log(`[Drive] Spreadsheet creado: ${sheetUrl}`);
@@ -774,6 +777,147 @@ export async function findOrCreateClientFolder(empresa: string): Promise<string>
 
   log(`[Drive] Carpeta nueva creada: "${empresa}" → ${folder.data.id}`);
   return folder.data.id!;
+}
+
+// ───────────────────────────────────────────────────────────────
+// Workspace canónico del cliente — UNA carpeta por cliente dentro de
+// CLIENTES_FOLDER_ID (03.clientes), con 4 subcarpetas fijas y el
+// contactId guardado en `properties` de Drive (visible cross-app) para
+// resolver/deduplicar de forma confiable. Reemplaza la creación dispersa
+// (findOrCreateClientFolder / createProjectFolder / createClientFolder).
+// ───────────────────────────────────────────────────────────────
+export type ClientSubfolders = { propuestas: string; reuniones: string; proyecto: string; documentos: string };
+export type ClientWorkspace = { folderId: string; created: boolean; subfolders: ClientSubfolders };
+
+const CLIENT_SUBFOLDERS = [
+  { key: "propuestas", prefix: "01.", name: "01.propuestas-diagnosticos" },
+  { key: "reuniones", prefix: "02.", name: "02.reuniones" },
+  { key: "proyecto", prefix: "03.", name: "03.proyecto" },
+  { key: "documentos", prefix: "04.", name: "04.documentos" },
+] as const;
+
+/** Parent donde viven todas las carpetas de cliente (03.clientes). */
+export function getClientesParentId(): string {
+  const id = process.env.CLIENTES_FOLDER_ID || process.env.GOOGLE_DRIVE_FOLDER_ID;
+  if (!id) throw new Error("CLIENTES_FOLDER_ID / GOOGLE_DRIVE_FOLDER_ID no configurado");
+  return id;
+}
+
+/**
+ * Resuelve-o-crea la carpeta canónica de un cliente + sus 4 subcarpetas.
+ * Orden de resolución: cache (folderId) → properties.im3ContactId → nombre exacto → crear.
+ * Solo Drive (sin DB): el caller persiste el folderId resultante.
+ */
+export async function ensureClientWorkspaceDrive(opts: {
+  contactId: string;
+  empresa: string;
+  cachedFolderId?: string | null;
+}): Promise<ClientWorkspace> {
+  const auth = getAuth();
+  if (!auth) throw new Error("Google Drive no configurado");
+  const drive = google.drive({ version: "v3", auth });
+  const parentId = getClientesParentId();
+  const empresa = (opts.empresa || "Cliente").trim() || "Cliente";
+  const escEmpresa = empresa.replace(/'/g, "\\'");
+  const escContactId = opts.contactId.replace(/'/g, "\\'");
+
+  const folderStillExists = async (id: string): Promise<boolean> => {
+    try {
+      const res = await drive.files.get({ fileId: id, fields: "id,trashed" });
+      return !!res.data.id && !res.data.trashed;
+    } catch {
+      return false;
+    }
+  };
+
+  const findOrCreateSubfolder = async (parent: string, prefix: string, defaultName: string): Promise<string> => {
+    const res = await drive.files.list({
+      q: `'${parent}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: "files(id,name)",
+      pageSize: 100,
+    });
+    const match = (res.data.files || []).find(f => (f.name || "").trim().startsWith(prefix));
+    if (match?.id) return match.id;
+    const created = await drive.files.create({
+      requestBody: { name: defaultName, mimeType: "application/vnd.google-apps.folder", parents: [parent] },
+      fields: "id",
+    });
+    return created.data.id!;
+  };
+
+  let folderId: string | null = null;
+  let created = false;
+
+  // 1) Cache del contacto
+  if (opts.cachedFolderId && (await folderStillExists(opts.cachedFolderId))) {
+    folderId = opts.cachedFolderId;
+  }
+
+  // 2) Por properties.im3ContactId (resolución estable, mata duplicados). Blindado:
+  // si la query por properties falla, seguimos por nombre en vez de romper.
+  if (!folderId) {
+    try {
+      const byProp = await drive.files.list({
+        q: `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false and properties has { key='im3ContactId' and value='${escContactId}' }`,
+        fields: "files(id,name)",
+        pageSize: 5,
+      });
+      if (byProp.data.files && byProp.data.files.length > 0) folderId = byProp.data.files[0].id!;
+    } catch (err) {
+      log(`[Drive] búsqueda por properties falló (sigo por nombre): ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
+  // 3) Por nombre: exacto → adoptar; o prefijo ("Empresa — fecha" del diagnóstico) → adoptar
+  //    + renombrar a "Empresa" (limpia el legacy y evita crear un duplicado nuevo).
+  if (!folderId) {
+    const byName = await drive.files.list({
+      q: `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false and name contains '${escEmpresa}'`,
+      fields: "files(id,name)",
+      pageSize: 25,
+    });
+    const candidates = byName.data.files || [];
+    const exact = candidates.find(f => (f.name || "").trim() === empresa);
+    const prefix = candidates.find(f => (f.name || "").trim().startsWith(empresa));
+    const adopt = exact || prefix;
+    if (adopt?.id) {
+      folderId = adopt.id;
+      const reqBody: { properties: Record<string, string>; name?: string } = {
+        properties: { im3ContactId: opts.contactId, im3Managed: "true" },
+      };
+      if (!exact && (adopt.name || "").trim() !== empresa) reqBody.name = empresa;
+      await drive.files.update({ fileId: folderId, requestBody: reqBody }).catch(() => {});
+      log(`[Drive] Carpeta de cliente adoptada: "${adopt.name}" → ${folderId}${reqBody.name ? ` (renombrada a "${empresa}")` : ""}`);
+    }
+  }
+
+  // 4) Crear nueva carpeta canónica
+  if (!folderId) {
+    const res = await drive.files.create({
+      requestBody: {
+        name: empresa,
+        mimeType: "application/vnd.google-apps.folder",
+        parents: [parentId],
+        properties: { im3ContactId: opts.contactId, im3Managed: "true" },
+      },
+      fields: "id",
+    });
+    folderId = res.data.id!;
+    created = true;
+    log(`[Drive] Workspace de cliente creado: "${empresa}" → ${folderId}`);
+  }
+
+  // Subcarpetas (find-or-create por prefijo numérico)
+  const sub: Record<string, string> = {};
+  for (const s of CLIENT_SUBFOLDERS) {
+    sub[s.key] = await findOrCreateSubfolder(folderId, s.prefix, s.name);
+  }
+
+  return {
+    folderId,
+    created,
+    subfolders: { propuestas: sub.propuestas, reuniones: sub.reuniones, proyecto: sub.proyecto, documentos: sub.documentos },
+  };
 }
 
 /**

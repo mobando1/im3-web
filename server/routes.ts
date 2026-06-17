@@ -9,6 +9,7 @@ import { syncGmailEmails, isGmailConfigured, sendGmailMessage, getOriginalMessag
 import { generateBlogContent, improveBlogContent } from "./blog-ai";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive, uploadFileToDrive, createProjectFolder, readGoogleDriveContent, extractFolderIdFromUrl, findOrCreateClientFolder } from "./google-drive";
+import { ensureClientWorkspace, ensureClientWorkspaceById } from "./client-drive";
 import multer from "multer";
 import { createCalendarEvent, deleteCalendarEvent, createProjectMeetingEvent, listCalendarEvents } from "./google-calendar";
 import { isEmailConfigured, sendEmail, sendAdminNotification } from "./email-sender";
@@ -24,7 +25,7 @@ import { analyzeCommitsForProject, generateWeeklySummary, calculateProjectHealth
 import { fetchRepoContext, fetchMultiRepoContext } from "./github-repo-context";
 import { syncDriveFilesToProject, syncDriveFilesToContact, runContactDriveSyncCron } from "./drive-file-sync";
 import { listDriveFolderChildren, searchDriveFolders, createSubfolder, getFolderPath, DriveAccessError } from "./google-drive";
-import { generateProposal, regenerateProposalSection, generateSectionOptions, applySectionOption } from "./proposal-ai";
+import { generateProposal, regenerateProposalSection, generateSectionOptions, applySectionOption, translateProposal } from "./proposal-ai";
 import { extractEditLessons } from "./proposal-edit-learner";
 import crypto from "crypto";
 import { getIndustriaLabel } from "@shared/industrias";
@@ -485,21 +486,9 @@ export async function registerRoutes(
       console.log("Datos del diagnóstico (sin DB):", JSON.stringify(data, null, 2));
     }
 
-    // Create Google Drive folder + Sheet (non-blocking)
-    if (isGoogleDriveConfigured()) {
-      createDiagnosticInDrive(data)
-        .then(({ folderUrl }) => {
-          if (db && insertedId) {
-            db.update(diagnostics)
-              .set({ googleDriveUrl: folderUrl })
-              .where(eq(diagnostics.id, insertedId))
-              .catch((err: unknown) => log(`Error updating Drive URL: ${err}`));
-          }
-        })
-        .catch((err: unknown) => {
-          log(`Error creando Google Drive: ${err}`);
-        });
-    }
+    // Nota: la creación de la carpeta de Drive del diagnóstico se hace MÁS ABAJO,
+    // después de crear/resolver el contacto, para usar su workspace canónico
+    // (subcarpeta 01.propuestas-diagnosticos) en vez de una carpeta suelta.
 
     // Create Google Calendar event with Meet link (AWAIT — must complete before email scheduling)
     let generatedMeetLink: string | null = null;
@@ -605,6 +594,25 @@ export async function registerRoutes(
               idioma: diagLanguage,
             }).returning();
             logActivity(contact.id, "form_submitted", `Formulario diagnóstico completado por ${data.participante}`, { empresa: data.empresa, diagnosticId: insertedId });
+          }
+
+          // Carpeta canónica del cliente en Drive + diagnóstico en 01.propuestas-diagnosticos (non-blocking).
+          // googleDriveUrl apunta a la carpeta del cliente (no a la subcarpeta) — es THE carpeta del cliente.
+          if (isGoogleDriveConfigured() && insertedId) {
+            const diagId = insertedId;
+            const contactForDrive = { id: contact.id, empresa: contact.empresa, driveFolderId: contact.driveFolderId };
+            ensureClientWorkspace(contactForDrive)
+              .then(async (ws) => {
+                await createDiagnosticInDrive(data, ws.subfolders.propuestas);
+                return `https://drive.google.com/drive/folders/${ws.folderId}`;
+              })
+              .then((clientFolderUrl) => {
+                if (db) {
+                  db.update(diagnostics).set({ googleDriveUrl: clientFolderUrl }).where(eq(diagnostics.id, diagId))
+                    .catch((err: unknown) => log(`Error updating Drive URL: ${err}`));
+                }
+              })
+              .catch((err: unknown) => log(`Error creando Drive del diagnóstico: ${err}`));
           }
 
           // Auto-create deal for pipeline
@@ -1579,7 +1587,18 @@ export async function registerRoutes(
             presupuesto: diag.presupuesto,
           };
 
-          const { folderUrl } = await createDiagnosticInDrive(data);
+          // Usar el workspace canónico del contacto del diagnóstico (subcarpeta 01.propuestas-diagnosticos)
+          const [contactForDiag] = await db.select({ id: contacts.id, empresa: contacts.empresa, driveFolderId: contacts.driveFolderId })
+            .from(contacts).where(eq(contacts.diagnosticId, diag.id)).limit(1);
+
+          let folderUrl: string;
+          if (contactForDiag) {
+            const ws = await ensureClientWorkspace(contactForDiag);
+            await createDiagnosticInDrive(data, ws.subfolders.propuestas);
+            folderUrl = `https://drive.google.com/drive/folders/${ws.folderId}`;
+          } else {
+            ({ folderUrl } = await createDiagnosticInDrive(data));
+          }
 
           await db.update(diagnostics)
             .set({ googleDriveUrl: folderUrl })
@@ -7240,10 +7259,15 @@ Responde SOLO con un JSON válido, sin markdown:
       const [project] = await db.select().from(clientProjects).where(eq(clientProjects.id, projectId));
       if (!project) return res.status(404).json({ error: "Proyecto no encontrado" });
 
-      // Asegurar que el proyecto tenga carpeta de Drive
+      // Asegurar que el proyecto tenga carpeta de Drive — preferir el workspace
+      // canónico del cliente (subcarpeta 03.proyecto); fallback a carpeta de proyecto suelta.
       let folderId = project.driveFolderId;
       if (!folderId) {
-        folderId = await createProjectFolder(project.name);
+        if (project.contactId) {
+          const ws = await ensureClientWorkspaceById(project.contactId);
+          folderId = ws?.subfolders.proyecto ?? null;
+        }
+        if (!folderId) folderId = await createProjectFolder(project.name);
         await db.update(clientProjects).set({ driveFolderId: folderId, updatedAt: new Date() }).where(eq(clientProjects.id, projectId));
       }
 
@@ -8966,10 +8990,15 @@ Responde SOLO con un JSON válido, sin markdown:
       const [project] = await db.select().from(clientProjects).where(eq(clientProjects.id, projectId));
       if (!project) return res.status(404).json({ message: "Proyecto no encontrado" });
 
-      // Ensure project has a Drive folder
+      // Ensure project has a Drive folder — preferir el workspace canónico del
+      // cliente (subcarpeta 03.proyecto); fallback a carpeta de proyecto suelta.
       let folderId = project.driveFolderId;
       if (!folderId) {
-        folderId = await createProjectFolder(project.name);
+        if (project.contactId) {
+          const ws = await ensureClientWorkspaceById(project.contactId);
+          folderId = ws?.subfolders.proyecto ?? null;
+        }
+        if (!folderId) folderId = await createProjectFolder(project.name);
         await db.update(clientProjects).set({ driveFolderId: folderId, updatedAt: new Date() }).where(eq(clientProjects.id, projectId));
       }
 
@@ -9289,6 +9318,38 @@ Responde SOLO con un JSON válido, sin markdown:
       // Exponemos el detalle real al admin (endpoint con requireAuth) para diagnóstico:
       // antes el error verdadero (ej. modelo retirado → 404) quedaba oculto tras el genérico.
       res.status(500).json({ error: "Error generando propuesta", detail: err?.message });
+    }
+  });
+
+  // Translate the entire proposal to the target language (es ↔ en), in place.
+  // Sobrescribe el contenido y guarda snapshot para deshacer (ver translateProposal).
+  app.post("/api/admin/proposals/:id/translate", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const proposalId = String(req.params.id);
+    try {
+      const [proposal] = await db.select().from(proposals).where(eq(proposals.id, proposalId)).limit(1);
+      if (!proposal) return res.status(404).json({ error: "Propuesta no encontrada" });
+
+      // targetLanguage explícito o, si no viene, el opuesto al idioma actual.
+      const requested = req.body?.targetLanguage;
+      const targetLanguage: "es" | "en" =
+        requested === "es" || requested === "en"
+          ? requested
+          : proposal.language === "en" ? "es" : "en";
+
+      // Envuelto en runAgent → cada traducción y sus errores quedan en agent_runs (/admin/agents).
+      const result = await runAgent(
+        "proposal-translate",
+        () => translateProposal(proposalId, targetLanguage),
+        { triggeredBy: "manual" }
+      );
+      if ("error" in result) return res.status(500).json({ error: result.error });
+
+      const [updated] = await db.select().from(proposals).where(eq(proposals.id, proposalId)).limit(1);
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error translating proposal: ${err?.message}`);
+      res.status(500).json({ error: "Error traduciendo propuesta", detail: err?.message });
     }
   });
 
@@ -11137,44 +11198,11 @@ Responde SOLO con un JSON válido, sin markdown:
       const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId));
       if (!contact) return res.status(404).json({ message: "Contacto no encontrado" });
 
-      // Resolve Drive folder: cached → diagnostic → search/create by empresa
-      let folderId: string | null = contact.driveFolderId || null;
-      if (!folderId && contact.diagnosticId) {
-        const [diag] = await db.select({ googleDriveUrl: diagnostics.googleDriveUrl }).from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId));
-        if (diag?.googleDriveUrl) folderId = extractFolderIdFromUrl(diag.googleDriveUrl);
-      }
-      if (!folderId) folderId = await findOrCreateClientFolder(contact.empresa);
-      if (folderId && folderId !== contact.driveFolderId) {
-        db.update(contacts).set({ driveFolderId: folderId }).where(eq(contacts.id, contactId)).catch(() => {});
-      }
+      // Workspace canónico del cliente — el contrato va a 04.documentos
+      const ws = await ensureClientWorkspace(contact);
+      const targetFolderId = ws.subfolders.documentos;
 
-      // Find-or-create "Contratos" subfolder inside the client's folder
-      let targetFolderId = folderId;
-      if (folderId) {
-        const { google } = await import("googleapis");
-        const auth = new google.auth.JWT({
-          email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
-          key: (process.env.GOOGLE_PRIVATE_KEY || "").replace(/\\n/g, "\n"),
-          scopes: ["https://www.googleapis.com/auth/drive"],
-          subject: process.env.GOOGLE_DRIVE_IMPERSONATE || undefined,
-        });
-        const drive = google.drive({ version: "v3", auth });
-        const existing = await drive.files.list({
-          q: `'${folderId}' in parents and name='Contratos' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
-          fields: "files(id)",
-        });
-        if (existing.data.files && existing.data.files.length > 0) {
-          targetFolderId = existing.data.files[0].id!;
-        } else {
-          const folder = await drive.files.create({
-            requestBody: { name: "Contratos", mimeType: "application/vnd.google-apps.folder", parents: [folderId] },
-            fields: "id",
-          });
-          targetFolderId = folder.data.id!;
-        }
-      }
-
-      const { fileId, webViewLink } = await uploadFileToDrive(targetFolderId!, req.file.originalname, req.file.mimetype, req.file.buffer);
+      const { fileId, webViewLink } = await uploadFileToDrive(targetFolderId, req.file.originalname, req.file.mimetype, req.file.buffer);
 
       const signedAt = req.body.signedAt ? new Date(req.body.signedAt) : new Date();
       const title = (req.body.title as string)?.trim() || `Contrato firmado — ${contact.empresa || contact.nombre}`;
@@ -11373,33 +11401,13 @@ Responde SOLO con un JSON válido, sin markdown:
       const [contact] = await db.select().from(contacts).where(eq(contacts.id, contactId));
       if (!contact) return res.status(404).json({ message: "Contacto no encontrado" });
 
-      // Resolve Drive folder: 1) cached on contact, 2) from diagnostic, 3) search/create by empresa
-      let folderId: string | null = contact.driveFolderId || null;
+      // Workspace canónico del cliente. Por defecto los documentos van a 04.documentos.
+      // Si se pide un `subfolder` explícito, se crea dentro de la carpeta del cliente.
+      const ws = await ensureClientWorkspace(contact);
+      let targetFolderId = ws.subfolders.documentos;
 
-      if (!folderId && contact.diagnosticId) {
-        const [diag] = await db.select({ googleDriveUrl: diagnostics.googleDriveUrl }).from(diagnostics).where(eq(diagnostics.id, contact.diagnosticId));
-        if (diag?.googleDriveUrl) {
-          folderId = extractFolderIdFromUrl(diag.googleDriveUrl);
-        }
-      }
-
-      if (!folderId) {
-        folderId = await findOrCreateClientFolder(contact.empresa);
-      }
-
-      // Cache folder ID on contact for future uploads
-      if (folderId && folderId !== contact.driveFolderId) {
-        db.update(contacts)
-          .set({ driveFolderId: folderId })
-          .where(eq(contacts.id, contactId))
-          .catch(() => {});
-      }
-
-      // Upload to subfolder if specified
-      const subfolder = req.body.subfolder;
-      let targetFolderId = folderId;
+      const subfolder = req.body.subfolder ? String(req.body.subfolder).trim() : "";
       if (subfolder) {
-        // Create subfolder in the client's folder
         const { google } = await import("googleapis");
         const auth = new google.auth.JWT({
           email: process.env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
@@ -11408,18 +11416,15 @@ Responde SOLO con un JSON válido, sin markdown:
           subject: process.env.GOOGLE_DRIVE_IMPERSONATE || undefined,
         });
         const drive = google.drive({ version: "v3", auth });
-
-        // Check if subfolder already exists
         const existing = await drive.files.list({
-          q: `'${folderId}' in parents and name='${subfolder}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+          q: `'${ws.folderId}' in parents and name='${subfolder.replace(/'/g, "\\'")}' and mimeType='application/vnd.google-apps.folder' and trashed=false`,
           fields: "files(id)",
         });
-
         if (existing.data.files && existing.data.files.length > 0) {
           targetFolderId = existing.data.files[0].id!;
         } else {
           const folder = await drive.files.create({
-            requestBody: { name: subfolder, mimeType: "application/vnd.google-apps.folder", parents: [folderId] },
+            requestBody: { name: subfolder, mimeType: "application/vnd.google-apps.folder", parents: [ws.folderId] },
             fields: "id",
           });
           targetFolderId = folder.data.id!;
@@ -11427,7 +11432,7 @@ Responde SOLO con un JSON válido, sin markdown:
       }
 
       // Upload to Drive
-      const { webViewLink } = await uploadFileToDrive(targetFolderId!, req.file.originalname, req.file.mimetype, req.file.buffer);
+      const { webViewLink } = await uploadFileToDrive(targetFolderId, req.file.originalname, req.file.mimetype, req.file.buffer);
 
       // Detect type
       const ext = req.file.originalname.split(".").pop()?.toLowerCase() || "";
@@ -11454,6 +11459,174 @@ Responde SOLO con un JSON válido, sin markdown:
       res.json(file);
     } catch (err: unknown) {
       res.status(500).json({ message: `Error: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  });
+
+  // Resolver/crear el workspace canónico de Drive del cliente (carpeta única + 4 subcarpetas).
+  // Útil para verificar/sembrar la estructura y como base de la reconciliación.
+  app.post("/api/admin/contacts/:id/ensure-workspace", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ message: "DB no disponible" });
+    if (!isGoogleDriveConfigured()) return res.status(400).json({ message: "Google Drive no configurado" });
+    try {
+      const ws = await ensureClientWorkspaceById(req.params.id as string);
+      if (!ws) return res.status(404).json({ message: "Contacto no encontrado" });
+      res.json({
+        ...ws,
+        folderUrl: `https://drive.google.com/drive/folders/${ws.folderId}`,
+      });
+    } catch (err: unknown) {
+      res.status(500).json({ message: `Error: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  });
+
+  // ───────────────────────────────────────────────────────────────
+  // Integraciones (Acta u otras apps IM3) — auth por token de servicio.
+  // El hub es la fuente de verdad: resuelve el cliente por email, devuelve su
+  // carpeta canónica, y guarda reuniones/audio en 02.reuniones + el perfil.
+  // ───────────────────────────────────────────────────────────────
+  const requireServiceToken = (req: import("express").Request, res: import("express").Response, next: import("express").NextFunction) => {
+    const expected = process.env.ACTA_API_KEY || process.env.SERVICE_API_KEY || "";
+    if (!expected) return res.status(503).json({ error: "Integración no configurada (falta ACTA_API_KEY)" });
+    const header = String(req.headers.authorization || "");
+    const token = header.startsWith("Bearer ") ? header.slice(7).trim() : "";
+    const a = Buffer.from(token);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      return res.status(401).json({ error: "Token inválido" });
+    }
+    return next();
+  };
+
+  // Find-or-create contacto por email (llave única).
+  async function resolveContactByEmail(input: { email: string; nombre?: string; empresa?: string; telefono?: string }) {
+    if (!db) return null;
+    const email = input.email.trim();
+    const [existing] = await db.select().from(contacts).where(sql`lower(${contacts.email}) = ${email.toLowerCase()}`).limit(1);
+    if (existing) return existing;
+    const [created] = await db.insert(contacts).values({
+      email,
+      nombre: input.nombre?.trim() || email,
+      empresa: input.empresa?.trim() || "(sin empresa)",
+      telefono: input.telefono?.trim() || null,
+    }).returning();
+    logActivity(created.id, "contact_edited", `Contacto creado vía integración (Acta): ${email}`);
+    return created;
+  }
+
+  // Resuelve/crea el cliente por email y devuelve su carpeta canónica + subcarpetas.
+  app.post("/api/integrations/clients/resolve", requireServiceToken, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB no disponible" });
+    const email = String(req.body?.email || "").trim();
+    if (!email) return res.status(400).json({ error: "email requerido" });
+    try {
+      const contact = await resolveContactByEmail({ email, nombre: req.body?.nombre, empresa: req.body?.empresa, telefono: req.body?.telefono });
+      if (!contact) return res.status(500).json({ error: "No se pudo resolver el contacto" });
+      const ws = isGoogleDriveConfigured() ? await ensureClientWorkspace(contact) : null;
+      res.json({
+        contactId: contact.id,
+        email: contact.email,
+        empresa: contact.empresa,
+        driveFolderId: ws?.folderId ?? null,
+        subfolders: ws?.subfolders ?? null,
+        folderUrl: ws ? `https://drive.google.com/drive/folders/${ws.folderId}` : null,
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Búsqueda ligera de clientes (para selección manual en Acta).
+  app.get("/api/integrations/clients", requireServiceToken, async (req, res) => {
+    if (!db) return res.json([]);
+    const q = String(req.query.query || "").trim().toLowerCase();
+    try {
+      const cols = { contactId: contacts.id, email: contacts.email, empresa: contacts.empresa, nombre: contacts.nombre };
+      const rows = q
+        ? await db.select(cols).from(contacts)
+            .where(sql`lower(${contacts.email}) like ${"%" + q + "%"} or lower(${contacts.empresa}) like ${"%" + q + "%"} or lower(${contacts.nombre}) like ${"%" + q + "%"}`)
+            .limit(20)
+        : await db.select(cols).from(contacts).orderBy(desc(contacts.createdAt)).limit(20);
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Ingesta de una reunión (Acta): crea/actualiza la sesión en el perfil del cliente
+  // y guarda el archivo en 02.reuniones. Idempotente por externalId. JSON o multipart (campo `file`).
+  app.post("/api/integrations/meetings", requireServiceToken, upload.single("file"), async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB no disponible" });
+    const body = req.body || {};
+    try {
+      let contact: Awaited<ReturnType<typeof resolveContactByEmail>> = null;
+      if (body.contactId) {
+        [contact] = await db.select().from(contacts).where(eq(contacts.id, String(body.contactId))).limit(1);
+      } else if (body.email) {
+        contact = await resolveContactByEmail({ email: String(body.email), nombre: body.nombre, empresa: body.empresa });
+      }
+      if (!contact) return res.status(404).json({ error: "Cliente no encontrado (envía email o contactId)" });
+      const resolvedContact = contact;
+
+      const parseList = (v: unknown): string[] => {
+        if (Array.isArray(v)) return v as string[];
+        if (typeof v === "string" && v.trim()) { try { const p = JSON.parse(v); return Array.isArray(p) ? p : [v]; } catch { return [v]; } }
+        return [];
+      };
+      const title = String(body.title || "").trim() || "Reunión";
+      const date = body.date ? new Date(String(body.date)) : new Date();
+      const duration = body.durationMinutes ? parseInt(String(body.durationMinutes), 10) : null;
+      const transcription = body.transcription ? String(body.transcription) : null;
+      const summary = body.summary ? String(body.summary) : null;
+      const actionItems = parseList(body.actionItems);
+      const speakers = parseList(body.speakers);
+      const externalId = body.externalId ? String(body.externalId) : null;
+
+      const result = await runAgent("acta-meeting-sync", async () => {
+        let recordingUrl = body.recordingUrl ? String(body.recordingUrl) : null;
+        let driveFolderUrl: string | null = null;
+        // Drive es best-effort: si falla, igual guardamos la reunión en el perfil
+        // (la transcripción/datos no se pierden por un hipo de Drive).
+        if (isGoogleDriveConfigured()) {
+          try {
+            const ws = await ensureClientWorkspace(resolvedContact);
+            driveFolderUrl = `https://drive.google.com/drive/folders/${ws.subfolders.reuniones}`;
+            if (req.file) {
+              const up = await uploadFileToDrive(ws.subfolders.reuniones, req.file.originalname, req.file.mimetype, req.file.buffer);
+              recordingUrl = recordingUrl || up.webViewLink;
+            }
+          } catch (driveErr) {
+            log(`[acta-meeting-sync] Drive falló (guardo la sesión igual): ${driveErr instanceof Error ? driveErr.message : String(driveErr)}`);
+          }
+        }
+
+        const values = {
+          contactId: resolvedContact.id,
+          title, date, duration,
+          recordingUrl, transcription, summary,
+          actionItems, speakers,
+          status: "ready" as const,
+          source: "acta" as const,
+          externalId,
+          driveFolderUrl,
+        };
+
+        let session = externalId
+          ? (await db!.select().from(projectSessions).where(eq(projectSessions.externalId, externalId)).limit(1))[0]
+          : undefined;
+        if (session) {
+          [session] = await db!.update(projectSessions).set(values).where(eq(projectSessions.id, session.id)).returning();
+        } else {
+          [session] = await db!.insert(projectSessions).values(values).returning();
+        }
+
+        logActivity(resolvedContact.id, "recording_saved", `Reunión sincronizada desde Acta: ${title}`, { sessionId: session.id, driveFolderUrl });
+        return { recordsProcessed: 1, metadata: { sessionId: session.id }, sessionId: session.id, driveFolderUrl, recordingUrl };
+      }, { triggeredBy: "webhook" });
+
+      res.json({ sessionId: result.sessionId, contactId: resolvedContact.id, folderUrl: result.driveFolderUrl, recordingUrl: result.recordingUrl });
+    } catch (err: any) {
+      log(`Error en /api/integrations/meetings: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
     }
   });
 

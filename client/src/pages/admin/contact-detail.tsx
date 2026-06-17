@@ -171,12 +171,14 @@ type AppointmentItem = {
   status: string;
   completedAt: string | null;
   appointmentType: string;
+  recordingUrl: string | null;
+  transcriptUrl: string | null;
   createdAt: string;
 };
 
 type SessionItem = {
   id: string;
-  projectId: string;
+  projectId: string | null;
   contactId: string | null;
   title: string;
   date: string;
@@ -186,6 +188,8 @@ type SessionItem = {
   summary: string | null;
   actionItems: string[];
   status: string;
+  source?: string;
+  driveFolderUrl?: string | null;
   createdAt: string;
 };
 
@@ -2909,7 +2913,7 @@ export default function ContactDetailPage() {
         <TabsContent value="sesiones" className="space-y-4 mt-4">
           {(() => {
             // Merge appointments + project sessions into unified timeline
-            type UnifiedMeeting = { id: string; type: "appointment" | "session"; title: string; date: string; duration: number | null; status: string; notes: string | null; meetLink: string | null; recordingUrl: string | null; transcription: string | null; summary: string | null; actionItems: string[]; appointmentType?: string };
+            type UnifiedMeeting = { id: string; type: "appointment" | "session"; title: string; date: string; duration: number | null; status: string; notes: string | null; meetLink: string | null; recordingUrl: string | null; transcriptUrl: string | null; transcription: string | null; summary: string | null; actionItems: string[]; appointmentType?: string; source?: string; driveFolderUrl?: string | null };
 
             const safeAppointments = Array.isArray(contactAppointments) ? contactAppointments : [];
             const safeSessions = Array.isArray(contactSessions) ? contactSessions : [];
@@ -2917,16 +2921,17 @@ export default function ContactDetailPage() {
               ...safeAppointments.map(a => ({
                 id: a.id, type: "appointment" as const, title: a.title,
                 date: `${a.date}T${a.time}`, duration: a.duration, status: a.status,
-                notes: a.notes, meetLink: a.meetLink, recordingUrl: null,
-                transcription: null, summary: null, actionItems: [] as string[],
+                notes: a.notes, meetLink: a.meetLink, recordingUrl: a.recordingUrl,
+                transcriptUrl: a.transcriptUrl, transcription: null, summary: null, actionItems: [] as string[],
                 appointmentType: a.appointmentType,
               })),
               ...safeSessions.map(s => ({
                 id: s.id, type: "session" as const, title: s.title,
                 date: s.date, duration: s.duration, status: s.status,
                 notes: null, meetLink: null, recordingUrl: s.recordingUrl,
-                transcription: s.transcription, summary: s.summary,
+                transcriptUrl: null, transcription: s.transcription, summary: s.summary,
                 actionItems: s.actionItems || [],
+                source: s.source, driveFolderUrl: s.driveFolderUrl ?? null,
               })),
             ].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
 
@@ -2968,6 +2973,9 @@ export default function ContactDetailPage() {
                             {meeting.appointmentType === "initial" ? "Inicial" : meeting.appointmentType === "follow_up" ? "Seguimiento" : "Manual"}
                           </Badge>
                         )}
+                        {meeting.source === "acta" && (
+                          <Badge variant="outline" className="text-[9px] bg-indigo-50 text-indigo-600 border-indigo-200">Acta</Badge>
+                        )}
                       </div>
                       <button onClick={() => setExpandedSession(isExpanded ? null : meeting.id)} className="text-gray-400 hover:text-gray-700 transition-colors p-1">
                         {isExpanded ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
@@ -2978,6 +2986,8 @@ export default function ContactDetailPage() {
                       {meeting.duration && <span>{meeting.duration} min</span>}
                       {meeting.meetLink && <a href={meeting.meetLink} target="_blank" rel="noopener noreferrer" className="text-[#2FA4A9] hover:underline flex items-center gap-0.5"><Video className="w-3 h-3" /> Meet</a>}
                       {meeting.recordingUrl && <a href={meeting.recordingUrl} target="_blank" rel="noopener noreferrer" className="text-purple-500 hover:underline flex items-center gap-0.5"><Video className="w-3 h-3" /> Grabacion</a>}
+                      {meeting.transcriptUrl && <a href={meeting.transcriptUrl} target="_blank" rel="noopener noreferrer" className="text-blue-500 hover:underline flex items-center gap-0.5"><FileText className="w-3 h-3" /> Transcripción</a>}
+                      {meeting.driveFolderUrl && <a href={meeting.driveFolderUrl} target="_blank" rel="noopener noreferrer" className="text-amber-600 hover:underline flex items-center gap-0.5"><FolderOpen className="w-3 h-3" /> Carpeta</a>}
                     </div>
                   </CardHeader>
                   {isExpanded && (

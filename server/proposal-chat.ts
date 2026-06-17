@@ -3,7 +3,8 @@ import { db } from "./db";
 import { proposals, proposalChatMessages, proposalSnapshots, contacts } from "@shared/schema";
 import { eq, asc } from "drizzle-orm";
 import { log } from "./index";
-import { listFolderFilesRecursive, readGoogleDriveContent, uploadFileToDrive, findOrCreateClientFolder } from "./google-drive";
+import { listFolderFilesRecursive, readGoogleDriveContent, uploadFileToDrive } from "./google-drive";
+import { ensureClientWorkspace } from "./client-drive";
 import { google } from "googleapis";
 import {
   proposalMetaSchema, heroSchema, summarySchema, problemSchema, solutionSchema,
@@ -227,7 +228,7 @@ async function fetchAttachmentForClaude(att: StoredAttachment): Promise<Anthropi
  */
 async function persistAttachmentsToDrive(
   attachments: Attachment[],
-  contactEmpresa: string,
+  contact: { id: string; empresa: string | null; driveFolderId?: string | null },
 ): Promise<StoredAttachment[]> {
   if (attachments.length === 0) return [];
 
@@ -235,7 +236,8 @@ async function persistAttachmentsToDrive(
   let subfolderId: string | null = null;
 
   try {
-    const clientFolderId = await findOrCreateClientFolder(contactEmpresa);
+    const ws = await ensureClientWorkspace(contact);
+    const clientFolderId = ws.folderId;
 
     // Crear subcarpeta "_chat-attachments" si no existe
     const auth = new google.auth.JWT({
@@ -584,7 +586,7 @@ async function runProposalChatInner(params: {
   let storedAttachments: StoredAttachment[] = [];
   if (attachments.length > 0) {
     if (contactRow?.empresa) {
-      storedAttachments = await persistAttachmentsToDrive(attachments, contactRow.empresa);
+      storedAttachments = await persistAttachmentsToDrive(attachments, { id: proposal.contactId, empresa: contactRow.empresa });
     } else {
       storedAttachments = attachments.map(a => ({ name: a.name, mime: a.mime, size: a.size }));
     }

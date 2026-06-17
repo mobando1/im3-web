@@ -115,6 +115,23 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
     sourceFile: "server/proposal-ai.ts:631",
   },
   {
+    name: "proposal-translate",
+    displayName: "Traductor de Propuestas",
+    kind: "ai",
+    description: "Traduce una propuesta completa es ↔ en con lenguaje natural (~10-20s)",
+    trigger: "manual",
+    criticality: "normal",
+    longDescription:
+      "Traduce toda la propuesta (campo sections / ProposalData) al idioma destino (es ↔ en) con traducción idiomática, no literal. Preserva números, montos, monedas, enums, íconos y nombres propios (reimposición por clave). Guarda snapshot del estado anterior para deshacer y actualiza proposals.language.",
+    connections: [
+      { type: "llm", label: "Claude Sonnet 4", detail: "Traduce todo el JSON manteniendo estructura y campos no traducibles" },
+      { type: "db", label: "proposals", detail: "Lee sections, guarda traducción + language" },
+      { type: "db", label: "proposalSnapshots", detail: "Snapshot del estado anterior (undo)" },
+      { type: "db", label: "proposalBriefs", detail: "Marca brief como outdated si existe" },
+    ],
+    sourceFile: "server/proposal-ai.ts:995",
+  },
+  {
     name: "proposal-chat",
     displayName: "Asistente Conversacional de Propuestas",
     kind: "ai",
@@ -845,6 +862,24 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
       { type: "db", label: "activity_log", detail: "recording_saved, transcript_saved" },
     ],
     sourceFile: "server/email-scheduler.ts:849",
+  },
+  {
+    name: "acta-meeting-sync",
+    displayName: "Sync Reuniones (Acta)",
+    kind: "integration",
+    description: "Recibe reuniones de Acta (transcripción/audio) y las guarda en el perfil del cliente + Drive",
+    trigger: "webhook",
+    criticality: "normal",
+    longDescription:
+      "Disparado por la API de integración (POST /api/integrations/meetings, auth por token de servicio). Resuelve el cliente por email/contactId, sube el audio/grabación a la subcarpeta 02.reuniones del workspace canónico del cliente, y crea/actualiza la sesión en project_sessions (idempotente por externalId) con transcripción, resumen, action items y speakers. Registra la constancia en activity_log apuntando a la carpeta de Drive. Es el camino que llena el perfil del CRM con lo grabado en Acta.",
+    connections: [
+      { type: "webhook", label: "POST /api/integrations/meetings", detail: "Token de servicio (ACTA_API_KEY)" },
+      { type: "db", label: "contacts", detail: "Resuelve/crea el cliente por email" },
+      { type: "api", label: "Google Drive", detail: "Sube audio/grabación a 02.reuniones del cliente" },
+      { type: "db", label: "project_sessions", detail: "Crea/actualiza la reunión (idempotente por externalId)" },
+      { type: "db", label: "activity_log", detail: "Constancia recording_saved con link a la carpeta" },
+    ],
+    sourceFile: "server/routes.ts:11440",
   },
 
   // ─── Webhooks ────────────────────────────────────────────────

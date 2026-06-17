@@ -500,6 +500,9 @@ export async function runMigrations() {
     await pool.query(`ALTER TABLE "proposals" ADD COLUMN IF NOT EXISTS "ai_baseline_sections" json;`).catch(() => {});
     await pool.query(`ALTER TABLE "proposals" ADD COLUMN IF NOT EXISTS "edit_lessons_learned_at" timestamp;`).catch(() => {});
 
+    // Proposals: idioma del contenido (es | en) para el botón Traducir + rótulos del template/PDF.
+    await pool.query(`ALTER TABLE "proposals" ADD COLUMN IF NOT EXISTS "language" varchar(5) DEFAULT 'es' NOT NULL;`).catch(() => {});
+
     // Chat global memory — hechos cross-proposal/cross-client del chat
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "chat_global_memory" (
@@ -874,6 +877,31 @@ export async function runMigrations() {
     `).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_task_suggestions_project" ON "task_suggestions" ("project_id", "status");`).catch(() => {});
 
+    // Sesiones/reuniones (Fase 2 sync Acta) — projectId nullable + source/externalId/driveFolderUrl
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "project_sessions" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "project_id" varchar,
+        "contact_id" varchar,
+        "title" text NOT NULL,
+        "date" timestamp NOT NULL,
+        "duration" integer,
+        "recording_url" text,
+        "transcription" text,
+        "summary" text,
+        "action_items" json DEFAULT '[]'::json,
+        "speakers" json DEFAULT '[]'::json,
+        "status" text DEFAULT 'ready' NOT NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`ALTER TABLE "project_sessions" ALTER COLUMN "project_id" DROP NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "project_sessions" ADD COLUMN IF NOT EXISTS "source" text DEFAULT 'manual' NOT NULL;`).catch(() => {});
+    await pool.query(`ALTER TABLE "project_sessions" ADD COLUMN IF NOT EXISTS "external_id" text;`).catch(() => {});
+    await pool.query(`ALTER TABLE "project_sessions" ADD COLUMN IF NOT EXISTS "drive_folder_url" text;`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_project_sessions_contact" ON "project_sessions" ("contact_id");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_project_sessions_external" ON "project_sessions" ("external_id");`).catch(() => {});
+
     // Seed inicial del catálogo de stack — 10 servicios reales que IM3 usa hoy
     // Solo inserta si la tabla está vacía (idempotente). Tras seed, admin edita en /admin/stack-catalog.
     try {
@@ -1121,6 +1149,41 @@ ___________________________________
     } catch (err) {
       console.error("⚠ Could not seed contract_templates:", err);
     }
+
+    // System config — valores técnicos editables en runtime (panel Ingeniería IM3)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "system_config" (
+        "key" text PRIMARY KEY,
+        "value" text NOT NULL,
+        "category" text NOT NULL,
+        "description" text,
+        "updated_at" timestamp DEFAULT now() NOT NULL,
+        "updated_by" text
+      );
+    `).catch(() => {});
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "system_config_audit" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "key" text NOT NULL,
+        "old_value" text,
+        "new_value" text NOT NULL,
+        "changed_by" text NOT NULL,
+        "reason" text,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_system_config_audit_created" ON "system_config_audit" ("created_at" DESC);`).catch(() => {});
+    // Seed idempotente de los valores base. ON CONFLICT DO NOTHING => nunca pisa
+    // un valor ya editado por el admin. Mantener en sync con FALLBACKS de server/config.ts.
+    await pool.query(`
+      INSERT INTO "system_config" ("key", "value", "category", "description") VALUES
+        ('model.generation', 'claude-sonnet-4-6', 'model', 'Modelo Claude para generación (propuestas, blog, emails largos, briefs)'),
+        ('model.classification', 'claude-haiku-4-5-20251001', 'model', 'Modelo Claude rápido para clasificación y validación'),
+        ('flag.gmail-sync', 'true', 'flag', 'Sincronización del inbox de Gmail cada 15 min'),
+        ('flag.whatsapp-send', 'true', 'flag', 'Envío de mensajes de WhatsApp por el scheduler'),
+        ('flag.newsletter', 'true', 'flag', 'Envío automático del newsletter')
+      ON CONFLICT ("key") DO NOTHING;
+    `).catch(() => {});
 
     console.log("✓ Database tables and indexes ensured");
 

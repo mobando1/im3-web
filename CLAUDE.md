@@ -152,7 +152,12 @@ RESEND_API_KEY=re_...
 GOOGLE_SERVICE_ACCOUNT_EMAIL=...
 GOOGLE_PRIVATE_KEY=...                # con \n literales
 GOOGLE_DRIVE_IMPERSONATE=info@im3systems.com
-GOOGLE_DRIVE_FOLDER_ID=...            # carpeta raíz de clientes
+GOOGLE_DRIVE_FOLDER_ID=...            # carpeta raíz IM3 (legacy / fallback)
+CLIENTES_FOLDER_ID=...               # id de "03.clientes" — parent de TODAS las carpetas de cliente.
+                                     # Si no se setea, cae a GOOGLE_DRIVE_FOLDER_ID. Cada cliente tiene UNA
+                                     # carpeta aquí con 4 subcarpetas (01.propuestas-diagnosticos, 02.reuniones,
+                                     # 03.proyecto, 04.documentos) + contactId en properties.im3ContactId.
+                                     # Ver server/client-drive.ts + ensureClientWorkspaceDrive.
 
 # WhatsApp (Meta Cloud API)
 WHATSAPP_ACCESS_TOKEN=...
@@ -161,6 +166,12 @@ WHATSAPP_VERIFY_TOKEN=...
 
 # GitHub OAuth (para conectar repos de clientes)
 GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_WEBHOOK_SECRET
+
+# Integración con Acta (sync bidireccional de reuniones/clientes)
+ACTA_API_KEY=...                     # token Bearer que Acta usa para llamar /api/integrations/* del hub.
+                                     # Endpoints: POST /clients/resolve (find-or-create por email + carpeta),
+                                     # POST /meetings (ingesta de reunión/audio → 02.reuniones + perfil),
+                                     # GET /clients?query= (búsqueda). Sin este env, los endpoints responden 503.
 
 # Stripe (opcional, aún no activo)
 STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_STARTER, STRIPE_PRICE_PRO, STRIPE_PRICE_TEAM

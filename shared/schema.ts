@@ -645,7 +645,7 @@ export type InsertProjectGithubRepo = typeof projectGithubRepos.$inferInsert;
 // Project sessions (meeting recordings & transcriptions)
 export const projectSessions = pgTable("project_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  projectId: varchar("project_id").notNull(),
+  projectId: varchar("project_id"), // nullable — reuniones a nivel cliente (ej. de Acta) sin proyecto
   contactId: varchar("contact_id"),
   title: text("title").notNull(),
   date: timestamp("date").notNull(),
@@ -656,6 +656,9 @@ export const projectSessions = pgTable("project_sessions", {
   actionItems: json("action_items").$type<string[]>().default([]),
   speakers: json("speakers").$type<string[]>().default([]),
   status: text("status").notNull().default("ready"), // recording|processing|ready
+  source: text("source").notNull().default("manual"), // manual | acta
+  externalId: text("external_id"), // id de la fuente externa (Acta) — idempotencia en reintentos
+  driveFolderUrl: text("drive_folder_url"), // link a 02.reuniones del cliente (constancia)
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
@@ -700,6 +703,9 @@ export const proposals = pgTable("proposals", {
   contactId: varchar("contact_id").notNull(),
   title: text("title").notNull(),
   status: text("status").notNull().default("draft"), // draft | sent | viewed | accepted | rejected | expired
+  // Idioma actual del contenido de la propuesta. Determina la dirección del botón "Traducir"
+  // en el editor y qué rótulos fijos (es/en) renderiza el template público y el PDF.
+  language: varchar("language", { length: 5 }).default("es").notNull(), // es | en
   // sections puede ser:
   //  - Legacy: Record<string, string> (HTML strings)
   //  - Nuevo: ProposalData completo (ver shared/proposal-template/types.ts)
@@ -1116,6 +1122,38 @@ export const agentRuns = pgTable("agent_runs", {
 
 export type AgentRun = typeof agentRuns.$inferSelect;
 export type InsertAgentRun = typeof agentRuns.$inferInsert;
+
+// ───────────────────────────────────────────────────────────────
+// System config — valores técnicos editables en runtime desde el panel
+// "Ingeniería IM3" (model IDs, feature flags). Evita redeploy para cambios
+// como el del 16-jun-2026 (model ID de Anthropic retirado → 404).
+// ───────────────────────────────────────────────────────────────
+export const systemConfig = pgTable("system_config", {
+  key: text("key").primaryKey(), // ej. "model.generation", "flag.gmail-sync"
+  value: text("value").notNull(),
+  category: text("category").notNull(), // "model" | "flag"
+  description: text("description"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  updatedBy: text("updated_by"), // username del admin que hizo el último cambio
+});
+
+export type SystemConfig = typeof systemConfig.$inferSelect;
+export type InsertSystemConfig = typeof systemConfig.$inferInsert;
+
+// Auditoría de cada cambio de config — fuente de verdad de trazabilidad
+// (quién / qué / cuándo / por qué). Requisito central del panel.
+export const systemConfigAudit = pgTable("system_config_audit", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  key: text("key").notNull(),
+  oldValue: text("old_value"),
+  newValue: text("new_value").notNull(),
+  changedBy: text("changed_by").notNull(), // username del admin responsable
+  reason: text("reason"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type SystemConfigAudit = typeof systemConfigAudit.$inferSelect;
+export type InsertSystemConfigAudit = typeof systemConfigAudit.$inferInsert;
 
 // ───────────────────────────────────────────────────────────────
 // Portal de Clientes — Auth (login + reset password + invite)
