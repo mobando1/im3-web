@@ -5,6 +5,7 @@
  */
 import { Resend } from "resend";
 import Anthropic from "@anthropic-ai/sdk";
+import { getModelClassification } from "./config";
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
 const ANTHROPIC_API_KEY = process.env.ANTHROPIC_API_KEY;
@@ -150,7 +151,7 @@ async function main() {
 
   // Generate insights with AI (under-promise tone)
   const insightsResponse = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: getModelClassification(),
     max_tokens: 1200,
     system: `Eres un consultor senior de tecnologia e IA de IM3 Systems. Haces observaciones iniciales — areas que vale la pena explorar, no promesas. Responde UNICAMENTE con un JSON array valido. Sin texto antes ni despues. Sin bloques de codigo markdown. Solo el JSON.
 
@@ -191,7 +192,7 @@ Cada observacion debe ser DIFERENTE (automatizacion, datos/IA, integracion). Usa
 
   // Generate subject with AI (moderate tone)
   const subjectResp = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: getModelClassification(),
     max_tokens: 100,
     system: "Genera SOLO el texto del subject. Sin comillas. Maximo 60 caracteres. Tono profesional y moderado.",
     messages: [{

@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "./db";
+import { getModelGeneration } from "./config";
 import { proposals, proposalBriefs, contacts, diagnostics } from "@shared/schema";
 import { eq } from "drizzle-orm";
 import { log } from "./index";
@@ -101,7 +102,7 @@ export async function generateProposalBrief(proposalId: string): Promise<{
 
   try {
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: getModelGeneration(),
       max_tokens: 16000,
       temperature: 0.4,
       system: `Eres un consultor senior de IM3 Systems. Tu tarea: generar el BRIEF TÉCNICO DETALLADO que se envía al cliente DESPUÉS de la reunión donde se presentó la propuesta inicial.
@@ -282,7 +283,7 @@ export async function regenerateBriefModule(
 
   try {
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: getModelGeneration(),
       max_tokens: 3000,
       temperature: 0.4,
       system: `Eres un consultor senior de IM3 Systems reescribiendo UN módulo del brief técnico detallado.
@@ -414,7 +415,7 @@ async function regenerateBriefModuleNoPersist(
 
   try {
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: getModelGeneration(),
       max_tokens: 3000,
       temperature: 0.5,
       system: `Eres un consultor senior de IM3 Systems generando UNA variante de un módulo del brief técnico. Devuelve SOLO el JSON del módulo, mismos campos. La "key" debe ser "${moduleKey}". ${VOICE_GUIDE}`,

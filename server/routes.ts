@@ -1,5 +1,6 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
+import { getModelGeneration, getModelClassification } from "./config";
 import { eq, asc, isNull, isNotNull, sql, and, gte, lte, ilike, or, desc, count, inArray } from "drizzle-orm";
 import { db } from "./db";
 import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, teamMembers, taskSuggestions, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectGithubRepos, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, stackServices, contractTemplates, contracts, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback } from "@shared/schema";
@@ -5627,7 +5628,7 @@ ${urls}
       };
 
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model: getModelGeneration(),
         max_tokens: 600,
         system: `${IM3_PROJECT_CONTEXT}
 
@@ -5715,7 +5716,7 @@ ${brief.trim()}
 ${repoContext ? `\nContexto del repositorio conectado:\n${repoContext}\n` : "\n(No hay repo conectado todavía.)\n"}`;
 
       const response = await anthropic.messages.create({
-        model: "claude-sonnet-4-6",
+        model: getModelGeneration(),
         max_tokens: 1200,
         system: `${IM3_PROJECT_CONTEXT}
 
@@ -9488,7 +9489,7 @@ Responde SOLO con un JSON válido, sin markdown:
       const client = new Anthropic({ apiKey });
 
       const response = await client.messages.create({
-        model: "claude-haiku-4-5-20251001",
+        model: getModelClassification(),
         max_tokens: 500,
         temperature: 0.4,
         system: `Reescribe el texto que te dan aplicando la instrucción. Devuelve SOLO el texto reescrito, sin comillas, sin explicaciones, sin markdown. Español latinoamericano. Mantén el mismo tipo de contenido (si es un título corto, devuelve un título corto; si es un párrafo, devuelve un párrafo).`,
@@ -10884,6 +10885,106 @@ Responde SOLO con un JSON válido, sin markdown:
       const { clearSimulatorChatHistory } = await import("./stack-simulator-chat");
       await clearSimulatorChatHistory();
       res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // ── Ingeniero IM3 — agente de diagnóstico técnico (read-only) ──
+  app.get("/api/admin/engineer/sessions", requireAuth, async (_req, res) => {
+    try {
+      const { listEngineerSessions } = await import("./engineer-chat");
+      res.json(await listEngineerSessions());
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.post("/api/admin/engineer/sessions", requireAuth, async (req, res) => {
+    try {
+      const { createEngineerSession } = await import("./engineer-chat");
+      const username = (req.user as { username?: string } | undefined)?.username || null;
+      res.json(await createEngineerSession(username));
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.get("/api/admin/engineer/sessions/:id/messages", requireAuth, async (req, res) => {
+    try {
+      const { getEngineerChatHistory } = await import("./engineer-chat");
+      res.json(await getEngineerChatHistory(req.params.id as string));
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.post("/api/admin/engineer/chat", requireAuth, chatRateLimiter, async (req, res) => {
+    const sessionId = typeof req.body?.sessionId === "string" ? req.body.sessionId : "";
+    const message = (req.body?.message as string || "").trim();
+    if (!sessionId) return res.status(400).json({ error: "sessionId requerido" });
+    if (!message) return res.status(400).json({ error: "Mensaje requerido" });
+    const chatUser = req.user as { username?: string; githubAccessToken?: string } | undefined;
+    const username = chatUser?.username || null;
+    const githubToken = chatUser?.githubAccessToken || null;
+    try {
+      const { runEngineerChat } = await import("./engineer-chat");
+      const { runAgent } = await import("./agents/runner");
+      const result = await runAgent(
+        "engineer-chat",
+        () => runEngineerChat({ sessionId, userMessage: message, username, githubToken }),
+        { triggeredBy: "manual" },
+      );
+      res.json({ assistantMessage: result.assistantMessage, toolCalls: result.toolCalls });
+    } catch (err: any) {
+      log(`Error in engineer chat: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Acciones del agente: listar pendientes (por sesión), aplicar (con consentimiento), descartar, auditoría
+  app.get("/api/admin/engineer/actions", requireAuth, async (req, res) => {
+    try {
+      const { listPendingActions } = await import("./engineer-chat");
+      const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : undefined;
+      res.json(await listPendingActions(sessionId));
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.post("/api/admin/engineer/actions/:id/apply", requireAuth, async (req, res) => {
+    const consent = req.body?.consent === true;
+    const reason = typeof req.body?.reason === "string" ? req.body.reason : "";
+    if (!consent) return res.status(400).json({ error: "Se requiere consentimiento explícito (consent=true)" });
+    const applyUser = req.user as { username?: string; githubAccessToken?: string } | undefined;
+    const username = applyUser?.username || "admin";
+    const githubToken = applyUser?.githubAccessToken || null;
+    try {
+      const { applyPendingAction } = await import("./engineer-chat");
+      const result = await applyPendingAction(req.params.id as string, username, reason, githubToken);
+      if (!result.ok) return res.status(400).json({ error: result.message });
+      res.json(result);
+    } catch (err: any) {
+      log(`Error applying engineer action: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.post("/api/admin/engineer/actions/:id/discard", requireAuth, async (req, res) => {
+    try {
+      const { discardPendingAction } = await import("./engineer-chat");
+      await discardPendingAction(req.params.id as string);
+      res.json({ ok: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.get("/api/admin/engineer/audit", requireAuth, async (_req, res) => {
+    try {
+      const { listActionAudit } = await import("./engineer-chat");
+      res.json(await listActionAudit());
     } catch (err: any) {
       res.status(500).json({ error: err?.message });
     }

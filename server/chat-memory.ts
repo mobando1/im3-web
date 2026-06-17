@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "./db";
+import { getModelClassification } from "./config";
 import { chatGlobalMemory } from "@shared/schema";
 import { eq, desc, sql } from "drizzle-orm";
 import { log } from "./index";
@@ -11,7 +12,7 @@ function getClient(): Anthropic | null {
   return client;
 }
 
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL = () => getModelClassification();
 
 /**
  * Lee la memoria global y devuelve un bloque de texto para inyectar en
@@ -123,7 +124,7 @@ Sino, responde JSON:
 
   try {
     const response = await anthropic.messages.create({
-      model: MODEL,
+      model: MODEL(),
       max_tokens: 800,
       temperature: 0,
       messages: [{ role: "user", content: prompt }],

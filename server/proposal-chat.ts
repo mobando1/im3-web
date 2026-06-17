@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "./db";
+import { getModelGeneration } from "./config";
 import { proposals, proposalChatMessages, proposalSnapshots, contacts } from "@shared/schema";
 import { eq, asc } from "drizzle-orm";
 import { log } from "./index";
@@ -123,7 +124,7 @@ function getClient(): Anthropic | null {
   return client;
 }
 
-const MODEL = "claude-sonnet-4-6";
+const MODEL = () => getModelGeneration();
 const MAX_HISTORY = 80;
 
 // Lock por proposalId — serializa mensajes concurrentes a la misma propuesta
@@ -950,7 +951,7 @@ Presenta este resumen al usuario y espera confirmación. Cuando confirme, vuelve
     // Usamos messages.stream para emitir text_delta en tiempo real al cliente.
     // Al final del stream tomamos el final message completo para procesar tool_use.
     const stream = anthropic.messages.stream({
-      model: MODEL,
+      model: MODEL(),
       max_tokens: 8192,
       system: systemBlocks,
       tools: TOOLS,

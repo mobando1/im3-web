@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "./db";
+import { getModelGeneration } from "./config";
 import { stackServices, stackSimulatorChatMessages, contacts, diagnostics } from "@shared/schema";
 import { eq, and, asc } from "drizzle-orm";
 import { log } from "./index";
@@ -14,7 +15,7 @@ function getClient(): Anthropic | null {
   return client;
 }
 
-const MODEL = "claude-sonnet-4-6";
+const MODEL = () => getModelGeneration();
 const MAX_ITERATIONS = 6;
 const MAX_HISTORY = 30;
 
@@ -258,7 +259,7 @@ ${stackRef || "(El catálogo está vacío. Indica al usuario que agregue servici
     iteration++;
 
     const response = await anthropic.messages.create({
-      model: MODEL,
+      model: MODEL(),
       max_tokens: 4096,
       system: systemBlocks,
       tools: TOOLS,

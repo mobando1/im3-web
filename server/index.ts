@@ -92,6 +92,15 @@ app.use((req, res, next) => {
   // Run database migrations
   await runMigrations();
 
+  // Cargar config editable en runtime (model IDs / flags) a memoria — debe ir
+  // ANTES de registrar rutas/scheduler para que los getters lean valores vivos.
+  const { loadConfig } = await import("./config");
+  await loadConfig();
+
+  // Ingeniero IM3: verificar si el código fuente está en disco (para read_source_file)
+  const { logSourceAvailability } = await import("./engineer-chat");
+  await logSourceAvailability();
+
   // Setup auth (session + passport) before routes
   await setupAuth(app);
   setupClientAuth();

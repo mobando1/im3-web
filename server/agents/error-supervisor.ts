@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "../db";
+import { getModelClassification } from "../config";
 import { agentRuns, notifications } from "@shared/schema";
 import { and, eq, gte, isNull, desc } from "drizzle-orm";
 import { sendEmail, isEmailConfigured } from "../email-sender";
@@ -137,7 +138,7 @@ GUÍA:
 
   try {
     const response = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: getModelClassification(),
       max_tokens: 500,
       temperature: 0.1,
       messages: [{ role: "user", content: prompt }],

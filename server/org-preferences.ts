@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "./db";
+import { getModelClassification } from "./config";
 import { orgPreferences, proposals } from "@shared/schema";
 import { eq, desc, sql } from "drizzle-orm";
 import { log } from "./index";
@@ -11,7 +12,7 @@ function getClient(): Anthropic | null {
   return client;
 }
 
-const MODEL = "claude-haiku-4-5-20251001";
+const MODEL = () => getModelClassification();
 
 /**
  * Devuelve un resumen de las preferencias de la organización para inyectar
@@ -78,7 +79,7 @@ Responde JSON: {"preferences": [{"key": "...", "value": "...", "confidence": 0-1
 
   try {
     const response = await anthropic.messages.create({
-      model: MODEL,
+      model: MODEL(),
       max_tokens: 2000,
       temperature: 0.1,
       messages: [{ role: "user", content: prompt }],

@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { log } from "./index";
+import { getModelGeneration, getModelClassification } from "./config";
 import { db } from "./db";
 import { clientProjects, projectPhases, projectTasks, projectDeliverables, projectActivityEntries, projectTimeLog, projectIdeas } from "@shared/schema";
 import { eq, desc, gte, asc, and, isNull } from "drizzle-orm";
@@ -91,7 +92,7 @@ async function callJudge(opts: {
 
   try {
     const response = await client.messages.create({
-      model: "claude-sonnet-4-6",
+      model: getModelGeneration(),
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: "user", content: userMessage }],
@@ -591,7 +592,7 @@ SOLO devuelve el JSON, nada más.`;
 
   try {
     const response = await ai.messages.create({
-      model: "claude-sonnet-4-6",
+      model: getModelGeneration(),
       max_tokens: 4000,
       messages: [{ role: "user", content: prompt }],
     });
@@ -689,7 +690,7 @@ NO uses markdown. Texto plano con saltos de línea. NO incluyas emojis.`;
 
   try {
     const response = await ai.messages.create({
-      model: "claude-sonnet-4-6",
+      model: getModelGeneration(),
       max_tokens: 500,
       messages: [{ role: "user", content: prompt }],
     });
@@ -841,7 +842,7 @@ export async function generateProjectArtifacts(
     tasksRetries: 0,
     fallbackUsed: false,
   };
-  const aiModel = "claude-sonnet-4-6";
+  const aiModel = getModelGeneration();
   const repoLoaded = !!repoContext;
 
   const buildResult = (phasesCreated: number, tasksCreated: number, deliverablesCreated: number): GenerateArtifactsResult => ({
@@ -943,7 +944,7 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato:
 
       const { result: parsed, verdict: pvLocal, retriesUsed: prLocal } = await callSonnetWithRetry<PhaseSpec[]>({
         client: anthropic,
-        model: "claude-sonnet-4-6",
+        model: getModelGeneration(),
         maxTokens: 4000,
         baseSystem: designSystem,
         userMessage: designPrompt,
@@ -1116,7 +1117,7 @@ Reglas estrictas:
 
       const { result: phaseTasks, verdict: tvLocal, retriesUsed: trLocal } = await callSonnetWithRetry<PhaseTasksPayload>({
         client: anthropic,
-        model: "claude-sonnet-4-6",
+        model: getModelGeneration(),
         maxTokens: 12000,
         baseSystem: tasksSystem,
         userMessage: `Genera tareas para este proyecto:\n\n${taskContext}`,
@@ -1246,7 +1247,7 @@ Reglas estrictas:
   if (anthropic) {
     try {
       const ideasResponse = await anthropic.messages.create({
-        model: "claude-haiku-4-5-20251001",
+        model: getModelClassification(),
         max_tokens: 500,
         system: "Genera 3 ideas de mejoras futuras para un proyecto de tecnología. JSON array: [{\"title\": \"...\", \"description\": \"...\", \"priority\": \"medium\"}]. Sin markdown.",
         messages: [{ role: "user", content: `Brief: ${brief.substring(0, 500)}` }],
@@ -1324,7 +1325,7 @@ ${existingPhases.length === 0 ? "(ninguna todavía)" : existingPhases.map((p, i)
   let taskGenFailed = false;
   try {
     const designRes = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: getModelGeneration(),
       max_tokens: 800,
       system: `${IM3_PROJECT_CONTEXT}
 
@@ -1382,7 +1383,7 @@ Responde SOLO con un JSON válido (un objeto, no un array), sin markdown:
   let totalTasks = 0;
   try {
     const taskRes = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: getModelGeneration(),
       max_tokens: 2500,
       system: `${IM3_PROJECT_CONTEXT}
 
@@ -1456,7 +1457,7 @@ Responde SOLO con un JSON array válido, sin markdown ni texto extra. Formato EX
       phaseName: phaseSpec.name,
       phaseWeeks: phaseSpec.weeks,
       repoLoaded: !!options.repoContext,
-      aiModel: "claude-sonnet-4-6",
+      aiModel: getModelGeneration(),
       designFailed,
       taskGenFailed,
     },

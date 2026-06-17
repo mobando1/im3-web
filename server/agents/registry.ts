@@ -151,6 +151,24 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
     sourceFile: "server/proposal-brief-chat.ts:1",
   },
   {
+    name: "engineer-chat",
+    displayName: "Ingeniero IM3 (Diagnóstico)",
+    kind: "ai",
+    description: "Agente técnico read-only que diagnostica fallas del sistema (errores de agentes, código, datos, config) y propone el fix. No ejecuta cambios.",
+    trigger: "manual",
+    criticality: "normal",
+    longDescription:
+      "Ventana admin-only tipo Claude Code en modo SOLO LECTURA. El admin chatea y el agente diagnostica problemas técnicos del CRM leyendo agent_runs (errores + stack + supervisorAnalysis), el código fuente del repo (read_source_file/search_code/list_dir), el esquema y datos de la DB (get_db_schema/query_db_readonly en transacción READ ONLY) y la presencia de env vars (check_env, sin exponer valores). Entrega causa raíz + pasos de arreglo + nivel de confianza, citando archivo:línea. No modifica nada. Cada turno se persiste en engineer_chat_messages y queda registrado en agent_runs (Fase A del roadmap del agente ingeniero).",
+    connections: [
+      { type: "llm", label: "Claude Sonnet 4.6", detail: "Razonamiento + 8 tools de solo lectura (loop hasta 10 iteraciones)" },
+      { type: "db", label: "agent_runs", detail: "Lee errores/estado/stack/metadata para diagnóstico" },
+      { type: "db", label: "engineer_chat_sessions / engineer_chat_messages", detail: "Persiste la conversación (trazabilidad, sin borrado)" },
+      { type: "db", label: "information_schema + queries READ ONLY", detail: "Inspección de esquema y datos (sin escritura)" },
+      { type: "internal", label: "Filesystem del repo (sandbox)", detail: "Lectura de código fuente; bloquea .env/secretos/node_modules" },
+    ],
+    sourceFile: "server/engineer-chat.ts:1",
+  },
+  {
     name: "project-ai-analyzer",
     displayName: "Analizador de Proyectos",
     kind: "ai",

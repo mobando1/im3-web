@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "../db";
+import { getModelGeneration } from "../config";
 import {
   appointments,
   contacts,
@@ -170,7 +171,7 @@ Genera un brief práctico. Responde SOLO con JSON válido, sin markdown:
 
   try {
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: getModelGeneration(),
       max_tokens: 1500,
       temperature: 0.3,
       messages: [{ role: "user", content: prompt }],

@@ -12,7 +12,7 @@ Dominio CRM admin: `hub.im3systems.com`
 - **Base de datos:** PostgreSQL en **Railway** (`maglev.proxy.rlwy.net`) + Drizzle ORM
 - **Migraciones:** SQL crudo en `server/db.ts` (bloque `runMigrations()` con `CREATE TABLE IF NOT EXISTS`) + carpeta `migrations/` con `.sql` numerados
 - **Auth admin:** Passport.js + passport-local + sesiones en Postgres (`connect-pg-simple`)
-- **IA:** Anthropic Claude (`@anthropic-ai/sdk`) — modelos `claude-sonnet-4-6` (generación) y `claude-haiku-4-5-20251001` (clasificación rápida). Nota: `claude-sonnet-4-20250514` (Sonnet 4) fue retirado por Anthropic el 15-jun-2026 (404); migrado a `claude-sonnet-4-6` el 16-jun-2026.
+- **IA:** Anthropic Claude (`@anthropic-ai/sdk`) — modelos `claude-sonnet-4-6` (generación) y `claude-haiku-4-5-20251001` (clasificación rápida). **Los model IDs ya NO están hardcodeados**: viven en la tabla `system_config` (claves `model.generation` / `model.classification`) y se leen vía getters síncronos de `server/config.ts` (`getModelGeneration()` / `getModelClassification()`), editables en runtime sin redeploy desde `/admin/engineering`. Nota: `claude-sonnet-4-20250514` (Sonnet 4) fue retirado por Anthropic el 15-jun-2026 (404); migrado a `claude-sonnet-4-6` el 16-jun-2026.
 - **Email:** Resend
 - **WhatsApp:** Meta WhatsApp Business Cloud API
 - **Google Workspace:** Service Account con domain-wide delegation, impersona `info@im3systems.com`
@@ -46,11 +46,26 @@ Dominio CRM admin: `hub.im3systems.com`
 - `/admin/tasks` — tareas internas
 - `/admin/templates` — plantillas de email
 - `/admin/agents` — dashboard de agentes/servicios (Fase 1 del sistema de agentes; ver roadmap)
+- `/admin/engineering` — **Ingeniero IM3**: agente técnico tipo Claude Code (solo admin) para diagnosticar y arreglar problemas del sistema. Ver sección abajo.
 
 ## Sistema de Agentes Automatizados
 El proyecto tiene ~27 agentes/servicios corriendo (cron jobs, webhooks, servicios de IA on-demand). Todos se registran en `server/agents/registry.ts` y se envuelven con `runAgent(name, fn)` de `server/agents/runner.ts` para persistir cada ejecución en la tabla `agent_runs`. El dashboard `/admin/agents` los visualiza por dominio (communication, ai, sync, projects, content, analysis) con estado de salud.
 
 **Roadmap vivo**: `/Users/mateoobandoangel/.claude/plans/quiet-rolling-octopus.md` — detalla Fase 1 (visibilidad, ✅), Fase 2 (error-supervisor + meeting-prep + followup-writer, ✅), y fases futuras.
+
+## Agente "Ingeniero IM3" (`/admin/engineering`)
+Ventana solo-admin tipo Claude Code embebida para diagnosticar y arreglar problemas técnicos del CRM. El motor (`server/engineer-chat.ts`) reusa el patrón chat+tools de `proposal-brief-chat.ts`; los guards de seguridad están aislados en `server/engineer-chat-guards.ts` (módulo puro, testeable). Cada turno se envuelve con `runAgent("engineer-chat")` → trazable en `/admin/agents`; las conversaciones se persisten en `engineer_chat_sessions`/`engineer_chat_messages` (sin borrado).
+
+Construido por fases (plan: `/Users/mateoobandoangel/.claude/plans/estaba-pensando-en-algo-serialized-cook.md`):
+- **Fase A — diagnóstico (read-only)**: tools `read_agent_runs`, `view_agent_run`, `read_source_file` (sandbox al repo, deniega `.env`/secretos/rutas absolutas), `search_code`, `list_dir`, `get_db_schema`, `query_db_readonly` (transacción READ ONLY + guard SELECT-only), `check_env` (solo booleano).
+- **Fase B — acciones de escritura seguras**: tools `propose_*` (set_config, toggle_flag, retry_agent, db_write con WHERE obligatorio). NO ejecutan: registran una acción pendiente. El admin la confirma firmando responsabilidad (modal) → `POST /api/admin/engineer/actions/:id/apply` ejecuta el payload guardado y audita en `admin_action_audit`. Config editable en runtime sin redeploy (`system_config` + `server/config.ts`).
+- **Fase C — cambios de código vía PR**: tool `propose_code_change` → al confirmar, `server/github-write.ts` abre un Pull Request (branch → commit → PR; NUNCA auto-merge). El admin revisa el diff en GitHub y mergea (eso dispara el redeploy). Requiere env `IM3_REPO` + token GitHub (ver variables de entorno).
+
+**Modelo de seguridad**: nada se auto-ejecuta dentro del chat; toda escritura pasa por consentimiento explícito + auditoría. Solo interno (admin IM3) por ahora.
+
+**Robustez (Fase B+)**: `applyPendingAction` reclama la acción con un compare-and-swap atómico (`pending`→`processing`) antes de ejecutar — evita doble-aplicación por doble-click/2 pestañas; las acciones terminan en `applied`/`failed` (las fallidas no se re-aplican); las propuestas expiran a las 24h (`expires_at` es **timestamptz**, no `timestamp`, para comparar instantes sin ambigüedad de zona). Whitelist de flags conocidos (`KNOWN_FLAGS` en sync con email-scheduler). `db_write` rechaza `WHERE 1=1`/`true`. La validación de model ID contra Anthropic ocurre al **aplicar** (no al proponer, para no gastar tokens en propuestas descartadas).
+
+**Nota de cache (config.ts)**: `setConfig` muta el cache **in-process**. Si Railway corre múltiples instancias, las otras quedan con el valor viejo hasta el próximo redeploy. Hoy aceptable (tool interno); si se escala, considerar invalidación vía pub/sub.
 
 ## Estructura de Carpetas
 ```
@@ -166,6 +181,10 @@ WHATSAPP_VERIFY_TOKEN=...
 
 # GitHub OAuth (para conectar repos de clientes)
 GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET, GITHUB_WEBHOOK_SECRET
+
+# Agente Ingeniero IM3 — Fase C (cambios de código vía Pull Request)
+IM3_REPO=owner/repo            # repo PROPIO donde el agente abre PRs (ej. mobando1/IM3-Website). Sin esto, propose_code_change/apply da error claro.
+GITHUB_TOKEN=ghp_...           # PAT con scope `repo` para abrir PRs. Alternativa: conectar GitHub en el admin (usa users.githubAccessToken). Solo lectura de repos públicos si falta.
 
 # Integración con Acta (sync bidireccional de reuniones/clientes)
 ACTA_API_KEY=...                     # token Bearer que Acta usa para llamar /api/integrations/* del hub.

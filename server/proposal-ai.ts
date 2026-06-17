@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "./db";
+import { getModelGeneration, getModelClassification } from "./config";
 import { contacts, diagnostics, sentEmails, contactNotes, activityLog, aiInsightsCache, gmailEmails, contactFiles } from "@shared/schema";
 import { eq, desc, and, sql } from "drizzle-orm";
 import { log } from "./index";
@@ -214,7 +215,7 @@ export async function generateProposal(contactId: string, adminNotes?: string): 
   const learnedMemoryBlock = await buildLearnedMemoryBlock();
 
   const response = await anthropic.messages.create({
-    model: "claude-sonnet-4-6",
+    model: getModelGeneration(),
     max_tokens: 10000,
     temperature: 0.35,
     system: `Eres un consultor senior de IM3 Systems, agencia de tecnología especializada en IA, automatización y desarrollo de software para empresas en Latinoamérica.
@@ -569,7 +570,7 @@ async function validateAndRepairOperationalCosts(
     .join("\n") || "(sin módulos)";
 
   const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: getModelClassification(),
     max_tokens: 2000,
     temperature: 0.1,
     system: `Eres un auditor de costos operativos ESTRICTO. Tu tarea principal: REMOVER servicios que la solución NO usa (WhatsApp ghost, storage ghost, etc.) y verificar coherencia.
@@ -712,7 +713,7 @@ export async function regenerateProposalSection(
 
   try {
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: getModelGeneration(),
       max_tokens: 2000,
       temperature: 0.4,
       system: `Eres un consultor senior de IM3 Systems reescribiendo UNA sección estructurada de una propuesta comercial.
@@ -826,7 +827,7 @@ export async function generateSectionOptions(
 
   try {
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: getModelGeneration(),
       max_tokens: 6000,
       temperature: 0.6,
       system: `Eres un consultor senior de IM3 Systems. El admin te pide reescribir UNA sección de una propuesta, dándote contexto de POR QUÉ quiere el cambio.
@@ -921,7 +922,7 @@ async function validateCrossSectionMath(
   const annualLossCOP = monthlyLossCOP * 12;
 
   const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: getModelClassification(),
     max_tokens: 2500,
     temperature: 0.1,
     system: `Eres un auditor financiero. Verificas coherencia matemática entre 3 secciones de una propuesta:
@@ -1092,7 +1093,7 @@ export async function translateProposal(
 
   try {
     const response = await anthropic.messages.create({
-      model: "claude-sonnet-4-6",
+      model: getModelGeneration(),
       max_tokens: 12000,
       temperature: 0.25,
       system: `Eres un traductor profesional especializado en propuestas comerciales B2B de IM3 Systems (consultoría de IA/automatización en LatAm).

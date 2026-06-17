@@ -1134,9 +1134,37 @@ export type AgentRun = typeof agentRuns.$inferSelect;
 export type InsertAgentRun = typeof agentRuns.$inferInsert;
 
 // ───────────────────────────────────────────────────────────────
-// System config — valores técnicos editables en runtime desde el panel
-// "Ingeniería IM3" (model IDs, feature flags). Evita redeploy para cambios
-// como el del 16-jun-2026 (model ID de Anthropic retirado → 404).
+// Agente "Ingeniero IM3" — chat técnico de diagnóstico (read-only) embebido
+// en el admin. Cada conversación se persiste para trazabilidad. Ver
+// server/engineer-chat.ts. Fase A del roadmap del agente ingeniero.
+// ───────────────────────────────────────────────────────────────
+export const engineerChatSessions = pgTable("engineer_chat_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  title: text("title").notNull().default("Nueva conversación"),
+  createdBy: text("created_by"), // username del admin
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type EngineerChatSession = typeof engineerChatSessions.$inferSelect;
+export type InsertEngineerChatSession = typeof engineerChatSessions.$inferInsert;
+
+export const engineerChatMessages = pgTable("engineer_chat_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull(),
+  role: text("role").notNull(), // user | assistant
+  content: text("content").notNull(),
+  // Resumen de las tools que el agente ejecutó en este turno (para mostrar en la UI)
+  toolCalls: json("tool_calls").$type<{ tool: string; summary: string }[]>().default([]),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type EngineerChatMessage = typeof engineerChatMessages.$inferSelect;
+export type InsertEngineerChatMessage = typeof engineerChatMessages.$inferInsert;
+
+// ───────────────────────────────────────────────────────────────
+// System config — valores técnicos editables en runtime (Fase B del agente
+// ingeniero). Permite cambiar model IDs / feature flags sin redeploy.
+// Ver server/config.ts. Seed inicial en runMigrations() de server/db.ts.
 // ───────────────────────────────────────────────────────────────
 export const systemConfig = pgTable("system_config", {
   key: text("key").primaryKey(), // ej. "model.generation", "flag.gmail-sync"
@@ -1144,26 +1172,48 @@ export const systemConfig = pgTable("system_config", {
   category: text("category").notNull(), // "model" | "flag"
   description: text("description"),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
-  updatedBy: text("updated_by"), // username del admin que hizo el último cambio
+  updatedBy: text("updated_by"), // username del admin del último cambio
 });
 
 export type SystemConfig = typeof systemConfig.$inferSelect;
 export type InsertSystemConfig = typeof systemConfig.$inferInsert;
 
-// Auditoría de cada cambio de config — fuente de verdad de trazabilidad
-// (quién / qué / cuándo / por qué). Requisito central del panel.
-export const systemConfigAudit = pgTable("system_config_audit", {
+// ───────────────────────────────────────────────────────────────
+// Acciones del agente ingeniero (Fase B+): modelo propuesta → confirmación →
+// ejecución auditada. El agente registra una acción PENDIENTE; el admin la
+// confirma firmando responsabilidad; el endpoint ejecuta el payload guardado.
+// ───────────────────────────────────────────────────────────────
+export const pendingAdminActions = pgTable("pending_admin_actions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  key: text("key").notNull(),
-  oldValue: text("old_value"),
-  newValue: text("new_value").notNull(),
-  changedBy: text("changed_by").notNull(), // username del admin responsable
-  reason: text("reason"),
+  sessionId: varchar("session_id"), // sesión del chat que la propuso
+  actionType: text("action_type").notNull(), // set_config | toggle_flag | retry_agent | db_write
+  title: text("title").notNull(), // resumen legible para la action card
+  payload: json("payload").$type<Record<string, unknown>>().notNull(),
+  preview: text("preview"), // p.ej. filas afectadas (db_write) o validación de modelo
+  status: text("status").notNull().default("pending"), // pending | processing | applied | failed | discarded | expired
+  createdBy: text("created_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }), // TTL: instante absoluto (timestamptz) para comparar sin ambigüedad de zona horaria
+});
+
+export type PendingAdminAction = typeof pendingAdminActions.$inferSelect;
+export type InsertPendingAdminAction = typeof pendingAdminActions.$inferInsert;
+
+// Auditoría unificada de TODA escritura aplicada por el agente (config, datos,
+// código). Fuente de verdad de trazabilidad + consentimiento.
+export const adminActionAudit = pgTable("admin_action_audit", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  actionType: text("action_type").notNull(),
+  target: text("target"), // qué se tocó (key de config, tabla, agente)
+  payload: json("payload").$type<Record<string, unknown>>(),
+  performedBy: text("performed_by").notNull(), // username del admin responsable
+  reason: text("reason"), // motivo escrito en el modal de consentimiento
+  result: text("result"), // ok / error + detalle
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
-export type SystemConfigAudit = typeof systemConfigAudit.$inferSelect;
-export type InsertSystemConfigAudit = typeof systemConfigAudit.$inferInsert;
+export type AdminActionAudit = typeof adminActionAudit.$inferSelect;
+export type InsertAdminActionAudit = typeof adminActionAudit.$inferInsert;
 
 // ───────────────────────────────────────────────────────────────
 // Portal de Clientes — Auth (login + reset password + invite)

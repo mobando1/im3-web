@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { db } from "./db";
+import { getModelGeneration } from "./config";
 import { proposals, proposalBriefs, proposalBriefChatMessages, proposalBriefSnapshots, contacts } from "@shared/schema";
 import { eq, asc } from "drizzle-orm";
 import { log } from "./index";
@@ -26,7 +27,7 @@ function getClient(): Anthropic | null {
   return client;
 }
 
-const MODEL = "claude-sonnet-4-6";
+const MODEL = () => getModelGeneration();
 const MAX_HISTORY = 30;
 const MAX_ITERATIONS = 12;
 
@@ -602,7 +603,7 @@ ${briefSnapshot}`,
     iteration++;
 
     const stream = anthropic.messages.stream({
-      model: MODEL,
+      model: MODEL(),
       max_tokens: 8192,
       system: systemBlocks,
       tools: TOOLS,

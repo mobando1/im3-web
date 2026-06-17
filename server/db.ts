@@ -22,6 +22,9 @@ if (process.env.DATABASE_URL) {
 export async function runMigrations() {
   if (!pool) return;
   try {
+    // Extensión pgcrypto — necesaria para gen_random_bytes() de migraciones legacy.
+    // gen_random_uuid() es nativo en PG13+, pero gen_random_bytes() requiere pgcrypto.
+    await pool.query(`CREATE EXTENSION IF NOT EXISTS pgcrypto;`).catch(() => {});
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "blog_categories" (
         "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
@@ -1153,7 +1156,29 @@ ___________________________________
       console.error("⚠ Could not seed contract_templates:", err);
     }
 
-    // System config — valores técnicos editables en runtime (panel Ingeniería IM3)
+    // Agente "Ingeniero IM3" — chat técnico de diagnóstico (read-only) en el admin.
+    // Toda conversación se conserva (trazabilidad). Ver server/engineer-chat.ts.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "engineer_chat_sessions" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "title" text DEFAULT 'Nueva conversación' NOT NULL,
+        "created_by" text,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "engineer_chat_messages" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "session_id" varchar NOT NULL,
+        "role" text NOT NULL,
+        "content" text NOT NULL,
+        "tool_calls" json DEFAULT '[]'::json,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_engineer_chat_messages_session" ON "engineer_chat_messages" ("session_id", "created_at");`).catch(() => {});
+
+    // System config — valores técnicos editables en runtime (Fase B agente ingeniero)
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "system_config" (
         "key" text PRIMARY KEY,
@@ -1164,29 +1189,51 @@ ___________________________________
         "updated_by" text
       );
     `).catch(() => {});
+    // Seed idempotente. ON CONFLICT DO NOTHING => nunca pisa un valor ya editado.
+    // Mantener en sync con FALLBACKS de server/config.ts.
     await pool.query(`
-      CREATE TABLE IF NOT EXISTS "system_config_audit" (
+      INSERT INTO "system_config" ("key", "value", "category", "description") VALUES
+        ('model.generation', 'claude-sonnet-4-6', 'model', 'Modelo Claude para generación (propuestas, blog, emails largos, briefs, chats)'),
+        ('model.classification', 'claude-haiku-4-5-20251001', 'model', 'Modelo Claude rápido para clasificación y validación'),
+        ('flag.gmail-sync', 'true', 'flag', 'Sincronización del inbox de Gmail (cron cada 15 min)'),
+        ('flag.whatsapp-send', 'true', 'flag', 'Envío de mensajes de WhatsApp por el scheduler'),
+        ('flag.newsletter', 'true', 'flag', 'Envío automático del newsletter semanal')
+      ON CONFLICT ("key") DO NOTHING;
+    `).catch(() => {});
+
+    // Acciones del agente ingeniero (propuesta → consentimiento → ejecución auditada)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "pending_admin_actions" (
         "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
-        "key" text NOT NULL,
-        "old_value" text,
-        "new_value" text NOT NULL,
-        "changed_by" text NOT NULL,
+        "session_id" varchar,
+        "action_type" text NOT NULL,
+        "title" text NOT NULL,
+        "payload" json NOT NULL,
+        "preview" text,
+        "status" text DEFAULT 'pending' NOT NULL,
+        "created_by" text,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "expires_at" timestamptz
+      );
+    `).catch(() => {});
+    await pool.query(`ALTER TABLE "pending_admin_actions" ADD COLUMN IF NOT EXISTS "expires_at" timestamptz;`).catch(() => {});
+    // Si la columna existía como timestamp (sin tz) — corrige a timestamptz (comparación correcta)
+    await pool.query(`ALTER TABLE "pending_admin_actions" ALTER COLUMN "expires_at" TYPE timestamptz USING "expires_at" AT TIME ZONE 'UTC';`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_pending_admin_actions_session" ON "pending_admin_actions" ("session_id", "created_at");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_pending_admin_actions_status" ON "pending_admin_actions" ("status", "created_at");`).catch(() => {});
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "admin_action_audit" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "action_type" text NOT NULL,
+        "target" text,
+        "payload" json,
+        "performed_by" text NOT NULL,
         "reason" text,
+        "result" text,
         "created_at" timestamp DEFAULT now() NOT NULL
       );
     `).catch(() => {});
-    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_system_config_audit_created" ON "system_config_audit" ("created_at" DESC);`).catch(() => {});
-    // Seed idempotente de los valores base. ON CONFLICT DO NOTHING => nunca pisa
-    // un valor ya editado por el admin. Mantener en sync con FALLBACKS de server/config.ts.
-    await pool.query(`
-      INSERT INTO "system_config" ("key", "value", "category", "description") VALUES
-        ('model.generation', 'claude-sonnet-4-6', 'model', 'Modelo Claude para generación (propuestas, blog, emails largos, briefs)'),
-        ('model.classification', 'claude-haiku-4-5-20251001', 'model', 'Modelo Claude rápido para clasificación y validación'),
-        ('flag.gmail-sync', 'true', 'flag', 'Sincronización del inbox de Gmail cada 15 min'),
-        ('flag.whatsapp-send', 'true', 'flag', 'Envío de mensajes de WhatsApp por el scheduler'),
-        ('flag.newsletter', 'true', 'flag', 'Envío automático del newsletter')
-      ON CONFLICT ("key") DO NOTHING;
-    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_admin_action_audit_created" ON "admin_action_audit" ("created_at" DESC);`).catch(() => {});
 
     console.log("✓ Database tables and indexes ensured");
 
@@ -1224,4 +1271,4 @@ ___________________________________
   }
 }
 
-export { db };
+export { db, pool };

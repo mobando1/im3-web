@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { log } from "./index";
+import { getModelGeneration } from "./config";
 
 let client: Anthropic | null = null;
 
@@ -51,7 +52,7 @@ export async function generateBlogContent(
       : "Escribe el artículo en español latinoamericano.";
 
     const response = await ai.messages.create({
-      model: "claude-sonnet-4-6",
+      model: getModelGeneration(),
       max_tokens: 4000,
       system: BLOG_SYSTEM_PROMPT,
       messages: [
@@ -100,7 +101,7 @@ export async function improveBlogContent(
 
   try {
     const response = await ai.messages.create({
-      model: "claude-sonnet-4-6",
+      model: getModelGeneration(),
       max_tokens: 4000,
       system: BLOG_SYSTEM_PROMPT,
       messages: [

@@ -1,5 +1,6 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { log } from "./index";
+import { getModelClassification } from "./config";
 import type { EmailTemplate, Diagnostic, Contact, SentEmail, ContactNote } from "@shared/schema";
 import { db } from "./db";
 import { contactFiles, contactNotes, gmailEmails } from "@shared/schema";
@@ -360,7 +361,7 @@ export async function generateEmailContent(
 
   // Generate subject
   const subjectResponse = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: getModelClassification(),
     max_tokens: 100,
     temperature: 0.3,
     system: language === "en"
@@ -383,7 +384,7 @@ export async function generateEmailContent(
 
   // Generate body
   const bodyResponse = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: getModelClassification(),
     max_tokens: 1500,
     temperature: 0.3,
     system: getSystemPrompt(language),
@@ -413,7 +414,7 @@ export async function generateEmailContent(
   if (hasForbiddenBody || hasForbiddenSubject) {
     log(`⚠ Email para ${diagnosticData?.empresa || "?"} contenía términos médicos — regenerando con temperature 0.1`);
     const retryResponse = await anthropic.messages.create({
-      model: "claude-haiku-4-5-20251001",
+      model: getModelClassification(),
       max_tokens: 1500,
       temperature: 0.1,
       system: getSystemPrompt(language),
@@ -449,7 +450,7 @@ export async function generateNewsletterWelcome(language: string = "es"): Promis
   }
 
   const subjectResponse = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: getModelClassification(),
     max_tokens: 100,
     temperature: 0.5,
     system: language === "en"
@@ -471,7 +472,7 @@ export async function generateNewsletterWelcome(language: string = "es"): Promis
       : language === "en" ? "Welcome to the IM3 Systems newsletter" : "Bienvenido al newsletter de IM3 Systems";
 
   const bodyResponse = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: getModelClassification(),
     max_tokens: 1500,
     temperature: 0.5,
     system: getSystemPrompt(language),
@@ -587,7 +588,7 @@ Responde con este JSON exacto:
 }`;
 
   const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: getModelClassification(),
     max_tokens: 1000,
     temperature: 0.2,
     messages: [{ role: "user", content: prompt }],
@@ -652,7 +653,7 @@ export async function generateDailyNewsDigest(language: string = "es"): Promise<
     : "\n\nNo se pudieron obtener noticias de RSS. Genera basándote en tendencias recientes verificables de IA/tech, citando fuentes reales (TechCrunch, MIT Technology Review, etc.).";
 
   const blogResponse = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: getModelClassification(),
     max_tokens: 3000,
     temperature: 0.5,
     system: isEn
@@ -776,7 +777,7 @@ export async function generateWhatsAppMessage(
   const context = buildContext(diagnostic);
 
   const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: getModelClassification(),
     max_tokens: 300,
     temperature: 0.3,
     system: language === "en"
@@ -992,7 +993,7 @@ export async function generateMiniAudit(
 
   // 1. Generate subject
   const subjectResponse = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: getModelClassification(),
     max_tokens: 100,
     temperature: 0.3,
     system: isEn
@@ -1012,7 +1013,7 @@ export async function generateMiniAudit(
 
   // 2. Generate 3 insights as structured JSON
   const insightsResponse = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: getModelClassification(),
     max_tokens: 1200,
     temperature: 0.3,
     system: isEn
@@ -1122,7 +1123,7 @@ export async function generateReengagement(
   const context = buildContext(diagnosticData);
 
   const subjectResponse = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: getModelClassification(),
     max_tokens: 100,
     temperature: 0.5,
     system: language === "en"
@@ -1141,7 +1142,7 @@ export async function generateReengagement(
     : language === "en" ? `Still thinking about automating ${contact.empresa}?` : `¿Sigues pensando en automatizar ${contact.empresa}?`;
 
   const bodyResponse = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: getModelClassification(),
     max_tokens: 1200,
     temperature: 0.5,
     system: getSystemPrompt(language),
@@ -1199,7 +1200,7 @@ export async function classifyWhatsAppIntent(
   if (!anthropic) return { type: "other", confidence: 0 };
 
   const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: getModelClassification(),
     max_tokens: 50,
     temperature: 0.1,
     system: `Clasifica el intent de este mensaje de WhatsApp de un lead de consultoría tecnológica. Responde SOLO con un JSON: {"type": "question"|"reschedule"|"interest"|"rejection"|"other", "confidence": 0.0-1.0}
@@ -1239,7 +1240,7 @@ export async function generateWhatsAppAutoReply(
   const context = buildContext(diagnosticData);
 
   const response = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
+    model: getModelClassification(),
     max_tokens: 300,
     temperature: 0.3,
     system: `Responde un mensaje de WhatsApp como si fueras del equipo de IM3 Systems (empresa de TECNOLOGÍA, IA y automatización — NO médica). Máximo 3-4 oraciones. Texto plano (no HTML). Tono: profesional pero cercano. Responde basándote en el contexto del diagnóstico del cliente. Si no sabes algo, di que lo revisarás con el equipo. Firma: "— Equipo IM3". No uses emojis excesivos (máximo 1).`,

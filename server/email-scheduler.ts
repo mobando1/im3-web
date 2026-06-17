@@ -9,6 +9,7 @@ import { parseFechaCita } from "./date-utils";
 import { syncGmailEmails, isGmailConfigured } from "./google-gmail";
 import { log } from "./index";
 import { runAgent } from "./agents/runner";
+import { getFlag } from "./config";
 import { runErrorSupervisor } from "./agents/error-supervisor";
 import { runMeetingPrep } from "./agents/meeting-prep";
 import { runFollowupWriter } from "./agents/followup-writer";
@@ -1267,6 +1268,7 @@ export function startEmailScheduler() {
   // Gmail sync runs independently of email system configuration
   if (isGmailConfigured()) {
     cron.schedule("*/15 * * * *", async () => {
+      if (!getFlag("gmail-sync")) return; // flag editable en runtime (Ingeniero IM3)
       await runAgent("gmail-sync", syncGmailEmails).catch(err => log(`Cron error gmail sync: ${err}`));
     }, { timezone: "America/Bogota" });
     log("Gmail sync cron scheduled (every 15 min)");
@@ -1281,7 +1283,7 @@ export function startEmailScheduler() {
   cron.schedule("*/15 * * * *", async () => {
     await runAgent("email-queue", processEmailQueue).catch(err => log(`Cron error queue: ${err}`));
     await runAgent("abandoned-followup", processAbandonedEmails).catch(err => log(`Cron error abandoned: ${err}`));
-    await runAgent("whatsapp-queue", processWhatsAppQueue).catch(err => log(`Cron error whatsapp: ${err}`));
+    if (getFlag("whatsapp-send")) await runAgent("whatsapp-queue", processWhatsAppQueue).catch(err => log(`Cron error whatsapp: ${err}`));
   }, { timezone: "America/Bogota" });
 
   // Run substatus updates, overdue task checks, and post-meeting recordings every 30 minutes
@@ -1321,7 +1323,7 @@ export function startEmailScheduler() {
 
   // Weekly newsletter every Monday at 7:30 AM Colombia time (12:30 UTC)
   cron.schedule("30 12 * * 1", async () => {
-    await runAgent("newsletter-digest", generateAndSendDailyNewsletter).catch(err => log(`Cron error newsletter: ${err}`));
+    if (getFlag("newsletter")) await runAgent("newsletter-digest", generateAndSendDailyNewsletter).catch(err => log(`Cron error newsletter: ${err}`));
   }, { timezone: "America/Bogota" });
 
   // Monthly cost reference freshness check (día 1 de cada mes, 9 AM COT = 14:00 UTC)
@@ -1359,14 +1361,14 @@ export function startEmailScheduler() {
   setTimeout(() => {
     runAgent("email-queue", processEmailQueue, { triggeredBy: "startup" }).catch(() => {});
     runAgent("abandoned-followup", processAbandonedEmails, { triggeredBy: "startup" }).catch(() => {});
-    runAgent("whatsapp-queue", processWhatsAppQueue, { triggeredBy: "startup" }).catch(() => {});
+    if (getFlag("whatsapp-send")) runAgent("whatsapp-queue", processWhatsAppQueue, { triggeredBy: "startup" }).catch(() => {});
   }, 10_000);
 
   // Catch-up: if today is Monday and newsletter hasn't been sent yet, send it now
   // (handles server restarts/deploys that cause the cron to miss its window)
   setTimeout(async () => {
     const now = new Date();
-    if (now.getUTCDay() === 1) { // Monday in UTC
+    if (now.getUTCDay() === 1 && getFlag("newsletter")) { // Monday in UTC
       log("Monday catch-up: checking if newsletter was sent today...");
       await runAgent("newsletter-digest", generateAndSendDailyNewsletter, { triggeredBy: "startup" }).catch(err => log(`Catch-up newsletter error: ${err}`));
     }
