@@ -43,6 +43,7 @@ export type ProposalStrings = {
   pricingHeadingLine2: string;
   pricingIntro: string;
   pricingIncludes: string;
+  pricingSavings: string; // prefijo de la línea de ahorro cuando hay descuento
   // Hardware
   hardwareEyebrow: string;
   hardwareColEquipo: string;
@@ -102,6 +103,7 @@ export const PROPOSAL_STRINGS: Record<ProposalLang, ProposalStrings> = {
     pricingHeadingLine2: "y sin sorpresas",
     pricingIntro: "La inversión se recupera rápido — no dejar de actuar es el verdadero costo.",
     pricingIncludes: "Tu inversión incluye",
+    pricingSavings: "Ahorras",
     hardwareEyebrow: "Hardware",
     hardwareColEquipo: "Equipo",
     hardwareColQty: "Cant.",
@@ -160,6 +162,7 @@ export const PROPOSAL_STRINGS: Record<ProposalLang, ProposalStrings> = {
     pricingHeadingLine2: "no surprises",
     pricingIntro: "The investment pays for itself fast — inaction is the real cost.",
     pricingIncludes: "Your investment includes",
+    pricingSavings: "You save",
     hardwareEyebrow: "Hardware",
     hardwareColEquipo: "Equipment",
     hardwareColQty: "Qty",

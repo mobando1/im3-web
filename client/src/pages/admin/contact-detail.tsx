@@ -421,6 +421,7 @@ const activityIcons: Record<string, any> = {
   ai_insight_generated: Sparkles,
   gmail_received: Inbox,
   gmail_sent: Send,
+  meeting: Video,
 };
 
 const activityColors: Record<string, string> = {
@@ -440,6 +441,7 @@ const activityColors: Record<string, string> = {
   ai_insight_generated: "bg-purple-50 text-purple-600",
   gmail_received: "bg-blue-50 text-blue-600",
   gmail_sent: "bg-teal-50 text-teal-600",
+  meeting: "bg-purple-50 text-purple-600",
 };
 
 const priorityColors: Record<string, string> = {
@@ -3138,8 +3140,8 @@ export default function ContactDetailPage() {
               ) : (
                 <div className="space-y-2">
                   {contactFilesData.map(file => {
-                    const typeIcons: Record<string, string> = { contrato: "text-amber-500", propuesta: "text-blue-500", auditoria: "text-purple-500", documento: "text-gray-500", imagen: "text-green-500", otro: "text-gray-400" };
-                    const typeLabels: Record<string, string> = { contrato: "Contrato", propuesta: "Propuesta", auditoria: "Auditoria", documento: "Documento", imagen: "Imagen", otro: "Otro" };
+                    const typeIcons: Record<string, string> = { contrato: "text-amber-500", propuesta: "text-blue-500", auditoria: "text-purple-500", documento: "text-gray-500", imagen: "text-green-500", recording: "text-purple-500", transcript: "text-blue-500", otro: "text-gray-400" };
+                    const typeLabels: Record<string, string> = { contrato: "Contrato", propuesta: "Propuesta", auditoria: "Auditoria", documento: "Documento", imagen: "Imagen", recording: "Grabación", transcript: "Transcripción", otro: "Otro" };
                     const isGoogleDrive = file.url.includes("google.com") || file.url.includes("docs.google");
                     const hasContent = !!file.content;
                     return (

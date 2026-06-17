@@ -97,6 +97,43 @@ test("conserva claves ausentes en la traducción (no pierde secciones)", () => {
   assert.equal(r2.a.x, "one");
 });
 
+test("descuento: discountType + discountValue + finalAmount + savingsAmount inmutables; label/note traducibles", () => {
+  const orig = {
+    pricing: {
+      discount: {
+        enabled: true,
+        discountType: "percentage",            // enum que controla el render de la tarjeta
+        label: "Descuento por pronto pago",
+        discountValue: "15",
+        finalAmount: "22.100.000",
+        savingsAmount: "3.900.000",
+        note: "Válido hasta el 30 de junio",
+      },
+    },
+  };
+  const tr = {
+    pricing: {
+      discount: {
+        enabled: false,                         // bool → preservado por JS (no por la traducción)
+        discountType: "porcentaje",             // enum traducido por error → debe reimponerse
+        label: "Early-payment discount",
+        discountValue: "fifteen",               // número traducido por error → debe reimponerse a "15"
+        finalAmount: "22,100,000",              // monto inmutable → vuelve al original
+        savingsAmount: "3,900,000",             // monto inmutable → vuelve al original
+        note: "Valid until June 30",
+      },
+    },
+  };
+  const d = (reimposeImmutable(orig, tr) as any).pricing.discount;
+  assert.equal(d.enabled, true);                         // bool preservado
+  assert.equal(d.discountType, "percentage");            // enum reimpuesto → no rompe el render
+  assert.equal(d.discountValue, "15");                   // valor del badge intacto (clave única, inmutable)
+  assert.equal(d.finalAmount, "22.100.000");             // precio final intacto entre idiomas
+  assert.equal(d.savingsAmount, "3.900.000");            // ahorro intacto entre idiomas
+  assert.equal(d.label, "Early-payment discount");       // prosa traducida
+  assert.equal(d.note, "Valid until June 30");           // prosa traducida
+});
+
 // ── simulación de invalidación de caché ──────────────────────
 test("caché: fp coincide → hit; tras 'editar' el contenido → miss", () => {
   const src = { meta: { clientName: "A" }, hero: { h: "hola" } };

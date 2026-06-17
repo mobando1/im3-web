@@ -9,11 +9,21 @@
 // modelo, no reimponiéndolos. Los valores numéricos/booleanos JS se preservan
 // automáticamente (ver reimposeImmutable).
 export const IMMUTABLE_TRANSLATION_KEYS = new Set<string>([
-  "paidBy", "billingModel", // enums que controlan lógica/renderizado de la UI — deben quedar exactos
+  "paidBy", "billingModel", "discountType", // enums que controlan lógica/renderizado de la UI — deben quedar exactos
   "icon",                   // identificadores/emoji de íconos
   "currency",               // código de moneda (COP/USD)
   "clientName", "contactName", // nombres propios
+  // Campos numéricos del descuento (claves ÚNICAS, no colisionan): el valor, el precio final y el
+  // ahorro NO deben cambiar entre idiomas — un precio es un precio. El campo se llama "discountValue"
+  // (no "value") precisamente para no colisionar con summary.stats[].value, que SÍ es prosa traducible
+  // ("4 semanas"→"4 weeks"). Así NINGÚN número del descuento depende de que el modelo respete el prompt.
+  "discountValue", "finalAmount", "savingsAmount",
 ]);
+// Nota: agregar estas claves NO requiere subir TRANSLATION_LOGIC_VERSION. Son campos NUEVOS
+// (descuento) que ninguna traducción cacheada contiene → no hay caché obsoleta que invalidar.
+// Cuando un admin agregue un descuento, el contenido cambia → el fingerprint cambia → se
+// re-traduce solo bajo esta lógica. Bumpear la versión solo causaría re-traducir todas las
+// propuestas (costo en tokens) sin beneficio de correctitud.
 
 /**
  * Reconstruye `translated` sobre la forma de `original`, reimponiendo los
