@@ -996,21 +996,18 @@ Audita y responde con JSON estricto (sin markdown).`
 // Traducción de propuesta completa (es ↔ en)
 // ───────────────────────────────────────────────────────────────
 
-// Claves cuyo valor NUNCA se traduce: montos formateados, monedas, enums,
-// íconos, nombres propios/marca y stack técnico. Cualquier valor numérico o
-// booleano también se preserva automáticamente (ver reimposeImmutable).
-// Es una red de seguridad: aunque el modelo "sobre-traduzca", estos campos
-// se reimponen desde el original por nombre de clave.
+// Claves cuyo valor NUNCA se traduce: SOLO las que romperían la UI o son códigos/
+// nombres propios. Deliberadamente acotado: muchos campos "de monto" (painAmount,
+// value, amount, paybackMonths, cost, *USD, rangos…) en la práctica llevan PROSA o
+// UNIDADES ("4 semanas", "$50/mes", "y cada semana sin un sistema…") que SÍ deben
+// traducirse. Los dígitos y el formato numérico se preservan vía instrucción al
+// modelo, no reimponiéndolos. Los valores numéricos/booleanos JS se preservan
+// automáticamente (ver reimposeImmutable).
 const IMMUTABLE_TRANSLATION_KEYS = new Set<string>([
-  "icon", "currency", "stack",
-  "amount", "painAmount", "amountPrefix", "amountSuffix",
-  "withoutAmount", "investmentAmount",
-  "unitPriceUSD", "totalPriceUSD", "subtotalUSD",
-  "monthlyRangeLow", "monthlyRangeHigh", "annualEstimate",
-  "monthlyFee", "markup", "cost",
-  "paidBy", "billingModel",
-  "clientName", "contactName",
-  "num", "value", "roiPercent", "paybackMonths",
+  "paidBy", "billingModel", // enums que controlan lógica/renderizado de la UI — deben quedar exactos
+  "icon",                   // identificadores/emoji de íconos
+  "currency",               // código de moneda (COP/USD)
+  "clientName", "contactName", // nombres propios
 ]);
 
 /**
@@ -1176,18 +1173,17 @@ CALIDAD (lo más importante):
 - Mantén el tono comercial persuasivo y profesional de la propuesta original.
 - Conserva la intención y el énfasis de cada frase (titulares de dolor, llamados a la acción, garantías).
 
-NO TRADUZCAS NI ALTERES (déjalos idénticos al original):
-- Números de cualquier tipo (cantidades, semanas, pesos/porcentajes, monthlyLossCOP).
-- Montos formateados y sus prefijos/sufijos (amount, painAmount, amountPrefix, amountSuffix, *USD, rangos, annualEstimate, cost, num, value, roiPercent, paybackMonths).
+CONSERVA EXACTOS (no los cambies):
+- Los DÍGITOS y el FORMATO de todo número o monto: "26.000.000" sigue siendo "26.000.000", "4" sigue siendo "4", "85%" sigue "85%". No relocalices separadores de miles/decimales ni recalcules nada.
 - Códigos de moneda ("COP", "USD") y el campo currency.
-- Valores de enum (paidBy, billingModel) — déjalos en su forma exacta.
-- Identificadores de íconos (icon).
-- Nombres propios y marca: clientName, contactName, "IM3 Systems", nombres de personas/empresas.
-- Stack técnico y nombres de tecnologías (stack, "React", "PostgreSQL", "OpenAI", etc.).
+- Valores de enum (paidBy, billingModel) — forma exacta, NO los traduzcas (controlan la UI).
+- Identificadores de íconos (icon) y nombres propios/marca/tecnologías (clientName, contactName, "IM3 Systems", "React", "PostgreSQL", "OpenAI", etc.).
 
-SÍ traduce/localiza:
-- Todos los títulos, párrafos, descripciones, labels, items de listas, garantías, FAQs, y los valores de sectionTitles.
-- Las fechas (proposalDate, validUntil): localízalas de forma natural al idioma destino, sin cambiar el día/mes/año.
+SÍ TRADUCE TODO EL TEXTO LEGIBLE, incluidas las palabras y unidades pegadas a números:
+- Unidades y sustantivos junto a cifras: "4 semanas" → "4 weeks", "2 agentes" → "2 agents", "8 meses" → "8 months", "$50/mes" → "$50/mo", "al año" → "per year". Mantén el dígito, traduce la palabra.
+- TODOS los títulos, párrafos, descripciones, labels, items, garantías, FAQs y los valores de sectionTitles.
+- OJO con campos que parecen "montos" pero llevan prosa: p.ej. hero.painAmount suele ser la CONTINUACIÓN de la frase del título (va en <em>) — tradúcelo como texto normal. value/num/paybackMonths suelen llevar unidades — tradúcelas.
+- Las fechas (proposalDate, validUntil): localízalas de forma natural, sin cambiar día/mes/año.
 
 FORMATO DE SALIDA:
 - Devuelve SOLO el JSON traducido. Sin \`\`\`, sin markdown, sin texto antes o después.
