@@ -803,6 +803,31 @@ export function getClientesParentId(): string {
   return id;
 }
 
+/** Lista todas las carpetas dentro de 03.clientes con su properties.im3ContactId (si está). Read-only. */
+export async function listClientesFolders(): Promise<Array<{ id: string; name: string; contactId: string | null }>> {
+  const auth = getAuth();
+  if (!auth) throw new Error("Google Drive no configurado");
+  const drive = google.drive({ version: "v3", auth });
+  const parentId = getClientesParentId();
+  const out: Array<{ id: string; name: string; contactId: string | null }> = [];
+  let pageToken: string | undefined;
+  do {
+    const res = await drive.files.list({
+      q: `'${parentId}' in parents and mimeType='application/vnd.google-apps.folder' and trashed=false`,
+      fields: "nextPageToken, files(id,name,properties)",
+      pageSize: 200,
+      pageToken,
+    });
+    for (const f of res.data.files || []) {
+      if (!f.id) continue;
+      const props = (f.properties || {}) as Record<string, string>;
+      out.push({ id: f.id, name: f.name || "", contactId: props.im3ContactId ?? null });
+    }
+    pageToken = res.data.nextPageToken || undefined;
+  } while (pageToken);
+  return out;
+}
+
 /**
  * Resuelve-o-crea la carpeta canónica de un cliente + sus 4 subcarpetas.
  * Orden de resolución: cache (folderId) → properties.im3ContactId → nombre exacto → crear.

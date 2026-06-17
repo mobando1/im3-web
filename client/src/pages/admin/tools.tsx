@@ -1,5 +1,8 @@
+import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { apiRequest } from "@/lib/queryClient";
 import {
   Mic,
   ScanSearch,
@@ -13,7 +16,20 @@ import {
   Wrench,
   Headphones,
   Download,
+  FolderSync,
+  Loader2,
+  AlertTriangle,
 } from "lucide-react";
+
+type ReconcileReport = {
+  dryRun: boolean;
+  totalContacts: number;
+  totalFolders: number;
+  duplicates: Array<{ contactId: string; empresa: string | null; email: string; folders: Array<{ id: string; name: string; url: string }> }>;
+  orphans: Array<{ id: string; name: string; url: string }>;
+  missing: Array<{ contactId: string; empresa: string | null; email: string }>;
+  ensured: number;
+};
 
 type ToolStatus = "active" | "idea";
 
@@ -128,6 +144,8 @@ export default function ToolsPage() {
         </p>
       </div>
 
+      <DriveReconcileCard />
+
       {toolGroups.map((group) => (
         <div key={group.label}>
           <div className="flex items-baseline gap-3 mb-3">
@@ -145,6 +163,89 @@ export default function ToolsPage() {
         </div>
       ))}
     </div>
+  );
+}
+
+function DriveReconcileCard() {
+  const [report, setReport] = useState<ReconcileReport | null>(null);
+  const [loading, setLoading] = useState<"dry" | "apply" | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  async function run(dryRun: boolean) {
+    if (!dryRun && !confirm("Consolidar elige y taggea UNA carpeta canónica para cada cliente con duplicados (las demás quedan listadas para mergear a mano). NO crea carpetas para clientes sin carpeta, ni borra/mueve archivos. ¿Continuar?")) return;
+    setLoading(dryRun ? "dry" : "apply");
+    setError(null);
+    try {
+      const res = await apiRequest("POST", `/api/admin/drive/reconcile?dryRun=${dryRun}`);
+      setReport(await res.json());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Error");
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  return (
+    <Card>
+      <CardContent className="p-4">
+        <div className="flex items-start gap-3">
+          <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+            <FolderSync className="w-5 h-5" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h3 className="text-sm font-semibold text-gray-900">Reconciliar carpetas de Drive</h3>
+            <p className="text-xs text-gray-500 mt-1">
+              Detecta duplicados/huérfanas en <span className="font-medium">03.clientes</span> y consolida una sola carpeta por cliente.
+              El dry-run solo reporta; consolidar taggea/adopta (no borra ni mueve nada).
+            </p>
+            <div className="flex items-center gap-2 mt-3 flex-wrap">
+              <Button size="sm" variant="outline" onClick={() => run(true)} disabled={loading !== null} className="gap-1.5">
+                {loading === "dry" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <ScanSearch className="w-3.5 h-3.5" />}
+                Reportar (dry-run)
+              </Button>
+              <Button size="sm" onClick={() => run(false)} disabled={loading !== null} className="gap-1.5 bg-amber-600 hover:bg-amber-700 text-white">
+                {loading === "apply" ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FolderSync className="w-3.5 h-3.5" />}
+                Consolidar
+              </Button>
+            </div>
+            {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
+            {report && (
+              <div className="mt-3 space-y-2">
+                <div className="flex items-center gap-3 text-[11px] text-gray-600 flex-wrap">
+                  <span>{report.totalContacts} contactos</span>
+                  <span>·</span>
+                  <span>{report.totalFolders} carpetas</span>
+                  <span>·</span>
+                  <span className={report.duplicates.length ? "text-amber-700 font-medium" : ""}>{report.duplicates.length} con duplicados</span>
+                  <span>·</span>
+                  <span>{report.orphans.length} huérfanas</span>
+                  <span>·</span>
+                  <span>{report.missing.length} sin carpeta</span>
+                  {!report.dryRun && <><span>·</span><span className="text-emerald-700">{report.ensured} consolidadas</span></>}
+                </div>
+                {report.duplicates.length > 0 && (
+                  <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-2.5 max-h-60 overflow-y-auto">
+                    <p className="text-[11px] font-semibold text-amber-800 flex items-center gap-1 mb-1.5"><AlertTriangle className="w-3 h-3" /> Clientes con múltiples carpetas (revisar/mergear a mano)</p>
+                    <div className="space-y-1.5">
+                      {report.duplicates.map(d => (
+                        <div key={d.contactId} className="text-[11px]">
+                          <span className="font-medium text-gray-800">{d.empresa || d.email}</span>
+                          <div className="flex flex-wrap gap-1.5 mt-0.5">
+                            {d.folders.map(f => (
+                              <a key={f.id} href={f.url} target="_blank" rel="noopener noreferrer" className="text-[10px] px-1.5 py-0.5 rounded bg-white border border-amber-200 text-amber-700 hover:underline truncate max-w-[160px]">{f.name}</a>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 

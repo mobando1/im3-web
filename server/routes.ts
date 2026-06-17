@@ -9,7 +9,7 @@ import { syncGmailEmails, isGmailConfigured, sendGmailMessage, getOriginalMessag
 import { generateBlogContent, improveBlogContent } from "./blog-ai";
 import { log } from "./index";
 import { isGoogleDriveConfigured, createDiagnosticInDrive, cleanupServiceAccountDrive, uploadFileToDrive, createProjectFolder, readGoogleDriveContent, extractFolderIdFromUrl, findOrCreateClientFolder } from "./google-drive";
-import { ensureClientWorkspace, ensureClientWorkspaceById } from "./client-drive";
+import { ensureClientWorkspace, ensureClientWorkspaceById, reconcileClientWorkspaces } from "./client-drive";
 import multer from "multer";
 import { createCalendarEvent, deleteCalendarEvent, createProjectMeetingEvent, listCalendarEvents } from "./google-calendar";
 import { isEmailConfigured, sendEmail, sendAdminNotification } from "./email-sender";
@@ -11627,6 +11627,20 @@ Responde SOLO con un JSON válido, sin markdown:
     } catch (err: any) {
       log(`Error en /api/integrations/meetings: ${err?.message}`);
       res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Reconciliación de carpetas de cliente en Drive. Por defecto dryRun (solo reporta).
+  // Pasar ?dryRun=false para asegurar/consolidar el workspace canónico de cada contacto (NO borra/mueve).
+  app.post("/api/admin/drive/reconcile", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ message: "DB no disponible" });
+    if (!isGoogleDriveConfigured()) return res.status(400).json({ message: "Google Drive no configurado" });
+    try {
+      const dryRun = req.query.dryRun !== "false";
+      const report = await reconcileClientWorkspaces({ dryRun });
+      res.json(report);
+    } catch (err: unknown) {
+      res.status(500).json({ message: `Error: ${err instanceof Error ? err.message : String(err)}` });
     }
   });
 
