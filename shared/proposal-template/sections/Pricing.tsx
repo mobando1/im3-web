@@ -8,8 +8,8 @@ export function Pricing({ data }: Props) {
   const discount = data.discount?.enabled ? data.discount : null;
   const discountBadge = discount
     ? discount.discountType === "percentage"
-      ? `−${discount.value}%`
-      : `−${data.amountPrefix}${discount.value} ${data.amountSuffix}`
+      ? `−${discount.discountValue}%`
+      : `−${data.amountPrefix}${discount.discountValue} ${data.amountSuffix}`
     : null;
   return (
     <section className="pt-pricing-section" id="inversion">

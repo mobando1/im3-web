@@ -136,13 +136,16 @@ export const milestoneSchema = z.object({
 
 // Descuento OPCIONAL aplicado al valor final (decisión comercial manual, NO generado por IA).
 // Si está presente y enabled, la tarjeta muestra el monto original tachado + el final con descuento.
-// Campos numéricos (value/finalAmount/savingsAmount/discountType) son INMUTABLES en traducción
-// (ver IMMUTABLE_TRANSLATION_KEYS en server/proposal-ai.ts); solo label/note se traducen.
+// Traducción es↔en (ver IMMUTABLE_TRANSLATION_KEYS en server/proposal-translate-helpers.ts):
+//   - discountType (enum de UI), finalAmount, savingsAmount → INMUTABLES (no cambian entre idiomas)
+//   - enabled (bool) → preservado automáticamente
+//   - value → el modelo preserva los dígitos (no inmutable: la clave colisiona con stats.value)
+//   - label, note → se traducen (prosa)
 export const discountSchema = z.object({
   enabled: z.boolean().default(true),
   discountType: z.enum(["percentage", "fixed"]).default("percentage"),
   label: z.string(),                     // "Descuento por pronto pago" (traducible)
-  value: z.string(),                     // "15" (%) ó "3.000.000" (fijo)
+  discountValue: z.string(),             // "15" (%) ó "3.000.000" (fijo) — clave única → inmutable en traducción
   finalAmount: z.string(),               // precio final con descuento ya aplicado
   savingsAmount: z.string().optional(),  // "3.900.000" para la línea "Ahorras"
   note: z.string().optional(),           // "Válido hasta el 30 de junio" (traducible)

@@ -524,7 +524,7 @@ type DiscountForm = {
   enabled?: boolean;
   discountType?: "percentage" | "fixed";
   label?: string;
-  value?: string;
+  discountValue?: string;
   finalAmount?: string;
   savingsAmount?: string;
   note?: string;
@@ -537,13 +537,13 @@ function PricingForm({ data, set }: { data: Record<string, unknown>; set: (k: st
   const setDiscount = (patch: Partial<DiscountForm>) => set("discount", { ...(discount ?? {}), ...patch });
   const toggleDiscount = (on: boolean) => {
     if (on && !discount) {
-      set("discount", { enabled: true, discountType: "percentage", label: "Descuento por pronto pago", value: "", finalAmount: "", savingsAmount: "", note: "" });
+      set("discount", { enabled: true, discountType: "percentage", label: "Descuento por pronto pago", discountValue: "", finalAmount: "", savingsAmount: "", note: "" });
     } else {
       set("discount", { ...(discount ?? {}), enabled: on });
     }
   };
   const recalcDiscount = () => {
-    const r = computeDiscount(String(data.amount ?? ""), discountType, String(discount?.value ?? ""));
+    const r = computeDiscount(String(data.amount ?? ""), discountType, String(discount?.discountValue ?? ""));
     if (r) setDiscount(r);
   };
   const milestones = (data.milestones as Array<{ step: number; name: string; desc: string; amount: string }>) ?? [];
@@ -656,8 +656,8 @@ function PricingForm({ data, set }: { data: Record<string, unknown>; set: (k: st
                 hint={discountType === "fixed" ? "Ej: 3.000.000" : "Ej: 15"}
               >
                 <Input
-                  value={String(discount?.value ?? "")}
-                  onChange={e => setDiscount({ value: e.target.value })}
+                  value={String(discount?.discountValue ?? "")}
+                  onChange={e => setDiscount({ discountValue: e.target.value })}
                   className="font-mono"
                   placeholder={discountType === "fixed" ? "3.000.000" : "15"}
                 />
