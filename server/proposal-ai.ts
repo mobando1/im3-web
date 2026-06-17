@@ -1068,11 +1068,17 @@ function stableStringify(v: unknown): string {
 
 // Fingerprint determinista (djb2) del contenido de una propuesta. Identifica de forma estable
 // el contenido activo para saber si una traducción cacheada sigue vigente.
+// Versión de la lógica/prompt de traducción. Va dentro del fingerprint para que, al
+// cambiar el prompt o el set de campos traducibles, TODAS las cachés viejas dejen de
+// coincidir y se re-traduzcan solas (en vez de servir una traducción obsoleta). Subir
+// este número cada vez que cambie la calidad/forma de la traducción.
+const TRANSLATION_LOGIC_VERSION = "2"; // v2: traduce prosa/unidades en painAmount/value/etc.
+
 function fingerprintSections(obj: unknown): string {
   const s = stableStringify(obj);
   let h = 5381;
   for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
-  return `${s.length}:${(h >>> 0).toString(36)}`;
+  return `v${TRANSLATION_LOGIC_VERSION}:${s.length}:${(h >>> 0).toString(36)}`;
 }
 
 const TRANSLATION_TARGET: Record<"es" | "en", { label: string; word: string }> = {
@@ -1187,12 +1193,20 @@ SÍ TRADUCE TODO EL TEXTO LEGIBLE, incluidas las palabras y unidades pegadas a n
 
 FORMATO DE SALIDA:
 - Devuelve SOLO el JSON traducido. Sin \`\`\`, sin markdown, sin texto antes o después.
-- Mismas claves, misma anidación, mismos tipos de datos que el original.`,
+- Mismas claves, misma anidación, mismos tipos de datos que el original.
+- NO reordenes, agregues ni quites elementos de ningún array: conserva el MISMO orden y la MISMA cantidad de items (se emparejan por posición).
+- En sectionTitles, traduce solo los VALORES; NO cambies las CLAVES (son identificadores: "problem", "roi", etc. deben quedar idénticas).`,
       messages: [{
         role: "user",
         content: `Traduce esta propuesta a ${target.word}. Devuelve SOLO el JSON traducido, con la misma estructura y las mismas claves:\n\n${JSON.stringify(currentData, null, 2)}`
       }],
     });
+
+    // Si la respuesta se truncó por límite de tokens, el JSON queda incompleto: avisamos
+    // con un mensaje específico en vez del genérico "JSON inválido".
+    if (response.stop_reason === "max_tokens") {
+      return { error: "La propuesta es demasiado grande para traducir en un solo paso (respuesta truncada). Reduce el contenido o divídela." };
+    }
 
     const text = response.content?.[0]?.type === "text" ? response.content[0].text.trim() : "";
     if (!text) return { error: "Respuesta vacía de Claude" };

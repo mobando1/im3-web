@@ -9374,15 +9374,21 @@ Responde SOLO con un JSON válido, sin markdown:
           : proposal.language === "en" ? "es" : "en";
 
       // Envuelto en runAgent → cada traducción y sus errores quedan en agent_runs (/admin/agents).
+      // Lanzamos dentro del closure cuando translateProposal devuelve { error } para que runAgent
+      // lo marque status='error' (si solo devolviéramos el objeto, quedaría como 'success' falso).
       const result = await runAgent(
         "proposal-translate",
-        () => translateProposal(proposalId, targetLanguage),
+        async () => {
+          const r = await translateProposal(proposalId, targetLanguage);
+          if ("error" in r) throw new Error(r.error);
+          return r;
+        },
         { triggeredBy: "manual" }
       );
-      if ("error" in result) return res.status(500).json({ error: result.error });
 
       const [updated] = await db.select().from(proposals).where(eq(proposals.id, proposalId)).limit(1);
-      res.json(updated);
+      // `cached: true` → swap instantáneo (sin IA); el front lo usa para el toast.
+      res.json({ ...updated, cached: result.cached });
     } catch (err: any) {
       log(`Error translating proposal: ${err?.message}`);
       res.status(500).json({ error: "Error traduciendo propuesta", detail: err?.message });
