@@ -504,8 +504,32 @@ export async function runMigrations() {
     await pool.query(`ALTER TABLE "proposals" ADD COLUMN IF NOT EXISTS "edit_lessons_learned_at" timestamp;`).catch(() => {});
     // Proposals: idioma del contenido (es | en) para el botón Traducir + rótulos del template/PDF.
     await pool.query(`ALTER TABLE "proposals" ADD COLUMN IF NOT EXISTS "language" varchar(5) DEFAULT 'es' NOT NULL;`).catch(() => {});
-    // Proposals: caché de traducciones por idioma (toggle instantáneo es↔en sin re-llamar IA).
-    await pool.query(`ALTER TABLE "proposals" ADD COLUMN IF NOT EXISTS "translation_cache" json;`).catch(() => {});
+    // Caché de traducciones en tabla aparte (antes era proposals.translation_cache inline → inflaba la fila).
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "proposal_translation_cache" (
+        "proposal_id" varchar NOT NULL,
+        "lang" varchar(5) NOT NULL,
+        "sections" json NOT NULL,
+        "src_fingerprint" text NOT NULL,
+        "updated_at" timestamp DEFAULT now() NOT NULL,
+        PRIMARY KEY ("proposal_id", "lang")
+      );
+    `).catch(() => {});
+    // Migración única: mover lo que hubiera en la columna inline a la tabla nueva (best-effort).
+    // En DBs donde la columna ya no existe (deploys posteriores) el query falla y el .catch lo ignora.
+    await pool.query(`
+      INSERT INTO "proposal_translation_cache" ("proposal_id", "lang", "sections", "src_fingerprint")
+      SELECT p."id", kv."key", (kv."value"->'sections'), kv."value"->>'srcFingerprint'
+      FROM "proposals" p, json_each(p."translation_cache") kv
+      WHERE p."translation_cache" IS NOT NULL
+        AND kv."value"->>'sections' IS NOT NULL
+        AND kv."value"->>'srcFingerprint' IS NOT NULL
+      ON CONFLICT ("proposal_id", "lang") DO NOTHING;
+    `).catch(() => {});
+    // Nota: NO dropeamos proposals.translation_cache. Al quitarla del schema de Drizzle, los SELECT
+    // ya no la cargan (objetivo cumplido: filas livianas). Dropearla en caliente podría romper una
+    // instancia vieja durante el solapamiento de deploy; queda inerte y se puede dropear en una
+    // migración futura cuando no haya instancias antiguas.
 
     // Chat global memory — hechos cross-proposal/cross-client del chat
     await pool.query(`

@@ -1245,7 +1245,7 @@ export async function purgeOldDeletedProposals(): Promise<{ recordsProcessed: nu
 
   try {
     const { sql } = await import("drizzle-orm");
-    const { proposalViews } = await import("@shared/schema");
+    const { proposalViews, proposalTranslationCache } = await import("@shared/schema");
     const oldDeleted = await db.select({ id: proposals.id })
       .from(proposals)
       .where(sql`${proposals.deletedAt} IS NOT NULL AND ${proposals.deletedAt} <= ${cutoff}`);
@@ -1254,6 +1254,7 @@ export async function purgeOldDeletedProposals(): Promise<{ recordsProcessed: nu
 
     const ids = oldDeleted.map(p => p.id);
     await db.delete(proposalViews).where(inArray(proposalViews.proposalId, ids)).catch(() => {});
+    await db.delete(proposalTranslationCache).where(inArray(proposalTranslationCache.proposalId, ids)).catch(() => {});
     await db.delete(proposals).where(inArray(proposals.id, ids));
 
     log(`[purge-trash] Purgadas ${oldDeleted.length} propuestas con más de ${RETENTION_DAYS} días en papelera`);

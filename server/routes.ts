@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { getModelGeneration, getModelClassification } from "./config";
 import { eq, asc, isNull, isNotNull, sql, and, gte, lte, ilike, or, desc, count, inArray } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, teamMembers, taskSuggestions, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectGithubRepos, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, stackServices, contractTemplates, contracts, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, teamMembers, taskSuggestions, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectGithubRepos, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalTranslationCache, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, stackServices, contractTemplates, contracts, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback } from "@shared/schema";
 import { AGENT_REGISTRY, AGENT_KINDS, findAgent } from "./agents/registry";
 import { runAgent } from "./agents/runner";
 import { syncGmailEmails, isGmailConfigured, sendGmailMessage, getOriginalMessageHeaders } from "./google-gmail";
@@ -9167,6 +9167,7 @@ Responde SOLO con un JSON válido, sin markdown:
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
       await db.delete(proposalViews).where(eq(proposalViews.proposalId, req.params.id as string)).catch(() => {});
+      await db.delete(proposalTranslationCache).where(eq(proposalTranslationCache.proposalId, req.params.id as string)).catch(() => {});
       await db.delete(proposals).where(eq(proposals.id, req.params.id as string));
       res.json({ success: true });
     } catch (err: any) {
@@ -9218,9 +9219,9 @@ Responde SOLO con un JSON válido, sin markdown:
   });
 
   // Duplicate proposal — clona el contenido para experimentar con nuevas configuraciones
-  // sin tocar la original. Copia secciones/precios/timeline/notas/baseline-IA/caché de
-  // traducción, pero regenera accessToken (único), resetea el ciclo de vida a "draft" y
-  // NO copia tablas hijas (snapshots, chat, views, brief, contrato): la copia arranca limpia.
+  // sin tocar la original. Copia secciones/precios/timeline/notas/baseline-IA, pero regenera
+  // accessToken (único), resetea el ciclo de vida a "draft" y NO copia tablas hijas
+  // (snapshots, chat, views, brief, contrato, caché de traducción): la copia arranca limpia.
   app.post("/api/admin/proposals/:id/duplicate", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
@@ -9234,7 +9235,6 @@ Responde SOLO con un JSON válido, sin markdown:
         title: `${original.title} (copia)`,
         status: "draft",
         language: original.language,
-        translationCache: original.translationCache,
         sections: original.sections,
         pricing: original.pricing,
         timelineData: original.timelineData,

@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, json, timestamp, boolean, integer, numeric } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, json, timestamp, boolean, integer, numeric, primaryKey } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -706,11 +706,8 @@ export const proposals = pgTable("proposals", {
   // Idioma actual del contenido de la propuesta. Determina la dirección del botón "Traducir"
   // en el editor y qué rótulos fijos (es/en) renderiza el template público y el PDF.
   language: varchar("language", { length: 5 }).default("es").notNull(), // es | en
-  // Caché de traducciones por idioma para toggle instantáneo (es ↔ en sin re-llamar a la IA).
-  // Cada entrada guarda las `sections` traducidas + un fingerprint del contenido-fuente del que
-  // se derivó. Si el contenido activo cambia (edición/regeneración), el fingerprint deja de
-  // coincidir y la traducción se rehace. Auto-validante: solo translateProposal() lo escribe.
-  translationCache: json("translation_cache").$type<Record<string, { sections: Record<string, unknown>; srcFingerprint: string }>>(),
+  // (La caché de traducciones vive en la tabla aparte `proposalTranslationCache`, no inline aquí,
+  //  para no inflar la fila proposals en cada SELECT. Ver translateProposal en server/proposal-ai.ts.)
   // sections puede ser:
   //  - Legacy: Record<string, string> (HTML strings)
   //  - Nuevo: ProposalData completo (ver shared/proposal-template/types.ts)
@@ -822,6 +819,20 @@ export const proposalSnapshots = pgTable("proposal_snapshots", {
 
 export type ProposalSnapshot = typeof proposalSnapshots.$inferSelect;
 export type InsertProposalSnapshot = typeof proposalSnapshots.$inferInsert;
+
+// Caché de traducciones por idioma (toggle instantáneo es↔en sin re-llamar a la IA). Tabla aparte
+// (en vez de inline en proposals) para no inflar la fila en cada SELECT. Una fila por (propuesta, idioma):
+// guarda las `sections` traducidas + el fingerprint del contenido-fuente del que se derivó. Si el
+// contenido activo cambia, el fingerprint deja de coincidir → se rehace. Solo translateProposal escribe.
+export const proposalTranslationCache = pgTable("proposal_translation_cache", {
+  proposalId: varchar("proposal_id").notNull(),
+  lang: varchar("lang", { length: 5 }).notNull(), // es | en
+  sections: json("sections").$type<Record<string, unknown>>().notNull(),
+  srcFingerprint: text("src_fingerprint").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+}, (t) => ({ pk: primaryKey({ columns: [t.proposalId, t.lang] }) }));
+
+export type ProposalTranslationCacheRow = typeof proposalTranslationCache.$inferSelect;
 
 // Chat de refinamiento por propuesta (Fase 1: assistant para ajustar secciones)
 export const proposalChatMessages = pgTable("proposal_chat_messages", {

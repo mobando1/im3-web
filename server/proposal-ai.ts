@@ -1011,8 +1011,8 @@ const TRANSLATION_TARGET: Record<"es" | "en", { label: string; word: string }> =
  * sobrescribiendo el contenido en su lugar. Guarda un snapshot del estado anterior
  * para poder deshacer, y actualiza `proposals.language`.
  *
- * Toggle instantáneo: cachea ambos idiomas en `translationCache`. Si ya existe una
- * traducción al destino derivada del contenido activo actual (fingerprint coincide),
+ * Toggle instantáneo: cachea ambos idiomas en la tabla `proposalTranslationCache`. Si ya existe
+ * una traducción al destino derivada del contenido activo actual (fingerprint coincide),
  * el cambio es inmediato y SIN llamar a la IA. Si el contenido cambió desde entonces
  * (edición/regeneración), la traducción se rehace.
  *
@@ -1026,7 +1026,7 @@ export async function translateProposal(
   if (!db) return { error: "DB not configured" };
   if (targetLang !== "es" && targetLang !== "en") return { error: "Idioma destino inválido (es | en)" };
 
-  const { proposals, proposalSnapshots, proposalBriefs } = await import("@shared/schema");
+  const { proposals, proposalSnapshots, proposalBriefs, proposalTranslationCache } = await import("@shared/schema");
 
   const [proposal] = await db.select().from(proposals).where(eq(proposals.id, proposalId)).limit(1);
   if (!proposal) return { error: "Propuesta no encontrada" };
@@ -1042,15 +1042,23 @@ export async function translateProposal(
   }
 
   const target = TRANSLATION_TARGET[targetLang];
-  const cache: TranslationCache = (proposal.translationCache as TranslationCache | null) || {};
   const currentFp = fingerprintSections(currentData);
   const dbRef = db;
 
-  // Persiste un cambio de idioma: (opcional) snapshot del estado anterior + sections + cache + brief.
+  // Caché de traducciones desde la tabla aparte (una fila por idioma).
+  const cacheRows = await db.select().from(proposalTranslationCache)
+    .where(eq(proposalTranslationCache.proposalId, proposalId));
+  const cache: TranslationCache = {};
+  for (const row of cacheRows) {
+    cache[row.lang] = { sections: row.sections as Record<string, unknown>, srcFingerprint: row.srcFingerprint };
+  }
+
+  // Persiste un cambio de idioma: (opcional) snapshot del estado anterior + sections + upsert de caché + brief.
   // takeSnapshot=false en swaps cacheados (ida/vuelta sin edición no necesita un undo nuevo y
   // evita acumular snapshots en cada toggle). El snapshot registra el idioma PRE-traducción
   // (currentLang) para que su restore devuelva también proposals.language correctamente.
-  const persist = async (newSections: Record<string, unknown>, newCache: TranslationCache, takeSnapshot: boolean) => {
+  type CacheUpsert = { lang: "es" | "en"; sections: Record<string, unknown>; srcFingerprint: string };
+  const persist = async (newSections: Record<string, unknown>, cacheUpserts: CacheUpsert[], takeSnapshot: boolean) => {
     if (takeSnapshot) {
       await dbRef.insert(proposalSnapshots).values({
         proposalId,
@@ -1063,8 +1071,18 @@ export async function translateProposal(
     }
 
     await dbRef.update(proposals)
-      .set({ sections: newSections, language: targetLang, translationCache: newCache, updatedAt: new Date() })
+      .set({ sections: newSections, language: targetLang, updatedAt: new Date() })
       .where(eq(proposals.id, proposalId));
+
+    for (const c of cacheUpserts) {
+      await dbRef.insert(proposalTranslationCache)
+        .values({ proposalId, lang: c.lang, sections: c.sections, srcFingerprint: c.srcFingerprint, updatedAt: new Date() })
+        .onConflictDoUpdate({
+          target: [proposalTranslationCache.proposalId, proposalTranslationCache.lang],
+          set: { sections: c.sections, srcFingerprint: c.srcFingerprint, updatedAt: new Date() },
+        })
+        .catch(() => {});
+    }
 
     await dbRef.update(proposalBriefs)
       .set({ outdatedSinceProposalUpdate: new Date() })
@@ -1079,11 +1097,9 @@ export async function translateProposal(
   const cachedTarget = cache[targetLang];
   if (cachedTarget?.sections && cachedTarget.srcFingerprint === currentFp) {
     // Refrescamos la entrada del idioma actual para que volver atrás también sea instantáneo.
-    const newCache: TranslationCache = {
-      ...cache,
-      [currentLang]: { sections: currentData, srcFingerprint: fingerprintSections(cachedTarget.sections) },
-    };
-    await persist(cachedTarget.sections, newCache, false); // swap cacheado: sin snapshot nuevo
+    await persist(cachedTarget.sections, [
+      { lang: currentLang, sections: currentData, srcFingerprint: fingerprintSections(cachedTarget.sections) },
+    ], false); // swap cacheado: sin snapshot nuevo
     return { language: targetLang, cached: true };
   }
 
@@ -1163,12 +1179,10 @@ FORMATO DE SALIDA:
 
     // Cachear ambos lados: destino (derivado del actual) y actual (derivado del traducido) →
     // ir y volver es instantáneo mientras no se edite el contenido.
-    const newCache: TranslationCache = {
-      ...cache,
-      [targetLang]: { sections: finalData, srcFingerprint: currentFp },
-      [currentLang]: { sections: currentData, srcFingerprint: fingerprintSections(finalData) },
-    };
-    await persist(finalData, newCache, true); // traducción nueva (IA): snapshot para deshacer
+    await persist(finalData, [
+      { lang: targetLang, sections: finalData, srcFingerprint: currentFp },
+      { lang: currentLang, sections: currentData, srcFingerprint: fingerprintSections(finalData) },
+    ], true); // traducción nueva (IA): snapshot para deshacer
 
     return { language: targetLang, cached: false };
   } catch (err: any) {
