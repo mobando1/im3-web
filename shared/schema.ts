@@ -262,7 +262,7 @@ export type InsertTaskSuggestion = typeof taskSuggestions.$inferInsert;
 export const activityLog = pgTable("activity_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   contactId: varchar("contact_id").notNull(),
-  type: text("type").notNull(), // form_submitted | status_changed | email_sent | email_opened | email_clicked | email_bounced | note_added | note_deleted | contact_edited | task_created | task_completed | score_changed | opted_out
+  type: text("type").notNull(), // form_submitted | status_changed | email_sent | email_opened | email_clicked | email_bounced | note_added | note_deleted | contact_edited | task_created | task_completed | score_changed | opted_out | meeting (Acta)
   description: text("description").notNull(),
   metadata: json("metadata").$type<Record<string, any>>(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -1099,7 +1099,7 @@ export const contactFiles = pgTable("contact_files", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   contactId: varchar("contact_id").notNull(),
   name: text("name").notNull(),
-  type: text("type").notNull().default("documento"), // contrato | propuesta | auditoria | documento | imagen | otro
+  type: text("type").notNull().default("documento"), // contrato | propuesta | auditoria | documento | imagen | recording | transcript | otro
   url: text("url").notNull(),
   size: integer("size"), // bytes
   content: text("content"), // text content for AI context (pasted or synced from Drive)
