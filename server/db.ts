@@ -502,6 +502,8 @@ export async function runMigrations() {
 
     // Proposals: idioma del contenido (es | en) para el botón Traducir + rótulos del template/PDF.
     await pool.query(`ALTER TABLE "proposals" ADD COLUMN IF NOT EXISTS "language" varchar(5) DEFAULT 'es' NOT NULL;`).catch(() => {});
+    // Proposals: caché de traducciones por idioma (toggle instantáneo es↔en sin re-llamar IA).
+    await pool.query(`ALTER TABLE "proposals" ADD COLUMN IF NOT EXISTS "translation_cache" json;`).catch(() => {});
 
     // Chat global memory — hechos cross-proposal/cross-client del chat
     await pool.query(`

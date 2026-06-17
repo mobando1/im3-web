@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useEffect } from "react";
 import { useParams, useLocation } from "wouter";
-import { ArrowLeft, Copy, ExternalLink, Send, Sparkles, Save, Eye, FolderKanban, FileSearch, X, Wand2, Check, RotateCcw, Trash2, MessageCircle, BookOpen, Pencil, FileCheck } from "lucide-react";
+import { ArrowLeft, Copy, ExternalLink, Send, Sparkles, Save, Eye, FolderKanban, FileSearch, X, Wand2, Check, RotateCcw, Trash2, MessageCircle, BookOpen, Pencil, FileCheck, Languages } from "lucide-react";
 import { SectionForm, hasTypedForm } from "@/components/proposal/SectionForm";
 import { ProposalChatPanel } from "@/components/proposal/ProposalChatPanel";
 import { Button } from "@/components/ui/button";
@@ -291,6 +291,7 @@ export default function ProposalEditor() {
   const [confirmSendOpen, setConfirmSendOpen] = useState(false);
   const [confirmRegenOpen, setConfirmRegenOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
+  const [confirmTranslateOpen, setConfirmTranslateOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
   const [convertStartDate, setConvertStartDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
 
@@ -324,6 +325,20 @@ export default function ProposalEditor() {
       setTimeout(() => window.location.reload(), 800);
     },
     onError: () => toast({ title: "Error generando propuesta", variant: "destructive" }),
+  });
+
+  // Translate whole proposal (es ↔ en). Sobrescribe el contenido; el server guarda snapshot para deshacer.
+  // Si ya hay una traducción cacheada del contenido actual, el server responde cached=true (swap instantáneo).
+  const translateMut = useMutation({
+    mutationFn: async (targetLanguage: "es" | "en") => {
+      const res = await apiRequest("POST", `/api/admin/proposals/${id}/translate`, { targetLanguage });
+      return res.json() as Promise<{ cached?: boolean }>;
+    },
+    onSuccess: (data) => {
+      toast({ title: data?.cached ? "Idioma cambiado — recargando..." : "Propuesta traducida — recargando..." });
+      setTimeout(() => window.location.reload(), 600);
+    },
+    onError: (err: any) => toast({ title: "Error traduciendo", description: err?.message, variant: "destructive" }),
   });
 
   // Update proposal
@@ -641,6 +656,21 @@ export default function ProposalEditor() {
               <Eye className="w-4 h-4" /> Ver propuesta web
             </Button>
           </a>
+        )}
+        {hasSections && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 border-blue-200 text-blue-700 hover:bg-blue-50"
+            onClick={() => setConfirmTranslateOpen(true)}
+            disabled={translateMut.isPending}
+            title="Traduce toda la propuesta (contenido + rótulos) al otro idioma con IA"
+          >
+            <Languages className="w-4 h-4" />
+            {translateMut.isPending
+              ? "Traduciendo..."
+              : proposal.language === "en" ? "Traducir a español" : "Traducir a inglés"}
+          </Button>
         )}
         {hasSections && proposal.aiSourcesReport && Object.keys(proposal.aiSourcesReport).length > 0 && (
           <Button size="sm" variant="outline" className="gap-1.5" onClick={() => setShowSources(!showSources)}>
@@ -1342,6 +1372,42 @@ export default function ProposalEditor() {
               className="bg-amber-600 hover:bg-amber-700 disabled:opacity-50"
             >
               <Sparkles className="w-4 h-4 mr-1.5" /> Re-generar
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirmar traducción de toda la propuesta (es ↔ en) */}
+      <AlertDialog open={confirmTranslateOpen} onOpenChange={setConfirmTranslateOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-blue-700">
+              <Languages className="w-5 h-5" /> Traducir propuesta a {proposal?.language === "en" ? "español" : "inglés"}
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-gray-600">
+                <p>
+                  Se traducirá <strong>todo el contenido</strong> (títulos, párrafos, listas) y los rótulos
+                  del template al <strong>{proposal?.language === "en" ? "español" : "inglés"}</strong>, con
+                  lenguaje natural. Los montos, monedas y números se mantienen igual.
+                </p>
+                <p className="text-blue-700 bg-blue-50 border border-blue-200 rounded-md p-2 text-xs">
+                  💡 El contenido actual se reemplaza, pero se guarda un snapshot de la versión anterior
+                  para poder deshacer (o volver a traducir al idioma original).
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                translateMut.mutate(proposal?.language === "en" ? "es" : "en");
+                setConfirmTranslateOpen(false);
+              }}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <Languages className="w-4 h-4 mr-1.5" /> Traducir
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

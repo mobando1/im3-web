@@ -1,12 +1,14 @@
 import type { TimelineData } from "../types";
+import { useProposalStrings } from "../i18n";
 
 type Props = { data: TimelineData };
 
 export function Timeline({ data }: Props) {
+  const t = useProposalStrings();
   return (
     <section>
       <div className="pt-container">
-        <div className="pt-section-label">Cronograma</div>
+        <div className="pt-section-label">{t.timelineEyebrow}</div>
         <h2 className="pt-timeline-heading pt-reveal" dangerouslySetInnerHTML={{ __html: data.heading }} />
         <div className="pt-phases">
           {data.phases.map((p) => {
@@ -20,7 +22,7 @@ export function Timeline({ data }: Props) {
                 <div className="pt-phase-dot">{p.number}</div>
                 <div className="pt-phase-header">
                   <div className="pt-phase-title">{p.title}</div>
-                  <div className="pt-phase-duration">{p.durationWeeks} sem.</div>
+                  <div className="pt-phase-duration">{p.durationWeeks} {t.weeksAbbrev}</div>
                 </div>
                 {items.length > 0 && (
                   <div className="pt-phase-items">
@@ -30,7 +32,7 @@ export function Timeline({ data }: Props) {
                   </div>
                 )}
                 {outcomeStripped && (
-                  <div className="pt-phase-outcome">Al finalizar: {outcomeStripped}</div>
+                  <div className="pt-phase-outcome">{t.timelineOutcome} {outcomeStripped}</div>
                 )}
               </div>
             );

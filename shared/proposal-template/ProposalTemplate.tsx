@@ -15,6 +15,7 @@ import { Hardware } from "./sections/Hardware";
 import { OperationalCosts } from "./sections/OperationalCosts";
 import { CTA } from "./sections/CTA";
 // import { Testimonials } from "./sections/Testimonials"; // removida por ahora — revivir cuando hayan casos reales
+import { ProposalLangContext, PROPOSAL_STRINGS, type ProposalLang } from "./i18n";
 
 import "./styles/tokens.css";
 import "./styles/template.css";
@@ -25,6 +26,8 @@ export type ProposalTemplateProps = {
   interactive?: boolean;
   onAccept?: () => void;
   onFallback?: () => void;
+  // Idioma de los rótulos fijos del template (eyebrows, tabla, footer). El contenido va traducido en `data`.
+  lang?: ProposalLang;
 };
 
 export function ProposalTemplate({
@@ -32,7 +35,11 @@ export function ProposalTemplate({
   interactive = true,
   onAccept,
   onFallback,
+  lang = "es",
 }: ProposalTemplateProps) {
+  // Para los literales del propio template usamos el diccionario directo (este componente
+  // ES el provider, así que useProposalStrings() leería el contexto del ancestro, no este `lang`).
+  const t = PROPOSAL_STRINGS[lang];
   const rootRef = useRef<HTMLDivElement>(null);
   const progressBarRef = useRef<HTMLDivElement>(null);
 
@@ -57,12 +64,13 @@ export function ProposalTemplate({
   }, []);
 
   return (
+   <ProposalLangContext.Provider value={lang}>
     <div className={`proposal-template${isPdfCapture ? " pt-pdf-mode" : ""}`} ref={rootRef}>
       <nav className="pt-nav">
         <div className="pt-nav-brand">
           <img src="/assets/im3-logo.png" alt="IM3 Systems" className="pt-nav-logo-img" />
           <div className="pt-nav-label">
-            <strong>Propuesta Comercial</strong>
+            <strong>{t.commercialProposal}</strong>
             {data.meta.clientName}
           </div>
         </div>
@@ -133,13 +141,14 @@ export function ProposalTemplate({
         <div className="pt-footer-links">
           <span>info@im3systems.com</span>
           <span>www.im3systems.com</span>
-          <span>Colombia · España · Latinoamérica</span>
+          <span>{t.footerLocations}</span>
         </div>
         <div className="pt-footer-confidential">
-          Esta propuesta es confidencial y fue preparada exclusivamente para {data.meta.clientName}.
+          {t.footerConfidential.replace("{client}", data.meta.clientName)}
         </div>
       </footer>
     </div>
+   </ProposalLangContext.Provider>
   );
 }
 

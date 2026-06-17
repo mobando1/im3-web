@@ -462,6 +462,7 @@ export default function ProposalView() {
     return (
       <ProposalTemplate
         data={rawSections as ProposalData}
+        lang={proposal.language === "en" ? "en" : "es"}
         interactive
         onAccept={() => setShowAccept(true)}
         onFallback={() => {

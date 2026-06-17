@@ -1,12 +1,14 @@
 import type { AuthorityData } from "../types";
+import { useProposalStrings } from "../i18n";
 
 type Props = { data: AuthorityData };
 
 export function Authority({ data }: Props) {
+  const t = useProposalStrings();
   return (
     <section className="pt-authority-section">
       <div className="pt-container">
-        <div className="pt-section-label">Sobre IM3 Systems</div>
+        <div className="pt-section-label">{t.authorityEyebrow}</div>
         <h2 className="pt-authority-heading pt-reveal" dangerouslySetInnerHTML={{ __html: data.heading }} />
         <p className="pt-section-intro pt-reveal">{data.intro}</p>
 

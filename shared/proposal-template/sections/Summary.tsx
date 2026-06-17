@@ -1,12 +1,14 @@
 import type { SummaryData } from "../types";
+import { useProposalStrings } from "../i18n";
 
 type Props = { data: SummaryData };
 
 export function Summary({ data }: Props) {
+  const t = useProposalStrings();
   return (
     <section id="resumen">
       <div className="pt-container">
-        <div className="pt-section-label">Resumen Ejecutivo</div>
+        <div className="pt-section-label">{t.summaryEyebrow}</div>
 
         {data.commitmentQuote && (
           <div className="pt-commitment-banner pt-reveal">
@@ -25,7 +27,7 @@ export function Summary({ data }: Props) {
           </div>
           {data.stats && data.stats.length > 0 && (
             <div className="pt-summary-card">
-              <div className="pt-summary-card-title">Datos del proyecto</div>
+              <div className="pt-summary-card-title">{t.summaryProjectData}</div>
               {data.stats.map((s, i) => (
                 <div key={i} className="pt-stat-row">
                   <span className="pt-stat-label">{s.label}</span>

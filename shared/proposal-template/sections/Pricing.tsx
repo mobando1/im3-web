@@ -1,15 +1,17 @@
 import type { PricingData } from "../types";
+import { useProposalStrings } from "../i18n";
 
 type Props = { data: PricingData };
 
 export function Pricing({ data }: Props) {
+  const t = useProposalStrings();
   return (
     <section className="pt-pricing-section" id="inversion">
       <div className="pt-container">
-        <div className="pt-section-label pt-centered">Tu Inversión</div>
-        <h2 className="pt-pricing-heading pt-reveal">Transparente<br />y sin sorpresas</h2>
+        <div className="pt-section-label pt-centered">{t.pricingEyebrow}</div>
+        <h2 className="pt-pricing-heading pt-reveal">{t.pricingHeadingLine1}<br />{t.pricingHeadingLine2}</h2>
         <p className="pt-pricing-intro pt-reveal">
-          La inversión se recupera rápido — no dejar de actuar es el verdadero costo.
+          {t.pricingIntro}
         </p>
 
         <div className="pt-scarcity-banner pt-reveal">
@@ -42,7 +44,7 @@ export function Pricing({ data }: Props) {
             ))}
           </div>
           <div className="pt-pricing-includes">
-            <div className="pt-includes-title">Tu inversión incluye</div>
+            <div className="pt-includes-title">{t.pricingIncludes}</div>
             <div className="pt-includes-grid">
               {data.includes.map((i, idx) => (
                 <div key={idx} className="pt-include-item">{i}</div>
@@ -50,7 +52,7 @@ export function Pricing({ data }: Props) {
             </div>
             {data.optionalIncludes && data.optionalIncludes.length > 0 && (
               <>
-                <div className="pt-includes-title pt-includes-title-optional">Opcionales</div>
+                <div className="pt-includes-title pt-includes-title-optional">{t.optional}</div>
                 <div className="pt-includes-grid pt-includes-grid-optional">
                   {data.optionalIncludes.map((i, idx) => (
                     <div key={idx} className="pt-include-item pt-include-item-optional">{i}</div>

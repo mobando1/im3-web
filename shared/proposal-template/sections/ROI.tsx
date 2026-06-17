@@ -1,6 +1,7 @@
 import { useMemo, useRef } from "react";
 import type { ROIData } from "../types";
 import { useAnimatedBars } from "../hooks/useAnimatedBars";
+import { useProposalStrings } from "../i18n";
 
 type Props = {
   data: ROIData;
@@ -8,6 +9,7 @@ type Props = {
 };
 
 export function ROI({ data, interactive }: Props) {
+  const t = useProposalStrings();
   const containerRef = useRef<HTMLDivElement>(null);
   const barDangerRef = useRef<HTMLDivElement>(null);
   const barTealRef = useRef<HTMLDivElement>(null);
@@ -25,7 +27,7 @@ export function ROI({ data, interactive }: Props) {
   return (
     <section>
       <div className="pt-container">
-        <div className="pt-section-label">Retorno de Inversión</div>
+        <div className="pt-section-label">{t.roiEyebrow}</div>
         <h2 className="pt-timeline-heading pt-reveal" dangerouslySetInnerHTML={{ __html: data.heading }} />
 
         <div className="pt-roi-grid">
@@ -40,7 +42,7 @@ export function ROI({ data, interactive }: Props) {
 
         <div className="pt-roi-comparison pt-reveal" ref={containerRef}>
           <div className="pt-roi-comparison-title">
-            Comparativa: no actuar vs. implementar
+            {t.roiComparison}
           </div>
           <div className="pt-bar-row">
             <div className="pt-bar-label">{data.comparison.withoutLabel}</div>
