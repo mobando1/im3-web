@@ -1,13 +1,7 @@
 import type { OperationalCostsData, OperationalCostCategory, OperationalCostGroup } from "../types";
+import { useProposalStrings } from "../i18n";
 
 type Props = { data: OperationalCostsData };
-
-const BILLING_LABELS: Record<OperationalCostGroup["billingModel"], string> = {
-  "fixed": "Tarifa fija mensual",
-  "passthrough": "Pass-through con markup",
-  "passthrough-with-cap": "Pass-through con tope mensual",
-  "client-direct": "Pago directo del cliente",
-};
 
 function CategoryCard({ category }: { category: OperationalCostCategory }) {
   return (
@@ -29,11 +23,12 @@ function CategoryCard({ category }: { category: OperationalCostCategory }) {
 }
 
 export function OperationalCosts({ data }: Props) {
+  const t = useProposalStrings();
   // Migración legacy: si no hay groups pero sí categories, envolver como un solo grupo "fixed"
   const groups: OperationalCostGroup[] = data.groups && data.groups.length > 0
     ? data.groups
     : data.categories && data.categories.length > 0
-      ? [{ name: "Servicios operativos", billingModel: "fixed", categories: data.categories }]
+      ? [{ name: t.opcostsDefaultGroup, billingModel: "fixed", categories: data.categories }]
       : [];
 
   const showRangeLow = data.monthlyRangeLow !== null && data.monthlyRangeLow !== undefined && data.monthlyRangeLow !== "";
@@ -44,7 +39,7 @@ export function OperationalCosts({ data }: Props) {
   return (
     <section className="pt-opcosts-section" id="costos-operativos">
       <div className="pt-container">
-        <div className="pt-section-label">Costos Operativos</div>
+        <div className="pt-section-label">{t.opcostsEyebrow}</div>
         {data.heading && <h2 className="pt-opcosts-heading pt-reveal">{data.heading}</h2>}
         {data.intro && <p className="pt-opcosts-intro pt-reveal">{data.intro}</p>}
 
@@ -53,9 +48,9 @@ export function OperationalCosts({ data }: Props) {
             <div className="pt-opcosts-group-header">
               <div className="pt-opcosts-group-name">{group.name}</div>
               <div className="pt-opcosts-group-billing">
-                {BILLING_LABELS[group.billingModel]}
+                {t.billingLabels[group.billingModel]}
                 {group.monthlyFee && <span className="pt-opcosts-group-fee"> · {group.monthlyFee}</span>}
-                {group.markup && <span className="pt-opcosts-group-fee"> · markup {group.markup}</span>}
+                {group.markup && <span className="pt-opcosts-group-fee"> · {t.opcostsMarkupPrefix} {group.markup}</span>}
               </div>
             </div>
             {group.description && (
@@ -73,7 +68,7 @@ export function OperationalCosts({ data }: Props) {
           <div className="pt-opcosts-totals pt-reveal">
             {(showRangeLow || showRangeHigh) && (
               <div className="pt-opcosts-total-block">
-                <div className="pt-opcosts-total-label">Rango mensual</div>
+                <div className="pt-opcosts-total-label">{t.opcostsMonthlyRange}</div>
                 <div className="pt-opcosts-total-value">
                   {showRangeLow && data.monthlyRangeLow}
                   {showRangeLow && showRangeHigh && " – "}
@@ -83,7 +78,7 @@ export function OperationalCosts({ data }: Props) {
             )}
             {showAnnual && (
               <div className="pt-opcosts-total-block">
-                <div className="pt-opcosts-total-label">Estimado anual</div>
+                <div className="pt-opcosts-total-label">{t.opcostsAnnualEstimate}</div>
                 <div className="pt-opcosts-total-value">{data.annualEstimate}</div>
               </div>
             )}
@@ -92,7 +87,7 @@ export function OperationalCosts({ data }: Props) {
 
         {data.managedServicesUpsell && (
           <div className="pt-opcosts-upsell pt-reveal">
-            <div className="pt-opcosts-upsell-label">Opción alternativa</div>
+            <div className="pt-opcosts-upsell-label">{t.opcostsAlternative}</div>
             <p className="pt-opcosts-upsell-text">{data.managedServicesUpsell}</p>
           </div>
         )}

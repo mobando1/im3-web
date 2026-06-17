@@ -24,7 +24,7 @@ import { analyzeCommitsForProject, generateWeeklySummary, calculateProjectHealth
 import { fetchRepoContext, fetchMultiRepoContext } from "./github-repo-context";
 import { syncDriveFilesToProject, syncDriveFilesToContact, runContactDriveSyncCron } from "./drive-file-sync";
 import { listDriveFolderChildren, searchDriveFolders, createSubfolder, getFolderPath, DriveAccessError } from "./google-drive";
-import { generateProposal, regenerateProposalSection, generateSectionOptions, applySectionOption } from "./proposal-ai";
+import { generateProposal, regenerateProposalSection, generateSectionOptions, applySectionOption, translateProposal } from "./proposal-ai";
 import { extractEditLessons } from "./proposal-edit-learner";
 import crypto from "crypto";
 import { getIndustriaLabel } from "@shared/industrias";
@@ -9289,6 +9289,39 @@ Responde SOLO con un JSON válido, sin markdown:
       // Exponemos el detalle real al admin (endpoint con requireAuth) para diagnóstico:
       // antes el error verdadero (ej. modelo retirado → 404) quedaba oculto tras el genérico.
       res.status(500).json({ error: "Error generando propuesta", detail: err?.message });
+    }
+  });
+
+  // Translate the entire proposal to the target language (es ↔ en), in place.
+  // Sobrescribe el contenido y guarda snapshot para deshacer (ver translateProposal).
+  app.post("/api/admin/proposals/:id/translate", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const proposalId = String(req.params.id);
+    try {
+      const [proposal] = await db.select().from(proposals).where(eq(proposals.id, proposalId)).limit(1);
+      if (!proposal) return res.status(404).json({ error: "Propuesta no encontrada" });
+
+      // targetLanguage explícito o, si no viene, el opuesto al idioma actual.
+      const requested = req.body?.targetLanguage;
+      const targetLanguage: "es" | "en" =
+        requested === "es" || requested === "en"
+          ? requested
+          : proposal.language === "en" ? "es" : "en";
+
+      // Envuelto en runAgent → cada traducción y sus errores quedan en agent_runs (/admin/agents).
+      const result = await runAgent(
+        "proposal-translate",
+        () => translateProposal(proposalId, targetLanguage),
+        { triggeredBy: "manual" }
+      );
+      if ("error" in result) return res.status(500).json({ error: result.error });
+
+      const [updated] = await db.select().from(proposals).where(eq(proposals.id, proposalId)).limit(1);
+      // `cached: true` → fue un swap instantáneo (sin IA); el front lo usa para el toast.
+      res.json({ ...updated, cached: result.cached });
+    } catch (err: any) {
+      log(`Error translating proposal: ${err?.message}`);
+      res.status(500).json({ error: "Error traduciendo propuesta", detail: err?.message });
     }
   });
 

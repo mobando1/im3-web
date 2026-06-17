@@ -115,6 +115,23 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
     sourceFile: "server/proposal-ai.ts:631",
   },
   {
+    name: "proposal-translate",
+    displayName: "Traductor de Propuestas",
+    kind: "ai",
+    description: "Traduce una propuesta completa es ↔ en con lenguaje natural (~10-20s)",
+    trigger: "manual",
+    criticality: "normal",
+    longDescription:
+      "Traduce toda la propuesta (campo sections / ProposalData) al idioma destino (es ↔ en) con traducción idiomática, no literal. Preserva números, montos, monedas, enums, íconos y nombres propios (reimposición por clave). Guarda snapshot del estado anterior para deshacer y actualiza proposals.language.",
+    connections: [
+      { type: "llm", label: "Claude Sonnet 4", detail: "Traduce todo el JSON manteniendo estructura y campos no traducibles" },
+      { type: "db", label: "proposals", detail: "Lee sections, guarda traducción + language" },
+      { type: "db", label: "proposalSnapshots", detail: "Snapshot del estado anterior (undo)" },
+      { type: "db", label: "proposalBriefs", detail: "Marca brief como outdated si existe" },
+    ],
+    sourceFile: "server/proposal-ai.ts:995",
+  },
+  {
     name: "proposal-chat",
     displayName: "Asistente Conversacional de Propuestas",
     kind: "ai",

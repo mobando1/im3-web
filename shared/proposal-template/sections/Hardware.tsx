@@ -1,21 +1,23 @@
 import type { HardwareData } from "../types";
+import { useProposalStrings } from "../i18n";
 
 type Props = { data: HardwareData };
 
 export function Hardware({ data }: Props) {
+  const t = useProposalStrings();
   return (
     <section className="pt-hardware-section" id="hardware">
       <div className="pt-container">
-        <div className="pt-section-label">Hardware</div>
+        <div className="pt-section-label">{t.hardwareEyebrow}</div>
         <h2 className="pt-hardware-heading pt-reveal">{data.heading}</h2>
         <p className="pt-hardware-intro pt-reveal">{data.intro}</p>
 
         <div className="pt-hardware-table pt-reveal">
           <div className="pt-hardware-table-head">
-            <div>Equipo</div>
-            <div className="pt-hardware-col-qty">Cant.</div>
-            <div className="pt-hardware-col-unit">Unit.</div>
-            <div className="pt-hardware-col-total">Total</div>
+            <div>{t.hardwareColEquipo}</div>
+            <div className="pt-hardware-col-qty">{t.hardwareColQty}</div>
+            <div className="pt-hardware-col-unit">{t.hardwareColUnit}</div>
+            <div className="pt-hardware-col-total">{t.hardwareColTotal}</div>
           </div>
           {data.items.map((item, idx) => (
             <div key={idx} className="pt-hardware-row">
@@ -32,14 +34,14 @@ export function Hardware({ data }: Props) {
             </div>
           ))}
           <div className="pt-hardware-subtotal">
-            <div className="pt-hardware-subtotal-label">Subtotal hardware</div>
+            <div className="pt-hardware-subtotal-label">{t.hardwareSubtotal}</div>
             <div className="pt-hardware-subtotal-value">{data.subtotalUSD}</div>
           </div>
         </div>
 
         {data.recommendationNote && (
           <div className="pt-hardware-recommendation pt-reveal">
-            <div className="pt-hardware-rec-label">Acompañamiento en la compra</div>
+            <div className="pt-hardware-rec-label">{t.hardwarePurchaseSupport}</div>
             <p>{data.recommendationNote}</p>
           </div>
         )}

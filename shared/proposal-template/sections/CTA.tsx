@@ -1,4 +1,5 @@
 import type { CTAData } from "../types";
+import { useProposalStrings } from "../i18n";
 
 type Props = {
   data: CTAData;
@@ -7,11 +8,12 @@ type Props = {
 };
 
 export function CTA({ data, onAccept, onFallback }: Props) {
+  const t = useProposalStrings();
   return (
     <section className="pt-cta-section" id="aceptar">
       <div className="pt-container">
         <div className="pt-section-label pt-centered" style={{ marginBottom: "1.4rem" }}>
-          Próximos Pasos
+          {t.ctaEyebrow}
         </div>
         <h2 className="pt-reveal">
           {data.heading} <em>{data.painHighlight}</em>

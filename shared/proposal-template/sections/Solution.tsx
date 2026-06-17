@@ -1,12 +1,14 @@
 import type { SolutionData } from "../types";
+import { useProposalStrings } from "../i18n";
 
 type Props = { data: SolutionData };
 
 export function Solution({ data }: Props) {
+  const t = useProposalStrings();
   return (
     <section>
       <div className="pt-container">
-        <div className="pt-section-label">Nuestra Solución</div>
+        <div className="pt-section-label">{t.solutionEyebrow}</div>
         <h2 className="pt-solution-heading pt-reveal" dangerouslySetInnerHTML={{ __html: data.heading }} />
         <p className="pt-section-intro pt-reveal">{data.intro}</p>
         <div className="pt-modules-list">

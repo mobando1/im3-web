@@ -1,4 +1,5 @@
 import type { HeroData, ProposalMeta } from "../types";
+import { useProposalStrings } from "../i18n";
 
 type Props = {
   data: HeroData;
@@ -6,13 +7,14 @@ type Props = {
 };
 
 export function Hero({ data, meta }: Props) {
+  const t = useProposalStrings();
   return (
     <section className="pt-hero">
       <div className="pt-hero-bg" />
       <div className="pt-hero-line" />
       <div className="pt-container pt-hero-inner">
         <div className="pt-hero-tag">
-          Propuesta personalizada · {meta.contactName}
+          {t.heroTag} · {meta.contactName}
         </div>
 
         <h1>
@@ -34,10 +36,10 @@ export function Hero({ data, meta }: Props) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
             </svg>
           </span>
-          Ver la propuesta completa
+          {t.heroSeeFull}
         </a>
       </div>
-      <div className="pt-scroll-hint">Desliza</div>
+      <div className="pt-scroll-hint">{t.heroScroll}</div>
     </section>
   );
 }

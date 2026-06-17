@@ -700,6 +700,14 @@ export const proposals = pgTable("proposals", {
   contactId: varchar("contact_id").notNull(),
   title: text("title").notNull(),
   status: text("status").notNull().default("draft"), // draft | sent | viewed | accepted | rejected | expired
+  // Idioma actual del contenido de la propuesta. Determina la dirección del botón "Traducir"
+  // en el editor y qué rótulos fijos (es/en) renderiza el template público y el PDF.
+  language: varchar("language", { length: 5 }).default("es").notNull(), // es | en
+  // Caché de traducciones por idioma para toggle instantáneo (es ↔ en sin re-llamar a la IA).
+  // Cada entrada guarda las `sections` traducidas + un fingerprint del contenido-fuente del que
+  // se derivó. Si el contenido activo cambia (edición/regeneración), el fingerprint deja de
+  // coincidir y la traducción se rehace. Auto-validante: solo translateProposal() lo escribe.
+  translationCache: json("translation_cache").$type<Record<string, { sections: Record<string, unknown>; srcFingerprint: string }>>(),
   // sections puede ser:
   //  - Legacy: Record<string, string> (HTML strings)
   //  - Nuevo: ProposalData completo (ver shared/proposal-template/types.ts)

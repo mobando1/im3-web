@@ -1,6 +1,7 @@
 import { useRef } from "react";
 import type { ProblemData } from "../types";
 import { useCostCounter } from "../hooks/useCostCounter";
+import { useProposalStrings } from "../i18n";
 
 type Props = {
   data: ProblemData;
@@ -9,6 +10,7 @@ type Props = {
 };
 
 export function Problem({ data, interactive, sectionLabel }: Props) {
+  const t = useProposalStrings();
   const wrapRef = useRef<HTMLDivElement>(null);
   const counterRef = useRef<HTMLDivElement>(null);
   const meterRef = useRef<HTMLDivElement>(null);
@@ -25,13 +27,13 @@ export function Problem({ data, interactive, sectionLabel }: Props) {
   return (
     <section className="pt-problem-section">
       <div className="pt-container">
-        <div className="pt-section-label">{sectionLabel || "El Problema"}</div>
+        <div className="pt-section-label">{sectionLabel || t.problemEyebrow}</div>
         <h2 className="pt-problem-heading pt-reveal" dangerouslySetInnerHTML={{ __html: data.intro }} />
 
         {showCounter && (
           <div className="pt-cost-counter-wrap pt-reveal" ref={wrapRef}>
             <div className="pt-cost-counter-label">
-              Pérdida acumulada desde que abriste esta propuesta
+              {t.problemAccumulated}
             </div>
             <div className="pt-cost-counter-row">
               <div className="pt-cost-counter" ref={counterRef}>
@@ -49,7 +51,7 @@ export function Problem({ data, interactive, sectionLabel }: Props) {
             </div>
             {data.calculationBreakdown && (
               <div className="pt-cost-breakdown">
-                <div className="pt-cost-breakdown-label">Cómo calculamos esto</div>
+                <div className="pt-cost-breakdown-label">{t.problemHowCalc}</div>
                 <p dangerouslySetInnerHTML={{ __html: data.calculationBreakdown }} />
               </div>
             )}
