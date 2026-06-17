@@ -5,8 +5,12 @@ type Props = { data: PricingData };
 
 export function Pricing({ data }: Props) {
   const t = useProposalStrings();
-  const discount = data.discount?.enabled ? data.discount : null;
-  const discountBadge = discount
+  // El descuento solo aplica si está habilitado Y tiene un precio final real.
+  // Si está habilitado pero sin precio final (campo vacío), se muestra el monto
+  // original normal — nunca un valor en blanco ni con espacios sueltos.
+  const discount = data.discount?.enabled && data.discount.finalAmount.trim() ? data.discount : null;
+  // El chip de porcentaje/monto solo se muestra si hay un valor de descuento.
+  const discountBadge = discount && discount.discountValue.trim()
     ? discount.discountType === "percentage"
       ? `−${discount.discountValue}%`
       : `−${data.amountPrefix}${discount.discountValue} ${data.amountSuffix}`
@@ -32,10 +36,12 @@ export function Pricing({ data }: Props) {
             <div className="pt-pricing-badge">{data.label}</div>
             {discount ? (
               <>
-                <div className="pt-pricing-discount-chip">
-                  <span className="pt-pricing-discount-pct">{discountBadge}</span>
-                  {discount.label}
-                </div>
+                {(discountBadge || discount.label) && (
+                  <div className="pt-pricing-discount-chip">
+                    {discountBadge && <span className="pt-pricing-discount-pct">{discountBadge}</span>}
+                    {discount.label}
+                  </div>
+                )}
                 <div className="pt-pricing-original">
                   {data.amountPrefix}{data.amount} {data.amountSuffix}
                 </div>
