@@ -925,6 +925,7 @@ Presenta este resumen al usuario y espera confirmación. Cuando confirme, vuelve
         await dbRef.insert(proposalSnapshots).values({
           proposalId: params.proposalId,
           sections: currentSections,
+          language: proposal.language, // idioma del contenido en este snapshot (para restaurar bien tras una traducción)
           changeSummary,
           sectionKey,
         });

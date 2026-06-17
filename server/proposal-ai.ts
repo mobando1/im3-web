@@ -6,6 +6,7 @@ import { log } from "./index";
 import { readGoogleDriveContent } from "./google-drive";
 import { getIndustriaLabel } from "@shared/industrias";
 import { proposalDataSchema, type ProposalData, type ProposalSectionKey, type ProposalSourcesReport } from "@shared/proposal-template/types";
+import { reimposeImmutable, fingerprintSections, type TranslationCache } from "./proposal-translate-helpers";
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import { buildStackReferenceFromDB } from "./stack-reference";
@@ -996,90 +997,8 @@ Audita y responde con JSON estricto (sin markdown).`
 // Traducción de propuesta completa (es ↔ en)
 // ───────────────────────────────────────────────────────────────
 
-// Claves cuyo valor NUNCA se traduce: SOLO las que romperían la UI o son códigos/
-// nombres propios. Deliberadamente acotado: muchos campos "de monto" (painAmount,
-// value, amount, paybackMonths, cost, *USD, rangos…) en la práctica llevan PROSA o
-// UNIDADES ("4 semanas", "$50/mes", "y cada semana sin un sistema…") que SÍ deben
-// traducirse. Los dígitos y el formato numérico se preservan vía instrucción al
-// modelo, no reimponiéndolos. Los valores numéricos/booleanos JS se preservan
-// automáticamente (ver reimposeImmutable).
-const IMMUTABLE_TRANSLATION_KEYS = new Set<string>([
-  "paidBy", "billingModel", // enums que controlan lógica/renderizado de la UI — deben quedar exactos
-  "icon",                   // identificadores/emoji de íconos
-  "currency",               // código de moneda (COP/USD)
-  "clientName", "contactName", // nombres propios
-]);
-
-/**
- * Reconstruye `translated` sobre la forma de `original`, reimponiendo los
- * campos no traducibles. Para cada clave del original:
- *  - números/booleanos/null → se conservan tal cual
- *  - claves en IMMUTABLE_TRANSLATION_KEYS → se conservan del original
- *  - claves ausentes en la traducción → se conservan del original (no se pierde nada)
- *  - el resto (texto legible) → se toma de la traducción
- * Arrays se recorren por índice; objetos recursivamente.
- */
-function reimposeImmutable(original: unknown, translated: unknown): unknown {
-  if (Array.isArray(original)) {
-    if (!Array.isArray(translated)) return original;
-    return original.map((item, i) =>
-      reimposeImmutable(item, i < translated.length ? translated[i] : item)
-    );
-  }
-  if (original !== null && typeof original === "object") {
-    if (translated === null || typeof translated !== "object" || Array.isArray(translated)) {
-      return original;
-    }
-    const o = original as Record<string, unknown>;
-    const t = translated as Record<string, unknown>;
-    const out: Record<string, unknown> = {};
-    for (const key of Object.keys(o)) {
-      const ov = o[key];
-      if (typeof ov === "number" || typeof ov === "boolean" || ov === null) {
-        out[key] = ov;
-      } else if (IMMUTABLE_TRANSLATION_KEYS.has(key)) {
-        out[key] = ov;
-      } else if (!(key in t)) {
-        out[key] = ov;
-      } else {
-        out[key] = reimposeImmutable(ov, t[key]);
-      }
-    }
-    return out;
-  }
-  // Primitivo traducible (string): usar la traducción si vino.
-  return translated !== undefined ? translated : original;
-}
-
-// Caché de traducciones: por idioma, las sections traducidas + el fingerprint del contenido-fuente
-// del que se derivaron. Si el contenido activo cambia, el fingerprint deja de coincidir → se rehace.
-type TranslationCache = Record<string, { sections: Record<string, unknown>; srcFingerprint: string }>;
-
-// Serialización canónica (claves ordenadas) → mismo contenido produce el mismo string sin importar
-// el orden de las claves. Base para el fingerprint.
-function stableStringify(v: unknown): string {
-  if (Array.isArray(v)) return "[" + v.map(stableStringify).join(",") + "]";
-  if (v !== null && typeof v === "object") {
-    const keys = Object.keys(v as Record<string, unknown>).sort();
-    return "{" + keys.map(k => JSON.stringify(k) + ":" + stableStringify((v as Record<string, unknown>)[k])).join(",") + "}";
-  }
-  return JSON.stringify(v);
-}
-
-// Fingerprint determinista (djb2) del contenido de una propuesta. Identifica de forma estable
-// el contenido activo para saber si una traducción cacheada sigue vigente.
-// Versión de la lógica/prompt de traducción. Va dentro del fingerprint para que, al
-// cambiar el prompt o el set de campos traducibles, TODAS las cachés viejas dejen de
-// coincidir y se re-traduzcan solas (en vez de servir una traducción obsoleta). Subir
-// este número cada vez que cambie la calidad/forma de la traducción.
-const TRANSLATION_LOGIC_VERSION = "2"; // v2: traduce prosa/unidades en painAmount/value/etc.
-
-function fingerprintSections(obj: unknown): string {
-  const s = stableStringify(obj);
-  let h = 5381;
-  for (let i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0;
-  return `v${TRANSLATION_LOGIC_VERSION}:${s.length}:${(h >>> 0).toString(36)}`;
-}
+// Helpers puros (reimposeImmutable, fingerprintSections, TranslationCache, etc.) viven en
+// ./proposal-translate-helpers para poder testearlos sin levantar el server (importado arriba).
 
 const TRANSLATION_TARGET: Record<"es" | "en", { label: string; word: string }> = {
   es: { label: "español latinoamericano natural, cercano y profesional (modismos de negocio de LatAm, no traducción literal)", word: "español" },
@@ -1126,15 +1045,21 @@ export async function translateProposal(
   const currentFp = fingerprintSections(currentData);
   const dbRef = db;
 
-  // Persiste un cambio de idioma: snapshot del estado anterior (undo) + sections + cache + brief outdated.
-  const persist = async (newSections: Record<string, unknown>, newCache: TranslationCache) => {
-    await dbRef.insert(proposalSnapshots).values({
-      proposalId,
-      sections: currentData,
-      triggeredByMessageId: null,
-      changeSummary: `Traducción a ${target.word}`,
-      sectionKey: null,
-    }).catch(() => {});
+  // Persiste un cambio de idioma: (opcional) snapshot del estado anterior + sections + cache + brief.
+  // takeSnapshot=false en swaps cacheados (ida/vuelta sin edición no necesita un undo nuevo y
+  // evita acumular snapshots en cada toggle). El snapshot registra el idioma PRE-traducción
+  // (currentLang) para que su restore devuelva también proposals.language correctamente.
+  const persist = async (newSections: Record<string, unknown>, newCache: TranslationCache, takeSnapshot: boolean) => {
+    if (takeSnapshot) {
+      await dbRef.insert(proposalSnapshots).values({
+        proposalId,
+        sections: currentData,
+        language: currentLang,
+        triggeredByMessageId: null,
+        changeSummary: `Traducción a ${target.word}`,
+        sectionKey: null,
+      }).catch(() => {});
+    }
 
     await dbRef.update(proposals)
       .set({ sections: newSections, language: targetLang, translationCache: newCache, updatedAt: new Date() })
@@ -1157,7 +1082,7 @@ export async function translateProposal(
       ...cache,
       [currentLang]: { sections: currentData, srcFingerprint: fingerprintSections(cachedTarget.sections) },
     };
-    await persist(cachedTarget.sections, newCache);
+    await persist(cachedTarget.sections, newCache, false); // swap cacheado: sin snapshot nuevo
     return { language: targetLang, cached: true };
   }
 
@@ -1242,7 +1167,7 @@ FORMATO DE SALIDA:
       [targetLang]: { sections: finalData, srcFingerprint: currentFp },
       [currentLang]: { sections: currentData, srcFingerprint: fingerprintSections(finalData) },
     };
-    await persist(finalData, newCache);
+    await persist(finalData, newCache, true); // traducción nueva (IA): snapshot para deshacer
 
     return { language: targetLang, cached: false };
   } catch (err: any) {

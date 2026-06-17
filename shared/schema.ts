@@ -812,6 +812,11 @@ export const proposalSnapshots = pgTable("proposal_snapshots", {
   changeSummary: text("change_summary"),
   // Sección que se modificó (si fue update_section específico)
   sectionKey: text("section_key"),
+  // Idioma del contenido en ESTE snapshot. Clave para traducciones: al restaurar un snapshot
+  // pre-traducción hay que devolver también proposals.language a ese idioma (si no, queda
+  // contenido en un idioma con los rótulos fijos del template en el otro). Nullable: snapshots
+  // viejos no lo tienen → el restore deja language sin cambiar.
+  language: varchar("language", { length: 5 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 

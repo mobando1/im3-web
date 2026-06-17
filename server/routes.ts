@@ -9260,7 +9260,7 @@ Responde SOLO con un JSON válido, sin markdown:
       // Da trazabilidad/undo de ediciones manuales (igual que el chat snapshotea sus cambios)
       // y deja el rastro que proposal-edit-learner usa al comparar baseline IA vs versión final.
       if ("sections" in req.body) {
-        const [before] = await db.select({ sections: proposals.sections })
+        const [before] = await db.select({ sections: proposals.sections, language: proposals.language })
           .from(proposals)
           .where(eq(proposals.id, req.params.id as string))
           .limit(1);
@@ -9269,6 +9269,7 @@ Responde SOLO con un JSON válido, sin markdown:
           await db.insert(proposalSnapshots).values({
             proposalId: req.params.id as string,
             sections: before.sections,
+            language: before.language,
             triggeredByMessageId: null,
             changeSummary: "Edición manual",
             sectionKey: null,
@@ -9365,6 +9366,14 @@ Responde SOLO con un JSON válido, sin markdown:
     try {
       const [proposal] = await db.select().from(proposals).where(eq(proposals.id, proposalId)).limit(1);
       if (!proposal) return res.status(404).json({ error: "Propuesta no encontrada" });
+
+      // Guard de ciclo de vida: no traducir in-place una propuesta aceptada (el documento que el
+      // cliente aceptó bajo este accessToken debe quedar intacto). Rechazo de negocio → 409, ANTES de
+      // runAgent, para no ensuciar agent_runs con un "fallo" del agente.
+      // Nota: regenerar/chat/edición manual sí mutan aceptadas hoy; congelar TODO es decisión aparte.
+      if (proposal.status === "accepted") {
+        return res.status(409).json({ error: "No se puede traducir una propuesta aceptada. Duplícala y traduce la copia." });
+      }
 
       // targetLanguage explícito o, si no viene, el opuesto al idioma actual.
       const requested = req.body?.targetLanguage;
@@ -9774,19 +9783,23 @@ Responde SOLO con un JSON válido, sin markdown:
       }
 
       // Snapshot del estado actual antes de restaurar (para volver hacia adelante)
-      const [currentProp] = await db.select({ sections: proposals.sections })
+      const [currentProp] = await db.select({ sections: proposals.sections, language: proposals.language })
         .from(proposals).where(eq(proposals.id, proposalId)).limit(1);
       if (currentProp?.sections) {
         await db.insert(proposalSnapshots).values({
           proposalId,
           sections: currentProp.sections,
+          language: currentProp.language,
           changeSummary: `[Auto-snapshot antes de restaurar]`,
           sectionKey: null,
         }).catch(() => {});
       }
 
+      // Restaurar también el idioma del snapshot (si lo tiene). Sin esto, restaurar un snapshot
+      // pre-traducción dejaba el contenido en un idioma y proposals.language en el otro → la vista
+      // pública/PDF mezclaba contenido y rótulos. Snapshots viejos (language null) no tocan el idioma.
       await db.update(proposals)
-        .set({ sections: snap.sections, updatedAt: new Date() })
+        .set({ sections: snap.sections, updatedAt: new Date(), ...(snap.language ? { language: snap.language } : {}) })
         .where(eq(proposals.id, proposalId));
 
       res.json({ success: true, restoredFrom: snap.createdAt });

@@ -550,6 +550,8 @@ export async function runMigrations() {
       );
     `).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_proposal_snapshots_proposal" ON "proposal_snapshots" ("proposal_id", "created_at" DESC);`).catch(() => {});
+    // Idioma del contenido del snapshot (para restaurar proposals.language junto con sections).
+    await pool.query(`ALTER TABLE "proposal_snapshots" ADD COLUMN IF NOT EXISTS "language" varchar(5);`).catch(() => {});
 
     // Proposal chat messages — Fase 1 del asistente conversacional
     await pool.query(`

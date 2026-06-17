@@ -657,7 +657,7 @@ export default function ProposalEditor() {
             </Button>
           </a>
         )}
-        {hasSections && (
+        {hasSections && proposal.status !== "accepted" && (
           <Button
             size="sm"
             variant="outline"
