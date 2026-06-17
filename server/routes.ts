@@ -9253,10 +9253,24 @@ Responde SOLO con un JSON válido, sin markdown:
     }
   });
 
+  // Una propuesta ACEPTADA queda "congelada" (es el registro del acuerdo que vio el cliente bajo su
+  // accessToken): se bloquean todas las ediciones de contenido. Para cambiar algo → duplicar.
+  const ACCEPTED_LOCK_MSG = "Propuesta aceptada y bloqueada. Duplícala para crear una versión nueva y editarla.";
+  const isProposalAccepted = async (proposalId: string): Promise<boolean> => {
+    if (!db) return false;
+    const [p] = await db.select({ status: proposals.status }).from(proposals).where(eq(proposals.id, proposalId)).limit(1);
+    return p?.status === "accepted";
+  };
+
   // Update proposal (sections, pricing, timeline, status, etc.)
   app.patch("/api/admin/proposals/:id", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
+      // Aceptada → bloqueada para cambios de contenido (no para metadata como status interno).
+      if (("sections" in req.body || "pricing" in req.body || "timelineData" in req.body)
+          && await isProposalAccepted(req.params.id as string)) {
+        return res.status(409).json({ error: ACCEPTED_LOCK_MSG });
+      }
       // Si esta edición manual toca `sections`, snapshot del estado ANTES del cambio.
       // Da trazabilidad/undo de ediciones manuales (igual que el chat snapshotea sus cambios)
       // y deja el rastro que proposal-edit-learner usa al comparar baseline IA vs versión final.
@@ -9327,6 +9341,7 @@ Responde SOLO con un JSON válido, sin markdown:
     try {
       const [proposal] = await db.select().from(proposals).where(eq(proposals.id, req.params.id as string)).limit(1);
       if (!proposal) return res.status(404).json({ error: "Propuesta no encontrada" });
+      if (proposal.status === "accepted") return res.status(409).json({ error: ACCEPTED_LOCK_MSG });
 
       // Envuelto en runAgent → cada generación y sus errores quedan en agent_runs,
       // visibles en /admin/agents con errorMessage/errorStack (antes era invisible).
@@ -9368,10 +9383,9 @@ Responde SOLO con un JSON válido, sin markdown:
       const [proposal] = await db.select().from(proposals).where(eq(proposals.id, proposalId)).limit(1);
       if (!proposal) return res.status(404).json({ error: "Propuesta no encontrada" });
 
-      // Guard de ciclo de vida: no traducir in-place una propuesta aceptada (el documento que el
-      // cliente aceptó bajo este accessToken debe quedar intacto). Rechazo de negocio → 409, ANTES de
-      // runAgent, para no ensuciar agent_runs con un "fallo" del agente.
-      // Nota: regenerar/chat/edición manual sí mutan aceptadas hoy; congelar TODO es decisión aparte.
+      // Guard de ciclo de vida: una propuesta aceptada está CONGELADA (todos los endpoints de edición
+      // de contenido la bloquean — ver isProposalAccepted). El documento que el cliente aceptó bajo este
+      // accessToken debe quedar intacto. Rechazo de negocio → 409, ANTES de runAgent, para no ensuciar agent_runs.
       if (proposal.status === "accepted") {
         return res.status(409).json({ error: "No se puede traducir una propuesta aceptada. Duplícala y traduce la copia." });
       }
@@ -9409,6 +9423,7 @@ Responde SOLO con un JSON válido, sin markdown:
   app.post("/api/admin/proposals/:id/sections/:sectionKey/regenerate", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     const proposalId = String(req.params.id);
+    if (await isProposalAccepted(proposalId)) return res.status(409).json({ error: ACCEPTED_LOCK_MSG });
     const sectionKey = String(req.params.sectionKey);
     const instruction = String(req.body?.instruction ?? "").trim();
 
@@ -9461,6 +9476,7 @@ Responde SOLO con un JSON válido, sin markdown:
   app.post("/api/admin/proposals/:id/sections/:sectionKey/apply", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     const proposalId = String(req.params.id);
+    if (await isProposalAccepted(proposalId)) return res.status(409).json({ error: ACCEPTED_LOCK_MSG });
     const sectionKey = String(req.params.sectionKey);
     const sectionData = req.body?.section;
     if (!sectionData) return res.status(400).json({ error: "No section data" });
@@ -9528,6 +9544,7 @@ Responde SOLO con un JSON válido, sin markdown:
     if (!message && files.length === 0) {
       return res.status(400).json({ error: "Mensaje o archivo requerido" });
     }
+    if (await isProposalAccepted(proposalId)) return res.status(409).json({ error: ACCEPTED_LOCK_MSG });
 
     try {
       const { runProposalChat } = await import("./proposal-chat");
@@ -9577,6 +9594,7 @@ Responde SOLO con un JSON válido, sin markdown:
     if (!message && files.length === 0) {
       return res.status(400).json({ error: "Mensaje o archivo requerido" });
     }
+    if (await isProposalAccepted(proposalId)) return res.status(409).json({ error: ACCEPTED_LOCK_MSG });
 
     // Setup SSE headers — desactivar todo tipo de buffering posible
     res.setHeader("Content-Type", "text/event-stream");
@@ -9782,6 +9800,7 @@ Responde SOLO con un JSON válido, sin markdown:
       if (!snap || snap.proposalId !== proposalId) {
         return res.status(404).json({ error: "Snapshot no encontrado" });
       }
+      if (await isProposalAccepted(proposalId)) return res.status(409).json({ error: ACCEPTED_LOCK_MSG });
 
       // Snapshot del estado actual antes de restaurar (para volver hacia adelante)
       const [currentProp] = await db.select({ sections: proposals.sections, language: proposals.language })
@@ -11011,6 +11030,8 @@ Responde SOLO con un JSON válido, sin markdown:
   app.post("/api/admin/proposals/:id/stack-cost/apply", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
+      // Aceptada → congelada: este endpoint sobrescribe sections.operationalCosts.
+      if (await isProposalAccepted(req.params.id as string)) return res.status(409).json({ error: ACCEPTED_LOCK_MSG });
       const items = Array.isArray(req.body?.items) ? req.body.items : [];
       if (items.length === 0) return res.status(400).json({ error: "items requeridos" });
       const { calculateStackCost, applyStackCostToProposal } = await import("./stack-calculator");

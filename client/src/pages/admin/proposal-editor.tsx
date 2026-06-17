@@ -497,6 +497,8 @@ export default function ProposalEditor() {
   const sections: Record<string, any> = proposal.sections || {};
   const pricing = proposal.pricing;
   const hasSections = hasSectionsForHooks;
+  // Aceptada = congelada: el backend bloquea toda edición; aquí ocultamos los controles de edición.
+  const isAccepted = proposal.status === "accepted";
 
   // Labels y orden según formato detectado
   const SECTION_LABELS = isNewFormat ? SECTION_LABELS_NEW : SECTION_LABELS_LEGACY;
@@ -602,27 +604,39 @@ export default function ProposalEditor() {
       )}
 
       {/* Action buttons */}
+      {isAccepted && (
+        <div className="flex items-start gap-2 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          <Check className="w-4 h-4 mt-0.5 shrink-0" />
+          <p>
+            <strong>Propuesta aceptada — bloqueada.</strong> El contenido quedó congelado tal como lo aceptó el
+            cliente. Para hacer cambios, <strong>duplícala</strong> y trabaja sobre la copia.
+          </p>
+        </div>
+      )}
+
       <div className="flex flex-wrap gap-2">
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={() => {
-            // Si NO hay secciones todavía, generar directo (no es destructivo)
-            if (!hasSections) {
-              generateMut.mutate();
-              return;
-            }
-            // Re-generar SÍ es destructivo: borra todas las secciones existentes
-            setConfirmText("");
-            setConfirmRegenOpen(true);
-          }}
-          disabled={generateMut.isPending}
-          className="gap-1.5"
-        >
-          <Sparkles className="w-4 h-4" />
-          {generateMut.isPending ? "Generando..." : hasSections ? "Re-generar con IA" : "Generar con IA"}
-        </Button>
-        {hasSections && (
+        {!isAccepted && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              // Si NO hay secciones todavía, generar directo (no es destructivo)
+              if (!hasSections) {
+                generateMut.mutate();
+                return;
+              }
+              // Re-generar SÍ es destructivo: borra todas las secciones existentes
+              setConfirmText("");
+              setConfirmRegenOpen(true);
+            }}
+            disabled={generateMut.isPending}
+            className="gap-1.5"
+          >
+            <Sparkles className="w-4 h-4" />
+            {generateMut.isPending ? "Generando..." : hasSections ? "Re-generar con IA" : "Generar con IA"}
+          </Button>
+        )}
+        {hasSections && !isAccepted && (
           <Button
             size="sm"
             variant="outline"
@@ -946,6 +960,8 @@ export default function ProposalEditor() {
                         <X className="w-3.5 h-3.5" />
                       </Button>
                     </div>
+                  ) : isAccepted ? (
+                    <h2 className="text-lg font-bold text-gray-900">{getSectionTitle(activeSection)}</h2>
                   ) : (
                     <button
                       type="button"
@@ -961,6 +977,7 @@ export default function ProposalEditor() {
                     </button>
                   )}
                   <div className="flex gap-2 items-center">
+                    {!isAccepted && (<>
                     {/* Eliminar SECCIÓN COMPLETA — siempre visible para secciones eliminables */}
                     {isNewFormat && DELETABLE_SECTIONS_NEW.has(activeSection) && sections[activeSection] && (
                       <Button
@@ -996,6 +1013,7 @@ export default function ProposalEditor() {
                         </Button>
                       </>
                     )}
+                    </>)}
                   </div>
                 </div>
 
@@ -1056,15 +1074,17 @@ export default function ProposalEditor() {
                 ) : isNewFormat && DELETABLE_SECTIONS_NEW.has(activeSection) ? (
                   <div className="bg-amber-50 border border-amber-200 rounded-lg p-6 text-center">
                     <p className="text-sm text-amber-800 mb-3">Esta sección está eliminada — no se mostrará en la propuesta.</p>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      onClick={() => handleRestoreSection(activeSection)}
-                      disabled={restoreSectionMut.isPending}
-                      className="gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-100"
-                    >
-                      <Sparkles className="w-3.5 h-3.5" /> {restoreSectionMut.isPending ? "Generando..." : "Restaurar con IA"}
-                    </Button>
+                    {!isAccepted && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => handleRestoreSection(activeSection)}
+                        disabled={restoreSectionMut.isPending}
+                        className="gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-100"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" /> {restoreSectionMut.isPending ? "Generando..." : "Restaurar con IA"}
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <p className="text-gray-400 text-sm">Esta sección aún no tiene contenido.</p>
