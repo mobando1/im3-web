@@ -9216,6 +9216,42 @@ Responde SOLO con un JSON válido, sin markdown:
     }
   });
 
+  // Duplicate proposal — clona el contenido para experimentar con nuevas configuraciones
+  // sin tocar la original. Copia secciones/precios/timeline/notas/baseline-IA/caché de
+  // traducción, pero regenera accessToken (único), resetea el ciclo de vida a "draft" y
+  // NO copia tablas hijas (snapshots, chat, views, brief, contrato): la copia arranca limpia.
+  app.post("/api/admin/proposals/:id/duplicate", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [original] = await db.select().from(proposals)
+        .where(eq(proposals.id, req.params.id as string))
+        .limit(1);
+      if (!original) return res.status(404).json({ error: "Propuesta no encontrada" });
+
+      const [copy] = await db.insert(proposals).values({
+        contactId: original.contactId,
+        title: `${original.title} (copia)`,
+        status: "draft",
+        language: original.language,
+        translationCache: original.translationCache,
+        sections: original.sections,
+        pricing: original.pricing,
+        timelineData: original.timelineData,
+        notes: original.notes,
+        aiSourcesReport: original.aiSourcesReport,
+        aiBaselineSections: original.aiBaselineSections,
+        // id / accessToken / createdAt / updatedAt → defaults de DB (accessToken nuevo y único)
+        // sentAt / viewedAt / acceptedAt / acceptedBy / acceptedOption / acceptanceDetails /
+        // expiresAt / editLessonsLearnedAt / deletedAt → null (ciclo de vida limpio)
+      }).returning();
+
+      res.json(copy);
+    } catch (err: any) {
+      log(`Error duplicating proposal: ${err?.message}`);
+      res.status(500).json({ error: "Error duplicando propuesta" });
+    }
+  });
+
   // Update proposal (sections, pricing, timeline, status, etc.)
   app.patch("/api/admin/proposals/:id", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });

@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { Plus, FileSignature, ExternalLink, Copy, Trash2, Send, Sparkles, RotateCcw, AlertTriangle } from "lucide-react";
+import { Plus, FileSignature, ExternalLink, Copy, Trash2, Send, Sparkles, RotateCcw, AlertTriangle, Files } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -92,6 +92,19 @@ export default function AdminProposals() {
       navigate(`/admin/proposals/${proposal.id}`);
       toast({ title: "Propuesta creada — generando con IA..." });
     },
+  });
+
+  const duplicateMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/admin/proposals/${id}/duplicate`);
+      return res.json();
+    },
+    onSuccess: (proposal) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/proposals"] });
+      navigate(`/admin/proposals/${proposal.id}`);
+      toast({ title: "Propuesta duplicada", description: "Edita la copia sin afectar la original" });
+    },
+    onError: () => toast({ title: "Error al duplicar la propuesta", variant: "destructive" }),
   });
 
   const deleteMutation = useMutation({
@@ -243,6 +256,14 @@ export default function AdminProposals() {
                         <a href={`/proposal/${p.accessToken}`} target="_blank" rel="noopener noreferrer" className="p-1.5 rounded-md text-gray-400 hover:text-[#2FA4A9] transition-colors" title="Ver propuesta">
                           <ExternalLink className="w-4 h-4" />
                         </a>
+                        <button
+                          onClick={() => duplicateMutation.mutate(p.id)}
+                          disabled={duplicateMutation.isPending}
+                          className="p-1.5 rounded-md text-gray-400 hover:text-[#2FA4A9] transition-colors disabled:opacity-40"
+                          title="Duplicar propuesta (para probar cambios sin tocar la original)"
+                        >
+                          <Files className="w-4 h-4" />
+                        </button>
                         <button
                           onClick={() => { if (confirm(`¿Mover "${p.title}" a la papelera? Podrás restaurarla durante ${TRASH_RETENTION_DAYS} días.`)) deleteMutation.mutate(p.id); }}
                           className="p-1.5 rounded-md text-gray-300 hover:text-red-600 transition-colors"
