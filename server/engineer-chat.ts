@@ -557,7 +557,7 @@ async function executeTool(
 }
 
 // Valida un model ID haciendo una llamada mínima a Anthropic (1 token).
-async function validateModelId(modelId: string): Promise<{ ok: true } | { ok: false; error: string }> {
+export async function validateModelId(modelId: string): Promise<{ ok: true } | { ok: false; error: string }> {
   const anthropic = getClient();
   if (!anthropic) return { ok: false, error: "ANTHROPIC_API_KEY no configurada" };
   try {

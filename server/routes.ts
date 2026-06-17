@@ -1,9 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
-import { getModelGeneration, getModelClassification } from "./config";
+import { getModelGeneration, getModelClassification, getAllConfig, setConfig } from "./config";
 import { eq, asc, isNull, isNotNull, sql, and, gte, lte, ilike, or, desc, count, inArray } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, teamMembers, taskSuggestions, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectGithubRepos, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalTranslationCache, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, stackServices, contractTemplates, contracts, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, teamMembers, taskSuggestions, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectGithubRepos, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalTranslationCache, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, stackServices, contractTemplates, contracts, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback, adminActionAudit } from "@shared/schema";
 import { AGENT_REGISTRY, AGENT_KINDS, findAgent } from "./agents/registry";
 import { runAgent } from "./agents/runner";
 import { syncGmailEmails, isGmailConfigured, sendGmailMessage, getOriginalMessageHeaders } from "./google-gmail";
@@ -16,7 +16,7 @@ import { createCalendarEvent, deleteCalendarEvent, createProjectMeetingEvent, li
 import { isEmailConfigured, sendEmail, sendAdminNotification } from "./email-sender";
 import { generateEmailContent, buildMicroReminderEmail, build6hReminderEmail, buildFollowUpConfirmationEmail, buildNoShowEmail, generateDailyNewsDigest, generateContactInsight, generateWhatsAppMessage, generateNewsletterWelcome, generateMiniAudit, classifyWhatsAppIntent, generateWhatsAppAutoReply, buildWhatsAppNotificationEmail, buildProjectNotificationEmail, escapeHtml } from "./email-ai";
 import { parseFechaCita } from "./date-utils";
-import { requireAuth, hashPassword } from "./auth";
+import { requireAuth, hashPassword, comparePasswords } from "./auth";
 import { requireClient, requireClientOrAdminPreview, publicClientUser, sendInviteEmail, sendPasswordResetEmail, createMagicToken, magicLinkUrl, sendMagicLinkLoginEmail, MAGIC_LINK_TTL_MINUTES } from "./client-auth";
 import { calculateLeadScore } from "./lead-scoring";
 import { isWhatsAppConfigured, calculateWhatsAppSchedule, WHATSAPP_SEQUENCE, sendWhatsAppText } from "./whatsapp";
@@ -11029,6 +11029,129 @@ Responde SOLO con un JSON válido, sin markdown:
     try {
       const { listActionAudit } = await import("./engineer-chat");
       res.json(await listActionAudit());
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // ── Panel de Configuración del admin (/admin/settings) ──
+  // Estado completo: config (modelos/flags/otros), integraciones, github y Fase C.
+  app.get("/api/admin/settings", requireAuth, async (req, res) => {
+    try {
+      const user = req.user as { githubAccessToken?: string; githubUsername?: string };
+      const all = getAllConfig();
+      const config = { model: {} as Record<string, string>, flag: {} as Record<string, string>, other: {} as Record<string, string> };
+      for (const [k, v] of Object.entries(all)) {
+        if (k.startsWith("model.")) config.model[k] = v;
+        else if (k.startsWith("flag.")) config.flag[k] = v;
+        else config.other[k] = v;
+      }
+      res.json({
+        config,
+        integrations: {
+          anthropic: !!process.env.ANTHROPIC_API_KEY,
+          resend: isEmailConfigured(),
+          gmail: isGmailConfigured(),
+          googleDrive: isGoogleDriveConfigured(),
+          whatsapp: isWhatsAppConfigured(),
+          googleAnalytics: isGoogleAnalyticsConfigured(),
+        },
+        github: {
+          configured: !!(GITHUB_CLIENT_ID && GITHUB_CLIENT_SECRET),
+          connected: !!user.githubAccessToken,
+          githubUsername: user.githubUsername || null,
+        },
+        faseC: {
+          repo: process.env.IM3_REPO || process.env.GITHUB_REPO || null,
+          tokenEnv: !!process.env.GITHUB_TOKEN,
+          adminConnected: !!user.githubAccessToken,
+        },
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Validar un model ID contra Anthropic antes de guardar
+  app.post("/api/admin/settings/config/:key/test", requireAuth, async (req, res) => {
+    const key = req.params.key as string;
+    const value = String(req.body?.value || "");
+    if (!key.startsWith("model.")) return res.status(400).json({ error: "Solo se valida 'model.*'" });
+    try {
+      const { validateModelId } = await import("./engineer-chat");
+      const result = await validateModelId(value);
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Editar/crear un valor de config (modelos, flags, editor avanzado) — auditado
+  app.patch("/api/admin/settings/config/:key", requireAuth, async (req, res) => {
+    const key = req.params.key as string;
+    const value = req.body?.value === undefined ? null : String(req.body.value);
+    const reason = typeof req.body?.reason === "string" ? req.body.reason : null;
+    const username = (req.user as { username?: string } | undefined)?.username || "admin";
+    if (!key || value === null) return res.status(400).json({ error: "key y value requeridos" });
+    try {
+      // Los modelos se validan contra Anthropic antes de aplicar (igual que el agente)
+      if (key.startsWith("model.")) {
+        const { validateModelId } = await import("./engineer-chat");
+        const check = await validateModelId(value);
+        if (!check.ok) return res.status(400).json({ error: `Model ID inválido: ${check.error}` });
+      }
+      const result = await setConfig(key, value, username);
+      if (!result.ok) return res.status(500).json({ error: result.error });
+      // Auditoría unificada (mismo trail que el agente)
+      if (db) {
+        await db.insert(adminActionAudit).values({
+          actionType: "set_config",
+          target: key,
+          payload: { key, oldValue: result.oldValue, newValue: value },
+          performedBy: username,
+          reason,
+          result: `${key}: "${result.oldValue ?? ""}" → "${value}"`,
+        }).catch((e) => log(`[settings] no se pudo auditar cambio de ${key}: ${e}`));
+      }
+      res.json({ ok: true, oldValue: result.oldValue });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Historial de cambios (reusa la auditoría unificada del agente)
+  app.get("/api/admin/settings/audit", requireAuth, async (_req, res) => {
+    try {
+      const { listActionAudit } = await import("./engineer-chat");
+      res.json(await listActionAudit());
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Cambiar contraseña del admin
+  app.post("/api/admin/account/password", requireAuth, async (req, res) => {
+    const currentPassword = String(req.body?.currentPassword || "");
+    const newPassword = String(req.body?.newPassword || "");
+    const u = req.user as { id: string; username?: string };
+    if (newPassword.length < 8) return res.status(400).json({ error: "La nueva contraseña debe tener al menos 8 caracteres" });
+    if (!db) return res.status(500).json({ error: "DB no disponible" });
+    try {
+      const [row] = await db.select().from(users).where(eq(users.id, u.id)).limit(1);
+      if (!row) return res.status(404).json({ error: "Usuario no encontrado" });
+      const valid = await comparePasswords(currentPassword, row.password);
+      if (!valid) return res.status(400).json({ error: "La contraseña actual es incorrecta" });
+      const hashed = await hashPassword(newPassword);
+      await db.update(users).set({ password: hashed }).where(eq(users.id, u.id));
+      await db.insert(adminActionAudit).values({
+        actionType: "change_password",
+        target: u.username || "admin",
+        payload: {},
+        performedBy: u.username || "admin",
+        reason: null,
+        result: "Contraseña actualizada",
+      }).catch(() => {});
+      res.json({ ok: true });
     } catch (err: any) {
       res.status(500).json({ error: err?.message });
     }
