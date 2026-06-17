@@ -5,6 +5,12 @@ type Props = { data: PricingData };
 
 export function Pricing({ data }: Props) {
   const t = useProposalStrings();
+  const discount = data.discount?.enabled ? data.discount : null;
+  const discountBadge = discount
+    ? discount.discountType === "percentage"
+      ? `−${discount.value}%`
+      : `−${data.amountPrefix}${discount.value} ${data.amountSuffix}`
+    : null;
   return (
     <section className="pt-pricing-section" id="inversion">
       <div className="pt-container">
@@ -24,12 +30,38 @@ export function Pricing({ data }: Props) {
         <div className="pt-pricing-card pt-reveal">
           <div className="pt-pricing-header">
             <div className="pt-pricing-badge">{data.label}</div>
-            <div className="pt-pricing-amount">
-              <sup>{data.amountPrefix}</sup>
-              {data.amount}
-              <sub> {data.amountSuffix}</sub>
-            </div>
-            <div className="pt-pricing-label">{data.priceFootnote}</div>
+            {discount ? (
+              <>
+                <div className="pt-pricing-discount-chip">
+                  <span className="pt-pricing-discount-pct">{discountBadge}</span>
+                  {discount.label}
+                </div>
+                <div className="pt-pricing-original">
+                  {data.amountPrefix}{data.amount} {data.amountSuffix}
+                </div>
+                <div className="pt-pricing-amount">
+                  <sup>{data.amountPrefix}</sup>
+                  {discount.finalAmount}
+                  <sub> {data.amountSuffix}</sub>
+                </div>
+                {discount.savingsAmount && (
+                  <div className="pt-pricing-savings">
+                    {t.pricingSavings} {data.amountPrefix}{discount.savingsAmount} {data.amountSuffix}
+                  </div>
+                )}
+                {discount.note && <div className="pt-pricing-discount-note">{discount.note}</div>}
+                <div className="pt-pricing-label">{data.priceFootnote}</div>
+              </>
+            ) : (
+              <>
+                <div className="pt-pricing-amount">
+                  <sup>{data.amountPrefix}</sup>
+                  {data.amount}
+                  <sub> {data.amountSuffix}</sub>
+                </div>
+                <div className="pt-pricing-label">{data.priceFootnote}</div>
+              </>
+            )}
           </div>
           <div className="pt-pricing-milestones">
             {data.milestones.map((m) => (

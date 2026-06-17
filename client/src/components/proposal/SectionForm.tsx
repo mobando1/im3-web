@@ -4,7 +4,8 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Save, X, GripVertical, Undo2, Redo2 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Plus, Trash2, Save, X, GripVertical, Undo2, Redo2, Calculator } from "lucide-react";
 import { AiFieldHelper } from "./AiFieldHelper";
 
 /** Hook for HTML5 drag-and-drop reordering of any array */
@@ -487,7 +488,64 @@ function ProblemForm({ data, set }: { data: Record<string, unknown>; set: (k: st
 // SECTION: PRICING
 // ────────────────────────────────────────────────────────────────
 
+// ── Helpers de descuento (solo editor; el template solo renderiza strings) ──
+// Parsea un monto formateado ("26.000.000" / "26,000,000" / "$26.000.000 COP") a entero.
+function parseAmount(raw: string): number {
+  const digits = String(raw ?? "").replace(/[^\d]/g, "");
+  return digits ? parseInt(digits, 10) : 0;
+}
+// Reformatea un entero con el separador de miles detectado en la muestra (. para COP, , para USD).
+function formatAmount(n: number, sample: string): string {
+  const sep = sample.includes(",") && !sample.includes(".") ? "," : ".";
+  return Math.round(n).toLocaleString("en-US").replace(/,/g, sep);
+}
+// Calcula precio final + ahorro a partir del monto total. Best-effort y editable luego.
+function computeDiscount(
+  amount: string,
+  type: "percentage" | "fixed",
+  value: string,
+): { finalAmount: string; savingsAmount: string } | null {
+  const orig = parseAmount(amount);
+  if (!orig) return null;
+  let savings = 0;
+  if (type === "percentage") {
+    const pct = parseFloat(String(value).replace(/[^\d.]/g, ""));
+    if (!pct) return null;
+    savings = Math.round(orig * (pct / 100));
+  } else {
+    savings = parseAmount(value);
+    if (!savings) return null;
+  }
+  const final = Math.max(0, orig - savings);
+  return { finalAmount: formatAmount(final, amount), savingsAmount: formatAmount(savings, amount) };
+}
+
+type DiscountForm = {
+  enabled?: boolean;
+  discountType?: "percentage" | "fixed";
+  label?: string;
+  value?: string;
+  finalAmount?: string;
+  savingsAmount?: string;
+  note?: string;
+};
+
 function PricingForm({ data, set }: { data: Record<string, unknown>; set: (k: string, v: unknown) => void }) {
+  const discount = data.discount as DiscountForm | undefined;
+  const discountEnabled = !!discount?.enabled;
+  const discountType = discount?.discountType ?? "percentage";
+  const setDiscount = (patch: Partial<DiscountForm>) => set("discount", { ...(discount ?? {}), ...patch });
+  const toggleDiscount = (on: boolean) => {
+    if (on && !discount) {
+      set("discount", { enabled: true, discountType: "percentage", label: "Descuento por pronto pago", value: "", finalAmount: "", savingsAmount: "", note: "" });
+    } else {
+      set("discount", { ...(discount ?? {}), enabled: on });
+    }
+  };
+  const recalcDiscount = () => {
+    const r = computeDiscount(String(data.amount ?? ""), discountType, String(discount?.value ?? ""));
+    if (r) setDiscount(r);
+  };
   const milestones = (data.milestones as Array<{ step: number; name: string; desc: string; amount: string }>) ?? [];
   const includes = (data.includes as string[]) ?? [];
   const optionalIncludes = (data.optionalIncludes as string[] | undefined) ?? [];
@@ -570,6 +628,73 @@ function PricingForm({ data, set }: { data: Record<string, unknown>; set: (k: st
       <Field label={`Opcionales (${optionalIncludes.length})`} hint="Entregables/checkpoints opcionales — se muestran en bloque separado bajo título 'Opcionales'. Si lo dejas vacío, no aparece nada.">
         <StringListEditor items={optionalIncludes} onChange={v => set("optionalIncludes", v.length > 0 ? v : undefined)} placeholder="Ej: Capacitación adicional al equipo" />
       </Field>
+
+      {/* ── Descuento sobre el valor final (opcional, por propuesta) ── */}
+      <div className="border-t pt-4 mt-2">
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <Label className="text-xs font-medium text-gray-700 block">Descuento sobre el valor final</Label>
+            <p className="text-[10px] text-gray-400 mt-0.5">Opcional. Habilítalo solo para esta propuesta.</p>
+          </div>
+          <Switch checked={discountEnabled} onCheckedChange={toggleDiscount} />
+        </div>
+
+        {discountEnabled && (
+          <div className="space-y-3 mt-3 rounded-lg border border-teal-200 bg-teal-50/40 p-3">
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Tipo de descuento">
+                <Select value={discountType} onValueChange={v => setDiscount({ discountType: v as "percentage" | "fixed" })}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="percentage">Porcentaje (%)</SelectItem>
+                    <SelectItem value="fixed">Monto fijo</SelectItem>
+                  </SelectContent>
+                </Select>
+              </Field>
+              <Field
+                label={discountType === "fixed" ? "Monto a descontar" : "Porcentaje"}
+                hint={discountType === "fixed" ? "Ej: 3.000.000" : "Ej: 15"}
+              >
+                <Input
+                  value={String(discount?.value ?? "")}
+                  onChange={e => setDiscount({ value: e.target.value })}
+                  className="font-mono"
+                  placeholder={discountType === "fixed" ? "3.000.000" : "15"}
+                />
+              </Field>
+            </div>
+            <Field label="Etiqueta del descuento" hint="Se muestra en el chip. Ej: 'Descuento por pronto pago'">
+              <AiFieldHelper value={String(discount?.label ?? "")} onChange={v => setDiscount({ label: v })} context="Etiqueta de descuento en propuesta">
+                <Input value={String(discount?.label ?? "")} onChange={e => setDiscount({ label: e.target.value })} />
+              </AiFieldHelper>
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Precio final" hint="Con descuento aplicado. Ej: 22.100.000">
+                <Input
+                  value={String(discount?.finalAmount ?? "")}
+                  onChange={e => setDiscount({ finalAmount: e.target.value })}
+                  className="font-mono text-base font-bold"
+                  placeholder="22.100.000"
+                />
+              </Field>
+              <Field label="Ahorro (opcional)" hint="Se muestra como 'Ahorras …'">
+                <Input
+                  value={String(discount?.savingsAmount ?? "")}
+                  onChange={e => setDiscount({ savingsAmount: e.target.value })}
+                  className="font-mono"
+                  placeholder="3.900.000"
+                />
+              </Field>
+            </div>
+            <Button size="sm" variant="outline" onClick={recalcDiscount} className="text-xs h-7 gap-1.5">
+              <Calculator className="w-3.5 h-3.5" /> Calcular desde el monto total ({String(data.amount ?? "—")})
+            </Button>
+            <Field label="Nota (opcional)" hint="Ej: 'Válido hasta el 30 de junio'">
+              <Input value={String(discount?.note ?? "")} onChange={e => setDiscount({ note: e.target.value })} />
+            </Field>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
