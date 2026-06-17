@@ -725,7 +725,7 @@ REGLAS:
 - Mantén EXACTAMENTE la misma forma (keys, tipos de datos) que la versión actual.
 - NO cambies tipos: si un campo es número, que siga siendo número. Si es array, array. Etc.
 - Mantén coherencia con las otras secciones.
-- Español latinoamericano.
+- ${proposal.language === "en" ? "Escribe en inglés de negocios natural e idiomático — la propuesta está EN INGLÉS, NO escribas en español." : "Español latinoamericano."}
 - No inventes datos del cliente que contradigan el contexto.${learnedMemoryBlock ? `\n\n${learnedMemoryBlock}` : ""}`,
       messages: [{
         role: "user",
@@ -837,7 +837,7 @@ Tu tarea: generar EXACTAMENTE 3 opciones diferentes de esa sección, cada una co
 REGLAS:
 - Cada opción mantiene la MISMA estructura JSON (mismas keys, mismos tipos).
 - Las 3 opciones deben ser genuinamente DIFERENTES en tono/enfoque, no variaciones mínimas.
-- Español latinoamericano.
+- ${proposal.language === "en" ? "Escribe en inglés de negocios natural e idiomático — la propuesta está EN INGLÉS, NO escribas en español." : "Español latinoamericano."}
 - No inventes datos del cliente que no estén en el contexto.${learnedMemoryBlock ? `\n\n${learnedMemoryBlock}` : ""}
 
 Responde SOLO con JSON (sin markdown), con esta forma exacta:

@@ -768,10 +768,13 @@ ESTADO ACTUAL DE LA PROPUESTA (JSON)
 
 Título: ${proposal.title}
 Status: ${proposal.status}
+Idioma de la propuesta: ${proposal.language === "en" ? "INGLÉS" : "español"}
+${proposal.language === "en" ? "⚠️ IMPORTANTE: esta propuesta está EN INGLÉS. Respóndele al usuario en inglés y escribe TODO el contenido de las secciones (update_section) en inglés natural de negocios. NO escribas en español." : ""}
 Última actualización: ${proposal.updatedAt}
 
 SECCIONES:
 ${proposalSnapshot}`,
+
     },
   ];
 

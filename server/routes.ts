@@ -9508,7 +9508,7 @@ Responde SOLO con un JSON válido, sin markdown:
         model: getModelClassification(),
         max_tokens: 500,
         temperature: 0.4,
-        system: `Reescribe el texto que te dan aplicando la instrucción. Devuelve SOLO el texto reescrito, sin comillas, sin explicaciones, sin markdown. Español latinoamericano. Mantén el mismo tipo de contenido (si es un título corto, devuelve un título corto; si es un párrafo, devuelve un párrafo).`,
+        system: `Reescribe el texto que te dan aplicando la instrucción. Devuelve SOLO el texto reescrito, sin comillas, sin explicaciones, sin markdown. Responde en el MISMO idioma del texto original (si viene en inglés, responde en inglés; si en español, español latinoamericano). Mantén el mismo tipo de contenido (si es un título corto, devuelve un título corto; si es un párrafo, devuelve un párrafo).`,
         messages: [{
           role: "user",
           content: `${context ? `CONTEXTO: ${context}\n\n` : ""}TEXTO ACTUAL:\n${text}\n\nINSTRUCCIÓN:\n${instruction}\n\nDevuelve SOLO el texto reescrito:`
