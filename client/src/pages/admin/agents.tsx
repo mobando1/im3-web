@@ -48,6 +48,12 @@ import {
   RefreshCcw,
   List,
   LayoutGrid,
+  Pencil,
+  Trash2,
+  Eye,
+  EyeOff,
+  Check,
+  Lightbulb,
 } from "lucide-react";
 
 type AgentHealth = "healthy" | "warning" | "error" | "idle";
@@ -550,10 +556,10 @@ function AgentRow({
   onRun: () => void;
   isRunning: boolean;
 }) {
-  const KindIcon = kindIcons[agent.kind];
-  const kindColor = kindColors[agent.kind];
-  const health = healthStyles[agent.health];
-  const TriggerIcon = triggerIcons[agent.trigger];
+  const KindIcon = kindIcons[agent.kind] ?? kindIcons.automation;
+  const kindColor = kindColors[agent.kind] ?? kindColors.automation;
+  const health = healthStyles[agent.health] ?? healthStyles.idle;
+  const TriggerIcon = triggerIcons[agent.trigger] ?? triggerIcons.manual;
   const successRate =
     agent.stats.last10Total > 0
       ? Math.round((agent.stats.last10Success / agent.stats.last10Total) * 100)
@@ -704,10 +710,10 @@ function SheetBody({
   isRunning: boolean;
 }) {
   const agent = data.agent;
-  const KindIcon = kindIcons[agent.kind];
-  const kindColor = kindColors[agent.kind];
-  const health = healthStyles[agent.health];
-  const TriggerIcon = triggerIcons[agent.trigger];
+  const KindIcon = kindIcons[agent.kind] ?? kindIcons.automation;
+  const kindColor = kindColors[agent.kind] ?? kindColors.automation;
+  const health = healthStyles[agent.health] ?? healthStyles.idle;
+  const TriggerIcon = triggerIcons[agent.trigger] ?? triggerIcons.manual;
 
   // Stats
   const lastSuccess = data.runs.find((r) => r.status === "success") ?? null;
@@ -719,6 +725,9 @@ function SheetBody({
     data.runs.filter((r) => r.durationMs != null).reduce((acc, r) => acc + (r.durationMs ?? 0), 0) /
     Math.max(1, data.runs.filter((r) => r.durationMs != null).length);
   const isLive = data.runs[0]?.status === "running";
+
+  // Agentes ligados a la memoria de propuestas → muestran la pestaña "Aprendizajes"
+  const showLearnings = ["proposal-edit-learner", "org-preferences-extractor", "proposal-ai"].includes(agent.name);
 
   return (
     <>
@@ -806,6 +815,14 @@ function SheetBody({
           >
             Métricas
           </TabsTrigger>
+          {showLearnings && (
+            <TabsTrigger
+              value="learnings"
+              className="data-[state=active]:border-b-2 data-[state=active]:border-[#2FA4A9] data-[state=active]:text-[#2FA4A9] data-[state=active]:shadow-none rounded-none px-0 pb-2.5 text-xs font-medium"
+            >
+              Aprendizajes
+            </TabsTrigger>
+          )}
         </TabsList>
 
         <ScrollArea className="flex-1 overflow-hidden">
@@ -942,9 +959,211 @@ function SheetBody({
               </Section>
             )}
           </TabsContent>
+
+          {showLearnings && (
+            <TabsContent value="learnings" className="px-6 py-5 mt-0">
+              <LearningsTab enabled={showLearnings} />
+            </TabsContent>
+          )}
         </ScrollArea>
       </Tabs>
     </>
+  );
+}
+
+type MemoryFact = {
+  id: string;
+  category: string;
+  fact: string;
+  origin: string | null;
+  confidence: number;
+  reinforcedCount: number;
+  sourceProposalIds: string[] | null;
+  lastSeenAt: string;
+  createdAt: string;
+};
+
+const CATEGORY_LABELS: Record<string, string> = {
+  style: "Redacción y tono",
+  structure: "Estructura",
+  pattern: "Patrones (industria / números)",
+  preference: "Preferencias del equipo",
+  constraint: "Restricciones (lo que NO hacemos)",
+  person: "Personas y estilos",
+  client_history: "Historial de clientes",
+  other: "Otros aprendizajes",
+};
+
+const ORIGIN_BADGES: Record<string, { label: string; cls: string }> = {
+  edit_diff: { label: "de tus ediciones", cls: "bg-purple-50 text-purple-700" },
+  chat: { label: "del chat", cls: "bg-blue-50 text-blue-700" },
+  closed_proposal: { label: "propuesta cerrada", cls: "bg-emerald-50 text-emerald-700" },
+};
+
+function LearningsTab({ enabled }: { enabled: boolean }) {
+  const queryClient = useQueryClient();
+  const { data: facts, isLoading } = useQuery<MemoryFact[]>({
+    queryKey: ["/api/admin/chat-memory"],
+    enabled,
+  });
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draft, setDraft] = useState("");
+
+  const patchMut = useMutation({
+    mutationFn: async ({ id, body }: { id: string; body: Record<string, unknown> }) => {
+      await apiRequest("PATCH", `/api/admin/chat-memory/${id}`, body);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/chat-memory"] });
+      setEditingId(null);
+    },
+  });
+
+  const deleteMut = useMutation({
+    mutationFn: async (id: string) => {
+      await apiRequest("DELETE", `/api/admin/chat-memory/${id}`);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/admin/chat-memory"] }),
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="w-5 h-5 text-gray-300 animate-spin" />
+      </div>
+    );
+  }
+
+  if (!facts || facts.length === 0) {
+    return (
+      <div className="text-center py-12 text-gray-400">
+        <Lightbulb className="w-8 h-8 mx-auto mb-3 text-gray-300" />
+        <p className="text-sm">Aún no hay aprendizajes</p>
+        <p className="text-xs text-gray-400 mt-1 max-w-xs mx-auto leading-relaxed">
+          Cuando edites y envíes propuestas, el agente aprenderá tus cambios de redacción,
+          estructura y números, y los aplicará en las próximas.
+        </p>
+      </div>
+    );
+  }
+
+  // Agrupar por categoría, ordenando por confianza dentro de cada grupo
+  const grouped: Record<string, MemoryFact[]> = {};
+  for (const f of facts) {
+    (grouped[f.category] ||= []).push(f);
+  }
+  const orderedCats = Object.keys(grouped).sort((a, b) =>
+    (CATEGORY_LABELS[a] || a).localeCompare(CATEGORY_LABELS[b] || b),
+  );
+
+  return (
+    <div className="space-y-5">
+      <p className="text-xs text-gray-500 leading-relaxed">
+        Lecciones que el sistema aprendió de propuestas anteriores. Alimentan al generador
+        automáticamente. Puedes editarlas, desactivarlas (dejan de aplicarse sin borrarse) o eliminarlas.
+      </p>
+      {orderedCats.map((cat) => {
+        const items = grouped[cat].sort((a, b) => b.confidence - a.confidence);
+        return (
+          <Section key={cat} title={`${CATEGORY_LABELS[cat] || cat} (${items.length})`}>
+            <div className="space-y-2">
+              {items.map((f) => {
+                const isEditing = editingId === f.id;
+                const inactive = f.confidence < 30;
+                const origin = ORIGIN_BADGES[f.origin || "chat"] || ORIGIN_BADGES.chat;
+                return (
+                  <div
+                    key={f.id}
+                    className={`rounded-lg border p-3 ${inactive ? "border-gray-100 bg-gray-50/60 opacity-70" : "border-gray-200 bg-white"}`}
+                  >
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={draft}
+                          onChange={(e) => setDraft(e.target.value)}
+                          rows={3}
+                          className="w-full text-sm border border-gray-200 rounded-md p-2 focus:outline-none focus:ring-1 focus:ring-[#2FA4A9]"
+                        />
+                        <div className="flex items-center gap-2">
+                          <Button
+                            size="sm"
+                            className="h-7 px-2.5 text-[11px] bg-[#2FA4A9] hover:bg-[#2FA4A9]/90 text-white gap-1"
+                            disabled={patchMut.isPending || draft.trim().length < 5}
+                            onClick={() => patchMut.mutate({ id: f.id, body: { fact: draft } })}
+                          >
+                            <Check className="w-3 h-3" />
+                            Guardar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2.5 text-[11px] text-gray-500"
+                            onClick={() => setEditingId(null)}
+                          >
+                            Cancelar
+                          </Button>
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <p className="text-sm text-gray-800 leading-relaxed">{f.fact}</p>
+                        <div className="flex items-center gap-2 mt-2 flex-wrap">
+                          <span
+                            className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
+                              f.confidence >= 70
+                                ? "bg-emerald-50 text-emerald-700"
+                                : f.confidence >= 30
+                                  ? "bg-amber-50 text-amber-700"
+                                  : "bg-gray-100 text-gray-500"
+                            }`}
+                          >
+                            {inactive ? "desactivada" : `${f.confidence}% confianza`}
+                          </span>
+                          {f.reinforcedCount > 1 && (
+                            <span className="text-[10px] text-gray-400">{f.reinforcedCount}× reforzada</span>
+                          )}
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${origin.cls}`}>
+                            {origin.label}
+                          </span>
+                          <div className="ml-auto flex items-center gap-1">
+                            <button
+                              title="Editar"
+                              className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                              onClick={() => {
+                                setEditingId(f.id);
+                                setDraft(f.fact);
+                              }}
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              title={inactive ? "Reactivar" : "Desactivar"}
+                              className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                              disabled={patchMut.isPending}
+                              onClick={() => patchMut.mutate({ id: f.id, body: { enabled: inactive } })}
+                            >
+                              {inactive ? <Eye className="w-3.5 h-3.5" /> : <EyeOff className="w-3.5 h-3.5" />}
+                            </button>
+                            <button
+                              title="Eliminar"
+                              className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-600"
+                              disabled={deleteMut.isPending}
+                              onClick={() => deleteMut.mutate(f.id)}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </Section>
+        );
+      })}
+    </div>
   );
 }
 

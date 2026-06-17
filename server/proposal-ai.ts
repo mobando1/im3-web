@@ -9,6 +9,29 @@ import { proposalDataSchema, type ProposalData, type ProposalSectionKey, type Pr
 import { readFileSync } from "fs";
 import { resolve } from "path";
 import { buildStackReferenceFromDB } from "./stack-reference";
+import { getGlobalMemoryContext } from "./chat-memory";
+import { getOrgPreferencesContext } from "./org-preferences";
+
+/**
+ * Carga la memoria aprendida (lecciones de redacción/estructura/números extraídas
+ * de ediciones manuales por proposal-edit-learner + hechos del chat + preferencias org)
+ * como un bloque de texto para inyectar en los prompts del generador.
+ * Sin esto, el generador sería ciego a todo lo que el sistema aprende.
+ */
+async function buildLearnedMemoryBlock(): Promise<string> {
+  const [globalMemory, orgPrefs] = await Promise.all([
+    getGlobalMemoryContext().catch(() => ""),
+    getOrgPreferencesContext().catch(() => ""),
+  ]);
+  const parts = [globalMemory, orgPrefs].filter(Boolean);
+  if (parts.length === 0) return "";
+  return `═══════════════════════════════════════════════════════════════
+MEMORIA APRENDIDA — aplica estas lecciones de propuestas anteriores
+(redacción, estructura, precios y patrones que el equipo prefiere):
+═══════════════════════════════════════════════════════════════
+
+${parts.join("\n\n")}`;
+}
 
 // Load voice guide, cost reference, hardware catalog and case studies once at module load.
 // Exportados para que proposal-chat.ts use los mismos referentes que el generador.
@@ -186,6 +209,9 @@ export async function generateProposal(contactId: string, adminNotes?: string): 
   const stackRefFromDB = await buildStackReferenceFromDB().catch(() => "");
   const costReferenceBlock = stackRefFromDB || COST_REFERENCE;
 
+  // Memoria aprendida (lecciones de ediciones manuales + chat + preferencias org)
+  const learnedMemoryBlock = await buildLearnedMemoryBlock();
+
   const response = await anthropic.messages.create({
     model: "claude-sonnet-4-6",
     max_tokens: 10000,
@@ -217,7 +243,7 @@ CASE STUDIES — ÚNICA fuente autorizada de testimonios:
 ═══════════════════════════════════════════════════════════════
 
 ${CASE_STUDIES}
-
+${learnedMemoryBlock ? `\n${learnedMemoryBlock}\n` : ""}
 ═══════════════════════════════════════════════════════════════
 INSTRUCCIONES DE GENERACIÓN:
 ═══════════════════════════════════════════════════════════════
@@ -681,6 +707,8 @@ export async function regenerateProposalSection(
     }
   }
 
+  const learnedMemoryBlock = await buildLearnedMemoryBlock();
+
   try {
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
@@ -696,7 +724,7 @@ REGLAS:
 - NO cambies tipos: si un campo es número, que siga siendo número. Si es array, array. Etc.
 - Mantén coherencia con las otras secciones.
 - Español latinoamericano.
-- No inventes datos del cliente que contradigan el contexto.`,
+- No inventes datos del cliente que contradigan el contexto.${learnedMemoryBlock ? `\n\n${learnedMemoryBlock}` : ""}`,
       messages: [{
         role: "user",
         content: `${contactBrief}
@@ -793,6 +821,8 @@ export async function generateSectionOptions(
     }
   }
 
+  const learnedMemoryBlock = await buildLearnedMemoryBlock();
+
   try {
     const response = await anthropic.messages.create({
       model: "claude-sonnet-4-6",
@@ -806,7 +836,7 @@ REGLAS:
 - Cada opción mantiene la MISMA estructura JSON (mismas keys, mismos tipos).
 - Las 3 opciones deben ser genuinamente DIFERENTES en tono/enfoque, no variaciones mínimas.
 - Español latinoamericano.
-- No inventes datos del cliente que no estén en el contexto.
+- No inventes datos del cliente que no estén en el contexto.${learnedMemoryBlock ? `\n\n${learnedMemoryBlock}` : ""}
 
 Responde SOLO con JSON (sin markdown), con esta forma exacta:
 {

@@ -25,6 +25,7 @@ import { fetchRepoContext, fetchMultiRepoContext } from "./github-repo-context";
 import { syncDriveFilesToProject, syncDriveFilesToContact, runContactDriveSyncCron } from "./drive-file-sync";
 import { listDriveFolderChildren, searchDriveFolders, createSubfolder, getFolderPath, DriveAccessError } from "./google-drive";
 import { generateProposal, regenerateProposalSection, generateSectionOptions, applySectionOption } from "./proposal-ai";
+import { extractEditLessons } from "./proposal-edit-learner";
 import crypto from "crypto";
 import { getIndustriaLabel } from "@shared/industrias";
 import { testConnection as testGAConnection, isGoogleAnalyticsConfigured } from "./google-analytics";
@@ -9190,6 +9191,26 @@ Responde SOLO con un JSON válido, sin markdown:
   app.patch("/api/admin/proposals/:id", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
+      // Si esta edición manual toca `sections`, snapshot del estado ANTES del cambio.
+      // Da trazabilidad/undo de ediciones manuales (igual que el chat snapshotea sus cambios)
+      // y deja el rastro que proposal-edit-learner usa al comparar baseline IA vs versión final.
+      if ("sections" in req.body) {
+        const [before] = await db.select({ sections: proposals.sections })
+          .from(proposals)
+          .where(eq(proposals.id, req.params.id as string))
+          .limit(1);
+        if (before?.sections && Object.keys(before.sections).length > 0) {
+          const { proposalSnapshots } = await import("@shared/schema");
+          await db.insert(proposalSnapshots).values({
+            proposalId: req.params.id as string,
+            sections: before.sections,
+            triggeredByMessageId: null,
+            changeSummary: "Edición manual",
+            sectionKey: null,
+          }).catch(() => {});
+        }
+      }
+
       const [updated] = await db.update(proposals)
         .set({ ...req.body, updatedAt: new Date() })
         .where(eq(proposals.id, req.params.id as string))
@@ -9251,9 +9272,14 @@ Responde SOLO con un JSON válido, sin markdown:
 
       // Nuevo formato: toda la ProposalData va dentro de `sections` (campo JSON libre)
       // El frontend detecta si `sections.meta` existe → usa ProposalTemplate, si no → legacy render
+      // aiBaselineSections guarda lo que generó la IA (el "antes") para que proposal-edit-learner
+      // pueda comparar contra la versión final editada por el humano al enviar la propuesta.
+      // editLessonsLearnedAt se resetea: esta propuesta vuelve a ser candidata a aprender.
       const [updated] = await db.update(proposals).set({
         sections: result.proposalData as unknown as typeof proposals.$inferInsert["sections"],
+        aiBaselineSections: result.proposalData as unknown as typeof proposals.$inferInsert["aiBaselineSections"],
         aiSourcesReport: result.sourcesReport as unknown as typeof proposals.$inferInsert["aiSourcesReport"],
+        editLessonsLearnedAt: null,
         updatedAt: new Date(),
       }).where(eq(proposals.id, proposal.id)).returning();
 
@@ -9550,6 +9576,34 @@ Responde SOLO con un JSON válido, sin markdown:
     }
   });
 
+  // Editar una lección: cambiar el texto/categoría, ajustar confianza o desactivarla.
+  // Desactivar = confidence 0 (queda bajo el umbral >= 30 de getGlobalMemoryContext,
+  // así deja de alimentar al generador sin borrarse). enabled:true la reactiva a 50.
+  app.patch("/api/admin/chat-memory/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { chatGlobalMemory } = await import("@shared/schema");
+      const { fact, category, confidence, enabled } = req.body as {
+        fact?: string; category?: string; confidence?: number; enabled?: boolean;
+      };
+      const patch: Record<string, unknown> = {};
+      if (typeof fact === "string" && fact.trim().length > 0) patch.fact = fact.trim();
+      if (typeof category === "string" && category.trim().length > 0) patch.category = category.trim();
+      if (typeof confidence === "number") patch.confidence = Math.max(0, Math.min(99, Math.round(confidence)));
+      if (typeof enabled === "boolean") patch.confidence = enabled ? 50 : 0;
+      if (Object.keys(patch).length === 0) return res.status(400).json({ error: "Nada que actualizar" });
+      const [updated] = await db.update(chatGlobalMemory)
+        .set(patch)
+        .where(eq(chatGlobalMemory.id, req.params.id as string))
+        .returning();
+      if (!updated) return res.status(404).json({ error: "Lección no encontrada" });
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error updating chat memory: ${err?.message}`);
+      res.status(500).json({ error: "Error" });
+    }
+  });
+
   app.delete("/api/admin/chat-memory/:id", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
@@ -9725,6 +9779,15 @@ Responde SOLO con un JSON válido, sin markdown:
       await logActivity(contact.id, "email_sent", `Propuesta enviada: ${proposal.title} + secuencia de seguimiento programada`, { proposalId });
 
       log(`Proposal sent to ${contact.email} + 3 follow-ups scheduled`);
+
+      // Aprender de las ediciones humanas: compara el baseline IA vs la versión final
+      // que se está enviando y generaliza los cambios en lecciones de redacción/estructura.
+      // Fire-and-forget — no bloquea la respuesta. Envuelto en runAgent para observabilidad.
+      runAgent(
+        "proposal-edit-learner",
+        () => extractEditLessons(proposalId).then((r) => ({ recordsProcessed: r.lessonsLearned })),
+        { triggeredBy: "manual" },
+      ).catch((err) => log(`[edit-learner] trigger error: ${(err as Error).message}`));
 
       res.json({ success: true, proposalUrl });
     } catch (err: any) {
@@ -12305,8 +12368,48 @@ Responde SOLO con un JSON válido, sin markdown:
         .orderBy(desc(agentRuns.startedAt))
         .limit(limit);
 
+      // Campos calculados que el frontend del detalle necesita (igual que el endpoint de lista).
+      // Sin esto, agent.health/lastRun/stats llegan undefined y el detalle crashea ("reading 'bg'").
+      const lastRunRow = runs[0] ?? null;
+      const last10 = runs.slice(0, 10);
+      const errorCount = last10.filter((r) => r.status === "error").length;
+      const successCount = last10.filter((r) => r.status === "success").length;
+
+      let health: "healthy" | "warning" | "error" | "idle" = "idle";
+      if (lastRunRow) {
+        if (lastRunRow.status === "error") {
+          health = def.criticality === "critical" ? "error" : "warning";
+        } else if (errorCount >= 3) {
+          health = "warning";
+        } else {
+          health = "healthy";
+        }
+      }
+
       res.json({
-        agent: { ...def, runnable: undefined, hasRunnable: typeof def.runnable === "function" },
+        agent: {
+          ...def,
+          runnable: undefined,
+          hasRunnable: typeof def.runnable === "function",
+          health,
+          lastRun: lastRunRow
+            ? {
+                id: lastRunRow.id,
+                status: lastRunRow.status,
+                startedAt: lastRunRow.startedAt,
+                completedAt: lastRunRow.completedAt,
+                durationMs: lastRunRow.durationMs,
+                recordsProcessed: lastRunRow.recordsProcessed,
+                errorMessage: lastRunRow.errorMessage,
+                triggeredBy: lastRunRow.triggeredBy,
+              }
+            : null,
+          stats: {
+            last10Success: successCount,
+            last10Error: errorCount,
+            last10Total: last10.length,
+          },
+        },
         runs,
       });
     } catch (err: any) {

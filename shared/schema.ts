@@ -715,6 +715,13 @@ export const proposals = pgTable("proposals", {
   }>(),
   notes: text("notes"), // internal admin notes
   aiSourcesReport: json("ai_sources_report").$type<Record<string, string[]>>(), // AI traceability: section → sources
+  // Snapshot de lo que generó la IA al momento de /generate. Sirve de "antes" para que el
+  // agente proposal-edit-learner compare baseline-IA vs versión final (editada por humano)
+  // y generalice los cambios en lecciones. Ver server/proposal-edit-learner.ts.
+  aiBaselineSections: json("ai_baseline_sections").$type<Record<string, unknown>>(),
+  // Marca que el learner ya procesó esta propuesta (evita re-aprender al re-enviar).
+  // Se resetea a null en cada /generate.
+  editLessonsLearnedAt: timestamp("edit_lessons_learned_at"),
   accessToken: varchar("access_token").default(sql`gen_random_uuid()`).notNull().unique(),
   sentAt: timestamp("sent_at"),
   viewedAt: timestamp("viewed_at"),
@@ -746,7 +753,11 @@ export const chatGlobalMemory = pgTable("chat_global_memory", {
   category: text("category").notNull(),
   // Texto natural del aprendizaje (1-2 oraciones). Es lo que se inyecta al prompt.
   fact: text("fact").notNull(),
-  // 0-100. Sube cuando se reitera, baja cuando contradice.
+  // De dónde salió la lección: "chat" (extractFactsFromTurn), "edit_diff" (proposal-edit-learner,
+  // compara baseline IA vs versión final), "closed_proposal". Para mostrar el origen en la UI.
+  origin: text("origin").default("chat"),
+  // 0-100. Sube cuando se reitera, baja cuando contradice. Poner en 0 = desactivar
+  // (queda bajo el umbral >= 30 de getGlobalMemoryContext, deja de alimentar al generador).
   confidence: integer("confidence").default(50).notNull(),
   // De qué propuesta(s) y mensaje(s) salió este hecho — auditoría.
   sourceProposalIds: json("source_proposal_ids").$type<string[]>().default([]),

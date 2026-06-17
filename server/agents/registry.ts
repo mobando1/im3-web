@@ -19,6 +19,7 @@ import { runCostReferenceFreshness } from "./cost-reference-freshness";
 import { runAnalyticsSync } from "./analytics-sync";
 import { runAnalyticsMonthlyReport } from "./analytics-monthly-report";
 import { runOrgPreferencesExtractor } from "../org-preferences";
+import { runEditLearnerBatch } from "../proposal-edit-learner";
 import { runContactDriveSyncCron } from "../drive-file-sync";
 
 export type AgentKind = "ai" | "automation" | "integration" | "webhook";
@@ -355,6 +356,23 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
       { type: "db", label: "org_preferences", detail: "Guarda insights extraídos como memoria org" },
     ],
     sourceFile: "server/org-preferences.ts:45",
+  },
+  {
+    name: "proposal-edit-learner",
+    displayName: "Aprendiz de Ediciones",
+    kind: "ai",
+    description: "Compara lo que generó la IA vs la versión final que enviaste y aprende tus cambios de redacción, estructura y números para las próximas propuestas.",
+    trigger: "manual",
+    criticality: "low",
+    runnable: runEditLearnerBatch,
+    longDescription:
+      "Cuando envías una propuesta, compara el baseline que generó la IA (aiBaselineSections) contra la versión final que dejaste tú (ediciones manuales + chat) y, con Claude Haiku, generaliza esos cambios en lecciones reutilizables: estilo/redacción, estructura y patrones numéricos (como tendencia, nunca valores fijos). Las lecciones se guardan en la memoria global y alimentan al generador para que la próxima propuesta nazca respetándolas. Las puedes ver/curar en la pestaña Aprendizajes. El botón Ejecutar procesa en lote las propuestas enviadas/aceptadas que aún no fueron aprendidas.",
+    connections: [
+      { type: "llm", label: "Claude Haiku 4.5", detail: "Generaliza el diff baseline→final en lecciones" },
+      { type: "db", label: "proposals", detail: "Lee aiBaselineSections vs sections; marca editLessonsLearnedAt" },
+      { type: "db", label: "chat_global_memory", detail: "Guarda lecciones con origin='edit_diff'" },
+    ],
+    sourceFile: "server/proposal-edit-learner.ts:1",
   },
   {
     name: "newsletter-digest",

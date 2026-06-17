@@ -495,6 +495,11 @@ export async function runMigrations() {
     await pool.query(`ALTER TABLE "proposals" ADD COLUMN IF NOT EXISTS "deleted_at" timestamp;`).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_proposals_deleted_at" ON "proposals" ("deleted_at");`).catch(() => {});
 
+    // Proposals: aprendizaje de ediciones manuales (proposal-edit-learner).
+    // aiBaselineSections = lo que generó la IA; editLessonsLearnedAt = ya procesada por el learner.
+    await pool.query(`ALTER TABLE "proposals" ADD COLUMN IF NOT EXISTS "ai_baseline_sections" json;`).catch(() => {});
+    await pool.query(`ALTER TABLE "proposals" ADD COLUMN IF NOT EXISTS "edit_lessons_learned_at" timestamp;`).catch(() => {});
+
     // Chat global memory — hechos cross-proposal/cross-client del chat
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "chat_global_memory" (
@@ -510,6 +515,8 @@ export async function runMigrations() {
     `).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_chat_memory_category" ON "chat_global_memory" ("category", "confidence" DESC);`).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_chat_memory_last_seen" ON "chat_global_memory" ("last_seen_at" DESC);`).catch(() => {});
+    // Origen de la lección: chat | edit_diff | closed_proposal (default chat para filas existentes)
+    await pool.query(`ALTER TABLE "chat_global_memory" ADD COLUMN IF NOT EXISTS "origin" text DEFAULT 'chat';`).catch(() => {});
 
     // Org preferences — memoria entre propuestas (Sprint 6.1)
     await pool.query(`
