@@ -3,6 +3,7 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams } from "wouter";
 import { ProposalTemplate } from "@shared/proposal-template";
 import type { ProposalData } from "@shared/proposal-template/types";
+import { PROPOSAL_STRINGS } from "@shared/proposal-template/i18n";
 import {
   CheckCircle2, Calendar, ChevronDown, ChevronRight,
   AlertTriangle, Quote, ArrowDown, TrendingUp, Shield, Clock, Zap,
@@ -367,6 +368,7 @@ export default function ProposalView() {
   const { token } = useParams<{ token: string }>();
   const [selectedOption, setSelectedOption] = useState<string>("standard");
   const [acceptName, setAcceptName] = useState("");
+  const [acceptTerms, setAcceptTerms] = useState(false);
   const [showAccept, setShowAccept] = useState(false);
   const [accepted, setAccepted] = useState(false);
   const [showMobileCta, setShowMobileCta] = useState(false);
@@ -458,25 +460,10 @@ export default function ProposalView() {
   // En modo `?pdf=true` el template se renderiza igual; el useEffect dispara window.print().
   const rawSections = proposal.sections || {};
   const isNewFormat = rawSections.meta && rawSections.hero && rawSections.summary;
-  if (isNewFormat) {
-    return (
-      <ProposalTemplate
-        data={rawSections as ProposalData}
-        lang={proposal.language === "en" ? "en" : "es"}
-        interactive
-        onAccept={() => setShowAccept(true)}
-        onFallback={() => {
-          // Scroll al CTA existente sin cerrar
-        }}
-      />
-    );
-  }
+  const lang: "es" | "en" = proposal.language === "en" ? "en" : "es";
+  const t = PROPOSAL_STRINGS[lang];
 
-  const sections = rawSections;
-  const pricing = proposal.pricing;
-  const timeline = proposal.timelineData;
-
-  // ── Accepted state ──
+  // ── Estado aceptado (antes de elegir formato: aplica a formato nuevo Y legacy) ──
   if (accepted || proposal.status === "accepted") {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4">
@@ -484,15 +471,83 @@ export default function ProposalView() {
           <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto">
             <CheckCircle2 className="w-8 h-8 text-emerald-600" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-900">Propuesta aceptada</h1>
-          <p className="text-gray-500">Gracias por confiar en IM3 Systems. Nos pondremos en contacto contigo pronto para dar inicio al proyecto.</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t.acceptedTitle}</h1>
+          <p className="text-gray-500">{t.acceptedBody}</p>
           <a href="https://www.im3systems.com/booking" className="inline-flex items-center gap-2 bg-[#2FA4A9] text-white px-6 py-3 rounded-xl font-medium hover:bg-[#238b8f] transition-colors">
-            <Calendar className="w-4 h-4" /> Agendar reunión de inicio
+            <Calendar className="w-4 h-4" /> {t.acceptedScheduleKickoff}
           </a>
         </div>
       </div>
     );
   }
+
+  // ── Formato nuevo (ProposalData con template premium) ──
+  // El modal de aceptación se renderiza como overlay JUNTO al template (antes vivía solo en el
+  // render legacy de abajo → era inalcanzable en formato nuevo: el botón "Aceptar" no hacía nada).
+  if (isNewFormat) {
+    return (
+      <>
+        <ProposalTemplate
+          data={rawSections as ProposalData}
+          lang={lang}
+          interactive
+          onAccept={() => setShowAccept(true)}
+          onFallback={() => {
+            // Scroll al CTA existente sin cerrar
+          }}
+        />
+        {showAccept && (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4 print:hidden"
+            onClick={() => setShowAccept(false)}
+          >
+            <div
+              className="bg-white rounded-2xl p-6 sm:p-8 max-w-sm w-full space-y-4 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="text-center space-y-1">
+                <h2 className="text-xl font-bold text-gray-900">{t.acceptModalTitle}</h2>
+                <p className="text-sm text-gray-500">{t.acceptModalSubtitle}</p>
+              </div>
+              <Input
+                value={acceptName}
+                onChange={(e) => setAcceptName(e.target.value)}
+                placeholder={t.acceptNamePlaceholder}
+                autoFocus
+              />
+              <label className="flex items-start gap-2 text-left text-sm text-gray-600">
+                <input
+                  type="checkbox"
+                  checked={acceptTerms}
+                  onChange={(e) => setAcceptTerms(e.target.checked)}
+                  className="mt-0.5 rounded border-gray-300"
+                />
+                {t.acceptTermsLabel}
+              </label>
+              <Button
+                className="w-full bg-emerald-600 hover:bg-emerald-700 gap-2"
+                disabled={!acceptName || !acceptTerms || acceptMut.isPending}
+                onClick={() => acceptMut.mutate()}
+              >
+                <CheckCircle2 className="w-4 h-4" />
+                {acceptMut.isPending ? t.acceptProcessing : t.acceptConfirm}
+              </Button>
+              <button
+                onClick={() => setShowAccept(false)}
+                className="w-full text-xs text-gray-400 hover:text-gray-600"
+              >
+                {t.acceptCancel}
+              </button>
+            </div>
+          </div>
+        )}
+      </>
+    );
+  }
+
+  const sections = rawSections;
+  const pricing = proposal.pricing;
+  const timeline = proposal.timelineData;
 
   // Visible sections for dot nav
   const visibleSections = SECTION_ORDER.filter(k => sections[k]);

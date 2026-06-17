@@ -9932,6 +9932,31 @@ Responde SOLO con un JSON válido, sin markdown:
     }
   });
 
+  // Marcar como aceptada desde el CRM (cierre en llamada). Mismo efecto que la aceptación pública:
+  // status=accepted → congela la propuesta y habilita "Crear proyecto". Idempotente.
+  app.post("/api/admin/proposals/:id/mark-accepted", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [proposal] = await db.select().from(proposals).where(eq(proposals.id, req.params.id as string)).limit(1);
+      if (!proposal) return res.status(404).json({ error: "Propuesta no encontrada" });
+      if (proposal.status === "accepted") return res.json(proposal); // ya aceptada → no-op
+
+      const adminUser = (req.user as { username?: string } | undefined)?.username || "admin";
+      const [updated] = await db.update(proposals).set({
+        status: "accepted",
+        acceptedAt: new Date(),
+        acceptedBy: `${adminUser} (marcada desde el CRM)`,
+        acceptanceDetails: { manual: true, by: adminUser, timestamp: new Date().toISOString() },
+        updatedAt: new Date(),
+      }).where(eq(proposals.id, proposal.id)).returning();
+
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error marking proposal accepted: ${err?.message}`);
+      res.status(500).json({ error: "Error marcando la propuesta como aceptada" });
+    }
+  });
+
   // Convert proposal to project (AI-generated plan)
   app.post("/api/admin/proposals/:id/convert-to-project", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });

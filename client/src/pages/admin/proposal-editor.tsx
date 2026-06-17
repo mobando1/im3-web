@@ -292,6 +292,7 @@ export default function ProposalEditor() {
   const [confirmRegenOpen, setConfirmRegenOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
   const [confirmTranslateOpen, setConfirmTranslateOpen] = useState(false);
+  const [confirmAcceptOpen, setConfirmAcceptOpen] = useState(false);
   const [convertOpen, setConvertOpen] = useState(false);
   const [convertStartDate, setConvertStartDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
 
@@ -410,6 +411,23 @@ export default function ProposalEditor() {
       toast({ title: "Propuesta enviada al cliente" });
     },
     onError: () => toast({ title: "Error enviando propuesta", variant: "destructive" }),
+  });
+
+  // Marcar como aceptada desde el CRM (cierre en llamada). Congela la propuesta (status=accepted).
+  const markAcceptedMut = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", `/api/admin/proposals/${id}/mark-accepted`);
+      return res.json();
+    },
+    onSuccess: () => {
+      // Limpiar estado de edición: al congelarse, los formularios se desmontan; evita que un
+      // dirty flag viejo dispare el guard de "cambios sin guardar".
+      setHasUnsavedChanges(false);
+      setEditingSection(null);
+      toast({ title: "Propuesta marcada como aceptada" });
+      invalidate();
+    },
+    onError: (err: any) => toast({ title: "Error marcando como aceptada", description: err?.message, variant: "destructive" }),
   });
 
   // Delete a section (set to null)
@@ -703,6 +721,19 @@ export default function ProposalEditor() {
           >
             <Send className="w-4 h-4" />
             {sendMut.isPending ? "Enviando..." : "Enviar al cliente"}
+          </Button>
+        )}
+        {hasSections && !isAccepted && (
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+            onClick={() => setConfirmAcceptOpen(true)}
+            disabled={markAcceptedMut.isPending}
+            title="Marca la propuesta como aceptada (p.ej. tras cerrar en una llamada). Congela el contenido."
+          >
+            <Check className="w-4 h-4" />
+            {markAcceptedMut.isPending ? "Marcando..." : "Marcar como aceptada"}
           </Button>
         )}
         {hasSections && (
@@ -1428,6 +1459,40 @@ export default function ProposalEditor() {
               className="bg-blue-600 hover:bg-blue-700"
             >
               <Languages className="w-4 h-4 mr-1.5" /> Traducir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Confirmar marcar como aceptada (cierre en llamada) — congela la propuesta */}
+      <AlertDialog open={confirmAcceptOpen} onOpenChange={setConfirmAcceptOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 text-emerald-700">
+              <Check className="w-5 h-5" /> Marcar propuesta como aceptada
+            </AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-gray-600">
+                <p>
+                  Marca esta propuesta como <strong>aceptada</strong> (por ejemplo, tras cerrar en una llamada).
+                  Queda registrada con fecha y <strong>se congela</strong>: no se podrá editar su contenido.
+                </p>
+                <p className="text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-md p-2 text-xs">
+                  💡 Si luego necesitas cambios, duplícala y trabaja sobre la copia. Después puedes "Crear proyecto".
+                </p>
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                markAcceptedMut.mutate();
+                setConfirmAcceptOpen(false);
+              }}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              <Check className="w-4 h-4 mr-1.5" /> Marcar como aceptada
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

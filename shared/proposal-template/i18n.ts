@@ -61,6 +61,17 @@ export type ProposalStrings = {
   billingLabels: Record<"fixed" | "passthrough" | "passthrough-with-cap" | "client-direct", string>;
   // CTA
   ctaEyebrow: string;
+  // Flujo de aceptación (página pública: modal + pantalla de gracias)
+  acceptModalTitle: string;
+  acceptModalSubtitle: string;
+  acceptNamePlaceholder: string;
+  acceptTermsLabel: string;
+  acceptConfirm: string;
+  acceptProcessing: string;
+  acceptCancel: string;
+  acceptedTitle: string;
+  acceptedBody: string;
+  acceptedScheduleKickoff: string;
 };
 
 export const PROPOSAL_STRINGS: Record<ProposalLang, ProposalStrings> = {
@@ -111,6 +122,16 @@ export const PROPOSAL_STRINGS: Record<ProposalLang, ProposalStrings> = {
       "client-direct": "Pago directo del cliente",
     },
     ctaEyebrow: "Próximos Pasos",
+    acceptModalTitle: "¿Listo para empezar?",
+    acceptModalSubtitle: "Acepta la propuesta y agendaremos la reunión de inicio para arrancar tu proyecto.",
+    acceptNamePlaceholder: "Tu nombre completo",
+    acceptTermsLabel: "Acepto los términos de esta propuesta comercial",
+    acceptConfirm: "Confirmar aceptación",
+    acceptProcessing: "Procesando...",
+    acceptCancel: "Cancelar",
+    acceptedTitle: "Propuesta aceptada",
+    acceptedBody: "Gracias por confiar en IM3 Systems. Nos pondremos en contacto contigo pronto para dar inicio al proyecto.",
+    acceptedScheduleKickoff: "Agendar reunión de inicio",
   },
   en: {
     commercialProposal: "Commercial Proposal",
@@ -159,6 +180,16 @@ export const PROPOSAL_STRINGS: Record<ProposalLang, ProposalStrings> = {
       "client-direct": "Client pays directly",
     },
     ctaEyebrow: "Next Steps",
+    acceptModalTitle: "Ready to get started?",
+    acceptModalSubtitle: "Accept the proposal and we'll schedule the kickoff meeting to start your project.",
+    acceptNamePlaceholder: "Your full name",
+    acceptTermsLabel: "I accept the terms of this commercial proposal",
+    acceptConfirm: "Confirm acceptance",
+    acceptProcessing: "Processing...",
+    acceptCancel: "Cancel",
+    acceptedTitle: "Proposal accepted",
+    acceptedBody: "Thank you for trusting IM3 Systems. We'll be in touch soon to kick off your project.",
+    acceptedScheduleKickoff: "Schedule kickoff meeting",
   },
 };
 
