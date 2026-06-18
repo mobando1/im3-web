@@ -3,7 +3,7 @@ import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { LayoutDashboard, Users, CalendarDays, CheckSquare, LogOut, Bell, Search, Briefcase, FileText, BookOpen, Columns3, FolderKanban, Mic, FileSignature, ClipboardCheck, Activity, Wrench, Layers, FileCheck, Newspaper, Stethoscope, Settings } from "lucide-react";
+import { LayoutDashboard, Users, CalendarDays, CheckSquare, LogOut, Bell, Search, Briefcase, FileText, BookOpen, Columns3, FolderKanban, Mic, FileSignature, ClipboardCheck, Activity, Wrench, Layers, FileCheck, Newspaper, Stethoscope, Settings, KeyRound } from "lucide-react";
 import { CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 
 const navItems = [
@@ -15,13 +15,14 @@ const navItems = [
   { label: "Propuestas", path: "/admin/proposals", icon: FileSignature },
   { label: "Contratos", path: "/admin/contracts", icon: FileCheck },
   { label: "Stack & Costos", path: "/admin/stack-catalog", icon: Layers },
-  { label: "Acta", path: "https://acta.im3systems.com", icon: Mic, external: true },
+  { label: "Acta", path: "/admin/sessions", icon: Mic },
   { label: "Daily Brief", path: "/admin/daily-brief", icon: Newspaper },
   { label: "Blog", path: "/admin/blog", icon: BookOpen },
   { label: "Tareas", path: "/admin/tasks", icon: CheckSquare, showBadge: true },
   { label: "Calendario", path: "/admin/calendar", icon: CalendarDays },
   { label: "Sistema", path: "/admin/agents", icon: Activity },
   { label: "Ingeniero IA", path: "/admin/engineering", icon: Stethoscope },
+  { label: "Bóveda", path: "/admin/vault", icon: KeyRound },
   { label: "Configuración", path: "/admin/settings", icon: Settings },
   { label: "Herramientas", path: "/admin/tools", icon: Wrench },
   { label: "Plantillas", path: "/admin/templates", icon: FileText },

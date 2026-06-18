@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { getModelGeneration, getModelClassification, getAllConfig, setConfig } from "./config";
 import { eq, asc, isNull, isNotNull, sql, and, gte, lte, ilike, or, desc, count, inArray } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, teamMembers, taskSuggestions, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectGithubRepos, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalTranslationCache, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, stackServices, contractTemplates, contracts, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback, adminActionAudit } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, teamMembers, taskSuggestions, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectGithubRepos, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalTranslationCache, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, stackServices, contractTemplates, contracts, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback, adminActionAudit, vaultItems, vaultAccessLog } from "@shared/schema";
 import { AGENT_REGISTRY, AGENT_KINDS, findAgent } from "./agents/registry";
 import { runAgent } from "./agents/runner";
 import { syncGmailEmails, isGmailConfigured, sendGmailMessage, getOriginalMessageHeaders } from "./google-gmail";
@@ -32,6 +32,7 @@ import crypto from "crypto";
 import { getIndustriaLabel } from "@shared/industrias";
 import { testConnection as testGAConnection, isGoogleAnalyticsConfigured } from "./google-analytics";
 import { backfillAnalytics } from "./agents/analytics-sync";
+import { isVaultConfigured, encryptSecret, decryptSecret, VaultDecryptError } from "./vault-crypto";
 
 type ProjectNotificationContent = {
   title: string;
@@ -11031,6 +11032,253 @@ Responde SOLO con un JSON válido, sin markdown:
       res.json(await listActionAudit());
     } catch (err: any) {
       res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // ───────────────────────────────────────────────────────────────
+  // Bóveda (Vault) — credenciales cifradas + base de conocimiento.
+  // Todas requieren admin. El ciphertext NUNCA cruza el cable: list/get
+  // pasan por toPublicItem(); solo POST /:id/reveal descifra (y audita).
+  // ───────────────────────────────────────────────────────────────
+  const vaultSecretFieldSchema = z.object({
+    label: z.string().min(1).max(200),
+    value: z.string().max(20000),
+  });
+  const vaultKindSchema = z.enum(["credential", "link", "note", "idea", "doc"]);
+  const vaultOwnerScopeSchema = z.enum(["internal", "client"]);
+  const vaultCreateSchema = z.object({
+    kind: vaultKindSchema,
+    title: z.string().min(1).max(300),
+    description: z.string().max(20000).nullish(),
+    url: z.string().max(2000).nullish(),
+    username: z.string().max(300).nullish(),
+    ownerScope: vaultOwnerScopeSchema.default("internal"),
+    contactId: z.string().nullish(),
+    projectId: z.string().nullish(),
+    tags: z.array(z.string().max(60)).max(50).default([]),
+    favorite: z.boolean().default(false),
+    // omitido → secreto sin cambios (en PATCH); [] → limpiar; [{...}] → (re)cifrar
+    secretFields: z.array(vaultSecretFieldSchema).max(50).optional(),
+  });
+  const vaultPatchSchema = vaultCreateSchema.partial();
+
+  // Quita el ciphertext de la fila y expone solo si tiene secreto.
+  type VaultRow = typeof vaultItems.$inferSelect;
+  const toPublicVaultItem = (row: VaultRow) => {
+    const { secretCiphertext, ...rest } = row;
+    return { ...rest, hasSecret: secretCiphertext != null };
+  };
+
+  const logVaultAccess = async (
+    itemId: string | null,
+    action: "reveal" | "create" | "update" | "delete",
+    performedBy: string,
+    detail: string | null,
+  ) => {
+    if (!db) return;
+    await db.insert(vaultAccessLog).values({ itemId, action, performedBy, detail }).catch((e) => {
+      log(`[vault] ⚠ falló el log de acceso (${action}): ${(e as Error)?.message}`);
+    });
+  };
+
+  // GET lista — filtros + búsqueda. Nunca devuelve secretos. No requiere llave.
+  app.get("/api/admin/vault", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { kind, tag, contactId, projectId, ownerScope, search, favorite, limit = "50", offset = "0" } = req.query as Record<string, string>;
+      const limitNum = Math.min(200, Math.max(1, parseInt(limit) || 50));
+      const offsetNum = Math.max(0, parseInt(offset) || 0);
+
+      const conditions = [isNull(vaultItems.deletedAt)];
+      if (kind) conditions.push(eq(vaultItems.kind, kind));
+      if (ownerScope) conditions.push(eq(vaultItems.ownerScope, ownerScope));
+      if (contactId) conditions.push(eq(vaultItems.contactId, contactId));
+      if (projectId) conditions.push(eq(vaultItems.projectId, projectId));
+      if (favorite === "true") conditions.push(eq(vaultItems.favorite, true));
+      if (tag) conditions.push(sql`${vaultItems.tags}::jsonb ? ${tag}`);
+      if (search) {
+        conditions.push(
+          or(
+            ilike(vaultItems.title, `%${search}%`),
+            ilike(vaultItems.description, `%${search}%`),
+            ilike(vaultItems.username, `%${search}%`),
+          )!,
+        );
+      }
+      const whereClause = and(...conditions);
+
+      const rows = await db
+        .select()
+        .from(vaultItems)
+        .where(whereClause)
+        .orderBy(desc(vaultItems.favorite), desc(vaultItems.updatedAt))
+        .limit(limitNum)
+        .offset(offsetNum);
+
+      const [{ value: total }] = await db.select({ value: count() }).from(vaultItems).where(whereClause);
+
+      res.json({ items: rows.map(toPublicVaultItem), total });
+    } catch (err: any) {
+      log(`Error vault list: ${err?.message}`);
+      res.status(500).json({ error: "Error obteniendo items de la bóveda" });
+    }
+  });
+
+  // GET recientes accesos — para la vista de auditoría.
+  app.get("/api/admin/vault/access-log", requireAuth, async (_req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const rows = await db.select().from(vaultAccessLog).orderBy(desc(vaultAccessLog.createdAt)).limit(100);
+      res.json(rows);
+    } catch (err: any) {
+      log(`Error vault access-log: ${err?.message}`);
+      res.status(500).json({ error: "Error en la bóveda" });
+    }
+  });
+
+  // GET un item — metadata only. No loguea acceso (ver metadata ≠ ver secreto).
+  app.get("/api/admin/vault/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const id = req.params.id as string;
+      const [row] = await db.select().from(vaultItems).where(eq(vaultItems.id, id)).limit(1);
+      if (!row || row.deletedAt) return res.status(404).json({ message: "Item no encontrado" });
+      res.json(toPublicVaultItem(row));
+    } catch (err: any) {
+      log(`Error vault get: ${err?.message}`);
+      res.status(500).json({ error: "Error en la bóveda" });
+    }
+  });
+
+  // POST crear.
+  app.post("/api/admin/vault", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const parsed = vaultCreateSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Datos inválidos", issues: parsed.error.flatten().fieldErrors });
+    const username = (req.user as { username?: string } | undefined)?.username || "admin";
+    try {
+      const d = parsed.data;
+      let secretCiphertext: string | null = null;
+      if (d.secretFields && d.secretFields.length > 0) {
+        if (!isVaultConfigured()) return res.status(503).json({ message: "Bóveda no configurada: falta VAULT_MASTER_KEY" });
+        secretCiphertext = encryptSecret(JSON.stringify(d.secretFields));
+      }
+      const [row] = await db
+        .insert(vaultItems)
+        .values({
+          kind: d.kind,
+          title: d.title,
+          description: d.description ?? null,
+          url: d.url ?? null,
+          username: d.username ?? null,
+          ownerScope: d.ownerScope,
+          contactId: d.contactId ?? null,
+          projectId: d.projectId ?? null,
+          tags: d.tags,
+          favorite: d.favorite,
+          secretCiphertext,
+          createdBy: username,
+          updatedBy: username,
+        })
+        .returning();
+      await logVaultAccess(row.id, "create", username, row.title);
+      res.status(201).json(toPublicVaultItem(row));
+    } catch (err: any) {
+      log(`Error vault create: ${err?.message}`);
+      res.status(500).json({ error: "Error creando item" });
+    }
+  });
+
+  // PATCH actualizar. Re-cifra solo si llegan secretFields.
+  app.patch("/api/admin/vault/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const parsed = vaultPatchSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ message: "Datos inválidos", issues: parsed.error.flatten().fieldErrors });
+    const username = (req.user as { username?: string } | undefined)?.username || "admin";
+    try {
+      const id = req.params.id as string;
+      const [existing] = await db.select().from(vaultItems).where(eq(vaultItems.id, id)).limit(1);
+      if (!existing || existing.deletedAt) return res.status(404).json({ message: "Item no encontrado" });
+
+      const d = parsed.data;
+      const updates: Partial<typeof vaultItems.$inferInsert> = { updatedBy: username, updatedAt: new Date() };
+      if (d.kind !== undefined) updates.kind = d.kind;
+      if (d.title !== undefined) updates.title = d.title;
+      if (d.description !== undefined) updates.description = d.description ?? null;
+      if (d.url !== undefined) updates.url = d.url ?? null;
+      if (d.username !== undefined) updates.username = d.username ?? null;
+      if (d.ownerScope !== undefined) updates.ownerScope = d.ownerScope;
+      if (d.contactId !== undefined) updates.contactId = d.contactId ?? null;
+      if (d.projectId !== undefined) updates.projectId = d.projectId ?? null;
+      if (d.tags !== undefined) updates.tags = d.tags;
+      if (d.favorite !== undefined) updates.favorite = d.favorite;
+      // Tri-estado del secreto: omitido → sin cambios; [] → limpiar; [{...}] → re-cifrar.
+      if (d.secretFields !== undefined) {
+        if (d.secretFields.length === 0) {
+          updates.secretCiphertext = null;
+        } else {
+          if (!isVaultConfigured()) return res.status(503).json({ message: "Bóveda no configurada: falta VAULT_MASTER_KEY" });
+          updates.secretCiphertext = encryptSecret(JSON.stringify(d.secretFields));
+        }
+      }
+
+      const [row] = await db.update(vaultItems).set(updates).where(eq(vaultItems.id, id)).returning();
+      await logVaultAccess(row.id, "update", username, row.title);
+      res.json(toPublicVaultItem(row));
+    } catch (err: any) {
+      log(`Error vault patch: ${err?.message}`);
+      res.status(500).json({ error: "Error actualizando item" });
+    }
+  });
+
+  // DELETE — soft-delete. Conserva el ciphertext (recuperable). No requiere llave.
+  app.delete("/api/admin/vault/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const username = (req.user as { username?: string } | undefined)?.username || "admin";
+    try {
+      const id = req.params.id as string;
+      const [existing] = await db.select().from(vaultItems).where(eq(vaultItems.id, id)).limit(1);
+      if (!existing || existing.deletedAt) return res.status(404).json({ message: "Item no encontrado" });
+      await db.update(vaultItems).set({ deletedAt: new Date(), updatedBy: username }).where(eq(vaultItems.id, id));
+      await logVaultAccess(id, "delete", username, existing.title);
+      res.json({ ok: true });
+    } catch (err: any) {
+      log(`Error vault delete: ${err?.message}`);
+      res.status(500).json({ error: "Error en la bóveda" });
+    }
+  });
+
+  // POST reveal — descifra y devuelve los secretFields. POST (no GET): las URLs
+  // GET se loguean en proxies/historial/cache; reveal es acción auditable con
+  // efecto secundario y respuesta no cacheable.
+  app.post("/api/admin/vault/:id/reveal", requireAuth, async (req, res) => {
+    // El cuerpo de esta respuesta lleva secretos en claro: que NO se loguee nunca.
+    res.locals.skipBodyLog = true;
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    if (!isVaultConfigured()) return res.status(503).json({ message: "Bóveda no configurada: falta VAULT_MASTER_KEY" });
+    const username = (req.user as { username?: string } | undefined)?.username || "admin";
+    try {
+      const id = req.params.id as string;
+      const [row] = await db.select().from(vaultItems).where(eq(vaultItems.id, id)).limit(1);
+      if (!row || row.deletedAt) return res.status(404).json({ message: "Item no encontrado" });
+
+      res.setHeader("Cache-Control", "no-store");
+      if (row.secretCiphertext == null) return res.json({ secretFields: [] });
+
+      let secretFields: { label: string; value: string }[];
+      try {
+        secretFields = JSON.parse(decryptSecret(row.secretCiphertext));
+      } catch (e) {
+        if (e instanceof VaultDecryptError) {
+          return res.status(422).json({ message: "No se pudo descifrar el secreto (clave incorrecta o dato corrupto)" });
+        }
+        throw e;
+      }
+      await logVaultAccess(row.id, "reveal", username, row.title);
+      res.json({ secretFields });
+    } catch (err: any) {
+      log(`Error vault reveal: ${err?.message}`);
+      res.status(500).json({ error: "Error revelando secreto" });
     }
   });
 

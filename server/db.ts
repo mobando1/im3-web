@@ -1259,6 +1259,52 @@ ___________________________________
     `).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_admin_action_audit_created" ON "admin_action_audit" ("created_at" DESC);`).catch(() => {});
 
+    // ── Bóveda (Vault) — credenciales cifradas + base de conocimiento ──
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "vault_items" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "kind" text NOT NULL,
+        "title" text NOT NULL,
+        "description" text,
+        "url" text,
+        "username" text,
+        "owner_scope" text DEFAULT 'internal' NOT NULL,
+        "contact_id" varchar,
+        "project_id" varchar,
+        "tags" json DEFAULT '[]'::json,
+        "favorite" boolean DEFAULT false NOT NULL,
+        "secret_ciphertext" text,
+        "created_by" text,
+        "updated_by" text,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "updated_at" timestamp DEFAULT now() NOT NULL,
+        "deleted_at" timestamp
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_vault_items_kind" ON "vault_items" ("kind");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_vault_items_owner_scope" ON "vault_items" ("owner_scope");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_vault_items_contact_id" ON "vault_items" ("contact_id");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_vault_items_project_id" ON "vault_items" ("project_id");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_vault_items_deleted_at" ON "vault_items" ("deleted_at");`).catch(() => {});
+    // Búsqueda de texto: pg_trgm hace ILIKE '%x%' indexado. La tabla es pequeña
+    // (admin-only), así que si la extensión faltara los índices se omiten sin romper.
+    await pool.query(`CREATE EXTENSION IF NOT EXISTS pg_trgm;`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_vault_items_title_trgm" ON "vault_items" USING gin ("title" gin_trgm_ops);`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_vault_items_desc_trgm" ON "vault_items" USING gin ("description" gin_trgm_ops);`).catch(() => {});
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "vault_access_log" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "item_id" varchar,
+        "action" text NOT NULL,
+        "performed_by" text NOT NULL,
+        "detail" text,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_vault_access_log_item" ON "vault_access_log" ("item_id", "created_at" DESC);`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_vault_access_log_created" ON "vault_access_log" ("created_at" DESC);`).catch(() => {});
+
     console.log("✓ Database tables and indexes ensured");
 
     // Ensure admin user exists with correct password

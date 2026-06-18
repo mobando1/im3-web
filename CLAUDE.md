@@ -192,6 +192,13 @@ ACTA_API_KEY=...                     # token Bearer que Acta usa para llamar /ap
                                      # POST /meetings (ingesta de reunión/audio → 02.reuniones + perfil),
                                      # GET /clients?query= (búsqueda). Sin este env, los endpoints responden 503.
 
+# Bóveda (Vault) — credenciales cifradas en /admin/vault
+VAULT_MASTER_KEY=...                  # base64 de 32 bytes (generar: openssl rand -base64 32). Cifra los
+                                     # secretos de la bóveda con AES-256-GCM. Vive SOLO en env, nunca en la DB.
+                                     # Sin él, las operaciones con secreto (crear-con-secreto, reveal) responden
+                                     # 503, pero la metadata de items sigue legible. ⚠️ Si se pierde, los secretos
+                                     # cifrados son IRRECUPERABLES — guardar copia segura fuera de Railway.
+
 # Stripe (opcional, aún no activo)
 STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_STARTER, STRIPE_PRICE_PRO, STRIPE_PRICE_TEAM
 ```

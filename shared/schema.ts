@@ -1227,6 +1227,63 @@ export type AdminActionAudit = typeof adminActionAudit.$inferSelect;
 export type InsertAdminActionAudit = typeof adminActionAudit.$inferInsert;
 
 // ───────────────────────────────────────────────────────────────
+// Bóveda (Vault) — credenciales cifradas (sistemas IM3 + clientes) +
+// base de conocimiento ligera (notas, ideas, links a Drive, docs).
+// El secreto se guarda cifrado AES-256-GCM en `secretCiphertext` (un solo
+// blob = JSON [{label,value}] cifrado). NUNCA se devuelve en list/get; solo
+// en POST /:id/reveal. Todo lo buscable/visible vive en columnas EN CLARO.
+// ───────────────────────────────────────────────────────────────
+export const vaultItems = pgTable("vault_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  kind: text("kind").notNull(), // credential | link | note | idea | doc
+  title: text("title").notNull(),
+  description: text("description"), // notas NO secretas (searchable)
+  url: text("url"), // link de login / Drive (NO secreto)
+  username: text("username"), // identificador NO secreto (ej. user de login)
+  ownerScope: text("owner_scope").notNull().default("internal"), // internal | client
+  contactId: varchar("contact_id"), // FK manual -> contacts.id (sin constraint DB)
+  projectId: varchar("project_id"), // FK manual -> client_projects.id
+  tags: json("tags").$type<string[]>().default([]),
+  favorite: boolean("favorite").default(false).notNull(),
+  secretCiphertext: text("secret_ciphertext"), // AES-GCM blob "v1.iv.tag.ct"; null para knowledge-base
+  createdBy: text("created_by"), // username del admin
+  updatedBy: text("updated_by"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  deletedAt: timestamp("deleted_at"), // soft-delete
+});
+
+export type VaultItem = typeof vaultItems.$inferSelect;
+export type InsertVaultItem = typeof vaultItems.$inferInsert;
+
+// Log append-only de accesos a la bóveda (reveal/create/update/delete).
+// Inmutable — misma filosofía que admin_action_audit. Alimenta la vista de
+// "accesos recientes". `detail` guarda el título, NUNCA el secreto.
+export const vaultAccessLog = pgTable("vault_access_log", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  itemId: varchar("item_id"), // nullable: sobrevive a un hard-delete futuro del item
+  action: text("action").notNull(), // reveal | create | update | delete
+  performedBy: text("performed_by").notNull(),
+  detail: text("detail"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type VaultAccessLog = typeof vaultAccessLog.$inferSelect;
+export type InsertVaultAccessLog = typeof vaultAccessLog.$inferInsert;
+
+// `secretCiphertext` se construye server-side desde `secretFields`, nunca se
+// acepta directo del cliente.
+export const insertVaultItemSchema = createInsertSchema(vaultItems).omit({
+  id: true,
+  secretCiphertext: true,
+  createdBy: true,
+  updatedBy: true,
+  createdAt: true,
+  updatedAt: true,
+  deletedAt: true,
+});
+
+// ───────────────────────────────────────────────────────────────
 // Portal de Clientes — Auth (login + reset password + invite)
 // ───────────────────────────────────────────────────────────────
 

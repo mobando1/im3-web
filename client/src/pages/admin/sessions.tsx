@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Mic, ExternalLink, Maximize2, Minimize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const ACTA_URL = "https://brave-kindness-production-049c.up.railway.app";
+const ACTA_URL = "https://acta.im3systems.com";
 
 export default function AdminSessions() {
   const [fullscreen, setFullscreen] = useState(false);
@@ -16,7 +16,7 @@ export default function AdminSessions() {
             <Mic className="w-5 h-5" />
           </div>
           <div>
-            <h1 className={`font-bold text-gray-900 ${fullscreen ? "text-lg" : "text-2xl"}`}>Sesiones</h1>
+            <h1 className={`font-bold text-gray-900 ${fullscreen ? "text-lg" : "text-2xl"}`}>Acta</h1>
             <p className="text-xs text-gray-400">Graba y transcribe reuniones con clientes usando Acta</p>
           </div>
         </div>
