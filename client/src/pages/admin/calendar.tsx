@@ -116,7 +116,8 @@ export default function CalendarPage() {
 
   // Contacts list for the selector
   const { data: contactsList = [] } = useQuery<Array<{ id: string; nombre: string; empresa: string; email: string; telefono: string | null }>>({
-    queryKey: ["/api/admin/contacts"],
+    queryKey: ["/api/admin/contacts?limit=100"],
+    select: (data: any) => (Array.isArray(data) ? data : data?.contacts || []),
   });
 
   // Auto-fill title when contact is selected
