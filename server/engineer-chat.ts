@@ -14,6 +14,7 @@ import {
   resolveSafe,
   checkReadOnlySql,
   checkDbWriteSql,
+  isVaultTable,
   REPO_ROOT,
   MAX_FILE_CHARS,
   MAX_GREP_LINES,
@@ -391,6 +392,11 @@ async function executeTool(
       if (!pool) return "DB no disponible.";
       const table = typeof input.table === "string" ? input.table : undefined;
       if (table) {
+        // Las tablas de la bóveda (credenciales) están ocultas al agente.
+        if (isVaultTable(table)) {
+          toolCalls.push({ tool: "get_db_schema", summary: `tabla protegida (${table})` });
+          return `La tabla "${table}" pertenece a la bóveda de credenciales y no es accesible desde aquí.`;
+        }
         const { rows } = await pool.query(
           `SELECT column_name, data_type, is_nullable FROM information_schema.columns WHERE table_schema='public' AND table_name=$1 ORDER BY ordinal_position`,
           [table],
@@ -400,8 +406,9 @@ async function executeTool(
         return rows.map((r: { column_name: string; data_type: string; is_nullable: string }) => `${r.column_name} ${r.data_type}${r.is_nullable === "NO" ? " NOT NULL" : ""}`).join("\n");
       }
       const { rows } = await pool.query(`SELECT table_name FROM information_schema.tables WHERE table_schema='public' ORDER BY table_name`);
-      toolCalls.push({ tool: "get_db_schema", summary: `${rows.length} tablas` });
-      return rows.map((r: { table_name: string }) => r.table_name).join("\n");
+      const visible = rows.filter((r: { table_name: string }) => !isVaultTable(r.table_name));
+      toolCalls.push({ tool: "get_db_schema", summary: `${visible.length} tablas` });
+      return visible.map((r: { table_name: string }) => r.table_name).join("\n");
     }
 
     if (toolName === "query_db_readonly") {

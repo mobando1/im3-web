@@ -77,7 +77,9 @@ app.use((req, res, next) => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
-      if (capturedJsonResponse) {
+      // Rutas que manejan secretos en claro (ej. la bóveda) marcan res.locals.skipBodyLog
+      // para que el cuerpo NUNCA llegue a stdout/Railway logs (defeat del cifrado en reposo).
+      if (capturedJsonResponse && !res.locals?.skipBodyLog) {
         logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
       }
 
