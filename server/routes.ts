@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { getModelGeneration, getModelClassification, getAllConfig, setConfig } from "./config";
 import { eq, asc, isNull, isNotNull, sql, and, gte, lte, ilike, or, desc, count, inArray } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, teamMembers, taskSuggestions, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectGithubRepos, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalTranslationCache, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, stackServices, contractTemplates, contracts, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback, adminActionAudit, vaultItems, vaultAccessLog } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, teamMembers, taskSuggestions, taskCompletionSuggestions, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectGithubRepos, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalTranslationCache, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, stackServices, contractTemplates, contracts, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback, adminActionAudit, vaultItems, vaultAccessLog } from "@shared/schema";
 import { AGENT_REGISTRY, AGENT_KINDS, findAgent } from "./agents/registry";
 import { runAgent } from "./agents/runner";
 import { syncGmailEmails, isGmailConfigured, sendGmailMessage, getOriginalMessageHeaders } from "./google-gmail";
@@ -22,7 +22,7 @@ import { calculateLeadScore } from "./lead-scoring";
 import { isWhatsAppConfigured, calculateWhatsAppSchedule, WHATSAPP_SEQUENCE, sendWhatsAppText } from "./whatsapp";
 import passport from "passport";
 import { z } from "zod";
-import { analyzeCommitsForProject, generateWeeklySummary, calculateProjectHealth, generateProjectFromProposal, generateProjectArtifacts, appendPhaseArtifact } from "./project-ai";
+import { analyzeCommitsForProject, createCompletionSuggestions, generateWeeklySummary, calculateProjectHealth, generateProjectFromProposal, generateProjectArtifacts, appendPhaseArtifact } from "./project-ai";
 import { fetchRepoContext, fetchMultiRepoContext } from "./github-repo-context";
 import { syncDriveFilesToProject, syncDriveFilesToContact, runContactDriveSyncCron } from "./drive-file-sync";
 import { listDriveFolderChildren, searchDriveFolders, createSubfolder, getFolderPath, DriveAccessError } from "./google-drive";
@@ -135,6 +135,54 @@ async function notifyProjectClient(
     }
   } catch (err) {
     log(`Error in notifyProjectClient: ${err}`);
+  }
+}
+
+/**
+ * Cascada tarea → fase: tras completar una tarea, si TODAS las tareas no-borradas de su fase
+ * quedaron completadas (y la fase tiene ≥1 tarea), marca la fase como completed y notifica al
+ * cliente — la misma notificación que dispara el dropdown manual de fase. Guard de fase vacía:
+ * nunca autocompleta una fase sin tareas (no habría señal real). Best-effort: nunca lanza.
+ * Devuelve true si autocompletó la fase.
+ */
+async function maybeAutocompletePhase(phaseId: string | null): Promise<boolean> {
+  if (!db || !phaseId) return false;
+  try {
+    const [phase] = await db.select().from(projectPhases)
+      .where(and(eq(projectPhases.id, phaseId), isNull(projectPhases.deletedAt))).limit(1);
+    if (!phase || phase.status === "completed") return false;
+
+    const phaseTasks = await db.select({ status: projectTasks.status }).from(projectTasks)
+      .where(and(eq(projectTasks.phaseId, phaseId), isNull(projectTasks.deletedAt)));
+    if (phaseTasks.length === 0) return false; // fase vacía → no autocompletar
+    if (!phaseTasks.every(t => t.status === "completed")) return false;
+
+    await db.update(projectPhases).set({ status: "completed", updatedAt: new Date() })
+      .where(eq(projectPhases.id, phaseId));
+
+    // Notificar al cliente (espejo del flujo manual en PATCH /api/admin/phases/:id).
+    // Fases bonus aún no reveladas no notifican, para no filtrar trabajo oculto.
+    if (phase.projectId && !(phase.isBonus && !phase.revealedAt)) {
+      const allTasks = await db.select({ status: projectTasks.status }).from(projectTasks)
+        .where(eq(projectTasks.projectId, phase.projectId));
+      const completedCount = allTasks.filter(t => t.status === "completed").length;
+      const progress = allTasks.length > 0 ? Math.round((completedCount / allTasks.length) * 100) : 0;
+      notifyProjectClient(phase.projectId, `✅ Fase completada: ${phase.name}`, {
+        title: "Fase completada",
+        headerEmoji: "✅",
+        headerColor: "linear-gradient(135deg,#059669,#10B981)",
+        bodyLines: [
+          `La fase <strong>"${phase.name}"</strong> ha sido completada exitosamente.`,
+          `Tu proyecto avanza al <strong>${progress}%</strong> de progreso total.`,
+          "Entra al portal para ver el roadmap actualizado y las próximas fases.",
+        ],
+        ctaText: "Ver roadmap →",
+      });
+    }
+    return true;
+  } catch (err) {
+    log(`maybeAutocompletePhase error (phase ${phaseId}): ${err instanceof Error ? err.message : String(err)}`);
+    return false;
   }
 }
 
@@ -2938,6 +2986,82 @@ export async function registerRoutes(
     try {
       const [updated] = await db.update(taskSuggestions).set({ status: "dismissed" })
         .where(eq(taskSuggestions.id, req.params.id as string)).returning();
+      if (!updated) return res.status(404).json({ error: "Sugerencia no encontrada" });
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Sugerencias de COMPLETADO de tareas (commit GitHub → "esta tarea parece terminada").
+  // El admin las confirma con un click; nada se autocompleta sin consentimiento.
+  // ─────────────────────────────────────────────────────────────
+
+  // Lista las sugerencias de completado pendientes de un proyecto, con el título de la tarea.
+  app.get("/api/admin/projects/:id/completion-suggestions", requireAuth, async (req, res) => {
+    if (!db) return res.json([]);
+    try {
+      const status = (req.query.status as string) || "pending";
+      const rows = await db.select({
+        id: taskCompletionSuggestions.id,
+        taskId: taskCompletionSuggestions.taskId,
+        phaseId: taskCompletionSuggestions.phaseId,
+        reason: taskCompletionSuggestions.reason,
+        status: taskCompletionSuggestions.status,
+        createdAt: taskCompletionSuggestions.createdAt,
+        taskTitle: projectTasks.title,
+        taskStatus: projectTasks.status,
+      })
+        .from(taskCompletionSuggestions)
+        .leftJoin(projectTasks, eq(projectTasks.id, taskCompletionSuggestions.taskId))
+        .where(and(
+          eq(taskCompletionSuggestions.projectId, req.params.id as string),
+          eq(taskCompletionSuggestions.status, status),
+        ))
+        .orderBy(desc(taskCompletionSuggestions.createdAt));
+      res.json(rows);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Aceptar: marca la tarea como completada y, si cierra la fase, la autocompleta (cascada).
+  app.post("/api/admin/completion-suggestions/:id/accept", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [sug] = await db.select().from(taskCompletionSuggestions)
+        .where(eq(taskCompletionSuggestions.id, req.params.id as string)).limit(1);
+      if (!sug) return res.status(404).json({ error: "Sugerencia no encontrada" });
+      if (sug.status !== "pending") return res.status(400).json({ error: "Sugerencia ya procesada" });
+
+      const [task] = await db.select().from(projectTasks)
+        .where(eq(projectTasks.id, sug.taskId)).limit(1);
+      if (!task || task.deletedAt) {
+        // La tarea ya no existe → cerramos la sugerencia para que no quede colgada.
+        await db.update(taskCompletionSuggestions).set({ status: "dismissed" }).where(eq(taskCompletionSuggestions.id, sug.id));
+        return res.status(404).json({ error: "La tarea ya no existe" });
+      }
+
+      if (task.status !== "completed") {
+        await db.update(projectTasks)
+          .set({ status: "completed", completedAt: new Date(), updatedAt: new Date() })
+          .where(eq(projectTasks.id, sug.taskId));
+      }
+      await db.update(taskCompletionSuggestions).set({ status: "accepted" }).where(eq(taskCompletionSuggestions.id, sug.id));
+
+      const phaseCompleted = await maybeAutocompletePhase(task.phaseId);
+      res.json({ success: true, taskId: sug.taskId, phaseCompleted });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.post("/api/admin/completion-suggestions/:id/dismiss", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [updated] = await db.update(taskCompletionSuggestions).set({ status: "dismissed" })
+        .where(eq(taskCompletionSuggestions.id, req.params.id as string)).returning();
       if (!updated) return res.status(404).json({ error: "Sugerencia no encontrada" });
       res.json({ success: true });
     } catch (err: any) {
@@ -8230,13 +8354,15 @@ Responde SOLO con un JSON válido, sin markdown:
         { triggeredBy: "webhook" },
       );
 
+      const shas = commits.map(c => c.sha);
+      const completionItems: Array<{ result: typeof results[number]; entryId: string }> = [];
       for (const result of results) {
         const [entry] = await db!.insert(projectActivityEntries).values({
           projectId: repo.projectId,
           repoId: repo.id,
           repoFullName: repo.repoFullName,
           source: "github_webhook",
-          commitShas: commits.map(c => c.sha),
+          commitShas: shas,
           summaryLevel1: result.summaryLevel1,
           summaryLevel2: result.summaryLevel2,
           summaryLevel3: result.summaryLevel3,
@@ -8245,9 +8371,24 @@ Responde SOLO con un JSON válido, sin markdown:
           isSignificant: result.isSignificant,
         }).returning();
         await db!.update(githubWebhookEvents).set({ processed: true, activityEntryId: entry.id }).where(eq(githubWebhookEvents.id, event.id));
+        completionItems.push({ result, entryId: entry.id });
       }
 
       await calculateProjectHealth(repo.projectId);
+
+      // Sugerencias de COMPLETADO de tareas existentes (commit → "esta tarea parece terminada").
+      // Best-effort: nunca rompe el webhook. NO marca nada completado; solo propone, el admin confirma.
+      try {
+        await runAgent("task-completion-suggester", async () => {
+          let created = 0;
+          for (const item of completionItems) {
+            created += await createCompletionSuggestions(repo.projectId, item.result, item.entryId, shas);
+          }
+          return { recordsProcessed: created };
+        }, { triggeredBy: "webhook" });
+      } catch (compErr) {
+        log(`Completion suggestion generation failed (repo ${repo.repoFullName}): ${compErr instanceof Error ? compErr.message : String(compErr)}`);
+      }
 
       // Fase D — auto-sugerencias de tareas desde el análisis (best-effort, NUNCA rompe el webhook).
       // Reusa el resultado de la IA (suggestedTaskTitle) — sin llamada extra. Mapea el autor
@@ -8560,6 +8701,8 @@ Responde SOLO con un JSON válido, sin markdown:
 
       let totalEntries = 0;
       const errors: string[] = [];
+      // Items para sugerir completado de tareas existentes (se procesan al final, best-effort).
+      const completionItems: Array<{ result: Awaited<ReturnType<typeof analyzeCommitsForProject>>[number]; entryId: string; shas: string[] }> = [];
 
       for (const repo of effectiveRepos) {
         const ghRes = await fetch(`https://api.github.com/repos/${repo.repoFullName}/commits?per_page=20`, { headers: ghHeaders });
@@ -8575,6 +8718,7 @@ Responde SOLO con un JSON válido, sin markdown:
           timestamp: c.commit.author.date,
         }));
         if (commits.length === 0) continue;
+        const shas = commits.map(c => c.sha);
 
         const results = await runAgent(
           "commit-analyzer-on-demand",
@@ -8583,24 +8727,39 @@ Responde SOLO con un JSON válido, sin markdown:
         );
 
         for (const result of results) {
-          await db!.insert(projectActivityEntries).values({
+          const [entry] = await db!.insert(projectActivityEntries).values({
             projectId: id,
             repoId: repo.id,
             repoFullName: repo.repoFullName,
             source: "github_webhook",
-            commitShas: commits.map(c => c.sha),
+            commitShas: shas,
             summaryLevel1: result.summaryLevel1,
             summaryLevel2: result.summaryLevel2,
             summaryLevel3: result.summaryLevel3,
             category: result.category,
             aiGenerated: true,
             isSignificant: result.isSignificant,
-          });
+          }).returning();
+          completionItems.push({ result, entryId: entry.id, shas });
           totalEntries++;
         }
       }
 
       await calculateProjectHealth(id);
+
+      // Sugerencias de COMPLETADO de tareas existentes — el "botón refrescar" del admin las
+      // genera junto con la actividad. Best-effort: nunca rompe el análisis.
+      try {
+        await runAgent("task-completion-suggester", async () => {
+          let created = 0;
+          for (const item of completionItems) {
+            created += await createCompletionSuggestions(id, item.result, item.entryId, item.shas);
+          }
+          return { recordsProcessed: created };
+        }, { triggeredBy: "manual" });
+      } catch (compErr) {
+        log(`Completion suggestion generation failed (project ${id}): ${compErr instanceof Error ? compErr.message : String(compErr)}`);
+      }
 
       if (errors.length > 0 && totalEntries === 0) {
         return res.status(400).json({ message: `Sin commits analizables. Errores: ${errors.join("; ")}` });
