@@ -2,8 +2,8 @@ import Anthropic from "@anthropic-ai/sdk";
 import { log } from "./index";
 import { getModelGeneration, getModelClassification } from "./config";
 import { db } from "./db";
-import { clientProjects, projectPhases, projectTasks, projectDeliverables, projectActivityEntries, projectTimeLog, projectIdeas } from "@shared/schema";
-import { eq, desc, gte, asc, and, isNull } from "drizzle-orm";
+import { clientProjects, projectPhases, projectTasks, projectDeliverables, projectActivityEntries, projectTimeLog, projectIdeas, taskCompletionSuggestions } from "@shared/schema";
+import { eq, desc, gte, asc, and, isNull, inArray } from "drizzle-orm";
 import { IM3_PROJECT_CONTEXT } from "./im3-project-context";
 
 let client: Anthropic | null = null;
@@ -510,6 +510,10 @@ type ActivityResult = {
   summaryLevel3: string;
   category: "feature" | "bugfix" | "improvement" | "infrastructure" | "meeting" | "milestone";
   suggestedTaskTitle: string | null;
+  // IDs reales de tareas EXISTENTES del roadmap que estos commits parecen COMPLETAR.
+  // Resuelto en analyzeCommitsForProject a partir de las refs [T1..Tn] que devuelve la IA —
+  // el caller nunca ve refs, solo IDs validados (la tarea existe y no estaba ya completada).
+  completedTaskIds: string[];
   isSignificant: boolean;
 };
 
@@ -537,6 +541,18 @@ export async function analyzeCommitsForProject(
     return `Fase ${i + 1}: ${ph.name} (${ph.status})\n  Tareas: ${phaseTasks.map(t => `${t.title} [${t.status}]`).join(", ") || "ninguna"}`;
   }).join("\n");
 
+  // Candidatas a "completada": tareas abiertas (no completed, no borradas). Les damos una
+  // referencia estable [T1..Tn] para que la IA las identifique por ID y no por texto (evita
+  // el matching frágil de títulos largos). Mapeamos ref → taskId para resolver después.
+  const phaseNameById = new Map(phases.map(ph => [ph.id, ph.name]));
+  const candidateTasks = tasks.filter(t => t.status !== "completed" && !t.deletedAt);
+  const refToTaskId = new Map<string, string>();
+  const candidateContext = candidateTasks.map((t, i) => {
+    const ref = `T${i + 1}`;
+    refToTaskId.set(ref, t.id);
+    return `[${ref}] (${phaseNameById.get(t.phaseId) || "?"}) ${t.title} [${t.status}]`;
+  }).join("\n");
+
   const commitContext = commits.map(c =>
     `- ${c.message}\n  Archivos: ${c.filesChanged.slice(0, 10).join(", ")}${c.filesChanged.length > 10 ? ` (+${c.filesChanged.length - 10} más)` : ""}`
   ).join("\n");
@@ -548,6 +564,9 @@ DESCRIPCIÓN: ${project.description || "Sin descripción"}
 
 ESTADO ACTUAL DEL ROADMAP:
 ${phaseContext}
+
+TAREAS ABIERTAS DEL ROADMAP (referencias para marcar como COMPLETADAS):
+${candidateContext || "(no hay tareas abiertas)"}
 
 COMMITS RECIENTES (del más reciente al más antiguo):
 ${commitContext}
@@ -563,8 +582,9 @@ Agrupa los commits por área de trabajo y genera entradas de actividad. Para cad
    - Si se intentó algo que no funcionó y por qué se cambió de enfoque
    - Decisiones técnicas importantes y su justificación
 4. category: "feature" | "bugfix" | "improvement" | "infrastructure"
-5. suggestedTaskTitle: El título de la tarea del roadmap que más se relaciona (null si no aplica)
-6. isSignificant: true si es algo que el cliente debería notar (nueva funcionalidad, entrega, hito)
+5. suggestedTaskTitle: El título de una tarea NUEVA que debería existir en el roadmap pero NO está (null si no aplica)
+6. completesTaskRefs: Array de referencias (ej. ["T3"]) de las TAREAS ABIERTAS de la lista de arriba que estos commits parecen DEJAR TERMINADAS. Array vacío [] si ninguna.
+7. isSignificant: true si es algo que el cliente debería notar (nueva funcionalidad, entrega, hito)
 
 REGLAS ESTRICTAS:
 - TODO en español latinoamericano
@@ -575,6 +595,7 @@ REGLAS ESTRICTAS:
 - Si se hizo un "refactor", tradúcelo como "Se mejoró la organización interna del código para mayor eficiencia"
 - Enmarca todo como VALOR entregado al cliente, no como código escrito
 - Un commit de tests = "Se agregaron verificaciones automáticas de calidad"
+- completesTaskRefs: SÉ CONSERVADOR. Incluye una ref SOLO si los commits muestran que esa tarea quedó TERMINADA (implementada y funcionando, no apenas iniciada o "WIP"). Ante CUALQUIER duda, NO la incluyas — déjala fuera. Usa EXACTAMENTE las refs de la lista (T1, T2, ...); nunca inventes refs ni uses títulos.
 
 Responde en JSON exacto (array de objetos):
 [
@@ -584,6 +605,7 @@ Responde en JSON exacto (array de objetos):
     "summaryLevel3": "...",
     "category": "feature",
     "suggestedTaskTitle": "Módulo de envíos" | null,
+    "completesTaskRefs": ["T3"],
     "isSignificant": true
   }
 ]
@@ -605,13 +627,81 @@ SOLO devuelve el JSON, nada más.`;
       return [];
     }
 
-    const results: ActivityResult[] = JSON.parse(jsonMatch[0]);
+    type RawResult = Omit<ActivityResult, "completedTaskIds"> & { completesTaskRefs?: unknown };
+    const raw: RawResult[] = JSON.parse(jsonMatch[0]);
+
+    // Resolver refs [T1..Tn] → taskIds reales. Validamos contra refToTaskId (solo tareas
+    // abiertas que enviamos), deduplicamos por resultado y descartamos refs inválidas/inventadas.
+    const results: ActivityResult[] = raw.map(r => {
+      const refs = Array.isArray(r.completesTaskRefs) ? r.completesTaskRefs : [];
+      const ids = Array.from(new Set(
+        refs
+          .map(ref => (typeof ref === "string" ? refToTaskId.get(ref.trim()) : undefined))
+          .filter((id): id is string => Boolean(id))
+      ));
+      const { completesTaskRefs: _drop, ...rest } = r;
+      return { ...rest, completedTaskIds: ids } as ActivityResult;
+    });
     return results;
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     log(`project-ai: Error analyzing commits: ${message}`);
     return [];
   }
+}
+
+/**
+ * A partir de un ActivityResult ya analizado, crea sugerencias de COMPLETADO para las tareas
+ * existentes que la IA marcó como terminadas (result.completedTaskIds). NO marca nada completado:
+ * solo registra una sugerencia pending que el admin confirma con un click (modelo de consentimiento).
+ *
+ * Defensas (best-effort, nunca lanza al caller):
+ *  - re-valida que la tarea exista, no esté borrada y NO esté ya completada
+ *  - deduplica: si ya hay una sugerencia pending/accepted para esa tarea, no crea otra
+ * Devuelve cuántas sugerencias nuevas creó. Lo llaman: webhook GitHub, botón "Analizar commits"
+ * y el cron diario auto-analyze — para que el progreso se refleje desde cualquier vía.
+ */
+export async function createCompletionSuggestions(
+  projectId: string,
+  result: Pick<ActivityResult, "completedTaskIds" | "summaryLevel1">,
+  sourceActivityId: string | null,
+  commitShas: string[],
+): Promise<number> {
+  if (!db) return 0;
+  const ids = result.completedTaskIds || [];
+  if (ids.length === 0) return 0;
+
+  let created = 0;
+  for (const taskId of ids) {
+    try {
+      const [task] = await db
+        .select({ id: projectTasks.id, phaseId: projectTasks.phaseId, status: projectTasks.status, deletedAt: projectTasks.deletedAt })
+        .from(projectTasks).where(eq(projectTasks.id, taskId)).limit(1);
+      if (!task || task.deletedAt || task.status === "completed") continue;
+
+      const existing = await db
+        .select({ id: taskCompletionSuggestions.id }).from(taskCompletionSuggestions)
+        .where(and(
+          eq(taskCompletionSuggestions.taskId, taskId),
+          inArray(taskCompletionSuggestions.status, ["pending", "accepted"]),
+        )).limit(1);
+      if (existing.length > 0) continue;
+
+      await db.insert(taskCompletionSuggestions).values({
+        projectId,
+        taskId,
+        phaseId: task.phaseId,
+        sourceActivityId,
+        commitShas,
+        reason: result.summaryLevel1 || null,
+        status: "pending",
+      });
+      created++;
+    } catch (err) {
+      log(`createCompletionSuggestions: error en tarea ${taskId}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+  return created;
 }
 
 /**

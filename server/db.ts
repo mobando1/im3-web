@@ -907,6 +907,24 @@ export async function runMigrations() {
     `).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_task_suggestions_project" ON "task_suggestions" ("project_id", "status");`).catch(() => {});
 
+    // Sugerencias de COMPLETADO de tareas existentes (commit GitHub → "esta tarea parece terminada").
+    // El admin la confirma con un click; nada se autocompleta sin consentimiento.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "task_completion_suggestions" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "project_id" varchar NOT NULL,
+        "task_id" varchar NOT NULL,
+        "phase_id" varchar,
+        "source_activity_id" varchar,
+        "commit_shas" json DEFAULT '[]'::json,
+        "reason" text,
+        "status" text DEFAULT 'pending' NOT NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_task_completion_suggestions_project" ON "task_completion_suggestions" ("project_id", "status");`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_task_completion_suggestions_task" ON "task_completion_suggestions" ("task_id", "status");`).catch(() => {});
+
     // Sesiones/reuniones (Fase 2 sync Acta) — projectId nullable + source/externalId/driveFolderUrl
     await pool.query(`
       CREATE TABLE IF NOT EXISTS "project_sessions" (

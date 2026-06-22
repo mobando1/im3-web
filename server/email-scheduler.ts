@@ -1053,7 +1053,7 @@ export async function autoAnalyzeProjectCommits() {
   if (!db) return;
 
   try {
-    const { analyzeCommitsForProject } = await import("./project-ai");
+    const { analyzeCommitsForProject, createCompletionSuggestions } = await import("./project-ai");
     const { projectActivityEntries, projectGithubRepos, users } = await import("@shared/schema");
     const { isNotNull } = await import("drizzle-orm");
 
@@ -1128,7 +1128,7 @@ export async function autoAnalyzeProjectCommits() {
           const commitShas = commits.map(c => c.sha);
 
           for (const result of results) {
-            await db.insert(projectActivityEntries).values({
+            const [entry] = await db.insert(projectActivityEntries).values({
               projectId: project.id,
               repoId: repo.id,
               repoFullName: repo.repoFullName,
@@ -1140,8 +1140,11 @@ export async function autoAnalyzeProjectCommits() {
               category: result.category,
               aiGenerated: true,
               isSignificant: result.isSignificant,
-            });
+            }).returning();
             totalEntries++;
+            // Sugerencias de completado de tareas existentes (best-effort, no rompe el cron).
+            await createCompletionSuggestions(project.id, result, entry.id, commitShas)
+              .catch(err => log(`Auto-analyze completion-suggest error (project ${project.name}): ${err?.message || err}`));
           }
         } catch (err: any) {
           log(`Auto-analyze error for ${repo.repoFullName} (project ${project.name}): ${err?.message}`);

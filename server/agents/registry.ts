@@ -564,6 +564,22 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
     sourceFile: "server/routes.ts:8126",
   },
   {
+    name: "task-completion-suggester",
+    displayName: "Sugeridor de Completado de Tareas",
+    kind: "automation",
+    description: "Propone tachar tareas existentes del roadmap cuando los commits parecen haberlas terminado",
+    trigger: "webhook",
+    criticality: "low",
+    longDescription:
+      "Tras analizar los commits (webhook push, botón 'Analizar commits' o cron diario auto-analyze), reutiliza el resultado de la IA (completedTaskIds — tareas EXISTENTES que los commits parecen dejar terminadas, resueltas por referencia [T1..Tn] no por título) y crea filas en task_completion_suggestions para cada tarea abierta candidata. NO marca nada completado: solo propone. El admin lo confirma con un click en el roadmap de /admin/projects/:id → la tarea se tacha y, si era la última de su fase, la fase se autocompleta y se notifica al cliente. Re-valida que la tarea exista y no esté ya completada, y deduplica contra sugerencias pending/accepted. Best-effort: si falla, nunca rompe el flujo de análisis.",
+    connections: [
+      { type: "webhook", label: "POST /api/webhooks/github/repo/:repoId", detail: "Corre dentro del flujo del push" },
+      { type: "db", label: "task_completion_suggestions", detail: "Crea sugerencias deduplicadas (pendientes)" },
+      { type: "db", label: "project_tasks", detail: "Re-valida estado de la tarea candidata" },
+    ],
+    sourceFile: "server/routes.ts:8290",
+  },
+  {
     name: "weekly-summary-on-demand",
     displayName: "Resumen Semanal On-Demand",
     kind: "ai",

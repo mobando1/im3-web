@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useParams, useLocation } from "wouter";
 import { ArrowLeft, Copy, ExternalLink, Plus, Trash2, Send, Clock, CheckCircle2, Circle, AlertCircle, AlertTriangle, ChevronDown, ChevronRight, Github, CalendarDays, BarChart3, Diamond, TrendingUp, Package, MessageSquare, Timer, Mic, FolderOpen, Lightbulb, FileText, Image, File, ThumbsUp, X, UserPlus, Users, RefreshCw, Mail, Sparkles, Pencil, Wrench, Building2, GripVertical, History, Bot } from "lucide-react";
 import { format, parseISO, differenceInDays, startOfMonth, endOfMonth, eachDayOfInterval, eachMonthOfInterval, isSameDay, isSameMonth, addMonths, subMonths, isWithinInterval } from "date-fns";
@@ -204,6 +204,17 @@ type ActivityEntry = {
 type WeeklySummaryMessage = {
   id: string;
   content: string;
+  createdAt: string;
+};
+
+type CompletionSuggestion = {
+  id: string;
+  taskId: string;
+  phaseId: string | null;
+  reason: string | null;
+  status: string;
+  taskTitle: string | null;
+  taskStatus: string | null;
   createdAt: string;
 };
 
@@ -733,6 +744,33 @@ export default function AdminProjectDetail() {
 
   const invalidate = () => queryClient.invalidateQueries({ queryKey: [`/api/admin/projects/${params.id}`] });
 
+  // Sugerencias de completado de tareas (commit GitHub → "esta tarea parece terminada").
+  const completionSuggestionsKey = [`/api/admin/projects/${params.id}/completion-suggestions?status=pending`];
+  const { data: completionSuggestions = [] } = useQuery<CompletionSuggestion[]>({ queryKey: completionSuggestionsKey });
+  const completionByTask = useMemo(() => {
+    const m = new Map<string, CompletionSuggestion>();
+    for (const s of completionSuggestions) m.set(s.taskId, s);
+    return m;
+  }, [completionSuggestions]);
+  const invalidateCompletion = () => queryClient.invalidateQueries({ queryKey: completionSuggestionsKey });
+
+  const acceptCompletionMut = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/admin/completion-suggestions/${id}/accept`);
+      return res.json() as Promise<{ phaseCompleted?: boolean }>;
+    },
+    onSuccess: (data) => {
+      invalidate();
+      invalidateCompletion();
+      toast({ title: data?.phaseCompleted ? "Tarea y fase completadas ✓" : "Tarea completada ✓" });
+    },
+    onError: (err: any) => toast({ title: "No se pudo aplicar", description: err?.message, variant: "destructive" }),
+  });
+  const dismissCompletionMut = useMutation({
+    mutationFn: async (id: string) => { await apiRequest("POST", `/api/admin/completion-suggestions/${id}/dismiss`); },
+    onSuccess: invalidateCompletion,
+  });
+
   // Mutations
   const addPhaseMut = useMutation({
     mutationFn: async (data: Record<string, unknown>) => { await apiRequest("POST", `/api/admin/projects/${params.id}/phases`, data); },
@@ -1016,6 +1054,7 @@ export default function AdminProjectDetail() {
     },
     onSuccess: (data) => {
       invalidateActivity();
+      invalidateCompletion();
       toast({
         title: data.results > 0 ? `${data.results} entrada(s) generada(s)` : "Análisis completado",
         description: data.message,
@@ -1737,6 +1776,7 @@ export default function AdminProjectDetail() {
                             const today = new Date();
                             today.setHours(0, 0, 0, 0);
                             const isOverdue = !!task.dueDate && task.status !== "completed" && new Date(task.dueDate) < today;
+                            const completionSuggestion = task.status !== "completed" ? completionByTask.get(task.id) : undefined;
                             const priorityClasses =
                               task.priority === "high" ? "bg-red-50 text-red-600 hover:bg-red-100" :
                               task.priority === "medium" ? "bg-amber-50 text-amber-600 hover:bg-amber-100" :
@@ -1785,6 +1825,30 @@ export default function AdminProjectDetail() {
                                         onSave={(next) => updateTaskMut.mutate({ id: task.id, data: { assigneeName: next } })}
                                       />
                                     </div>
+                                    {/* Sugerencia de GitHub: "esta tarea parece completada" → tachar con 1 click */}
+                                    {completionSuggestion && (
+                                      <div
+                                        className="mt-1 flex flex-wrap items-center gap-1.5 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1"
+                                        title={completionSuggestion.reason || undefined}
+                                      >
+                                        <Github className="w-3 h-3 text-emerald-600 shrink-0" />
+                                        <span className="text-[11px] font-medium text-emerald-700">GitHub sugiere: completada</span>
+                                        <button
+                                          onClick={() => acceptCompletionMut.mutate(completionSuggestion.id)}
+                                          disabled={acceptCompletionMut.isPending || dismissCompletionMut.isPending}
+                                          className="text-[11px] font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded px-1.5 py-0.5 disabled:opacity-50"
+                                        >
+                                          Tachar ✓
+                                        </button>
+                                        <button
+                                          onClick={() => dismissCompletionMut.mutate(completionSuggestion.id)}
+                                          disabled={acceptCompletionMut.isPending || dismissCompletionMut.isPending}
+                                          className="text-[11px] text-emerald-700 hover:text-emerald-900 rounded px-1 py-0.5 disabled:opacity-50"
+                                        >
+                                          Ignorar
+                                        </button>
+                                      </div>
+                                    )}
                                   </div>
                                   {/* Mobile-only delete (always visible) */}
                                   <button

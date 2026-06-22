@@ -258,6 +258,25 @@ export const taskSuggestions = pgTable("task_suggestions", {
 export type TaskSuggestion = typeof taskSuggestions.$inferSelect;
 export type InsertTaskSuggestion = typeof taskSuggestions.$inferInsert;
 
+// Sugerencias de COMPLETADO de tareas existentes (commit GitHub → "esta tarea parece terminada").
+// Distinta de task_suggestions (que CREA tareas nuevas): aquí targetTaskId apunta a una tarea
+// existente del roadmap que el análisis de commits cree que ya se completó. El admin la acepta
+// con un click (marca la tarea completed; si cierra la fase, ésta se autocompleta) o la descarta.
+export const taskCompletionSuggestions = pgTable("task_completion_suggestions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  projectId: varchar("project_id").notNull(),
+  taskId: varchar("task_id").notNull(), // → project_tasks (la tarea existente que parece completada)
+  phaseId: varchar("phase_id"), // denormalizado para la cascada de fase
+  sourceActivityId: varchar("source_activity_id"), // → project_activity_entries
+  commitShas: json("commit_shas").$type<string[]>().default([]),
+  reason: text("reason"), // summaryLevel1 — por qué la IA cree que está terminada
+  status: text("status").notNull().default("pending"), // pending | accepted | dismissed
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type TaskCompletionSuggestion = typeof taskCompletionSuggestions.$inferSelect;
+export type InsertTaskCompletionSuggestion = typeof taskCompletionSuggestions.$inferInsert;
+
 // Activity log (audit trail for contact journey)
 export const activityLog = pgTable("activity_log", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
