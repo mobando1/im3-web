@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 
 // Tema del admin, independiente del sitio público (que usa useDarkMode + la clave
-// "im3-dark-mode"). Default OSCURO: el camino de demo (login→dashboard→pipeline→
-// contactos→agents) está migrado a tokens y dark-ready, así que oscuro da la
-// continuidad premium login→app. El toggle deja pasar a claro (también pulido).
-// (Páginas fuera del demo aún migran a tokens; ver rediseño "Teal Instrument".)
+// "im3-dark-mode"). Default CLARO para el día a día del equipo. Ambos temas están
+// pulidos (tokens theme-aware); para demos, el toggle ☀️/🌙 pasa a oscuro y la
+// preferencia persiste por navegador → recorrido premium login→app en oscuro.
 // Aplica .dark al <html> (no a un wrapper) para que portales — Dialog, Sheet,
 // Command, Sonner — hereden el tema. Al salir de /admin se restaura la preferencia
 // del sitio público; entre rutas /admin no se toca (evita parpadeo en cada nav).
@@ -24,8 +23,8 @@ function applyDark(on: boolean) {
 
 export function useAdminTheme() {
   const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window === "undefined") return "dark";
-    return (localStorage.getItem(KEY) as Theme | null) ?? "dark";
+    if (typeof window === "undefined") return "light";
+    return (localStorage.getItem(KEY) as Theme | null) ?? "light";
   });
 
   useEffect(() => {
