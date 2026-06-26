@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 
 // Tema del admin, independiente del sitio público (que usa useDarkMode + la clave
-// "im3-dark-mode"). Default oscuro para una transición continua login→dashboard.
+// "im3-dark-mode"). Default CLARO por ahora: el shell ya usa tokens (theme-aware),
+// pero las páginas internas aún hardcodean bg-white/text-gray-*, así que en oscuro
+// se verían a medias (cards blancas + badges en variante dark = contraste roto).
+// Se migran página por página; cuando el camino de demo esté dark-ready, se puede
+// cambiar el default a "dark" para la continuidad login→dashboard.
 // Aplica .dark al <html> (no a un wrapper) para que portales — Dialog, Sheet,
 // Command, Sonner — hereden el tema. Al salir de /admin se restaura la preferencia
 // del sitio público; entre rutas /admin no se toca (evita parpadeo en cada nav).
