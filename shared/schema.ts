@@ -661,6 +661,25 @@ export const projectGithubRepos = pgTable("project_github_repos", {
 export type ProjectGithubRepo = typeof projectGithubRepos.$inferSelect;
 export type InsertProjectGithubRepo = typeof projectGithubRepos.$inferInsert;
 
+// Repos de GitHub detectados que aún NO tienen proyecto en el CRM — sugerencias de
+// "crear proyecto". NO hay estado de descarte: un repo es sugerencia si existe en
+// GitHub y no está vinculado a ningún proyecto activo. Para excluir un repo se borra
+// de GitHub (el discoverer lo remueve en el próximo scan). El cron repo-discoverer
+// reconcilia esta tabla; el admin acepta una sugerencia → crea proyecto interno.
+export const repoProjectSuggestions = pgTable("repo_project_suggestions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  repoFullName: text("repo_full_name").notNull().unique(), // owner/repo
+  repoUrl: text("repo_url").notNull(),
+  description: text("description"),
+  isPrivate: boolean("is_private").default(false).notNull(),
+  detectedAt: timestamp("detected_at").defaultNow().notNull(),
+  lastSeenAt: timestamp("last_seen_at").defaultNow().notNull(), // refrescado en cada scan
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type RepoProjectSuggestion = typeof repoProjectSuggestions.$inferSelect;
+export type InsertRepoProjectSuggestion = typeof repoProjectSuggestions.$inferInsert;
+
 // Project sessions (meeting recordings & transcriptions)
 export const projectSessions = pgTable("project_sessions", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),

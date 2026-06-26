@@ -2,7 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useState, useMemo } from "react";
 import { useLocation } from "wouter";
-import { Plus, FolderKanban, ExternalLink, Copy, Sparkles, Trash2, List, LayoutGrid, GanttChart, Wrench, Building2, Users as UsersIcon, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, FolderKanban, ExternalLink, Copy, Sparkles, Trash2, List, LayoutGrid, GanttChart, Wrench, Building2, Users as UsersIcon, ChevronDown, ChevronRight, Github, Lock, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -29,6 +29,15 @@ type Project = {
   taskCount: number;
   completedTaskCount: number;
   createdAt: string;
+};
+
+type RepoSuggestion = {
+  id: string;
+  repoFullName: string;
+  repoUrl: string;
+  description: string | null;
+  isPrivate: boolean;
+  detectedAt: string;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -129,6 +138,54 @@ export default function AdminProjects() {
     },
   });
 
+  // ── Repos de GitHub sin proyecto (sugerencias del descubridor) ──
+  const { data: repoSuggestions = [] } = useQuery<RepoSuggestion[]>({
+    queryKey: ["/api/admin/repo-suggestions"],
+  });
+
+  const scanReposMutation = useMutation({
+    mutationFn: async () => {
+      const res = await apiRequest("POST", "/api/admin/repo-suggestions/scan", {});
+      return res.json();
+    },
+    onSuccess: (data: { created?: number; candidates?: number }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/repo-suggestions"] });
+      toast({
+        title: "Escaneo completado",
+        description: `${data?.candidates ?? 0} repo(s) sin proyecto · ${data?.created ?? 0} nuevo(s)`,
+      });
+    },
+    onError: (err: any) => {
+      toast({ title: "Error escaneando repos", description: err?.message, variant: "destructive" });
+    },
+  });
+
+  const acceptRepoMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const res = await apiRequest("POST", `/api/admin/repo-suggestions/${id}/accept`, {});
+      return res.json();
+    },
+    onSuccess: (data: { projectId?: string; webhookConfigured?: boolean; webhookError?: string | null }) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/repo-suggestions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/projects"] });
+      if (data?.webhookConfigured === false) {
+        toast({
+          title: "Proyecto creado, pero el webhook NO se creó",
+          description: `${data?.webhookError || "Motivo desconocido."} Reintentá el webhook desde el proyecto.`,
+          variant: "destructive",
+        });
+      } else {
+        toast({ title: "Proyecto creado desde el repo" });
+      }
+    },
+    onError: (err: any) => {
+      // El server pudo haber borrado la sugerencia (ej. 409 "ya tiene proyecto");
+      // refrescamos para que la fila obsoleta desaparezca del banner.
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/repo-suggestions"] });
+      toast({ title: "Error creando proyecto", description: err?.message, variant: "destructive" });
+    },
+  });
+
   const filtered = filterStatus === "all" ? projects : projects.filter(p => p.status === filterStatus);
 
   const groupedProjects = useMemo(() => {
@@ -193,12 +250,12 @@ export default function AdminProjects() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Proyectos</h1>
           <p className="text-sm text-gray-500 mt-1">{projects.length} proyectos en total</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <div className="flex bg-gray-100 rounded-lg p-0.5">
             {([["list", List, "Lista"], ["kanban", LayoutGrid, "Kanban"], ["timeline", GanttChart, "Timeline"]] as const).map(([mode, Icon, label]) => (
               <button
@@ -211,11 +268,68 @@ export default function AdminProjects() {
               </button>
             ))}
           </div>
+          <Button
+            variant="outline"
+            onClick={() => scanReposMutation.mutate()}
+            disabled={scanReposMutation.isPending}
+            title="Buscar repos de GitHub que aún no tienen proyecto"
+          >
+            <RefreshCw className={`w-4 h-4 mr-2 ${scanReposMutation.isPending ? "animate-spin" : ""}`} /> Escanear repos
+          </Button>
           <Button onClick={() => setShowCreate(true)} className="bg-[#2FA4A9] hover:bg-[#238b8f]">
             <Plus className="w-4 h-4 mr-2" /> Nuevo proyecto
           </Button>
         </div>
       </div>
+
+      {/* Repos de GitHub sin proyecto — sugerencias del descubridor */}
+      {repoSuggestions.length > 0 && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Github className="w-4 h-4 text-amber-700 shrink-0" />
+            <p className="text-sm font-semibold text-amber-900">
+              {repoSuggestions.length} repo{repoSuggestions.length === 1 ? "" : "s"} de GitHub sin proyecto
+            </p>
+          </div>
+          <div className="space-y-2">
+            {repoSuggestions.map(s => {
+              const isAccepting = acceptRepoMutation.isPending && acceptRepoMutation.variables === s.id;
+              return (
+              <div key={s.id} className="flex items-center gap-2 bg-white border border-amber-200 rounded-lg p-2.5">
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <a
+                      href={s.repoUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-sm font-medium text-gray-900 truncate hover:underline"
+                    >
+                      {s.repoFullName}
+                    </a>
+                    {s.isPrivate && <Lock className="w-3 h-3 text-gray-400 shrink-0" />}
+                  </div>
+                  {s.description && <p className="text-xs text-gray-400 truncate">{s.description}</p>}
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => acceptRepoMutation.mutate(s.id)}
+                  disabled={isAccepting}
+                  className="bg-[#2FA4A9] hover:bg-[#238b8f] shrink-0"
+                >
+                  {isAccepting
+                    ? <RefreshCw className="w-3.5 h-3.5 mr-1 animate-spin" />
+                    : <Plus className="w-3.5 h-3.5 mr-1" />}
+                  Crear proyecto
+                </Button>
+              </div>
+              );
+            })}
+          </div>
+          <p className="text-[11px] text-amber-700/80 mt-3">
+            Para excluir un repo, borralo de GitHub — no volverá a aparecer. Si borrás un proyecto pero dejás el repo, reaparecerá acá en el próximo escaneo.
+          </p>
+        </div>
+      )}
 
       {/* Filters */}
       <div className="flex gap-2">
