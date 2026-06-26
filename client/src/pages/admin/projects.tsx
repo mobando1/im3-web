@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { StatusBadge } from "@/components/admin";
 
 type Project = {
   id: string;
@@ -36,14 +37,6 @@ const STATUS_LABELS: Record<string, string> = {
   paused: "Pausado",
   completed: "Completado",
   cancelled: "Cancelado",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  planning: "bg-blue-100 text-blue-700",
-  in_progress: "bg-emerald-100 text-emerald-700",
-  paused: "bg-amber-100 text-amber-700",
-  completed: "bg-gray-100 text-gray-600",
-  cancelled: "bg-red-100 text-red-700",
 };
 
 export default function AdminProjects() {
@@ -349,9 +342,7 @@ export default function AdminProjects() {
                 <div className="text-[11px] text-gray-400 w-16 shrink-0 text-center">
                   {end.toLocaleDateString("es-CO", { day: "numeric", month: "short" })}
                 </div>
-                <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium shrink-0 ${STATUS_COLORS[p.status]}`}>
-                  {STATUS_LABELS[p.status]}
-                </span>
+                <StatusBadge status={p.status} label={STATUS_LABELS[p.status]} size="sm" className="shrink-0" />
               </div>
             );
           })}
@@ -411,9 +402,7 @@ export default function AdminProjects() {
                             {p.description && <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{p.description}</p>}
                           </td>
                           <td className="px-5 py-3">
-                            <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[p.status]}`}>
-                              {STATUS_LABELS[p.status]}
-                            </span>
+                            <StatusBadge status={p.status} label={STATUS_LABELS[p.status]} />
                           </td>
                           <td className="px-5 py-3">
                             <div className="flex items-center gap-3">

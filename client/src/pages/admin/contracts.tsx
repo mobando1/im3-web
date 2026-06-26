@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { UploadContractDialog } from "@/components/admin/UploadContractDialog";
+import { StatusBadge } from "@/components/admin";
 import { FileCheck, Download, ExternalLink, FileText, Upload } from "lucide-react";
 
 type ContractRow = {
@@ -29,12 +30,6 @@ const STATUS_LABELS: Record<string, string> = {
   locked: "Bloqueado",
   signed: "Firmado",
   cancelled: "Cancelado",
-};
-const STATUS_COLORS: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-700",
-  locked: "bg-amber-100 text-amber-700",
-  signed: "bg-emerald-100 text-emerald-700",
-  cancelled: "bg-red-100 text-red-700",
 };
 
 export default function AdminContracts() {
@@ -121,9 +116,7 @@ export default function AdminContracts() {
                     <div className="text-[11px] text-gray-400">{c.contactEmpresa}</div>
                   </td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[c.status]}`}>
-                      {STATUS_LABELS[c.status]}
-                    </span>
+                    <StatusBadge status={c.status} label={STATUS_LABELS[c.status]} />
                   </td>
                   <td className="px-4 py-3 text-xs text-gray-500">
                     {c.signedAt

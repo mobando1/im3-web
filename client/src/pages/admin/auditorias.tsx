@@ -5,6 +5,7 @@ import { useLocation } from "wouter";
 import { ClipboardCheck, Download, Eye, RefreshCw, Loader2, FolderSync } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
+import { StatusBadge } from "@/components/admin";
 
 type Audit = {
   id: number;
@@ -28,13 +29,6 @@ const STATUS_LABELS: Record<string, string> = {
   error: "Error",
 };
 
-const STATUS_COLORS: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-600",
-  queued: "bg-amber-100 text-amber-700",
-  processing: "bg-blue-100 text-blue-700",
-  ready: "bg-emerald-100 text-emerald-700",
-  error: "bg-red-100 text-red-700",
-};
 
 const TYPE_LABELS: Record<string, string> = {
   "pre-audit": "Pre-Auditoría",
@@ -139,10 +133,16 @@ export default function AdminAuditorias() {
                   </td>
                   <td className="px-5 py-4 text-sm text-gray-600">{TYPE_LABELS[audit.report_type] || audit.report_type}</td>
                   <td className="px-5 py-4">
-                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[audit.status] || "bg-gray-100 text-gray-600"}`}>
-                      {audit.status === "processing" && <Loader2 className="w-3 h-3 animate-spin" />}
-                      {STATUS_LABELS[audit.status] || audit.status}
-                    </span>
+                    <StatusBadge
+                      status={audit.status}
+                      dot={audit.status !== "processing"}
+                      label={
+                        <span className="inline-flex items-center gap-1.5">
+                          {audit.status === "processing" && <Loader2 className="w-3 h-3 animate-spin" />}
+                          {STATUS_LABELS[audit.status] || audit.status}
+                        </span>
+                      }
+                    />
                   </td>
                   <td className="px-5 py-4">
                     {audit.status === "processing" && audit.step && audit.total_steps ? (

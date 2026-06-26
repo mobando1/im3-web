@@ -10,6 +10,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
+import { StatusBadge } from "@/components/admin";
 
 type Proposal = {
   id: string;
@@ -46,15 +47,6 @@ const STATUS_LABELS: Record<string, string> = {
   accepted: "Aceptada",
   rejected: "Rechazada",
   expired: "Expirada",
-};
-
-const STATUS_COLORS: Record<string, string> = {
-  draft: "bg-gray-100 text-gray-600",
-  sent: "bg-blue-100 text-blue-700",
-  viewed: "bg-amber-100 text-amber-700",
-  accepted: "bg-emerald-100 text-emerald-700",
-  rejected: "bg-red-100 text-red-700",
-  expired: "bg-gray-100 text-gray-400",
 };
 
 export default function AdminProposals() {
@@ -232,9 +224,7 @@ export default function AdminProposals() {
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex flex-wrap items-center gap-1.5">
-                        <span className={`inline-flex px-2.5 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[p.status]}`}>
-                          {STATUS_LABELS[p.status] || p.status}
-                        </span>
+                        <StatusBadge status={p.status} label={STATUS_LABELS[p.status] || p.status} />
                         {p.briefStatus && BRIEF_BADGE[p.briefStatus] && (
                           <span
                             className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-medium ${BRIEF_BADGE[p.briefStatus].cls}`}

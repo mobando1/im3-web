@@ -1,36 +1,72 @@
 import { useState, useRef, useEffect } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
+import { useAdminTheme } from "@/hooks/useAdminTheme";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { LayoutDashboard, Users, CalendarDays, CheckSquare, LogOut, Bell, Search, Briefcase, FileText, BookOpen, Columns3, FolderKanban, Mic, FileSignature, ClipboardCheck, Activity, Wrench, Layers, FileCheck, Newspaper, Stethoscope, Settings, KeyRound } from "lucide-react";
+import { motion, MotionConfig } from "framer-motion";
+import { pageVariants } from "@/lib/motion";
+import { LayoutDashboard, Users, CalendarDays, CheckSquare, LogOut, Bell, Search, Briefcase, FileText, BookOpen, Columns3, FolderKanban, Mic, FileSignature, ClipboardCheck, Activity, Wrench, Layers, FileCheck, Newspaper, Stethoscope, Settings, KeyRound, Moon, Sun } from "lucide-react";
 import { CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 
-const navItems = [
-  { label: "Dashboard", path: "/admin", icon: LayoutDashboard },
-  { label: "Contactos", path: "/admin/contacts", icon: Users },
-  { label: "Pipeline", path: "/admin/pipeline", icon: Columns3 },
-  { label: "Proyectos", path: "/admin/projects", icon: FolderKanban },
-  { label: "Auditorías", path: "/admin/auditorias", icon: ClipboardCheck },
-  { label: "Propuestas", path: "/admin/proposals", icon: FileSignature },
-  { label: "Contratos", path: "/admin/contracts", icon: FileCheck },
-  { label: "Stack & Costos", path: "/admin/stack-catalog", icon: Layers },
-  { label: "Acta", path: "/admin/sessions", icon: Mic },
-  { label: "Daily Brief", path: "/admin/daily-brief", icon: Newspaper },
-  { label: "Blog", path: "/admin/blog", icon: BookOpen },
-  { label: "Tareas", path: "/admin/tasks", icon: CheckSquare, showBadge: true },
-  { label: "Calendario", path: "/admin/calendar", icon: CalendarDays },
-  { label: "Sistema", path: "/admin/agents", icon: Activity },
-  { label: "Ingeniero IA", path: "/admin/engineering", icon: Stethoscope },
-  { label: "Bóveda", path: "/admin/vault", icon: KeyRound },
-  { label: "Configuración", path: "/admin/settings", icon: Settings },
-  { label: "Herramientas", path: "/admin/tools", icon: Wrench },
-  { label: "Plantillas", path: "/admin/templates", icon: FileText },
+type NavItem = {
+  label: string;
+  path: string;
+  icon: typeof LayoutDashboard;
+  showBadge?: boolean;
+};
+
+const navGroups: { label: string; items: NavItem[] }[] = [
+  {
+    label: "Inicio",
+    items: [
+      { label: "Dashboard", path: "/admin", icon: LayoutDashboard },
+      { label: "Daily Brief", path: "/admin/daily-brief", icon: Newspaper },
+    ],
+  },
+  {
+    label: "CRM",
+    items: [
+      { label: "Contactos", path: "/admin/contacts", icon: Users },
+      { label: "Pipeline", path: "/admin/pipeline", icon: Columns3 },
+      { label: "Calendario", path: "/admin/calendar", icon: CalendarDays },
+      { label: "Tareas", path: "/admin/tasks", icon: CheckSquare, showBadge: true },
+    ],
+  },
+  {
+    label: "Entregables",
+    items: [
+      { label: "Proyectos", path: "/admin/projects", icon: FolderKanban },
+      { label: "Propuestas", path: "/admin/proposals", icon: FileSignature },
+      { label: "Contratos", path: "/admin/contracts", icon: FileCheck },
+      { label: "Auditorías", path: "/admin/auditorias", icon: ClipboardCheck },
+      { label: "Blog", path: "/admin/blog", icon: BookOpen },
+    ],
+  },
+  {
+    label: "Operación",
+    items: [
+      { label: "Acta", path: "/admin/sessions", icon: Mic },
+      { label: "Stack & Costos", path: "/admin/stack-catalog", icon: Layers },
+      { label: "Plantillas", path: "/admin/templates", icon: FileText },
+      { label: "Herramientas", path: "/admin/tools", icon: Wrench },
+    ],
+  },
+  {
+    label: "Sistema",
+    items: [
+      { label: "Sistema", path: "/admin/agents", icon: Activity },
+      { label: "Ingeniero IA", path: "/admin/engineering", icon: Stethoscope },
+      { label: "Bóveda", path: "/admin/vault", icon: KeyRound },
+      { label: "Configuración", path: "/admin/settings", icon: Settings },
+    ],
+  },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [location, navigate] = useLocation();
   const { user, logout } = useAuth();
+  const { isDark, toggle: toggleTheme } = useAdminTheme();
 
   const queryClient = useQueryClient();
   const [showNotifications, setShowNotifications] = useState(false);
@@ -108,197 +144,213 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     : "AD";
 
   return (
-    <div className="min-h-screen bg-gray-50 flex">
-      {/* Sidebar */}
-      <aside className="w-60 bg-white border-r border-gray-200 flex flex-col shadow-sm">
-        {/* Logo */}
-        <div className="p-5 border-b border-gray-100">
-          <div className="flex items-center gap-3">
-            <img src="/assets/im3-logo.png" alt="IM3" className="h-7" />
-            <span className="text-xs font-semibold tracking-widest uppercase text-gray-400">
-              CRM
-            </span>
+    <MotionConfig reducedMotion="user">
+      <div className="min-h-screen bg-background text-foreground flex">
+        {/* Sidebar */}
+        <aside className="w-60 shrink-0 bg-card border-r border-border flex flex-col">
+          {/* Logo */}
+          <div className="h-16 px-5 flex items-center border-b border-border">
+            <div className="flex items-center gap-3">
+              <img src="/assets/im3-logo.png" alt="IM3" className="h-7" />
+              <span className="mono-tag text-muted-foreground">CRM</span>
+            </div>
           </div>
-        </div>
 
-        {/* Navigation */}
-        <nav className="flex-1 py-4 px-3 space-y-1">
-          {navItems.map((item) => {
-            const Icon = item.icon;
-            const isExternal = (item as any).external;
-            const isActive = !isExternal && (
-              location === item.path ||
-              (item.path !== "/admin" && location.startsWith(item.path))
-            );
+          {/* Navigation */}
+          <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-5">
+            {navGroups.map((group) => (
+              <div key={group.label} className="space-y-1">
+                <p className="mono-tag text-muted-foreground/70 px-3 pb-1">{group.label}</p>
+                {group.items.map((item) => {
+                  const Icon = item.icon;
+                  const isActive =
+                    location === item.path ||
+                    (item.path !== "/admin" && location.startsWith(item.path));
 
-            if (isExternal) {
-              return (
-                <a
-                  key={item.path}
-                  href={item.path}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="w-full flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm font-medium transition-colors text-gray-500 hover:text-gray-900 hover:bg-gray-100"
-                >
-                  <Icon className="h-[18px] w-[18px] shrink-0" />
-                  <span className="flex-1 text-left">{item.label}</span>
-                  <span className="text-[10px] text-gray-300">↗</span>
-                </a>
-              );
-            }
+                  return (
+                    <button
+                      key={item.path}
+                      onClick={() => navigate(item.path)}
+                      className={`group relative w-full flex items-center gap-3 py-2 px-3 rounded-[var(--radius-control)] text-sm font-medium transition-colors duration-150 ${
+                        isActive
+                          ? "bg-accent-active text-primary"
+                          : "text-muted-foreground hover:text-foreground hover:bg-surface-hover"
+                      }`}
+                    >
+                      {isActive && (
+                        <span className="absolute left-0 top-1/2 -translate-y-1/2 h-5 w-0.5 rounded-full bg-primary" />
+                      )}
+                      <Icon
+                        className={`h-[18px] w-[18px] shrink-0 transition-colors ${
+                          isActive ? "text-primary" : "text-muted-foreground group-hover:text-foreground"
+                        }`}
+                        strokeWidth={1.5}
+                      />
+                      <span className="flex-1 text-left">{item.label}</span>
+                      {item.showBadge && pendingTaskCount > 0 && (
+                        <span className="text-[10px] font-semibold tabular-nums bg-destructive text-destructive-foreground rounded-full min-w-5 h-5 px-1 flex items-center justify-center">
+                          {pendingTaskCount > 9 ? "9+" : pendingTaskCount}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            ))}
+          </nav>
 
-            return (
+          {/* User section */}
+          <div className="p-4 border-t border-border">
+            <div className="flex items-center gap-3">
+              <div className="h-8 w-8 rounded-full bg-gradient-to-br from-primary to-[hsl(182_56%_34%)] flex items-center justify-center shrink-0">
+                <span className="text-xs font-bold text-primary-foreground">{initials}</span>
+              </div>
+              <span className="text-sm text-foreground font-medium truncate flex-1">
+                {user?.username}
+              </span>
               <button
-                key={item.path}
-                onClick={() => navigate(item.path)}
-                className={`w-full flex items-center gap-3 py-2.5 px-3 rounded-lg text-sm font-medium transition-colors ${
-                  isActive
-                    ? "bg-[#2FA4A9]/10 text-[#2FA4A9]"
-                    : "text-gray-500 hover:text-gray-900 hover:bg-gray-100"
-                }`}
+                onClick={handleLogout}
+                className="p-1.5 rounded-[var(--radius-control)] text-muted-foreground hover:text-destructive hover:bg-destructive/10 transition-colors"
+                title="Cerrar sesión"
               >
-                <Icon className={`h-[18px] w-[18px] shrink-0 ${isActive ? "text-[#2FA4A9]" : ""}`} />
-                <span className="flex-1 text-left">{item.label}</span>
-                {(item as any).showBadge && pendingTaskCount > 0 && (
-                  <span className="text-[10px] font-semibold bg-red-500 text-white rounded-full w-5 h-5 flex items-center justify-center">
-                    {pendingTaskCount > 9 ? "9+" : pendingTaskCount}
+                <LogOut className="h-4 w-4" strokeWidth={1.5} />
+              </button>
+            </div>
+          </div>
+        </aside>
+
+        {/* Main content */}
+        <main className="flex-1 overflow-auto">
+          {/* Top bar */}
+          <div className="sticky top-0 z-30 h-16 flex items-center justify-end gap-2 px-8 bg-background/80 backdrop-blur-md border-b border-border">
+            <button
+              onClick={() => setSearchOpen(true)}
+              className="flex items-center gap-2 h-9 pl-3 pr-2 rounded-[var(--radius-control)] border border-border bg-surface text-muted-foreground hover:text-foreground hover:bg-surface-hover transition-colors"
+              title="Buscar (⌘K)"
+            >
+              <Search className="w-4 h-4" strokeWidth={1.5} />
+              <span className="text-sm hidden sm:inline">Buscar…</span>
+              <kbd className="hidden sm:inline-flex items-center gap-0.5 rounded border border-border bg-card px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground">
+                ⌘K
+              </kbd>
+            </button>
+
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-[var(--radius-control)] text-muted-foreground hover:text-foreground hover:bg-surface-hover transition-colors"
+              title={isDark ? "Tema claro" : "Tema oscuro"}
+            >
+              {isDark ? <Sun className="w-5 h-5" strokeWidth={1.5} /> : <Moon className="w-5 h-5" strokeWidth={1.5} />}
+            </button>
+
+            <div className="relative" ref={notifRef}>
+              <button
+                onClick={() => setShowNotifications(!showNotifications)}
+                className="relative p-2 rounded-[var(--radius-control)] text-muted-foreground hover:text-foreground hover:bg-surface-hover transition-colors"
+              >
+                <Bell className="w-5 h-5" strokeWidth={1.5} />
+                {(notifData?.unreadCount || 0) > 0 && (
+                  <span className="absolute -top-0.5 -right-0.5 bg-destructive text-destructive-foreground text-[10px] font-bold tabular-nums rounded-full min-w-[18px] h-[18px] px-1 flex items-center justify-center">
+                    {notifData!.unreadCount > 9 ? "9+" : notifData!.unreadCount}
                   </span>
                 )}
               </button>
-            );
-          })}
-        </nav>
 
-        {/* User section */}
-        <div className="p-4 border-t border-gray-100">
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-gradient-to-br from-[#2FA4A9] to-[#238b8f] flex items-center justify-center shrink-0">
-              <span className="text-xs font-bold text-white">
-                {initials}
-              </span>
-            </div>
-            <span className="text-sm text-gray-700 font-medium truncate flex-1">
-              {user?.username}
-            </span>
-            <button
-              onClick={handleLogout}
-              className="p-1.5 rounded-md text-gray-400 hover:text-red-500 hover:bg-red-50 transition-colors"
-              title="Cerrar sesion"
-            >
-              <LogOut className="h-4 w-4" />
-            </button>
-          </div>
-        </div>
-      </aside>
-
-      {/* Main content */}
-      <main className="flex-1 overflow-auto">
-        {/* Top bar with notifications */}
-        <div className="flex items-center justify-end px-8 pt-4 pb-0 gap-1">
-          <button
-            onClick={() => setSearchOpen(true)}
-            className="p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-            title="Buscar (⌘K)"
-          >
-            <Search className="w-5 h-5" />
-          </button>
-          <div className="relative" ref={notifRef}>
-            <button
-              onClick={() => setShowNotifications(!showNotifications)}
-              className="relative p-2 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-colors"
-            >
-              <Bell className="w-5 h-5" />
-              {(notifData?.unreadCount || 0) > 0 && (
-                <span className="absolute -top-0.5 -right-0.5 bg-red-500 text-white text-[10px] font-bold rounded-full w-4.5 h-4.5 min-w-[18px] h-[18px] flex items-center justify-center">
-                  {notifData!.unreadCount > 9 ? "9+" : notifData!.unreadCount}
-                </span>
+              {showNotifications && (
+                <div className="absolute right-0 top-full mt-2 w-80 bg-popover text-popover-foreground rounded-[var(--radius-card)] shadow-[0_8px_24px_-8px_rgba(0,0,0,0.55)] border border-border z-50 overflow-hidden">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+                    <p className="text-sm font-semibold text-foreground">Notificaciones</p>
+                    {(notifData?.unreadCount || 0) > 0 && (
+                      <button onClick={() => markAllReadMutation.mutate()} className="text-xs text-primary hover:underline">
+                        Marcar todas leídas
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-80 overflow-y-auto">
+                    {(notifData?.notifications || []).length === 0 ? (
+                      <p className="text-sm text-muted-foreground text-center py-8">Sin notificaciones</p>
+                    ) : (
+                      <ul className="divide-y divide-border">
+                        {(notifData?.notifications || []).slice(0, 15).map((n: any) => (
+                          <li
+                            key={n.id}
+                            className={`px-4 py-3 hover:bg-surface-hover cursor-pointer transition-colors ${!n.isRead ? "bg-accent-active/40" : ""}`}
+                            onClick={() => {
+                              if (!n.isRead) markReadMutation.mutate(n.id);
+                              if (n.contactId) navigate(`/admin/contacts/${n.contactId}`);
+                              setShowNotifications(false);
+                            }}
+                          >
+                            <p className={`text-sm ${!n.isRead ? "font-medium text-foreground" : "text-muted-foreground"}`}>{n.title}</p>
+                            {n.description && <p className="text-xs text-muted-foreground mt-0.5">{n.description}</p>}
+                            <p className="text-xs text-muted-foreground/70 mt-1 tabular-nums">{new Date(n.createdAt).toLocaleDateString("es-CO", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                </div>
               )}
-            </button>
-
-            {showNotifications && (
-              <div className="absolute right-0 top-full mt-2 w-80 bg-white rounded-xl shadow-lg border border-gray-200 z-50 overflow-hidden">
-                <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-                  <p className="text-sm font-semibold text-gray-900">Notificaciones</p>
-                  {(notifData?.unreadCount || 0) > 0 && (
-                    <button onClick={() => markAllReadMutation.mutate()} className="text-xs text-[#2FA4A9] hover:underline">
-                      Marcar todas leidas
-                    </button>
-                  )}
-                </div>
-                <div className="max-h-80 overflow-y-auto">
-                  {(notifData?.notifications || []).length === 0 ? (
-                    <p className="text-sm text-gray-400 text-center py-8">Sin notificaciones</p>
-                  ) : (
-                    <ul className="divide-y divide-gray-50">
-                      {(notifData?.notifications || []).slice(0, 15).map((n: any) => (
-                        <li
-                          key={n.id}
-                          className={`px-4 py-3 hover:bg-gray-50 cursor-pointer transition-colors ${!n.isRead ? "bg-blue-50/50" : ""}`}
-                          onClick={() => {
-                            if (!n.isRead) markReadMutation.mutate(n.id);
-                            if (n.contactId) navigate(`/admin/contacts/${n.contactId}`);
-                            setShowNotifications(false);
-                          }}
-                        >
-                          <p className={`text-sm ${!n.isRead ? "font-medium text-gray-900" : "text-gray-600"}`}>{n.title}</p>
-                          {n.description && <p className="text-xs text-gray-400 mt-0.5">{n.description}</p>}
-                          <p className="text-xs text-gray-300 mt-1">{new Date(n.createdAt).toLocaleDateString("es-CO", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              </div>
-            )}
+            </div>
           </div>
-        </div>
-        <div className="px-8 pb-8 max-w-7xl animate-in fade-in-0 duration-300">{children}</div>
-        <CommandDialog open={searchOpen} onOpenChange={setSearchOpen}>
-          <CommandInput placeholder="Buscar contactos, deals, tareas..." value={searchQuery} onValueChange={setSearchQuery} />
-          <CommandList>
-            <CommandEmpty>No se encontraron resultados.</CommandEmpty>
-            {searchResults?.contacts && searchResults.contacts.length > 0 && (
-              <CommandGroup heading="Contactos">
-                {searchResults.contacts.map((c) => (
-                  <CommandItem key={c.id} onSelect={() => { navigate(`/admin/contacts/${c.id}`); setSearchOpen(false); setSearchQuery(""); }}>
-                    <Users className="mr-2 h-4 w-4 text-gray-400" />
-                    <div>
-                      <p className="text-sm font-medium">{c.nombre}</p>
-                      <p className="text-xs text-gray-400">{c.empresa} — {c.email}</p>
-                    </div>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
-            {searchResults?.deals && searchResults.deals.length > 0 && (
-              <CommandGroup heading="Deals">
-                {searchResults.deals.map((d) => (
-                  <CommandItem key={d.id} onSelect={() => { navigate(`/admin/contacts/${d.contactId}`); setSearchOpen(false); setSearchQuery(""); }}>
-                    <Briefcase className="mr-2 h-4 w-4 text-gray-400" />
-                    <div>
-                      <p className="text-sm font-medium">{d.title}</p>
-                      <p className="text-xs text-gray-400">{d.contactName}</p>
-                    </div>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
-            {searchResults?.tasks && searchResults.tasks.length > 0 && (
-              <CommandGroup heading="Tareas">
-                {searchResults.tasks.map((t) => (
-                  <CommandItem key={t.id} onSelect={() => { if (t.contactId) navigate(`/admin/contacts/${t.contactId}`); setSearchOpen(false); setSearchQuery(""); }}>
-                    <CheckSquare className="mr-2 h-4 w-4 text-gray-400" />
-                    <div>
-                      <p className="text-sm font-medium">{t.title}</p>
-                      {t.contactName && <p className="text-xs text-gray-400">{t.contactName}</p>}
-                    </div>
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            )}
-          </CommandList>
-        </CommandDialog>
-      </main>
-    </div>
+
+          <motion.div
+            key={location}
+            variants={pageVariants}
+            initial="hidden"
+            animate="visible"
+            className="px-8 py-8 max-w-7xl"
+          >
+            {children}
+          </motion.div>
+
+          <CommandDialog open={searchOpen} onOpenChange={setSearchOpen}>
+            <CommandInput placeholder="Buscar contactos, deals, tareas..." value={searchQuery} onValueChange={setSearchQuery} />
+            <CommandList>
+              <CommandEmpty>No se encontraron resultados.</CommandEmpty>
+              {searchResults?.contacts && searchResults.contacts.length > 0 && (
+                <CommandGroup heading="Contactos">
+                  {searchResults.contacts.map((c) => (
+                    <CommandItem key={c.id} onSelect={() => { navigate(`/admin/contacts/${c.id}`); setSearchOpen(false); setSearchQuery(""); }}>
+                      <Users className="mr-2 h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium">{c.nombre}</p>
+                        <p className="text-xs text-muted-foreground">{c.empresa} — {c.email}</p>
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
+              {searchResults?.deals && searchResults.deals.length > 0 && (
+                <CommandGroup heading="Deals">
+                  {searchResults.deals.map((d) => (
+                    <CommandItem key={d.id} onSelect={() => { navigate(`/admin/contacts/${d.contactId}`); setSearchOpen(false); setSearchQuery(""); }}>
+                      <Briefcase className="mr-2 h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium">{d.title}</p>
+                        <p className="text-xs text-muted-foreground">{d.contactName}</p>
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
+              {searchResults?.tasks && searchResults.tasks.length > 0 && (
+                <CommandGroup heading="Tareas">
+                  {searchResults.tasks.map((t) => (
+                    <CommandItem key={t.id} onSelect={() => { if (t.contactId) navigate(`/admin/contacts/${t.contactId}`); setSearchOpen(false); setSearchQuery(""); }}>
+                      <CheckSquare className="mr-2 h-4 w-4 text-muted-foreground" />
+                      <div>
+                        <p className="text-sm font-medium">{t.title}</p>
+                        {t.contactName && <p className="text-xs text-muted-foreground">{t.contactName}</p>}
+                      </div>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              )}
+            </CommandList>
+          </CommandDialog>
+        </main>
+      </div>
+    </MotionConfig>
   );
 }

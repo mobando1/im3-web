@@ -8,12 +8,24 @@
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
-  
+
+  /* Tiered radius for the admin "instrument" system (16px global is toylike on data UI).
+     control = buttons/inputs/badges/cells, card = panels/drawers, pill = full-round. */
+  --radius-control: 6px;
+  --radius-card: 12px;
+  --radius-pill: 9999px;
+
   --color-ink: #0B1C2D;
   --color-coal: #1F1F1F;
   --color-paper: #F4F6F8;
   --color-teal: #2FA4A9;
-  
+
+  /* NOTE: the source vars below come in two shapes — some are pre-wrapped as
+     hsl(var(--x)) and some are raw "H S% L%" triplets. @theme inline inlines the
+     value into the generated utility, so a raw triplet here yields an INVALID
+     color (e.g. background-color: 210 20% 92%). Raw-triplet sources are wrapped
+     in hsl() at the mapping; already-wrapped sources are passed through as-is.
+     Alpha (bg-muted/50 etc.) is handled by Tailwind v4 via color-mix. */
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -22,17 +34,23 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
+  --color-secondary: hsl(var(--secondary));
   --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
   --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-border: var(--border);
-  --color-input: var(--input);
+  --color-accent-active: hsl(var(--accent-active));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
   --color-ring: var(--ring);
+
+  /* Layered surfaces — depth comes from a luminance ladder, not shadows. */
+  --color-surface: hsl(var(--surface));
+  --color-surface-raised: hsl(var(--surface-raised));
+  --color-surface-hover: hsl(var(--surface-hover));
 
   --color-tech: hsl(215 40% 50%);
 
@@ -86,6 +104,10 @@
 
   --accent: 182 30% 92%;
   --accent-foreground: hsl(var(--teal));
+  /* Tenue tinte teal para nav activo / fila seleccionada (no fill teal pleno). */
+  --accent-active: 182 44% 88%;
+  /* Borde superior táctil para cards; en claro casi imperceptible. */
+  --rim: inset 0 1px 0 rgb(255 255 255 / 0.6);
 
   --destructive: 0 84% 60%;
   --destructive-foreground: 0 0% 98%;
@@ -126,6 +148,8 @@
   --coal: 210 14% 90%;
   --paper: 220 25% 8%;
   --white: 220 25% 12%;
+  /* Teal sube en luminancia sobre el lienzo near-black para no enlodarse. */
+  --teal: 182 52% 50%;
 
   --background: hsl(var(--paper));
   --foreground: hsl(var(--ink));
@@ -141,6 +165,9 @@
   --muted-foreground: 215 15% 60%;
   --accent: 182 30% 15%;
   --accent-foreground: hsl(var(--teal));
+  /* Tinte teal recesivo sobre lienzo near-black (card = 220 25% 12%). */
+  --accent-active: 182 40% 14%;
+  --rim: inset 0 1px 0 rgb(255 255 255 / 0.05);
   --destructive: 0 72% 51%;
   --destructive-foreground: 0 0% 98%;
   --border: 220 20% 18%;
@@ -192,6 +219,22 @@
 .dark .glass-panel {
   background: hsl(220 25% 12% / 0.8);
   border-color: hsl(220 20% 20%);
+}
+
+/* Skeleton shimmer — barrido izq→der, theme-aware (admin "Teal Instrument"). */
+@keyframes skeleton-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+.skeleton-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    hsl(var(--muted)) 25%,
+    hsl(var(--surface-raised)) 37%,
+    hsl(var(--muted)) 63%
+  );
+  background-size: 200% 100%;
+  animation: skeleton-shimmer 1.4s ease-in-out infinite;
 }
 
 .reveal-hidden {
@@ -395,9 +438,11 @@
   .animate-pulse-glow,
   .animate-pulse,
   .animated-dashed-border,
-  .technical-grid::after {
+  .technical-grid::after,
+  .skeleton-shimmer {
     animation: none !important;
   }
+  .skeleton-shimmer { background: hsl(var(--muted)); }
 
   .tech-card {
     transition: none !important;
