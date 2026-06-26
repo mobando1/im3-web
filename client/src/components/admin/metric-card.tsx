@@ -61,13 +61,15 @@ interface MetricCardProps {
   /** Formateador aplicado al número animado (ej. moneda, %). */
   format?: (n: number) => string;
   delta?: Delta;
+  /** Subtítulo muted (cuando no hay delta): ej. "12 hot leads". */
+  hint?: string;
   /** Serie de tendencia (8–12 puntos) → sparkline. */
   trend?: number[];
   icon?: React.ReactNode;
   className?: string;
 }
 
-export function MetricCard({ label, value, format, delta, trend, icon, className }: MetricCardProps) {
+export function MetricCard({ label, value, format, delta, hint, trend, icon, className }: MetricCardProps) {
   const deltaColor =
     delta?.direction === "down"
       ? "text-red-600 dark:text-red-400"
@@ -91,6 +93,8 @@ export function MetricCard({ label, value, format, delta, trend, icon, className
             {delta.direction !== "neutral" && <DeltaIcon className="h-3 w-3" />}
             {delta.value}
           </span>
+        ) : hint ? (
+          <span className="text-xs text-muted-foreground truncate">{hint}</span>
         ) : (
           <span />
         )}

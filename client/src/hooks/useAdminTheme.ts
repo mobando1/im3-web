@@ -25,8 +25,8 @@ function applyDark(on: boolean) {
 
 export function useAdminTheme() {
   const [theme, setTheme] = useState<Theme>(() => {
-    if (typeof window === "undefined") return "dark";
-    return (localStorage.getItem(KEY) as Theme | null) ?? "dark";
+    if (typeof window === "undefined") return "light";
+    return (localStorage.getItem(KEY) as Theme | null) ?? "light";
   });
 
   useEffect(() => {
