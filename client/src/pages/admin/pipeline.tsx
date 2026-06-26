@@ -16,7 +16,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useToast } from "@/hooks/use-toast";
 import { ToastAction } from "@/components/ui/toast";
 import { cn } from "@/lib/utils";
-import { PageHeader, EmptyState } from "@/components/admin";
+import { PageHeader, EmptyState, SeedDemoButton } from "@/components/admin";
 
 type Deal = {
   id: string;
@@ -303,6 +303,7 @@ export default function Pipeline() {
           title="Sin deals en el pipeline"
           description="Crea tu primer deal para empezar a mover oportunidades por las etapas."
           action={<Button onClick={() => setShowNewDeal(true)} className="gap-2"><Plus className="h-4 w-4" /> Nuevo deal</Button>}
+          secondaryAction={<SeedDemoButton label="Cargar datos de ejemplo" variant="outline" />}
         />
       ) : (
         <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>

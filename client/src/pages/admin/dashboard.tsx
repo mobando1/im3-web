@@ -12,7 +12,7 @@ import {
 } from "recharts";
 import {
   PageHeader, MetricCard, ConversionFunnel, ChartTooltip, StatusDot,
-  EmptyState, SkeletonCard,
+  EmptyState, SkeletonCard, SeedDemoButton,
 } from "@/components/admin";
 import { listContainer, listItem } from "@/lib/motion";
 
@@ -211,12 +211,15 @@ export default function Dashboard() {
         title={getGreeting()}
         subtitle={`Resumen de tu CRM — ${new Date().toLocaleDateString("es-CO", { weekday: "long", month: "long", day: "numeric" })}`}
         actions={
-          kpis.unreadNotifications > 0 ? (
-            <span className="inline-flex items-center gap-2 rounded-[var(--radius-control)] bg-amber-50 px-3 py-1.5 text-sm text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
-              <Flame className="h-4 w-4" />
-              {kpis.unreadNotifications} sin leer
-            </span>
-          ) : undefined
+          <>
+            {kpis.unreadNotifications > 0 && (
+              <span className="inline-flex items-center gap-2 rounded-[var(--radius-control)] bg-amber-50 px-3 py-1.5 text-sm text-amber-700 dark:bg-amber-500/15 dark:text-amber-300">
+                <Flame className="h-4 w-4" />
+                {kpis.unreadNotifications} sin leer
+              </span>
+            )}
+            <SeedDemoButton variant="outline" />
+          </>
         }
       />
 

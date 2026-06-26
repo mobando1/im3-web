@@ -3117,6 +3117,147 @@ export async function registerRoutes(
     }
   });
 
+  // ─────────────────────────────────────────────────────────────
+  // Datos de ejemplo (SOLO demos)
+  // Inserta DIRECTO en la DB con db.insert → NO pasa por el flujo de intake, así
+  // que NUNCA pre-genera emails de nurturing, NUNCA manda WhatsApp, NUNCA crea
+  // carpetas en Drive ni dispara notificaciones de lead automáticas. Idempotente:
+  // borra los ejemplos previos (email termina en @ejemplo.im3) y reinserta. Solo
+  // toca filas marcadas como ejemplo — jamás datos reales de clientes.
+  // ─────────────────────────────────────────────────────────────
+  const DEMO_DOMAIN = "@ejemplo.im3";
+
+  async function clearDemoData(): Promise<number> {
+    if (!db) return 0;
+    const demo = await db.select({ id: contacts.id }).from(contacts).where(ilike(contacts.email, `%${DEMO_DOMAIN}`));
+    const ids = demo.map((c) => c.id);
+    if (ids.length > 0) {
+      await db.delete(deals).where(inArray(deals.contactId, ids));
+      await db.delete(activityLog).where(inArray(activityLog.contactId, ids));
+      await db.delete(tasks).where(inArray(tasks.contactId, ids));
+      await db.delete(notifications).where(inArray(notifications.contactId, ids));
+      await db.delete(contacts).where(inArray(contacts.id, ids));
+    }
+    return ids.length;
+  }
+
+  app.post("/api/admin/seed-demo/clear", requireAuth, async (_req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const removed = await clearDemoData();
+      log(`seed-demo: cleared ${removed} demo contacts`);
+      res.json({ ok: true, removed });
+    } catch (err: any) {
+      log(`seed-demo clear error: ${err?.message}`);
+      res.status(500).json({ error: "Error limpiando datos de ejemplo" });
+    }
+  });
+
+  app.post("/api/admin/seed-demo", requireAuth, async (_req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      await clearDemoData(); // idempotencia: empezar limpio
+
+      const DAY = 86400000;
+      const ago = (d: number) => new Date(Date.now() - d * DAY);
+      const ahead = (d: number) => new Date(Date.now() + d * DAY);
+      const slug = (n: string) => n.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[^a-z]/g, ".").replace(/\.+/g, ".");
+
+      // 10 contactos LATAM, distribuidos por etapa del embudo
+      const seedContacts = [
+        { nombre: "Valentina", apellido: "Ríos", empresa: "Tech Solutions SAS", telefono: "+573001112233", status: "scheduled", substatus: "warm", leadScore: 87, createdAt: ago(3) },
+        { nombre: "Carlos", apellido: "Mendoza", empresa: "Logística Andina", telefono: "+573004445566", status: "contacted", substatus: "interested", leadScore: 54, createdAt: ago(6) },
+        { nombre: "Andrea", apellido: "Gómez", empresa: "Retail Plus", telefono: "+573007778899", status: "converted", substatus: "completed", leadScore: 92, createdAt: ago(28) },
+        { nombre: "Mateo", apellido: "Díaz", empresa: "FinCorp Colombia", telefono: null, status: "lead", substatus: "cold", leadScore: 18, createdAt: ago(1) },
+        { nombre: "Lucía", apellido: "Pérez", empresa: "AgroData", telefono: "+573002223344", status: "contacted", substatus: "no_response", leadScore: 41, createdAt: ago(9) },
+        { nombre: "Santiago", apellido: "Ramírez", empresa: "Clínica Vida", telefono: "+573005556677", status: "scheduled", substatus: "proposal_sent", leadScore: 76, createdAt: ago(12) },
+        { nombre: "Camila", apellido: "Torres", empresa: "EduTech LATAM", telefono: null, status: "lead", substatus: "warm", leadScore: 33, createdAt: ago(2) },
+        { nombre: "Daniel", apellido: "Castro", empresa: "Constructora del Sur", telefono: "+573008889900", status: "converted", substatus: "delivering", leadScore: 88, createdAt: ago(35) },
+        { nombre: "Isabella", apellido: "Vargas", empresa: "Moda Express", telefono: "+573001234567", status: "contacted", substatus: "interested", leadScore: 49, createdAt: ago(7) },
+        { nombre: "Sebastián", apellido: "Morales", empresa: "Transporte Veloz", telefono: null, status: "lead", substatus: "cold", leadScore: 22, createdAt: ago(4) },
+      ].map((c) => ({
+        ...c,
+        email: `${slug(c.nombre + " " + c.apellido)}${DEMO_DOMAIN}`,
+        idioma: "es" as const,
+        tags: ["Ejemplo"],
+      }));
+
+      const insertedContacts = await db.insert(contacts).values(seedContacts).returning({ id: contacts.id, nombre: contacts.nombre, status: contacts.status, empresa: contacts.empresa });
+      const byCompany: Record<string, { id: string; nombre: string }> = {};
+      insertedContacts.forEach((c) => { byCompany[c.empresa] = { id: c.id, nombre: c.nombre }; });
+
+      // Deals por etapa (incluye ganados y un perdido)
+      const dealDefs: Array<{ empresa: string; title: string; value: number; stage: string; lostReason?: string; createdAt: Date }> = [
+        { empresa: "Tech Solutions SAS", title: "Chatbot WhatsApp + nurturing", value: 8500, stage: "qualification", createdAt: ago(3) },
+        { empresa: "Logística Andina", title: "Automatización de inventario", value: 12000, stage: "qualification", createdAt: ago(6) },
+        { empresa: "Clínica Vida", title: "Agente de agendamiento de citas", value: 9800, stage: "proposal", createdAt: ago(12) },
+        { empresa: "FinCorp Colombia", title: "Dashboard financiero con IA", value: 18000, stage: "proposal", createdAt: ago(10) },
+        { empresa: "AgroData", title: "Pipeline predictivo de cosechas", value: 9200, stage: "negotiation", createdAt: ago(21) },
+        { empresa: "Retail Plus", title: "CRM + email marketing", value: 5400, stage: "closed_won", createdAt: ago(28) },
+        { empresa: "Constructora del Sur", title: "Portal de proyectos + reportes", value: 15600, stage: "closed_won", createdAt: ago(35) },
+        { empresa: "Moda Express", title: "Bot de soporte 24/7", value: 3100, stage: "closed_lost", lostReason: "Precio", createdAt: ago(20) },
+      ];
+      const seedDeals = dealDefs.filter((d) => byCompany[d.empresa]).map((d) => ({
+        contactId: byCompany[d.empresa].id,
+        title: d.title,
+        value: d.value,
+        stage: d.stage,
+        lostReason: d.lostReason ?? null,
+        closedAt: d.stage.startsWith("closed_") ? d.createdAt : null,
+        notes: "Ejemplo",
+        createdAt: d.createdAt,
+      }));
+      await db.insert(deals).values(seedDeals);
+
+      // Actividad por contacto (alimenta el feed del dashboard y el RecordPeek)
+      const actDefs: Array<{ empresa: string; type: string; description: string; at: Date }> = [];
+      for (const c of insertedContacts) {
+        actDefs.push({ empresa: c.empresa, type: "form_submitted", description: "Completó el diagnóstico inicial", at: ago(Math.random() < 0.5 ? 1 : 5) });
+        if (c.status !== "lead") actDefs.push({ empresa: c.empresa, type: "email_sent", description: "Email de bienvenida enviado", at: ago(4) });
+        if (["scheduled", "converted"].includes(c.status)) actDefs.push({ empresa: c.empresa, type: "email_opened", description: "Abrió 'Propuesta IM3 Systems'", at: ago(2) });
+        if (c.status === "scheduled") actDefs.push({ empresa: c.empresa, type: "status_changed", description: "Movido de Contactado a Agendado", at: ago(1) });
+        if (c.status === "converted") actDefs.push({ empresa: c.empresa, type: "meeting", description: "Reunión de diagnóstico (Acta)", at: ago(3) });
+      }
+      const seedActivity = actDefs.map((a) => ({ contactId: byCompany[a.empresa].id, type: a.type, description: a.description, createdAt: a.at }));
+      await db.insert(activityLog).values(seedActivity);
+
+      // Tareas (alimenta /admin/tasks y el dashboard)
+      const taskDefs: Array<{ empresa: string; title: string; priority: string; due: Date }> = [
+        { empresa: "Tech Solutions SAS", title: "Llamar a Valentina (pre-cita)", priority: "high", due: ago(1) },
+        { empresa: "Clínica Vida", title: "Enviar propuesta a Clínica Vida", priority: "high", due: ahead(1) },
+        { empresa: "Logística Andina", title: "Follow-up post diagnóstico", priority: "medium", due: ahead(3) },
+        { empresa: "AgroData", title: "Revisar objeciones de precio", priority: "medium", due: ahead(2) },
+        { empresa: "FinCorp Colombia", title: "Agendar demo técnica", priority: "low", due: ahead(5) },
+      ];
+      const seedTasks = taskDefs.filter((t) => byCompany[t.empresa]).map((t) => ({
+        contactId: byCompany[t.empresa].id,
+        title: t.title,
+        priority: t.priority,
+        status: "pending",
+        dueDate: t.due,
+      }));
+      await db.insert(tasks).values(seedTasks);
+
+      // Notificaciones (bell) ligadas a contactos de ejemplo
+      const hot = insertedContacts.filter((c) => ["scheduled", "converted"].includes(c.status)).slice(0, 3);
+      if (hot.length > 0) {
+        await db.insert(notifications).values(hot.map((c) => ({
+          type: "hot_lead",
+          title: `Lead caliente: ${c.nombre}`,
+          description: `${c.empresa} — requiere seguimiento`,
+          contactId: c.id,
+          isRead: false,
+        })));
+      }
+
+      log(`seed-demo: inserted ${insertedContacts.length} contacts, ${seedDeals.length} deals, ${seedActivity.length} activity, ${seedTasks.length} tasks`);
+      res.json({ ok: true, contacts: insertedContacts.length, deals: seedDeals.length, activity: seedActivity.length, tasks: seedTasks.length });
+    } catch (err: any) {
+      log(`seed-demo error: ${err?.message}`);
+      res.status(500).json({ error: "Error cargando datos de ejemplo" });
+    }
+  });
+
   // AI insight for a contact (cached)
   app.get("/api/admin/contacts/:id/ai-insight", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
