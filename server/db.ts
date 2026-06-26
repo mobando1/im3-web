@@ -375,7 +375,7 @@ export async function runMigrations() {
       INSERT INTO "project_github_repos" ("project_id", "repo_full_name", "repo_url", "webhook_secret", "label")
       SELECT
         cp."id",
-        REGEXP_REPLACE(cp."github_repo_url", '^https?://github\\.com/', ''),
+        REGEXP_REPLACE(REGEXP_REPLACE(cp."github_repo_url", '^https?://github\\.com/', ''), '\\.git$', ''),
         cp."github_repo_url",
         COALESCE(cp."github_webhook_secret", encode(gen_random_bytes(32), 'hex')),
         'Legacy (auto-migrado)'
@@ -386,6 +386,20 @@ export async function runMigrations() {
           WHERE pgr."project_id" = cp."id" AND pgr."repo_url" = cp."github_repo_url"
         );
     `).catch((err) => console.error(`legacy github repo migration: ${err?.message}`));
+
+    // Repo discovery: repos de GitHub sin proyecto en el CRM (sugerencias de "crear proyecto").
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "repo_project_suggestions" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "repo_full_name" text NOT NULL UNIQUE,
+        "repo_url" text NOT NULL,
+        "description" text,
+        "is_private" boolean DEFAULT false NOT NULL,
+        "detected_at" timestamp DEFAULT NOW() NOT NULL,
+        "last_seen_at" timestamp DEFAULT NOW() NOT NULL,
+        "updated_at" timestamp DEFAULT NOW() NOT NULL
+      );
+    `).catch(() => {});
 
     // Project deliverables: client rating
     await pool.query(`ALTER TABLE "project_deliverables" ADD COLUMN IF NOT EXISTS "client_rating" integer;`).catch(() => {});

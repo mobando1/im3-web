@@ -21,6 +21,7 @@ import { runAnalyticsMonthlyReport } from "./analytics-monthly-report";
 import { runOrgPreferencesExtractor } from "../org-preferences";
 import { runEditLearnerBatch } from "../proposal-edit-learner";
 import { runContactDriveSyncCron } from "../drive-file-sync";
+import { runRepoDiscovery } from "./repo-discoverer";
 
 export type AgentKind = "ai" | "automation" | "integration" | "webhook";
 
@@ -472,6 +473,27 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
       { type: "api", label: "Resend", detail: "Envía email al cliente" },
     ],
     sourceFile: "server/email-scheduler.ts:1141",
+  },
+  {
+    name: "repo-discoverer",
+    displayName: "Descubridor de Repos",
+    kind: "integration",
+    description: "Detecta repos de GitHub sin proyecto y los sugiere en Proyectos (diario 6:15 AM COT)",
+    trigger: "cron",
+    schedule: "15 11 * * *",
+    scheduleHuman: "diario 6:15 AM COT",
+    criticality: "low",
+    runnable: runRepoDiscovery,
+    longDescription:
+      "Cada día lista todos los repos de GitHub accesibles por el token (GITHUB_TOKEN o el OAuth de un admin) y los compara contra los repos ya vinculados a proyectos (tabla project_github_repos + columna legacy). Los repos sin proyecto se guardan como sugerencias en repo_project_suggestions; el admin las acepta en /admin/projects (un click crea un proyecto interno con el repo vinculado + webhook). NO hay descarte: para excluir un repo, se borra de GitHub y el discoverer lo remueve. Salvaguarda: si GitHub devuelve 0 repos (token inválido / rate limit), no borra nada. También corre on-demand desde el botón 'Escanear ahora'.",
+    connections: [
+      { type: "api", label: "GitHub API", detail: "GET /user/repos paginado (todos los repos accesibles)" },
+      { type: "db", label: "project_github_repos", detail: "Repos ya vinculados (se excluyen)" },
+      { type: "db", label: "client_projects", detail: "Repos legacy ya vinculados (se excluyen)" },
+      { type: "db", label: "repo_project_suggestions", detail: "Reconcilia: crea / actualiza / elimina sugerencias" },
+      { type: "db", label: "notifications", detail: "Avisa cuando aparecen repos nuevos" },
+    ],
+    sourceFile: "server/agents/repo-discoverer.ts",
   },
   {
     name: "phase-generator",

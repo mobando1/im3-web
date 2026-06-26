@@ -16,6 +16,7 @@ import { runFollowupWriter } from "./agents/followup-writer";
 import { runCostReferenceFreshness } from "./agents/cost-reference-freshness";
 import { runAnalyticsSync } from "./agents/analytics-sync";
 import { runAnalyticsMonthlyReport } from "./agents/analytics-monthly-report";
+import { runRepoDiscovery } from "./agents/repo-discoverer";
 import { getIndustriaLabel } from "@shared/industrias";
 
 export { syncGmailEmails };
@@ -1318,6 +1319,11 @@ export function startEmailScheduler() {
   // Daily GitHub commit analysis at 6:00 AM Colombia time (11:00 UTC)
   cron.schedule("0 11 * * *", async () => {
     await runAgent("commit-analyzer", autoAnalyzeProjectCommits).catch(err => log(`Cron error auto-analyze: ${err}`));
+  }, { timezone: "America/Bogota" });
+
+  // Descubre repos de GitHub sin proyecto y los deja como sugerencias (diario 6:15 AM COT).
+  cron.schedule("15 11 * * *", async () => {
+    await runAgent("repo-discoverer", () => runRepoDiscovery()).catch(err => log(`Cron error repo-discoverer: ${err}`));
   }, { timezone: "America/Bogota" });
 
   // Weekly project summaries every Monday at 7:15 AM Colombia time (12:15 UTC)

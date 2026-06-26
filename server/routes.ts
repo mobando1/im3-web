@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { getModelGeneration, getModelClassification, getAllConfig, setConfig } from "./config";
 import { eq, asc, isNull, isNotNull, sql, and, gte, lte, ilike, or, desc, count, inArray } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, teamMembers, taskSuggestions, taskCompletionSuggestions, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectGithubRepos, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalTranslationCache, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, stackServices, contractTemplates, contracts, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback, adminActionAudit, vaultItems, vaultAccessLog } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, teamMembers, taskSuggestions, taskCompletionSuggestions, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectGithubRepos, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalTranslationCache, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, stackServices, contractTemplates, contracts, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback, adminActionAudit, vaultItems, vaultAccessLog, repoProjectSuggestions } from "@shared/schema";
 import { AGENT_REGISTRY, AGENT_KINDS, findAgent } from "./agents/registry";
 import { runAgent } from "./agents/runner";
 import { syncGmailEmails, isGmailConfigured, sendGmailMessage, getOriginalMessageHeaders } from "./google-gmail";
@@ -32,6 +32,7 @@ import crypto from "crypto";
 import { getIndustriaLabel } from "@shared/industrias";
 import { testConnection as testGAConnection, isGoogleAnalyticsConfigured } from "./google-analytics";
 import { backfillAnalytics } from "./agents/analytics-sync";
+import { runRepoDiscovery } from "./agents/repo-discoverer";
 import { isVaultConfigured, encryptSecret, decryptSecret, VaultDecryptError } from "./vault-crypto";
 
 type ProjectNotificationContent = {
@@ -8509,10 +8510,97 @@ Responde SOLO con un JSON válido, sin markdown:
   // Multi-repo admin endpoints
   // ─────────────────────────────────────────────────────────────
 
+  // Crea un webhook "push" en GitHub para un repo. Devuelve el id del hook o un
+  // motivo ACCIONABLE del fallo (nunca lanza). Antes el error se tragaba al log y
+  // el repo quedaba "conectado" sin trackear (éxito silencioso). Reusado por
+  // "agregar repo" + "reintentar webhook".
+  async function createGithubPushHook(
+    repoFullName: string,
+    webhookSecret: string,
+    webhookUrl: string,
+    token: string,
+  ): Promise<{ webhookId: number | null; error: string | null }> {
+    if (!token) {
+      return { webhookId: null, error: "No hay token de GitHub: conectá GitHub en el admin o seteá GITHUB_TOKEN." };
+    }
+    // Validación defensiva: repoFullName se interpola en la URL de la GitHub API.
+    // Choke-point único para los 3 callers (connect, accept, retry).
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repoFullName)) {
+      return { webhookId: null, error: `repoFullName inválido (esperado owner/repo): ${repoFullName}` };
+    }
+    try {
+      const ghRes = await fetch(`https://api.github.com/repos/${repoFullName}/hooks`, {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${token}`,
+          "Accept": "application/vnd.github.v3+json",
+          "Content-Type": "application/json",
+          "User-Agent": "IM3-Systems-CRM",
+        },
+        body: JSON.stringify({
+          name: "web",
+          active: true,
+          events: ["push"],
+          config: { url: webhookUrl, content_type: "json", secret: webhookSecret },
+        }),
+      });
+      if (ghRes.ok) {
+        const hook = await ghRes.json() as { id?: number };
+        return { webhookId: hook.id ?? null, error: null };
+      }
+      // 422 = el hook ya existe en GitHub (config duplicada). Lo reconciliamos: buscamos
+      // el hook cuyo config.url coincide con el nuestro y devolvemos su id como éxito.
+      // Hace que "Reintentar" se auto-cure en vez de mostrar error para siempre.
+      if (ghRes.status === 422) {
+        const existingId = await findExistingPushHookId(repoFullName, webhookUrl, token);
+        if (existingId !== null) return { webhookId: existingId, error: null };
+      }
+      const body = await ghRes.text();
+      let detail = body;
+      try { detail = (JSON.parse(body) as { message?: string }).message || body; } catch { /* keep raw body */ }
+      let hint = "";
+      if (ghRes.status === 404) hint = " — el token no tiene permiso de admin sobre el repo (¿es de una organización?) o falta el scope admin:repo_hook.";
+      else if (ghRes.status === 401 || ghRes.status === 403) hint = " — permisos insuficientes: el token necesita el scope admin:repo_hook.";
+      log(`createGithubPushHook: ${repoFullName} failed ${ghRes.status}: ${body}`);
+      return { webhookId: null, error: `GitHub ${ghRes.status}: ${detail}${hint}` };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      log(`createGithubPushHook: ${repoFullName} error: ${msg}`);
+      return { webhookId: null, error: `Error de red al crear el webhook: ${msg}` };
+    }
+  }
+
+  // Busca un webhook existente en el repo cuyo config.url coincide con webhookUrl y
+  // devuelve su id (o null). Usado para reconciliar el 422 "Hook already exists".
+  async function findExistingPushHookId(repoFullName: string, webhookUrl: string, token: string): Promise<number | null> {
+    try {
+      const res = await fetch(`https://api.github.com/repos/${repoFullName}/hooks?per_page=100`, {
+        headers: { "Authorization": `Bearer ${token}`, "Accept": "application/vnd.github.v3+json", "User-Agent": "IM3-Systems-CRM" },
+      });
+      if (!res.ok) return null;
+      const hooks = await res.json() as Array<{ id?: number; config?: { url?: string } }>;
+      const match = hooks.find(h => h.config?.url === webhookUrl);
+      return match?.id ?? null;
+    } catch {
+      return null;
+    }
+  }
+
   app.get("/api/admin/projects/:id/repos", requireAuth, async (req, res) => {
     if (!db) return res.status(500).json({ error: "DB not configured" });
     try {
-      const rows = await db.select().from(projectGithubRepos)
+      // Proyección explícita: NUNCA serializar webhook_secret (clave HMAC) al cliente.
+      const rows = await db.select({
+        id: projectGithubRepos.id,
+        projectId: projectGithubRepos.projectId,
+        repoFullName: projectGithubRepos.repoFullName,
+        repoUrl: projectGithubRepos.repoUrl,
+        webhookId: projectGithubRepos.webhookId,
+        label: projectGithubRepos.label,
+        isActive: projectGithubRepos.isActive,
+        createdAt: projectGithubRepos.createdAt,
+        updatedAt: projectGithubRepos.updatedAt,
+      }).from(projectGithubRepos)
         .where(and(eq(projectGithubRepos.projectId, req.params.id as string), eq(projectGithubRepos.isActive, true)))
         .orderBy(asc(projectGithubRepos.createdAt));
       res.json(rows);
@@ -8552,39 +8640,15 @@ Responde SOLO con un JSON válido, sin markdown:
         row = inserted;
       }
 
-      // Try to create the webhook on GitHub using the admin's OAuth token.
+      // Crear el webhook en GitHub. Best-effort: si falla, el repo igual queda
+      // agregado, PERO el motivo del fallo viaja al cliente (no más éxito silencioso).
       const adminUser = req.user as { githubAccessToken?: string } | undefined;
       const token = adminUser?.githubAccessToken || process.env.GITHUB_TOKEN || "";
       const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
       const webhookUrl = `${baseUrl}/api/webhooks/github/repo/${row.id}`;
-      let webhookId: number | null = null;
-      if (token) {
-        try {
-          const ghRes = await fetch(`https://api.github.com/repos/${repoFullName}/hooks`, {
-            method: "POST",
-            headers: {
-              "Authorization": `Bearer ${token}`,
-              "Accept": "application/vnd.github.v3+json",
-              "Content-Type": "application/json",
-              "User-Agent": "IM3-Systems-CRM",
-            },
-            body: JSON.stringify({
-              name: "web",
-              active: true,
-              events: ["push"],
-              config: { url: webhookUrl, content_type: "json", secret: webhookSecret },
-            }),
-          });
-          if (ghRes.ok) {
-            const hook = await ghRes.json() as { id?: number };
-            webhookId = hook.id ?? null;
-            await db.update(projectGithubRepos).set({ webhookId, updatedAt: new Date() }).where(eq(projectGithubRepos.id, row.id));
-          } else {
-            log(`connect-repo: GitHub hook creation failed for ${repoFullName}: ${ghRes.status} ${await ghRes.text()}`);
-          }
-        } catch (err) {
-          log(`connect-repo: GitHub hook creation error for ${repoFullName}: ${err}`);
-        }
+      const { webhookId, error: webhookError } = await createGithubPushHook(repoFullName, webhookSecret, webhookUrl, token);
+      if (webhookId !== null) {
+        await db.update(projectGithubRepos).set({ webhookId, updatedAt: new Date() }).where(eq(projectGithubRepos.id, row.id));
       }
 
       // Enable AI tracking on the project (idempotent — if already on, no-op).
@@ -8592,7 +8656,8 @@ Responde SOLO con un JSON válido, sin markdown:
         .set({ aiTrackingEnabled: true, updatedAt: new Date() })
         .where(eq(clientProjects.id, projectId));
 
-      res.json({ ...row, webhookId, webhookUrl, webhookConfigured: webhookId !== null });
+      const { webhookSecret: _omit, ...rowSafe } = row; // no exponer la clave HMAC
+      res.json({ ...rowSafe, webhookId, webhookUrl, webhookConfigured: webhookId !== null, webhookError });
     } catch (err: any) {
       log(`Error connecting repo: ${err?.message}`);
       res.status(500).json({ error: err?.message });
@@ -8640,6 +8705,113 @@ Responde SOLO con un JSON válido, sin markdown:
         .where(eq(projectGithubRepos.id, repoId));
       res.json({ success: true });
     } catch (err: any) { res.status(500).json({ error: err?.message }); }
+  });
+
+  // Reintentar la creación del webhook en GitHub para un repo ya conectado cuyo
+  // webhook no se creó (webhookId === null). Evita tener que desconectar/reconectar.
+  app.post("/api/admin/repos/:repoId/retry-webhook", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const repoId = req.params.repoId as string;
+      const [repo] = await db.select().from(projectGithubRepos).where(eq(projectGithubRepos.id, repoId)).limit(1);
+      if (!repo) return res.status(404).json({ message: "Repo no encontrado" });
+      if (repo.webhookId !== null) {
+        return res.json({ webhookConfigured: true, webhookId: repo.webhookId, webhookError: null, message: "El webhook ya estaba creado." });
+      }
+
+      const adminUser = req.user as { githubAccessToken?: string } | undefined;
+      const token = adminUser?.githubAccessToken || process.env.GITHUB_TOKEN || "";
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
+      const webhookUrl = `${baseUrl}/api/webhooks/github/repo/${repo.id}`;
+      const { webhookId, error: webhookError } = await createGithubPushHook(repo.repoFullName, repo.webhookSecret, webhookUrl, token);
+      if (webhookId !== null) {
+        await db.update(projectGithubRepos).set({ webhookId, updatedAt: new Date() }).where(eq(projectGithubRepos.id, repo.id));
+      }
+      res.json({ webhookConfigured: webhookId !== null, webhookId, webhookUrl, webhookError });
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
+  });
+
+  // ─────────────────────────────────────────────────────────────
+  // Repo discovery — sugerencias de proyecto desde repos de GitHub sin proyecto
+  // ─────────────────────────────────────────────────────────────
+
+  app.get("/api/admin/repo-suggestions", requireAuth, async (_req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const rows = await db.select().from(repoProjectSuggestions).orderBy(desc(repoProjectSuggestions.detectedAt));
+      res.json(rows);
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
+  });
+
+  // Escaneo on-demand (botón "Escanear ahora"). Usa GITHUB_TOKEN o, si falta, el OAuth del admin.
+  app.post("/api/admin/repo-suggestions/scan", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const adminUser = req.user as { githubAccessToken?: string } | undefined;
+      const token = process.env.GITHUB_TOKEN || adminUser?.githubAccessToken || "";
+      const result = await runAgent("repo-discoverer", () => runRepoDiscovery({ token }), { triggeredBy: "manual" });
+      res.json(result);
+    } catch (err: any) { res.status(500).json({ error: err?.message }); }
+  });
+
+  // Aceptar una sugerencia → crea proyecto interno (sin cliente) + vincula el repo + webhook.
+  app.post("/api/admin/repo-suggestions/:id/accept", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      // Claim ATÓMICO: borra la sugerencia y la "gana" una sola request. Evita que dos
+      // clicks / pestañas concurrentes creen dos proyectos para el mismo repo (mismo
+      // patrón que applyPendingAction). Si devuelve 0 filas, otra request ya la procesó.
+      const [sugg] = await db.delete(repoProjectSuggestions)
+        .where(eq(repoProjectSuggestions.id, req.params.id as string)).returning();
+      if (!sugg) return res.status(404).json({ message: "Sugerencia no encontrada (¿ya fue procesada?)" });
+
+      // Guard: si el repo YA tiene una fila en project_github_repos (activa o inactiva,
+      // case-insensitive como el discoverer) no duplicamos: crear otro proyecto partiría
+      // el historial del repo. La sugerencia ya fue removida por el claim atómico.
+      const [alreadyLinked] = await db.select({ id: projectGithubRepos.id }).from(projectGithubRepos)
+        .where(sql`lower(${projectGithubRepos.repoFullName}) = ${sugg.repoFullName.toLowerCase()}`).limit(1);
+      if (alreadyLinked) {
+        return res.status(409).json({ message: "Ese repo ya tiene un proyecto." });
+      }
+
+      // Proyecto interno sin cliente (el admin asigna el contacto después).
+      const projectName = sugg.repoFullName.includes("/") ? sugg.repoFullName.split("/").pop()! : sugg.repoFullName;
+      const [project] = await db.insert(clientProjects).values({
+        name: projectName,
+        description: sugg.description?.slice(0, 500) || null,
+        contactId: null,
+        projectType: "internal",
+        status: "planning",
+        startDate: new Date(),
+        githubRepoUrl: sugg.repoUrl,
+        healthStatus: "on_track",
+        healthNote: "Proyecto creado desde un repo detectado en GitHub.",
+        aiTrackingEnabled: true,
+        createdFrom: "discovery",
+      }).returning();
+
+      // Vincular el repo (tabla multi-repo) + crear webhook reusando el helper compartido.
+      const webhookSecret = crypto.randomBytes(32).toString("hex");
+      const [repoRow] = await db.insert(projectGithubRepos).values({
+        projectId: project.id, repoFullName: sugg.repoFullName, repoUrl: sugg.repoUrl, webhookSecret,
+      }).returning();
+
+      const adminUser = req.user as { githubAccessToken?: string } | undefined;
+      const token = process.env.GITHUB_TOKEN || adminUser?.githubAccessToken || "";
+      const baseUrl = process.env.BASE_URL || `${req.protocol}://${req.get("host")}`;
+      const webhookUrl = `${baseUrl}/api/webhooks/github/repo/${repoRow.id}`;
+      const { webhookId, error: webhookError } = await createGithubPushHook(sugg.repoFullName, webhookSecret, webhookUrl, token);
+      if (webhookId !== null) {
+        await db.update(projectGithubRepos).set({ webhookId, updatedAt: new Date() }).where(eq(projectGithubRepos.id, repoRow.id));
+      }
+
+      // (la sugerencia ya fue removida por el claim atómico al inicio)
+
+      res.json({ projectId: project.id, webhookConfigured: webhookId !== null, webhookError });
+    } catch (err: any) {
+      log(`Error accepting repo suggestion: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
   });
 
   // Admin: update health status manually

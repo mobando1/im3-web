@@ -329,8 +329,13 @@ function GitHubRepoSelector({ projectId, onConnected }: {
   onConnected: () => void;
 }) {
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [search, setSearch] = useState("");
   const [showPicker, setShowPicker] = useState(false);
+  // La lista de repos conectados es su propia query: hay que invalidarla explícitamente
+  // (onConnected del padre solo invalida la query del proyecto, una key distinta).
+  const reposKey = [`/api/admin/projects/${projectId}/repos`];
+  const refreshRepos = () => queryClient.invalidateQueries({ queryKey: reposKey });
 
   const { data: ghStatus } = useQuery<{ configured: boolean; connected: boolean; githubUsername: string | null }>({
     queryKey: ["/api/admin/github/status"],
@@ -350,14 +355,19 @@ function GitHubRepoSelector({ projectId, onConnected }: {
       const res = await apiRequest("POST", `/api/admin/projects/${projectId}/repos`, { repoFullName, label });
       return res.json();
     },
-    onSuccess: (data: { webhookConfigured?: boolean; repoFullName?: string }) => {
-      toast({
-        title: data?.webhookConfigured
-          ? `Repo conectado con webhook: ${data.repoFullName}`
-          : `Repo guardado (webhook no se pudo crear automáticamente — verificá permisos OAuth)`,
-      });
+    onSuccess: (data: { webhookConfigured?: boolean; repoFullName?: string; webhookError?: string | null }) => {
+      if (data?.webhookConfigured) {
+        toast({ title: `Repo conectado con webhook: ${data.repoFullName}` });
+      } else {
+        toast({
+          title: "Repo guardado, pero el webhook NO se creó",
+          description: `${data?.webhookError || "Motivo desconocido."} Los commits NO se trackearán hasta arreglarlo (botón Reintentar).`,
+          variant: "destructive",
+        });
+      }
       setShowPicker(false);
       setSearch("");
+      refreshRepos();
       onConnected();
     },
     onError: (err: any) => {
@@ -371,7 +381,31 @@ function GitHubRepoSelector({ projectId, onConnected }: {
     },
     onSuccess: () => {
       toast({ title: "Repo desconectado" });
+      refreshRepos();
       onConnected();
+    },
+  });
+
+  const retryWebhookMut = useMutation({
+    mutationFn: async (repoId: string) => {
+      const res = await apiRequest("POST", `/api/admin/repos/${repoId}/retry-webhook`, {});
+      return res.json();
+    },
+    onSuccess: (data: { webhookConfigured?: boolean; webhookError?: string | null }) => {
+      if (data?.webhookConfigured) {
+        toast({ title: "Webhook creado — ahora sí se trackean los commits" });
+      } else {
+        toast({
+          title: "Sigue sin crearse el webhook",
+          description: data?.webhookError || "Motivo desconocido.",
+          variant: "destructive",
+        });
+      }
+      refreshRepos();
+      onConnected();
+    },
+    onError: (err: any) => {
+      toast({ title: "Error reintentando webhook", description: err?.message, variant: "destructive" });
     },
   });
 
@@ -379,7 +413,7 @@ function GitHubRepoSelector({ projectId, onConnected }: {
     mutationFn: async ({ repoId, label }: { repoId: string; label: string }) => {
       await apiRequest("PATCH", `/api/admin/repos/${repoId}`, { label });
     },
-    onSuccess: () => onConnected(),
+    onSuccess: () => { refreshRepos(); onConnected(); },
   });
 
   const disconnectGithubMut = useMutation({
@@ -437,12 +471,16 @@ function GitHubRepoSelector({ projectId, onConnected }: {
           <p className="text-xs font-medium text-gray-600">
             Repositorios conectados ({connectedRepos.length})
           </p>
-          {connectedRepos.map(repo => (
-            <div key={repo.id} className="flex items-center gap-2 bg-emerald-50 border border-emerald-200 rounded-lg p-2.5">
-              <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+          {connectedRepos.map(repo => {
+            const tracked = repo.webhookId !== null;
+            return (
+            <div key={repo.id} className={`flex items-center gap-2 rounded-lg p-2.5 border ${tracked ? "bg-emerald-50 border-emerald-200" : "bg-amber-50 border-amber-300"}`}>
+              {tracked
+                ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                : <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />}
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-emerald-900 truncate">{repo.repoFullName}</p>
-                <div className="flex items-center gap-2 mt-0.5">
+                <p className={`text-sm font-medium truncate ${tracked ? "text-emerald-900" : "text-amber-900"}`}>{repo.repoFullName}</p>
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   <input
                     type="text"
                     defaultValue={repo.label || ""}
@@ -451,12 +489,22 @@ function GitHubRepoSelector({ projectId, onConnected }: {
                       const next = e.target.value.trim();
                       if (next !== (repo.label || "")) updateLabelMut.mutate({ repoId: repo.id, label: next });
                     }}
-                    className="text-xs bg-white border border-emerald-200 rounded px-2 py-0.5 max-w-[140px] focus:outline-none focus:border-emerald-400"
+                    className={`text-xs bg-white rounded px-2 py-0.5 max-w-[140px] focus:outline-none border ${tracked ? "border-emerald-200 focus:border-emerald-400" : "border-amber-300 focus:border-amber-400"}`}
                   />
-                  {repo.webhookId === null && (
-                    <span className="text-[10px] text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded" title="Webhook no fue creado automáticamente (probablemente repo legacy o sin permisos)">
-                      sin webhook auto
-                    </span>
+                  {!tracked && (
+                    <>
+                      <span className="text-[10px] text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded" title="El webhook no se creó en GitHub: los pushes/commits de este repo NO se están trackeando.">
+                        ⚠ sin webhook — no se trackea
+                      </span>
+                      <button
+                        onClick={() => retryWebhookMut.mutate(repo.id)}
+                        disabled={retryWebhookMut.isPending}
+                        className="inline-flex items-center gap-1 text-[10px] text-amber-800 hover:text-amber-900 underline disabled:opacity-50"
+                        title="Reintentar crear el webhook en GitHub"
+                      >
+                        <RefreshCw className={`w-3 h-3 ${retryWebhookMut.isPending ? "animate-spin" : ""}`} /> Reintentar
+                      </button>
+                    </>
                   )}
                 </div>
               </div>
@@ -472,7 +520,8 @@ function GitHubRepoSelector({ projectId, onConnected }: {
                 <X className="w-4 h-4" />
               </button>
             </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
