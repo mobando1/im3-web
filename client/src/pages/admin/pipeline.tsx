@@ -1,12 +1,22 @@
-import { useState, useRef } from "react";
+import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import {
-  DollarSign, GripVertical, Clock, User, Building2, Plus,
-  X, ChevronDown, ArrowUpRight,
-} from "lucide-react";
-import { Card } from "@/components/ui/card";
+  DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
+  useDraggable, useDroppable, pointerWithin,
+  type DragStartEvent, type DragEndEvent,
+} from "@dnd-kit/core";
+import { Clock, User, Building2, Plus, X, Columns3 } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
+import { cn } from "@/lib/utils";
+import { PageHeader, EmptyState } from "@/components/admin";
 
 type Deal = {
   id: string;
@@ -21,51 +31,164 @@ type Deal = {
   createdAt: string;
 };
 
-type Contact = {
-  id: string;
-  nombre: string;
-  empresa: string;
-  email: string;
-};
+type Contact = { id: string; nombre: string; empresa: string; email: string };
 
+// Ramp teal para etapas ordenadas; emerald=ganado, slate=perdido. (No arcoíris.)
 const STAGES = [
-  { key: "qualification", label: "Calificacion", color: "bg-blue-500", lightBg: "bg-blue-50", textColor: "text-blue-700", borderColor: "border-blue-200" },
-  { key: "proposal", label: "Propuesta", color: "bg-amber-500", lightBg: "bg-amber-50", textColor: "text-amber-700", borderColor: "border-amber-200" },
-  { key: "negotiation", label: "Negociacion", color: "bg-purple-500", lightBg: "bg-purple-50", textColor: "text-purple-700", borderColor: "border-purple-200" },
-  { key: "closed_won", label: "Ganado", color: "bg-emerald-500", lightBg: "bg-emerald-50", textColor: "text-emerald-700", borderColor: "border-emerald-200" },
-  { key: "closed_lost", label: "Perdido", color: "bg-red-400", lightBg: "bg-red-50", textColor: "text-red-600", borderColor: "border-red-200" },
+  { key: "qualification", label: "Calificación", accent: "#5bbcbf" },
+  { key: "proposal", label: "Propuesta", accent: "#3aabaf" },
+  { key: "negotiation", label: "Negociación", accent: "#2FA4A9" },
+  { key: "closed_won", label: "Ganado", accent: "#10b981" },
+  { key: "closed_lost", label: "Perdido", accent: "#94a3b8" },
 ];
+const STAGE_LABEL: Record<string, string> = Object.fromEntries(STAGES.map((s) => [s.key, s.label]));
+const DEALS_KEY = ["/api/admin/deals"];
 
-function daysSince(dateStr: string): number {
-  return Math.floor((Date.now() - new Date(dateStr).getTime()) / (1000 * 60 * 60 * 24));
+const fmtMoney = (n: number) => `$${Math.round(n).toLocaleString("es-CO")}`;
+const daysSince = (d: string) => Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+
+function DealCard({ deal, contact, onDelete, onOpenContact, overlay }: {
+  deal: Deal;
+  contact?: Contact;
+  onDelete?: () => void;
+  onOpenContact?: () => void;
+  overlay?: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: deal.id });
+  const style = transform ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` } : undefined;
+  const stop = (e: React.PointerEvent) => e.stopPropagation();
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={cn(
+        "group rounded-[var(--radius-control)] border border-border bg-card p-3 transition-shadow",
+        overlay ? "scale-[1.02] cursor-grabbing shadow-[0_12px_28px_-8px_rgba(0,0,0,0.55)]" : "cursor-grab shadow-[var(--rim)] hover:border-primary/30",
+        isDragging && !overlay ? "opacity-40" : "",
+      )}
+    >
+      <div className="flex items-start justify-between gap-1.5">
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-medium text-foreground">{deal.title}</p>
+          {deal.value != null && deal.value > 0 && (
+            <p className="mt-0.5 text-sm font-semibold tabular-nums text-emerald-600 dark:text-emerald-400">{fmtMoney(deal.value)}</p>
+          )}
+        </div>
+        {onDelete && (
+          <button
+            onPointerDown={stop}
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            className="rounded p-0.5 text-muted-foreground/50 opacity-0 transition-all hover:text-destructive group-hover:opacity-100"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        )}
+      </div>
+
+      {contact && (
+        <div className="mt-2.5 space-y-1">
+          <button
+            onPointerDown={stop}
+            onClick={(e) => { e.stopPropagation(); onOpenContact?.(); }}
+            className="flex items-center gap-1.5 text-xs text-muted-foreground transition-colors hover:text-primary"
+          >
+            <User className="h-3 w-3" />
+            <span className="truncate">{contact.nombre}</span>
+          </button>
+          <div className="flex items-center gap-1.5 text-xs text-muted-foreground/70">
+            <Building2 className="h-3 w-3" />
+            <span className="truncate">{contact.empresa}</span>
+          </div>
+        </div>
+      )}
+
+      <div className="mt-2.5 flex items-center justify-between border-t border-border pt-2">
+        <span className="flex items-center gap-1 text-[11px] tabular-nums text-muted-foreground/70">
+          <Clock className="h-3 w-3" /> {daysSince(deal.createdAt)}d
+        </span>
+        {deal.lostReason && (
+          <span className="max-w-[100px] truncate text-[11px] text-red-500/80">{deal.lostReason}</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function KanbanColumn({ stage, deals, contactMap, onDelete, onOpenContact }: {
+  stage: typeof STAGES[number];
+  deals: Deal[];
+  contactMap: Record<string, Contact>;
+  onDelete: (id: string) => void;
+  onOpenContact: (id: string) => void;
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: stage.key });
+  const total = deals.reduce((s, d) => s + (d.value || 0), 0);
+
+  return (
+    <div className="flex min-w-[260px] flex-1 flex-col overflow-hidden rounded-[var(--radius-card)] border border-border bg-surface/40">
+      <div className="h-0.5 w-full shrink-0" style={{ background: stage.accent }} />
+      <div className="border-b border-border p-3">
+        <div className="flex items-center gap-2">
+          <span className="h-2.5 w-2.5 rounded-full" style={{ background: stage.accent }} />
+          <span className="text-sm font-semibold text-foreground">{stage.label}</span>
+          <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-xs tabular-nums text-muted-foreground">{deals.length}</span>
+        </div>
+        {total > 0 && <p className="ml-4.5 mt-1 text-xs tabular-nums text-muted-foreground/70">{fmtMoney(total)}</p>}
+      </div>
+      <div
+        ref={setNodeRef}
+        className={cn(
+          "min-h-[220px] flex-1 space-y-2 p-2 transition-colors",
+          isOver && "bg-accent-active/50 ring-1 ring-inset ring-primary/40",
+        )}
+      >
+        {deals.map((deal) => (
+          <DealCard
+            key={deal.id}
+            deal={deal}
+            contact={contactMap[deal.contactId]}
+            onDelete={() => onDelete(deal.id)}
+            onOpenContact={() => onOpenContact(deal.contactId)}
+          />
+        ))}
+        {deals.length === 0 && (
+          <div className="flex h-24 items-center justify-center rounded-[var(--radius-control)] border border-dashed border-border text-xs text-muted-foreground/60">
+            Arrastra deals aquí
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 export default function Pipeline() {
   const [, navigate] = useLocation();
   const queryClient = useQueryClient();
-  const [draggedDeal, setDraggedDeal] = useState<string | null>(null);
-  const [dragOverStage, setDragOverStage] = useState<string | null>(null);
+  const { toast } = useToast();
+  const [activeId, setActiveId] = useState<string | null>(null);
   const [showNewDeal, setShowNewDeal] = useState(false);
   const [newDeal, setNewDeal] = useState({ title: "", value: "", contactId: "", stage: "qualification" });
-  const [lostReasonModal, setLostReasonModal] = useState<{ dealId: string; stage: string } | null>(null);
+  const [lostReasonModal, setLostReasonModal] = useState<{ dealId: string; from: string } | null>(null);
   const [lostReason, setLostReason] = useState("");
 
-  const { data: deals = [], isLoading: dealsLoading } = useQuery<Deal[]>({
-    queryKey: ["/api/admin/deals"],
-  });
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
+  const { data: deals = [], isLoading } = useQuery<Deal[]>({ queryKey: DEALS_KEY });
   const { data: contactsData } = useQuery<{ contacts: Contact[]; total: number }>({
     queryKey: ["/api/admin/contacts?limit=200"],
   });
   const contacts = contactsData?.contacts || [];
+  const contactMap: Record<string, Contact> = {};
+  for (const c of contacts) contactMap[c.id] = c;
 
   const updateDealMutation = useMutation({
     mutationFn: async ({ id, ...data }: { id: string; stage?: string; lostReason?: string }) => {
       await apiRequest("PATCH", `/api/admin/deals/${id}`, data);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/deals"] });
-    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: DEALS_KEY }),
   });
 
   const createDealMutation = useMutation({
@@ -73,100 +196,88 @@ export default function Pipeline() {
       await apiRequest("POST", "/api/admin/deals", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/deals"] });
+      queryClient.invalidateQueries({ queryKey: DEALS_KEY });
       setShowNewDeal(false);
       setNewDeal({ title: "", value: "", contactId: "", stage: "qualification" });
     },
   });
 
   const deleteDealMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/admin/deals/${id}`);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/admin/deals"] });
-    },
+    mutationFn: async (id: string) => { await apiRequest("DELETE", `/api/admin/deals/${id}`); },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: DEALS_KEY }),
   });
 
-  // Group deals by stage
+  // Movimiento optimista: actualiza el cache YA y luego sincroniza el server.
+  function moveDeal(id: string, toStage: string, lostReasonText?: string) {
+    queryClient.setQueryData<Deal[]>(DEALS_KEY, (old) =>
+      (old || []).map((d) => (d.id === id ? { ...d, stage: toStage, lostReason: lostReasonText ?? (toStage === "closed_lost" ? d.lostReason : null) } : d)),
+    );
+    updateDealMutation.mutate({ id, stage: toStage, ...(lostReasonText ? { lostReason: lostReasonText } : {}) });
+  }
+
   const dealsByStage: Record<string, Deal[]> = {};
-  for (const stage of STAGES) {
-    dealsByStage[stage.key] = deals.filter(d => d.stage === stage.key);
+  for (const s of STAGES) dealsByStage[s.key] = deals.filter((d) => d.stage === s.key);
+
+  const activeDeal = activeId ? deals.find((d) => d.id === activeId) : null;
+
+  function handleDragStart(e: DragStartEvent) {
+    setActiveId(String(e.active.id));
   }
 
-  // Contact lookup
-  const contactMap: Record<string, Contact> = {};
-  for (const c of contacts) {
-    contactMap[c.id] = c;
-  }
+  function handleDragEnd(e: DragEndEvent) {
+    setActiveId(null);
+    const dealId = String(e.active.id);
+    const toStage = e.over ? String(e.over.id) : null;
+    if (!toStage) return;
+    const deal = deals.find((d) => d.id === dealId);
+    if (!deal || deal.stage === toStage) return;
 
-  // Drag handlers
-  function handleDragStart(dealId: string) {
-    setDraggedDeal(dealId);
-  }
-
-  function handleDragOver(e: React.DragEvent, stageKey: string) {
-    e.preventDefault();
-    setDragOverStage(stageKey);
-  }
-
-  function handleDragLeave() {
-    setDragOverStage(null);
-  }
-
-  function handleDrop(stageKey: string) {
-    if (!draggedDeal) return;
-    const deal = deals.find(d => d.id === draggedDeal);
-    if (!deal || deal.stage === stageKey) {
-      setDraggedDeal(null);
-      setDragOverStage(null);
+    if (toStage === "closed_lost") {
+      setLostReasonModal({ dealId, from: deal.stage });
       return;
     }
 
-    // If moving to closed_lost, ask for reason
-    if (stageKey === "closed_lost") {
-      setLostReasonModal({ dealId: draggedDeal, stage: stageKey });
-      setDraggedDeal(null);
-      setDragOverStage(null);
-      return;
-    }
-
-    updateDealMutation.mutate({ id: draggedDeal, stage: stageKey });
-    setDraggedDeal(null);
-    setDragOverStage(null);
-  }
-
-  function handleDragEnd() {
-    setDraggedDeal(null);
-    setDragOverStage(null);
+    const fromStage = deal.stage;
+    moveDeal(dealId, toStage);
+    toast({
+      title: "Deal movido",
+      description: `${deal.title} → ${STAGE_LABEL[toStage]}`,
+      action: (
+        <ToastAction altText="Deshacer" onClick={() => moveDeal(dealId, fromStage)}>
+          Deshacer
+        </ToastAction>
+      ),
+    });
   }
 
   function submitLostReason() {
     if (!lostReasonModal) return;
-    updateDealMutation.mutate({
-      id: lostReasonModal.dealId,
-      stage: lostReasonModal.stage,
-      lostReason: lostReason || "No especificado",
+    const { dealId, from } = lostReasonModal;
+    const deal = deals.find((d) => d.id === dealId);
+    moveDeal(dealId, "closed_lost", lostReason || "No especificado");
+    toast({
+      title: "Deal perdido",
+      description: deal?.title,
+      action: (
+        <ToastAction altText="Deshacer" onClick={() => moveDeal(dealId, from)}>
+          Deshacer
+        </ToastAction>
+      ),
     });
     setLostReasonModal(null);
     setLostReason("");
   }
 
-  // Totals
-  const totalPipeline = deals
-    .filter(d => !["closed_won", "closed_lost"].includes(d.stage))
-    .reduce((s, d) => s + (d.value || 0), 0);
-  const totalWon = deals
-    .filter(d => d.stage === "closed_won")
-    .reduce((s, d) => s + (d.value || 0), 0);
+  const totalPipeline = deals.filter((d) => !["closed_won", "closed_lost"].includes(d.stage)).reduce((s, d) => s + (d.value || 0), 0);
+  const totalWon = deals.filter((d) => d.stage === "closed_won").reduce((s, d) => s + (d.value || 0), 0);
 
-  if (dealsLoading) {
+  if (isLoading) {
     return (
-      <div className="space-y-4">
-        <div className="h-8 w-40 bg-gray-200 rounded-lg animate-pulse" />
-        <div className="grid grid-cols-5 gap-4">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="bg-gray-100 rounded-xl h-96 animate-pulse" />
+      <div className="space-y-5">
+        <div className="skeleton-shimmer h-8 w-40 rounded-[var(--radius-control)]" />
+        <div className="flex gap-3 overflow-hidden">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="skeleton-shimmer h-96 min-w-[260px] flex-1 rounded-[var(--radius-card)]" />
           ))}
         </div>
       </div>
@@ -175,247 +286,109 @@ export default function Pipeline() {
 
   return (
     <div className="space-y-5">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Pipeline</h2>
-          <p className="text-gray-400 text-sm mt-0.5">
-            {deals.length} deal{deals.length !== 1 ? "s" : ""} · Pipeline: <span className="text-emerald-600 font-medium">${totalPipeline.toLocaleString()}</span>
-            {totalWon > 0 && <> · Ganado: <span className="text-emerald-600 font-medium">${totalWon.toLocaleString()}</span></>}
-          </p>
-        </div>
-        <button
-          onClick={() => setShowNewDeal(true)}
-          className="flex items-center gap-2 px-4 py-2.5 bg-[#2FA4A9] text-white rounded-xl hover:bg-[#238b8f] transition-colors text-sm font-medium shadow-sm"
-        >
-          <Plus className="w-4 h-4" /> Nuevo Deal
-        </button>
-      </div>
+      <PageHeader
+        title="Pipeline"
+        subtitle={
+          <>
+            {deals.length} deal{deals.length !== 1 ? "s" : ""} · Activo: <span className="font-medium text-emerald-600 dark:text-emerald-400">{fmtMoney(totalPipeline)}</span>
+            {totalWon > 0 && <> · Ganado: <span className="font-medium text-emerald-600 dark:text-emerald-400">{fmtMoney(totalWon)}</span></>}
+          </>
+        }
+        actions={<Button onClick={() => setShowNewDeal(true)} className="gap-2"><Plus className="h-4 w-4" /> Nuevo deal</Button>}
+      />
 
-      {/* Kanban Board */}
-      <div className="grid grid-cols-5 gap-3 min-h-[60vh]">
-        {STAGES.map((stage) => {
-          const stageDeals = dealsByStage[stage.key] || [];
-          const stageTotal = stageDeals.reduce((s, d) => s + (d.value || 0), 0);
-          const isDragOver = dragOverStage === stage.key;
+      {deals.length === 0 ? (
+        <EmptyState
+          icon={<Columns3 />}
+          title="Sin deals en el pipeline"
+          description="Crea tu primer deal para empezar a mover oportunidades por las etapas."
+          action={<Button onClick={() => setShowNewDeal(true)} className="gap-2"><Plus className="h-4 w-4" /> Nuevo deal</Button>}
+        />
+      ) : (
+        <DndContext sensors={sensors} collisionDetection={pointerWithin} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {STAGES.map((stage) => (
+              <KanbanColumn
+                key={stage.key}
+                stage={stage}
+                deals={dealsByStage[stage.key] || []}
+                contactMap={contactMap}
+                onDelete={(id) => { if (confirm("¿Eliminar este deal?")) deleteDealMutation.mutate(id); }}
+                onOpenContact={(id) => navigate(`/admin/contacts/${id}`)}
+              />
+            ))}
+          </div>
+          <DragOverlay dropAnimation={null}>
+            {activeDeal ? <DealCard deal={activeDeal} contact={contactMap[activeDeal.contactId]} overlay /> : null}
+          </DragOverlay>
+        </DndContext>
+      )}
 
-          return (
-            <div
-              key={stage.key}
-              className={`rounded-xl border-2 transition-colors ${
-                isDragOver
-                  ? `${stage.borderColor} ${stage.lightBg}`
-                  : "border-gray-200/80 bg-gray-50/50"
-              }`}
-              onDragOver={(e) => handleDragOver(e, stage.key)}
-              onDragLeave={handleDragLeave}
-              onDrop={() => handleDrop(stage.key)}
+      {/* Nuevo deal */}
+      <Dialog open={showNewDeal} onOpenChange={setShowNewDeal}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Nuevo deal</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="deal-title">Título</Label>
+              <Input id="deal-title" value={newDeal.title} onChange={(e) => setNewDeal({ ...newDeal, title: e.target.value })} placeholder="Ej: Chatbot WhatsApp para empresa…" />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="deal-value">Valor (USD)</Label>
+              <Input id="deal-value" type="number" value={newDeal.value} onChange={(e) => setNewDeal({ ...newDeal, value: e.target.value })} placeholder="5000" />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Contacto</Label>
+              <Select value={newDeal.contactId} onValueChange={(v) => setNewDeal({ ...newDeal, contactId: v })}>
+                <SelectTrigger><SelectValue placeholder="Seleccionar contacto" /></SelectTrigger>
+                <SelectContent>
+                  {contacts.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>{c.nombre} — {c.empresa}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Etapa</Label>
+              <Select value={newDeal.stage} onValueChange={(v) => setNewDeal({ ...newDeal, stage: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  {STAGES.map((s) => (
+                    <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <Button
+              className="w-full"
+              disabled={!newDeal.title || !newDeal.contactId || createDealMutation.isPending}
+              onClick={() => {
+                if (!newDeal.title || !newDeal.contactId) return;
+                createDealMutation.mutate({ title: newDeal.title, value: Number(newDeal.value) || 0, contactId: newDeal.contactId, stage: newDeal.stage });
+              }}
             >
-              {/* Column Header */}
-              <div className="p-3 border-b border-gray-200/60">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className={`w-2.5 h-2.5 rounded-full ${stage.color}`} />
-                  <span className="text-sm font-semibold text-gray-700">{stage.label}</span>
-                  <span className="text-xs text-gray-400 bg-gray-100 rounded-full px-2 py-0.5 ml-auto">
-                    {stageDeals.length}
-                  </span>
-                </div>
-                {stageTotal > 0 && (
-                  <p className="text-xs text-gray-400 ml-4.5">${stageTotal.toLocaleString()}</p>
-                )}
-              </div>
-
-              {/* Cards */}
-              <div className="p-2 space-y-2 min-h-[200px]">
-                {stageDeals.map((deal) => {
-                  const contact = contactMap[deal.contactId];
-                  const days = daysSince(deal.createdAt);
-                  const isDragging = draggedDeal === deal.id;
-
-                  return (
-                    <div
-                      key={deal.id}
-                      draggable
-                      onDragStart={() => handleDragStart(deal.id)}
-                      onDragEnd={handleDragEnd}
-                      className={`bg-white rounded-lg border border-gray-200/80 p-3 cursor-grab active:cursor-grabbing hover:shadow-md transition-all group ${
-                        isDragging ? "opacity-40 scale-95" : ""
-                      }`}
-                    >
-                      {/* Title + drag handle */}
-                      <div className="flex items-start gap-1.5">
-                        <GripVertical className="w-3.5 h-3.5 text-gray-300 mt-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-900 truncate">{deal.title}</p>
-                          {deal.value && (
-                            <p className="text-sm font-bold text-emerald-600 mt-0.5">
-                              ${deal.value.toLocaleString()}
-                            </p>
-                          )}
-                        </div>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            if (confirm("Eliminar este deal?")) {
-                              deleteDealMutation.mutate(deal.id);
-                            }
-                          }}
-                          className="opacity-0 group-hover:opacity-100 p-0.5 rounded text-gray-300 hover:text-red-400 transition-all"
-                        >
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                      {/* Contact info */}
-                      {contact && (
-                        <div className="mt-2.5 space-y-1">
-                          <button
-                            onClick={() => navigate(`/admin/contacts/${contact.id}`)}
-                            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-[#2FA4A9] transition-colors"
-                          >
-                            <User className="w-3 h-3" />
-                            <span className="truncate">{contact.nombre}</span>
-                          </button>
-                          <div className="flex items-center gap-1.5 text-xs text-gray-400">
-                            <Building2 className="w-3 h-3" />
-                            <span className="truncate">{contact.empresa}</span>
-                          </div>
-                        </div>
-                      )}
-
-                      {/* Footer */}
-                      <div className="flex items-center justify-between mt-2.5 pt-2 border-t border-gray-100">
-                        <span className="text-[11px] text-gray-400 flex items-center gap-1">
-                          <Clock className="w-3 h-3" /> {days}d
-                        </span>
-                        {deal.lostReason && (
-                          <span className="text-[11px] text-red-400 truncate max-w-[100px]">
-                            {deal.lostReason}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-
-                {stageDeals.length === 0 && (
-                  <div className="flex items-center justify-center h-24 text-xs text-gray-300">
-                    Arrastra deals aqui
-                  </div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* New Deal Modal */}
-      {showNewDeal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50" onClick={() => setShowNewDeal(false)}>
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-5">
-              <h3 className="text-lg font-bold text-gray-900">Nuevo Deal</h3>
-              <button onClick={() => setShowNewDeal(false)} className="p-1 rounded-lg hover:bg-gray-100 text-gray-400">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Titulo</label>
-                <input
-                  type="text"
-                  value={newDeal.title}
-                  onChange={e => setNewDeal({ ...newDeal, title: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#2FA4A9]/20 focus:border-[#2FA4A9] outline-none"
-                  placeholder="Ej: Chatbot WhatsApp para empresa..."
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Valor (USD)</label>
-                <input
-                  type="number"
-                  value={newDeal.value}
-                  onChange={e => setNewDeal({ ...newDeal, value: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#2FA4A9]/20 focus:border-[#2FA4A9] outline-none"
-                  placeholder="5000"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Contacto</label>
-                <select
-                  value={newDeal.contactId}
-                  onChange={e => setNewDeal({ ...newDeal, contactId: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#2FA4A9]/20 focus:border-[#2FA4A9] outline-none bg-white"
-                >
-                  <option value="">Seleccionar contacto</option>
-                  {contacts.map(c => (
-                    <option key={c.id} value={c.id}>{c.nombre} — {c.empresa}</option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Etapa</label>
-                <select
-                  value={newDeal.stage}
-                  onChange={e => setNewDeal({ ...newDeal, stage: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#2FA4A9]/20 focus:border-[#2FA4A9] outline-none bg-white"
-                >
-                  {STAGES.map(s => (
-                    <option key={s.key} value={s.key}>{s.label}</option>
-                  ))}
-                </select>
-              </div>
-              <button
-                onClick={() => {
-                  if (!newDeal.title || !newDeal.contactId) return;
-                  createDealMutation.mutate({
-                    title: newDeal.title,
-                    value: Number(newDeal.value) || 0,
-                    contactId: newDeal.contactId,
-                    stage: newDeal.stage,
-                  });
-                }}
-                disabled={!newDeal.title || !newDeal.contactId || createDealMutation.isPending}
-                className="w-full py-2.5 bg-[#2FA4A9] text-white rounded-xl hover:bg-[#238b8f] transition-colors text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {createDealMutation.isPending ? "Creando..." : "Crear Deal"}
-              </button>
-            </div>
+              {createDealMutation.isPending ? "Creando…" : "Crear deal"}
+            </Button>
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
 
-      {/* Lost Reason Modal */}
-      {lostReasonModal && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-2xl shadow-xl w-full max-w-sm p-6">
-            <h3 className="text-lg font-bold text-gray-900 mb-2">Razon de perdida</h3>
-            <p className="text-sm text-gray-500 mb-4">Por que se perdio este deal?</p>
-            <input
-              type="text"
-              value={lostReason}
-              onChange={e => setLostReason(e.target.value)}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#2FA4A9]/20 focus:border-[#2FA4A9] outline-none mb-4"
-              placeholder="Ej: Precio, competencia, timing..."
-              autoFocus
-            />
-            <div className="flex gap-2">
-              <button
-                onClick={() => { setLostReasonModal(null); setLostReason(""); }}
-                className="flex-1 py-2 border border-gray-300 rounded-xl text-sm text-gray-700 hover:bg-gray-50"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={submitLostReason}
-                className="flex-1 py-2 bg-red-500 text-white rounded-xl text-sm font-medium hover:bg-red-600"
-              >
-                Confirmar
-              </button>
-            </div>
+      {/* Razón de pérdida */}
+      <Dialog open={!!lostReasonModal} onOpenChange={(o) => { if (!o) { setLostReasonModal(null); setLostReason(""); } }}>
+        <DialogContent className="sm:max-w-sm">
+          <DialogHeader>
+            <DialogTitle>Razón de pérdida</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">¿Por qué se perdió este deal?</p>
+          <Input value={lostReason} onChange={(e) => setLostReason(e.target.value)} placeholder="Ej: Precio, competencia, timing…" autoFocus />
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => { setLostReasonModal(null); setLostReason(""); }}>Cancelar</Button>
+            <Button variant="destructive" className="flex-1" onClick={submitLostReason}>Confirmar</Button>
           </div>
-        </div>
-      )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
