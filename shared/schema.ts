@@ -1,5 +1,12 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, json, timestamp, boolean, integer, numeric, primaryKey } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, json, timestamp, boolean, integer, numeric, primaryKey, customType } from "drizzle-orm/pg-core";
+
+// Tipo bytea para almacenar bytes de imágenes del CMS en Postgres.
+const bytea = customType<{ data: Buffer; driverData: Buffer }>({
+  dataType() {
+    return "bytea";
+  },
+});
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -1461,3 +1468,91 @@ export const clientMagicTokens = pgTable("client_magic_tokens", {
 
 export type ClientMagicToken = typeof clientMagicTokens.$inferSelect;
 export type InsertClientMagicToken = typeof clientMagicTokens.$inferInsert;
+
+// ============ CMS — sitios editables (content-as-data) ============
+// El landing (y, a futuro, sitios de cliente) se renderiza de un deep-merge:
+// publishedContent (DB) superpuesto sobre los defaults de shared/landing-defaults.ts.
+// Nada en vivo hasta "publicar"; cada publish hace snapshot para rollback.
+
+// Raíz multi-tenant. V1 = 1 fila (im3systems.com). El cliente #2 es un INSERT.
+export const cmsSites = pgTable("cms_sites", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  domain: text("domain").notNull(), // "im3systems.com"
+  name: text("name").default("IM3 Systems").notNull(),
+  contactId: varchar("contact_id"), // FK lógica -> contacts (nullable; V1 = sitio propio)
+  clientProjectId: varchar("client_project_id"), // FK lógica -> client_projects (nullable)
+  defaultLanguage: varchar("default_language", { length: 5 }).default("es").notNull(), // es | en
+  status: text("status").default("active").notNull(), // active | suspended
+  // Token público para preview tokenizado del draft (no login)
+  accessToken: varchar("access_token").default(sql`gen_random_uuid()`).notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type CmsSite = typeof cmsSites.$inferSelect;
+export type InsertCmsSite = typeof cmsSites.$inferInsert;
+
+export const cmsPages = pgTable("cms_pages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteId: varchar("site_id").notNull(),
+  slug: text("slug").default("").notNull(), // "" = landing; futuro: "servicios", etc.
+  title: text("title").default("Landing").notNull(), // etiqueta interna admin
+  status: text("status").default("draft").notNull(), // draft | published
+  // --- SEO plano (idioma default = es); overrides por idioma viven en seo JSONB ---
+  keyphrase: text("keyphrase"),
+  metaTitle: text("meta_title"),
+  metaDescription: text("meta_description"),
+  ogImageUrl: text("og_image_url"),
+  // --- Árboles de contenido: DeepPartial<{ es, en }> sembrados de landing-defaults ---
+  draftContent: json("draft_content").$type<Record<string, unknown>>().default({}),
+  publishedContent: json("published_content").$type<Record<string, unknown>>().default({}),
+  // SEO por idioma: { es: { metaTitle, metaDescription, ogImageUrl, keyphrase }, en: {...} }
+  seo: json("seo").$type<Record<string, unknown>>().default({}),
+  publishedAt: timestamp("published_at"),
+  deletedAt: timestamp("deleted_at"), // soft-delete
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+export type CmsPage = typeof cmsPages.$inferSelect;
+export type InsertCmsPage = typeof cmsPages.$inferInsert;
+
+// Snapshot-before-publish para rollback. Espeja proposalSnapshots.
+export const cmsSnapshots = pgTable("cms_snapshots", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pageId: varchar("page_id").notNull(),
+  content: json("content").$type<Record<string, unknown>>().notNull(), // publishedContent al momento del snapshot
+  seo: json("seo").$type<Record<string, unknown>>().default({}).notNull(),
+  changeSummary: text("change_summary"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+export type CmsSnapshot = typeof cmsSnapshots.$inferSelect;
+export type InsertCmsSnapshot = typeof cmsSnapshots.$inferInsert;
+
+// Imágenes del CMS guardadas en Postgres (bytea) y servidas por /api/cms/media/:id.
+// Sin dependencia externa; URL estable y mismo origen (embebible como <img src>).
+export const cmsMedia = pgTable("cms_media", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  siteId: varchar("site_id"),
+  bytes: bytea("bytes").notNull(),
+  contentType: text("content_type").notNull(),
+  sizeBytes: integer("size_bytes").notNull(),
+  sha256: text("sha256").notNull(),
+  fileName: text("file_name"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type CmsMedia = typeof cmsMedia.$inferSelect;
+export type InsertCmsMedia = typeof cmsMedia.$inferInsert;
+
+// Historial del chat del asistente IA del editor (una conversación por página).
+export const cmsChatMessages = pgTable("cms_chat_messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  pageId: varchar("page_id").notNull(),
+  role: text("role").notNull(), // user | assistant
+  content: text("content").notNull(),
+  toolCalls: json("tool_calls").$type<Array<{ tool: string; summary: string }>>(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type CmsChatMessage = typeof cmsChatMessages.$inferSelect;
+export type InsertCmsChatMessage = typeof cmsChatMessages.$inferInsert;

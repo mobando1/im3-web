@@ -1034,6 +1034,22 @@ export const AGENT_REGISTRY: AgentDefinition[] = [
     ],
     sourceFile: "server/proposal-brief-chat.ts:223",
   },
+  {
+    name: "cms-editor-chat",
+    displayName: "Asistente del Editor Web (CMS)",
+    kind: "ai",
+    description: "Edita copy, imágenes y SEO del sitio conversacionalmente con Claude + tool use",
+    trigger: "manual",
+    criticality: "normal",
+    longDescription:
+      "Chat con tool use para editar el landing desde /admin/cms: get_page_content, propose_content_edit y propose_seo_edit. Todas las escrituras pasan por los guards (whitelist de campos, anti-XSS, maxLen, URLs de imagen seguras) y van SOLO al borrador — nunca publican. Un humano revisa y publica.",
+    connections: [
+      { type: "llm", label: "Claude Sonnet 4", detail: "Chat + 3 tools" },
+      { type: "db", label: "cmsPages", detail: "Borrador + SEO de la página" },
+      { type: "db", label: "cmsChatMessages", detail: "Historial (últimos 20)" },
+    ],
+    sourceFile: "server/cms-editor-chat.ts:1",
+  },
 ];
 
 export function findAgent(name: string): AgentDefinition | undefined {

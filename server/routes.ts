@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import { getModelGeneration, getModelClassification, getAllConfig, setConfig } from "./config";
 import { eq, asc, isNull, isNotNull, sql, and, gte, lte, ilike, or, desc, count, inArray } from "drizzle-orm";
 import { db } from "./db";
-import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, teamMembers, taskSuggestions, taskCompletionSuggestions, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectGithubRepos, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalTranslationCache, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, stackServices, contractTemplates, contracts, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback, adminActionAudit, vaultItems, vaultAccessLog, repoProjectSuggestions } from "@shared/schema";
+import { diagnostics, contacts, emailTemplates, sentEmails, abandonedLeads, newsletterSubscribers, users, teamMembers, taskSuggestions, taskCompletionSuggestions, contactNotes, tasks, activityLog, aiInsightsCache, deals, notifications, appointments, blogPosts, blogCategories, whatsappMessages, clientProjects, projectPhases, projectTasks, projectDeliverables, projectTimeLog, projectMessages, projectActivityEntries, githubWebhookEvents, projectGithubRepos, projectSessions, projectFiles, projectIdeas, proposals, proposalViews, proposalTranslationCache, proposalBriefs, proposalBriefViews, proposalBriefSnapshots, proposalBriefChatMessages, stackServices, contractTemplates, contracts, gmailEmails, gmailSyncState, contactEmails, contactFiles, agentRuns, clientUsers, clientUserProjects, clientInvites, clientPasswordResets, clientMagicTokens, clientAnalyticsConnections, clientAnalyticsDaily, projectFeedback, adminActionAudit, vaultItems, vaultAccessLog, repoProjectSuggestions, cmsSites, cmsPages, cmsSnapshots, cmsMedia } from "@shared/schema";
 import { AGENT_REGISTRY, AGENT_KINDS, findAgent } from "./agents/registry";
 import { runAgent } from "./agents/runner";
 import { syncGmailEmails, isGmailConfigured, sendGmailMessage, getOriginalMessageHeaders } from "./google-gmail";
@@ -17,6 +17,9 @@ import { isEmailConfigured, sendEmail, sendAdminNotification } from "./email-sen
 import { generateEmailContent, buildMicroReminderEmail, build6hReminderEmail, buildFollowUpConfirmationEmail, buildNoShowEmail, generateDailyNewsDigest, generateContactInsight, generateWhatsAppMessage, generateNewsletterWelcome, generateMiniAudit, classifyWhatsAppIntent, generateWhatsAppAutoReply, buildWhatsAppNotificationEmail, buildProjectNotificationEmail, escapeHtml } from "./email-ai";
 import { parseFechaCita } from "./date-utils";
 import { requireAuth, hashPassword, comparePasswords } from "./auth";
+import { buildCmsDraftUpdate } from "./cms-apply";
+import { sniffImageType, sha256Hex, CMS_MEDIA_MAX_BYTES } from "./cms-media";
+import { invalidateCmsBotCache } from "./cms-bot-render";
 import { requireClient, requireClientOrAdminPreview, publicClientUser, sendInviteEmail, sendPasswordResetEmail, createMagicToken, magicLinkUrl, sendMagicLinkLoginEmail, MAGIC_LINK_TTL_MINUTES } from "./client-auth";
 import { calculateLeadScore } from "./lead-scoring";
 import { isWhatsAppConfigured, calculateWhatsAppSchedule, WHATSAPP_SEQUENCE, sendWhatsAppText } from "./whatsapp";
@@ -4463,6 +4466,401 @@ export async function registerRoutes(
     } catch (err: any) {
       log(`Error getting latest posts: ${err?.message}`);
       res.status(500).json({ error: "Error obteniendo posts" });
+    }
+  });
+
+  // ── CMS público: contenido del landing (overrides {es,en}) ──
+  // Devuelve published_content por defecto, o draft_content con ?preview=<accessToken>
+  // del sitio. El cliente hace deepMerge(defaults, esto) en I18nProvider.
+  // NUNCA responde 500: ante cualquier fallo devuelve {} y el cliente usa defaults.
+  app.get("/api/cms/landing", async (req, res) => {
+    if (!db) return res.json({});
+    try {
+      const previewToken = typeof req.query.preview === "string" ? req.query.preview : null;
+      // V1: un solo sitio activo (el propio). Multi-tenant: resolver por dominio aquí.
+      const [site] = await db.select().from(cmsSites)
+        .where(eq(cmsSites.status, "active"))
+        .orderBy(asc(cmsSites.createdAt))
+        .limit(1);
+      if (!site) return res.json({});
+
+      const [page] = await db.select().from(cmsPages)
+        .where(and(
+          eq(cmsPages.siteId, site.id),
+          eq(cmsPages.slug, ""),
+          isNull(cmsPages.deletedAt),
+        ))
+        .limit(1);
+      if (!page) return res.json({});
+
+      const validPreview = !!previewToken && previewToken === site.accessToken;
+      const content = validPreview ? page.draftContent : page.publishedContent;
+      res.json(content ?? {});
+    } catch (err: any) {
+      log(`Error GET /api/cms/landing: ${err?.message}`);
+      res.json({}); // degradar a defaults, nunca tumbar el landing
+    }
+  });
+
+  // Servir imágenes del CMS (público, inmutable, content-addressed por sha256)
+  app.get("/api/cms/media/:id", async (req, res) => {
+    if (!db) return res.status(404).end();
+    try {
+      const [m] = await db.select().from(cmsMedia).where(eq(cmsMedia.id, req.params.id as string)).limit(1);
+      if (!m) return res.status(404).end();
+      const etag = `"${m.sha256}"`;
+      if (req.headers["if-none-match"] === etag) return res.status(304).end();
+      res.setHeader("Content-Type", m.contentType);
+      res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      res.setHeader("ETag", etag);
+      res.end(m.bytes);
+    } catch {
+      res.status(404).end();
+    }
+  });
+
+  // ── CMS admin: command center + editor (requireAuth) ──
+
+  // Lista de sitios con un resumen de sus páginas (para el command center)
+  app.get("/api/admin/cms/sites", requireAuth, async (_req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const sites = await db.select().from(cmsSites).orderBy(asc(cmsSites.createdAt));
+      const pages = await db.select().from(cmsPages).where(isNull(cmsPages.deletedAt));
+      const enriched = sites.map((s) => ({
+        ...s,
+        pages: pages
+          .filter((p) => p.siteId === s.id)
+          .map((p) => ({ id: p.id, slug: p.slug, title: p.title, status: p.status, publishedAt: p.publishedAt, updatedAt: p.updatedAt })),
+      }));
+      res.json(enriched);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Detalle de una página (draft + published + seo) para el editor
+  app.get("/api/admin/cms/pages/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [page] = await db.select().from(cmsPages).where(eq(cmsPages.id, req.params.id as string)).limit(1);
+      if (!page || page.deletedAt) return res.status(404).json({ error: "Página no encontrada" });
+      const [site] = await db.select().from(cmsSites).where(eq(cmsSites.id, page.siteId)).limit(1);
+      res.json({ page, site });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Guardar borrador: content edits + SEO. Valida TODO antes de aplicar (rechazo atómico).
+  app.patch("/api/admin/cms/pages/:id", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const [page] = await db.select().from(cmsPages).where(eq(cmsPages.id, req.params.id as string)).limit(1);
+      if (!page || page.deletedAt) return res.status(404).json({ error: "Página no encontrada" });
+
+      const built = buildCmsDraftUpdate(page, req.body);
+      if (!built.ok) return res.status(400).json({ error: built.error });
+
+      const [updated] = await db.update(cmsPages).set(built.updates).where(eq(cmsPages.id, page.id)).returning();
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error PATCH /api/admin/cms/pages: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Publicar: snapshot del estado publicado actual → copiar draft a published. Requiere consent.
+  app.post("/api/admin/cms/pages/:id/publish", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const username = (req.user as any)?.username || "admin";
+    const reason = typeof req.body?.reason === "string" ? req.body.reason : null;
+    if (req.body?.consent !== true) return res.status(400).json({ error: "Se requiere confirmación (consent)" });
+    try {
+      const [page] = await db.select().from(cmsPages).where(eq(cmsPages.id, req.params.id as string)).limit(1);
+      if (!page || page.deletedAt) return res.status(404).json({ error: "Página no encontrada" });
+
+      // Snapshot del estado publicado actual (rollback)
+      await db.insert(cmsSnapshots).values({
+        pageId: page.id,
+        content: (page.publishedContent as Record<string, unknown>) ?? {},
+        seo: {
+          keyphrase: page.keyphrase,
+          metaTitle: page.metaTitle,
+          metaDescription: page.metaDescription,
+          ogImageUrl: page.ogImageUrl,
+        },
+        changeSummary: reason || "Publicación",
+      });
+
+      const [updated] = await db.update(cmsPages).set({
+        publishedContent: (page.draftContent as Record<string, unknown>) ?? {},
+        status: "published",
+        publishedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(cmsPages.id, page.id)).returning();
+
+      await db.insert(adminActionAudit).values({
+        actionType: "cms_publish",
+        target: `cms_page:${page.id}`,
+        payload: { pageId: page.id, slug: page.slug },
+        performedBy: username,
+        reason,
+        result: "Publicado",
+      }).catch((e) => log(`[cms] no se pudo auditar publish: ${e}`));
+
+      invalidateCmsBotCache(); // el HTML de bots refleja el nuevo contenido publicado
+
+      res.json(updated);
+    } catch (err: any) {
+      log(`Error publish cms page: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Snapshots de una página (historial para revertir)
+  app.get("/api/admin/cms/pages/:id/snapshots", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const snaps = await db.select().from(cmsSnapshots)
+        .where(eq(cmsSnapshots.pageId, req.params.id as string))
+        .orderBy(desc(cmsSnapshots.createdAt)).limit(50);
+      res.json(snaps);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Revertir: carga un snapshot al BORRADOR (el usuario revisa y vuelve a publicar)
+  app.post("/api/admin/cms/pages/:id/revert", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const snapshotId = typeof req.body?.snapshotId === "string" ? req.body.snapshotId : null;
+    if (!snapshotId) return res.status(400).json({ error: "snapshotId requerido" });
+    try {
+      const [page] = await db.select().from(cmsPages).where(eq(cmsPages.id, req.params.id as string)).limit(1);
+      if (!page || page.deletedAt) return res.status(404).json({ error: "Página no encontrada" });
+      const [snap] = await db.select().from(cmsSnapshots).where(eq(cmsSnapshots.id, snapshotId)).limit(1);
+      if (!snap || snap.pageId !== page.id) return res.status(404).json({ error: "Snapshot no encontrado" });
+
+      const seo = (snap.seo as Record<string, any>) ?? {};
+      const [updated] = await db.update(cmsPages).set({
+        draftContent: (snap.content as Record<string, unknown>) ?? {},
+        keyphrase: seo.keyphrase ?? null,
+        metaTitle: seo.metaTitle ?? null,
+        metaDescription: seo.metaDescription ?? null,
+        ogImageUrl: seo.ogImageUrl ?? null,
+        updatedAt: new Date(),
+      }).where(eq(cmsPages.id, page.id)).returning();
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Subir imagen al CMS (admin): sniff de magic-bytes, 5MB, solo raster, dedupe por sha256
+  const cmsMediaUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: CMS_MEDIA_MAX_BYTES } });
+  app.post("/api/admin/cms/media", requireAuth, cmsMediaUpload.single("file"), async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    if (!req.file) return res.status(400).json({ error: "No se subió ningún archivo" });
+    try {
+      const buf = req.file.buffer;
+      const sniff = sniffImageType(buf);
+      if (!sniff.ok) return res.status(400).json({ error: sniff.reason });
+      const sha = sha256Hex(buf);
+      const [existing] = await db.select().from(cmsMedia).where(eq(cmsMedia.sha256, sha)).limit(1);
+      if (existing) return res.json({ id: existing.id, url: `/api/cms/media/${existing.id}` });
+      const siteId = typeof req.body?.siteId === "string" ? req.body.siteId : null;
+      const [created] = await db.insert(cmsMedia).values({
+        siteId,
+        bytes: buf,
+        contentType: sniff.contentType,
+        sizeBytes: buf.length,
+        sha256: sha,
+        fileName: req.file.originalname?.slice(0, 200) || null,
+      }).returning({ id: cmsMedia.id });
+      res.json({ id: created.id, url: `/api/cms/media/${created.id}` });
+    } catch (err: any) {
+      log(`Error upload cms media: ${err?.message}`);
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // ── CMS: asistente IA del editor (escribe SOLO al borrador, nunca publica) ──
+  app.get("/api/admin/cms/pages/:id/chat", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { getCmsChatHistory } = await import("./cms-editor-chat");
+      const history = await getCmsChatHistory(req.params.id as string);
+      res.json(history);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.post("/api/admin/cms/pages/:id/chat", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const message = ((req.body?.message as string) || "").trim();
+    if (!message) return res.status(400).json({ error: "Mensaje requerido" });
+    if (message.length > 2000) return res.status(400).json({ error: "Mensaje demasiado largo" });
+    try {
+      const { runCmsEditorChat } = await import("./cms-editor-chat");
+      const { runAgent } = await import("./agents/runner");
+      const result = await runAgent(
+        "cms-editor-chat",
+        () => runCmsEditorChat({ pageId: req.params.id as string, userMessage: message }),
+        { triggeredBy: "manual" },
+      );
+      res.json(result);
+    } catch (err: any) {
+      log(`Error in cms editor chat: ${err?.message}`);
+      res.status(500).json({ error: err?.message || "Error en el chat del editor" });
+    }
+  });
+
+  app.delete("/api/admin/cms/pages/:id/chat", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const { clearCmsChatHistory } = await import("./cms-editor-chat");
+      await clearCmsChatHistory(req.params.id as string);
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // Invitar a un cliente a editar un sitio (magic-link). Requiere que el sitio
+  // esté vinculado a un proyecto de cliente (cms_sites.clientProjectId).
+  app.post("/api/admin/cms/sites/:siteId/invite", requireAuth, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    const email = String(req.body?.email || "").toLowerCase().trim();
+    const name = typeof req.body?.name === "string" ? req.body.name : null;
+    if (!email) return res.status(400).json({ error: "Email requerido" });
+    try {
+      const [site] = await db.select().from(cmsSites).where(eq(cmsSites.id, req.params.siteId as string)).limit(1);
+      if (!site) return res.status(404).json({ error: "Sitio no encontrado" });
+      if (!site.clientProjectId) {
+        return res.status(400).json({ error: "El sitio no está vinculado a un proyecto de cliente. Vincúlalo primero (cms_sites.clientProjectId)." });
+      }
+      let [user] = await db.select().from(clientUsers).where(eq(clientUsers.email, email)).limit(1);
+      if (!user) {
+        [user] = await db.insert(clientUsers).values({ email, name, status: "invited" }).returning();
+      }
+      const [link] = await db.select().from(clientUserProjects)
+        .where(and(eq(clientUserProjects.clientUserId, user.id), eq(clientUserProjects.clientProjectId, site.clientProjectId)))
+        .limit(1);
+      if (!link) {
+        await db.insert(clientUserProjects).values({ clientUserId: user.id, clientProjectId: site.clientProjectId }).catch(() => {});
+      }
+      const token = await createMagicToken({ clientUserId: user.id, clientProjectId: site.clientProjectId });
+      const url = `${magicLinkUrl(token)}?next=/portal/cms`;
+      sendMagicLinkLoginEmail({ to: email, name: user.name, magicToken: token }).catch((e) => log(`[cms-invite] email fallo: ${e}`));
+      res.json({ url, email });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  // ── CMS cliente: edición scoped a SU sitio (magic-link → sesión de cliente) ──
+  // Autorizado = cliente vinculado (client_user_projects) al proyecto del sitio.
+  async function resolveClientCmsPage(userId: string) {
+    if (!db) return null;
+    const linkRows = await db.select({ pid: clientUserProjects.clientProjectId })
+      .from(clientUserProjects).where(eq(clientUserProjects.clientUserId, userId));
+    const projectIds = linkRows.map((r) => r.pid).filter(Boolean) as string[];
+    if (projectIds.length === 0) return null;
+    const [site] = await db.select().from(cmsSites)
+      .where(and(eq(cmsSites.status, "active"), inArray(cmsSites.clientProjectId, projectIds)))
+      .orderBy(asc(cmsSites.createdAt)).limit(1);
+    if (!site) return null;
+    const [page] = await db.select().from(cmsPages)
+      .where(and(eq(cmsPages.siteId, site.id), eq(cmsPages.slug, ""), isNull(cmsPages.deletedAt))).limit(1);
+    if (!page) return null;
+    return { site, page };
+  }
+
+  app.get("/api/portal/cms/page", requireClient, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const ctx = await resolveClientCmsPage((req.user as any).id);
+      if (!ctx) return res.status(404).json({ error: "No tienes un sitio asignado" });
+      res.json({ page: ctx.page, site: { id: ctx.site.id, domain: ctx.site.domain, name: ctx.site.name, accessToken: ctx.site.accessToken } });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.patch("/api/portal/cms/page", requireClient, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    try {
+      const ctx = await resolveClientCmsPage((req.user as any).id);
+      if (!ctx) return res.status(404).json({ error: "No tienes un sitio asignado" });
+      const built = buildCmsDraftUpdate(ctx.page, req.body);
+      if (!built.ok) return res.status(400).json({ error: built.error });
+      const [updated] = await db.update(cmsPages).set(built.updates).where(eq(cmsPages.id, ctx.page.id)).returning();
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.post("/api/portal/cms/page/publish", requireClient, async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    if (req.body?.consent !== true) return res.status(400).json({ error: "Se requiere confirmación (consent)" });
+    try {
+      const ctx = await resolveClientCmsPage((req.user as any).id);
+      if (!ctx) return res.status(404).json({ error: "No tienes un sitio asignado" });
+      const page = ctx.page;
+      const reason = typeof req.body?.reason === "string" ? req.body.reason : null;
+      await db.insert(cmsSnapshots).values({
+        pageId: page.id,
+        content: (page.publishedContent as Record<string, unknown>) ?? {},
+        seo: { keyphrase: page.keyphrase, metaTitle: page.metaTitle, metaDescription: page.metaDescription, ogImageUrl: page.ogImageUrl },
+        changeSummary: reason || "Publicación (cliente)",
+      });
+      const [updated] = await db.update(cmsPages).set({
+        publishedContent: (page.draftContent as Record<string, unknown>) ?? {},
+        status: "published",
+        publishedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(cmsPages.id, page.id)).returning();
+      await db.insert(adminActionAudit).values({
+        actionType: "cms_publish",
+        target: `cms_page:${page.id}`,
+        payload: { pageId: page.id, via: "client" },
+        performedBy: (req.user as any)?.email || "cliente",
+        reason,
+        result: "Publicado (cliente)",
+      }).catch(() => {});
+      invalidateCmsBotCache();
+      res.json(updated);
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
+    }
+  });
+
+  app.post("/api/portal/cms/media", requireClient, cmsMediaUpload.single("file"), async (req, res) => {
+    if (!db) return res.status(500).json({ error: "DB not configured" });
+    if (!req.file) return res.status(400).json({ error: "No se subió ningún archivo" });
+    try {
+      const ctx = await resolveClientCmsPage((req.user as any).id);
+      if (!ctx) return res.status(403).json({ error: "No autorizado" });
+      const buf = req.file.buffer;
+      const sniff = sniffImageType(buf);
+      if (!sniff.ok) return res.status(400).json({ error: sniff.reason });
+      const sha = sha256Hex(buf);
+      const [existing] = await db.select().from(cmsMedia).where(eq(cmsMedia.sha256, sha)).limit(1);
+      if (existing) return res.json({ id: existing.id, url: `/api/cms/media/${existing.id}` });
+      const [created] = await db.insert(cmsMedia).values({
+        siteId: ctx.site.id,
+        bytes: buf,
+        contentType: sniff.contentType,
+        sizeBytes: buf.length,
+        sha256: sha,
+        fileName: req.file.originalname?.slice(0, 200) || null,
+      }).returning({ id: cmsMedia.id });
+      res.json({ id: created.id, url: `/api/cms/media/${created.id}` });
+    } catch (err: any) {
+      res.status(500).json({ error: err?.message });
     }
   });
 

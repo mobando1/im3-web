@@ -6,7 +6,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { motion, MotionConfig } from "framer-motion";
 import { pageVariants } from "@/lib/motion";
-import { LayoutDashboard, Users, CalendarDays, CheckSquare, LogOut, Bell, Search, Briefcase, FileText, BookOpen, Columns3, FolderKanban, Mic, FileSignature, ClipboardCheck, Activity, Wrench, Layers, FileCheck, Newspaper, Stethoscope, Settings, KeyRound, Moon, Sun, Menu } from "lucide-react";
+import { LayoutDashboard, Users, CalendarDays, CheckSquare, LogOut, Bell, Search, Briefcase, FileText, BookOpen, Columns3, FolderKanban, Mic, FileSignature, ClipboardCheck, Activity, Wrench, Layers, FileCheck, Newspaper, Stethoscope, Settings, KeyRound, Moon, Sun, Menu, Globe } from "lucide-react";
 import { CommandDialog, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem } from "@/components/ui/command";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 
@@ -42,6 +42,7 @@ const navGroups: { label: string; items: NavItem[] }[] = [
       { label: "Contratos", path: "/admin/contracts", icon: FileCheck },
       { label: "Auditorías", path: "/admin/auditorias", icon: ClipboardCheck },
       { label: "Blog", path: "/admin/blog", icon: BookOpen },
+      { label: "Sitio web", path: "/admin/cms", icon: Globe },
     ],
   },
   {
