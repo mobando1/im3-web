@@ -615,20 +615,25 @@ SOLO devuelve el JSON, nada más.`;
   try {
     const response = await ai.messages.create({
       model: getModelGeneration(),
-      max_tokens: 4000,
+      max_tokens: 8000,
       messages: [{ role: "user", content: prompt }],
     });
 
-    const text = response.content[0].type === "text" ? response.content[0].text : "";
-    // Extract JSON from response (handle possible markdown wrapping)
-    const jsonMatch = text.match(/\[[\s\S]*\]/);
-    if (!jsonMatch) {
-      log("project-ai: Could not parse AI response as JSON");
-      return [];
+    // Si la respuesta se cortó por límite de tokens, el JSON viene incompleto y NINGÚN parser
+    // lo puede recuperar. Lo logueamos explícito para subir max_tokens si reaparece.
+    if (response.stop_reason === "max_tokens") {
+      log("project-ai: respuesta de análisis de commits truncada (max_tokens) — JSON posiblemente incompleto; considerar subir max_tokens o partir el batch");
     }
 
+    const text = response.content[0].type === "text" ? response.content[0].text : "";
+
     type RawResult = Omit<ActivityResult, "completedTaskIds"> & { completesTaskRefs?: unknown };
-    const raw: RawResult[] = JSON.parse(jsonMatch[0]);
+    // parseAIJson tolera fences/prosa, loguea el crudo si falla y NO lanza (consistente con el
+    // resto del archivo). Antes este sitio hacía JSON.parse(regex) crudo → tiraba y perdía el batch.
+    const raw = parseAIJson<RawResult[]>(text, "analyze-commits");
+    if (!raw || !Array.isArray(raw)) {
+      return [];
+    }
 
     // Resolver refs [T1..Tn] → taskIds reales. Validamos contra refToTaskId (solo tareas
     // abiertas que enviamos), deduplicamos por resultado y descartamos refs inválidas/inventadas.
