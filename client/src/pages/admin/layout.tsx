@@ -148,6 +148,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     setSidebarOpen(false);
   };
 
+  const runCommand = (fn: () => void) => {
+    setSearchOpen(false);
+    setSearchQuery("");
+    fn();
+  };
+
   // Contenido del sidebar — reutilizado en el aside estático (desktop) y el
   // drawer (móvil) para no duplicar markup.
   const sidebar = (
@@ -329,9 +335,34 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           </motion.div>
 
           <CommandDialog open={searchOpen} onOpenChange={setSearchOpen}>
-            <CommandInput placeholder="Buscar contactos, deals, tareas..." value={searchQuery} onValueChange={setSearchQuery} />
+            <CommandInput placeholder="Buscar o ejecutar una acción..." value={searchQuery} onValueChange={setSearchQuery} />
             <CommandList>
               <CommandEmpty>No se encontraron resultados.</CommandEmpty>
+              <CommandGroup heading="Acciones rápidas">
+                <CommandItem onSelect={() => runCommand(() => navigate("/admin/contacts"))}>
+                  <Users className="mr-2 h-4 w-4 text-muted-foreground" /> Crear contacto
+                </CommandItem>
+                <CommandItem onSelect={() => runCommand(() => navigate("/admin/pipeline"))}>
+                  <Columns3 className="mr-2 h-4 w-4 text-muted-foreground" /> Crear deal
+                </CommandItem>
+                <CommandItem onSelect={() => runCommand(() => navigate("/admin/proposals"))}>
+                  <FileSignature className="mr-2 h-4 w-4 text-muted-foreground" /> Generar propuesta
+                </CommandItem>
+                <CommandItem onSelect={() => runCommand(toggleTheme)}>
+                  {isDark ? <Sun className="mr-2 h-4 w-4 text-muted-foreground" /> : <Moon className="mr-2 h-4 w-4 text-muted-foreground" />}
+                  Cambiar a tema {isDark ? "claro" : "oscuro"}
+                </CommandItem>
+              </CommandGroup>
+              <CommandGroup heading="Ir a">
+                {navGroups.flatMap((g) => g.items).map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <CommandItem key={item.path} onSelect={() => runCommand(() => navigate(item.path))}>
+                      <Icon className="mr-2 h-4 w-4 text-muted-foreground" /> {item.label}
+                    </CommandItem>
+                  );
+                })}
+              </CommandGroup>
               {searchResults?.contacts && searchResults.contacts.length > 0 && (
                 <CommandGroup heading="Contactos">
                   {searchResults.contacts.map((c) => (
