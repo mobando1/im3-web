@@ -7,3 +7,5 @@ export { ChartTooltip } from "./chart-tooltip";
 export { MetricCard, Sparkline } from "./metric-card";
 export { SegmentedControl } from "./segmented-control";
 export { ConversionFunnel, type FunnelStage } from "./conversion-funnel";
+export { ActivityTimeline } from "./activity-timeline";
+export { RecordPeek, type PeekContact } from "./record-peek";

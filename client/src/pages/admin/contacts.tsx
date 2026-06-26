@@ -38,6 +38,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { List, LayoutGrid, Mail, Filter, Download, X, MessageCircle, Tag, UserX, Trash2, Plus } from "lucide-react";
 import { DriveFolderField } from "@/components/admin/DriveFolderField";
+import { StatusBadge, RecordPeek, type PeekContact } from "@/components/admin";
 
 type Contact = {
   id: string;
@@ -87,7 +88,7 @@ const pipelineBorderColors: Record<string, string> = {
 
 const pipelineCountColors: Record<string, string> = {
   lead: "bg-blue-50 text-blue-600",
-  contacted: "bg-amber-50 text-amber-600",
+  contacted: "bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300",
   scheduled: "bg-orange-50 text-orange-600",
   converted: "bg-emerald-50 text-emerald-600",
 };
@@ -116,6 +117,7 @@ export default function Contacts() {
   const [bulkTag, setBulkTag] = useState("");
   const [bulkStatus, setBulkStatus] = useState("contacted");
   const [deleteTarget, setDeleteTarget] = useState<Contact | null>(null);
+  const [peek, setPeek] = useState<Contact | null>(null);
   const { toast } = useToast();
   const [showNewContact, setShowNewContact] = useState(false);
   const [newContactForm, setNewContactForm] = useState<{
@@ -259,20 +261,20 @@ export default function Contacts() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h2 className="text-2xl font-bold text-gray-900">Contactos</h2>
-          <Button size="sm" onClick={() => setShowNewContact(true)} className="bg-[#2FA4A9] hover:bg-[#238b8f]">
+          <h2 className="text-2xl font-bold text-foreground">Contactos</h2>
+          <Button size="sm" onClick={() => setShowNewContact(true)} className="bg-primary hover:bg-primary/90">
             <Plus className="w-4 h-4 mr-1.5" /> Nuevo contacto
           </Button>
         </div>
-        <div className="flex rounded-lg border border-gray-200 overflow-hidden bg-white shadow-sm">
+        <div className="flex rounded-lg border border-border overflow-hidden bg-card shadow-sm">
           <Button
             variant="ghost"
             size="sm"
             onClick={() => setView("list")}
             className={`rounded-none gap-2 ${
               view === "list"
-                ? "bg-[#2FA4A9]/10 text-[#2FA4A9]"
-                : "text-gray-500 hover:text-gray-900"
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <List className="w-4 h-4" />
@@ -282,10 +284,10 @@ export default function Contacts() {
             variant="ghost"
             size="sm"
             onClick={() => setView("pipeline")}
-            className={`rounded-none gap-2 border-l border-gray-200 ${
+            className={`rounded-none gap-2 border-l border-border ${
               view === "pipeline"
-                ? "bg-[#2FA4A9]/10 text-[#2FA4A9]"
-                : "text-gray-500 hover:text-gray-900"
+                ? "bg-primary/10 text-primary"
+                : "text-muted-foreground hover:text-foreground"
             }`}
           >
             <LayoutGrid className="w-4 h-4" />
@@ -303,7 +305,7 @@ export default function Contacts() {
             setSearch(e.target.value);
             setPage(1);
           }}
-          className="max-w-sm bg-white border-gray-200 text-gray-900 placeholder:text-gray-400"
+          className="max-w-sm bg-card border-border text-foreground placeholder:text-muted-foreground"
         />
         {view === "list" && (
           <Select
@@ -313,10 +315,10 @@ export default function Contacts() {
               setPage(1);
             }}
           >
-            <SelectTrigger className="w-40 bg-white border-gray-200 text-gray-700">
+            <SelectTrigger className="w-40 bg-card border-border text-foreground">
               <SelectValue placeholder="Status" />
             </SelectTrigger>
-            <SelectContent className="bg-white border-gray-200">
+            <SelectContent className="bg-card border-border">
               <SelectItem value="all">Todos</SelectItem>
               <SelectItem value="lead">Lead</SelectItem>
               <SelectItem value="contacted">Contactado</SelectItem>
@@ -325,21 +327,21 @@ export default function Contacts() {
             </SelectContent>
           </Select>
         )}
-        <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className={`gap-1.5 border-gray-200 ${hasActiveFilters ? "text-[#2FA4A9] border-[#2FA4A9]/30 bg-[#2FA4A9]/5" : "text-gray-500"}`}>
+        <Button variant="outline" size="sm" onClick={() => setShowFilters(!showFilters)} className={`gap-1.5 border-border ${hasActiveFilters ? "text-primary border-primary/30 bg-primary/5" : "text-muted-foreground"}`}>
           <Filter className="w-4 h-4" />
           Filtros
-          {hasActiveFilters && <span className="text-xs bg-[#2FA4A9] text-white rounded-full w-4 h-4 flex items-center justify-center">!</span>}
+          {hasActiveFilters && <span className="text-xs bg-primary text-white rounded-full w-4 h-4 flex items-center justify-center">!</span>}
         </Button>
-        <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5 border-gray-200 text-gray-500 hover:text-gray-900">
+        <Button variant="outline" size="sm" onClick={handleExport} className="gap-1.5 border-border text-muted-foreground hover:text-foreground">
           <Download className="w-4 h-4" />
           CSV
         </Button>
       </div>
 
       {showFilters && (
-        <div className="bg-white rounded-lg border border-gray-200 p-4 shadow-sm space-y-3">
+        <div className="bg-card rounded-lg border border-border p-4 shadow-sm space-y-3">
           <div className="flex items-center justify-between">
-            <p className="text-sm font-medium text-gray-700">Filtros avanzados</p>
+            <p className="text-sm font-medium text-foreground">Filtros avanzados</p>
             {hasActiveFilters && (
               <button onClick={clearFilters} className="text-xs text-red-500 hover:underline flex items-center gap-1">
                 <X className="w-3 h-3" /> Limpiar filtros
@@ -348,20 +350,20 @@ export default function Contacts() {
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">Lead Score minimo</label>
-              <Input type="number" placeholder="0" value={minScore} onChange={(e) => { setMinScore(e.target.value); setPage(1); }} className="bg-gray-50 border-gray-200 text-gray-900" />
+              <label className="text-xs text-muted-foreground mb-1 block">Lead Score minimo</label>
+              <Input type="number" placeholder="0" value={minScore} onChange={(e) => { setMinScore(e.target.value); setPage(1); }} className="bg-surface-hover border-border text-foreground" />
             </div>
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">Lead Score maximo</label>
-              <Input type="number" placeholder="100" value={maxScore} onChange={(e) => { setMaxScore(e.target.value); setPage(1); }} className="bg-gray-50 border-gray-200 text-gray-900" />
+              <label className="text-xs text-muted-foreground mb-1 block">Lead Score maximo</label>
+              <Input type="number" placeholder="100" value={maxScore} onChange={(e) => { setMaxScore(e.target.value); setPage(1); }} className="bg-surface-hover border-border text-foreground" />
             </div>
             <div>
-              <label className="text-xs text-gray-500 mb-1 block">Substatus</label>
+              <label className="text-xs text-muted-foreground mb-1 block">Substatus</label>
               <Select value={substatusFilter} onValueChange={(v) => { setSubstatusFilter(v); setPage(1); }}>
-                <SelectTrigger className="bg-gray-50 border-gray-200 text-gray-700">
+                <SelectTrigger className="bg-surface-hover border-border text-foreground">
                   <SelectValue placeholder="Todos" />
                 </SelectTrigger>
-                <SelectContent className="bg-white border-gray-200">
+                <SelectContent className="bg-card border-border">
                   <SelectItem value="all">Todos</SelectItem>
                   <SelectItem value="warm">Caliente</SelectItem>
                   <SelectItem value="cold">Frio</SelectItem>
@@ -380,42 +382,42 @@ export default function Contacts() {
       {/* List View */}
       {view === "list" && (
         <>
-          <Card className="bg-white border-gray-200 shadow-sm">
+          <Card className="bg-card border-border shadow-sm">
             <CardContent className="p-0">
               <Table>
                 <TableHeader>
-                  <TableRow className="border-gray-100 hover:bg-transparent">
+                  <TableRow className="border-border hover:bg-transparent">
                     <TableHead className="w-10">
                       <input
                         type="checkbox"
                         checked={data?.contacts ? selectedIds.size === data.contacts.length && data.contacts.length > 0 : false}
                         onChange={toggleSelectAll}
-                        className="rounded border-gray-300 text-[#2FA4A9] focus:ring-[#2FA4A9]"
+                        className="rounded border-border text-primary focus:ring-primary"
                       />
                     </TableHead>
-                    <TableHead className="text-gray-500 uppercase text-xs font-medium">Nombre</TableHead>
-                    <TableHead className="text-gray-500 uppercase text-xs font-medium">Empresa</TableHead>
-                    <TableHead className="text-gray-500 uppercase text-xs font-medium">Email</TableHead>
-                    <TableHead className="text-gray-500 uppercase text-xs font-medium">Score</TableHead>
-                    <TableHead className="text-gray-500 uppercase text-xs font-medium">Status</TableHead>
-                    <TableHead className="text-gray-500 uppercase text-xs font-medium">Emails</TableHead>
-                    <TableHead className="text-gray-500 uppercase text-xs font-medium">Fecha</TableHead>
+                    <TableHead className="text-muted-foreground uppercase text-xs font-medium">Nombre</TableHead>
+                    <TableHead className="text-muted-foreground uppercase text-xs font-medium">Empresa</TableHead>
+                    <TableHead className="text-muted-foreground uppercase text-xs font-medium">Email</TableHead>
+                    <TableHead className="text-muted-foreground uppercase text-xs font-medium">Score</TableHead>
+                    <TableHead className="text-muted-foreground uppercase text-xs font-medium">Status</TableHead>
+                    <TableHead className="text-muted-foreground uppercase text-xs font-medium">Emails</TableHead>
+                    <TableHead className="text-muted-foreground uppercase text-xs font-medium">Fecha</TableHead>
                     <TableHead className="w-10"></TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {isLoading ? (
                     [...Array(5)].map((_, i) => (
-                      <TableRow key={i} className="border-gray-100">
+                      <TableRow key={i} className="border-border">
                         {[...Array(9)].map((_, j) => (
                           <TableCell key={j}>
-                            <div className="h-4 bg-gray-100 rounded animate-pulse w-20" />
+                            <div className="h-4 bg-muted rounded animate-pulse w-20" />
                           </TableCell>
                         ))}
                       </TableRow>
                     ))
                   ) : error ? (
-                    <TableRow className="border-gray-100">
+                    <TableRow className="border-border">
                       <TableCell
                         colSpan={9}
                         className="text-center text-red-400 py-8"
@@ -426,10 +428,10 @@ export default function Contacts() {
                       </TableCell>
                     </TableRow>
                   ) : data?.contacts.length === 0 ? (
-                    <TableRow className="border-gray-100">
+                    <TableRow className="border-border">
                       <TableCell
                         colSpan={9}
-                        className="text-center text-gray-400 py-8"
+                        className="text-center text-muted-foreground py-8"
                       >
                         No hay contactos aún. Aparecerán cuando alguien se suscriba al newsletter o complete un diagnóstico.
                       </TableCell>
@@ -441,40 +443,40 @@ export default function Contacts() {
                       return (
                         <TableRow
                           key={contact.id}
-                          onClick={() => navigate(`/admin/contacts/${contact.id}`)}
-                          className="border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors"
+                          onClick={() => setPeek(contact)}
+                          className="border-border cursor-pointer hover:bg-surface-hover transition-colors"
                         >
                           <TableCell className="w-10" onClick={(e) => e.stopPropagation()}>
                             <input
                               type="checkbox"
                               checked={selectedIds.has(contact.id)}
                               onChange={() => toggleSelect(contact.id)}
-                              className="rounded border-gray-300 text-[#2FA4A9] focus:ring-[#2FA4A9]"
+                              className="rounded border-border text-primary focus:ring-primary"
                             />
                           </TableCell>
                           <TableCell>
                             <div className="flex items-center gap-3">
-                              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-[#2FA4A9]/20 to-[#2FA4A9]/5 text-[#2FA4A9] flex items-center justify-center text-xs font-semibold shrink-0">
+                              <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 text-primary flex items-center justify-center text-xs font-semibold shrink-0">
                                 {getInitials(fullName(contact))}
                               </div>
-                              <span className="text-gray-900 font-medium">
+                              <span className="text-foreground font-medium">
                                 {fullName(contact)}
                               </span>
                             </div>
                           </TableCell>
-                          <TableCell className="text-gray-600">
+                          <TableCell className="text-muted-foreground">
                             {contact.empresa}
                           </TableCell>
-                          <TableCell className="text-gray-500 text-sm">
+                          <TableCell className="text-muted-foreground text-sm">
                             {contact.email}
                           </TableCell>
                           <TableCell>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full cursor-default ${
-                                  contact.leadScore > 60 ? "bg-red-50 text-red-600" :
-                                  contact.leadScore > 30 ? "bg-amber-50 text-amber-600" :
-                                  "bg-gray-100 text-gray-500"
+                                  contact.leadScore > 60 ? "bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-300" :
+                                  contact.leadScore > 30 ? "bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300" :
+                                  "bg-muted text-muted-foreground"
                                 }`}>
                                   {contact.leadScore}
                                 </span>
@@ -484,24 +486,19 @@ export default function Contacts() {
                               </TooltipContent>
                             </Tooltip>
                           </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={statusColors[contact.status] || ""}
-                            >
-                              {statusLabels[contact.status] || contact.status}
-                            </Badge>
+                          <TableCell onClick={(e) => e.stopPropagation()}>
+                            <StatusBadge status={contact.status} />
                           </TableCell>
                           <TableCell>
                             <Tooltip>
                               <TooltipTrigger asChild>
                                 <div className="flex items-center gap-2 cursor-default">
-                                  <span className="text-gray-700 text-sm font-medium">
+                                  <span className="text-foreground text-sm font-medium">
                                     {contact.emailsOpened}/{contact.emailsSent}
                                   </span>
-                                  <div className="w-16 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                  <div className="w-16 h-2 bg-muted rounded-full overflow-hidden">
                                     <div
-                                      className="h-full bg-[#2FA4A9] rounded-full transition-all"
+                                      className="h-full bg-primary rounded-full transition-all"
                                       style={{ width: `${ratio}%` }}
                                     />
                                   </div>
@@ -512,7 +509,7 @@ export default function Contacts() {
                               </TooltipContent>
                             </Tooltip>
                           </TableCell>
-                          <TableCell className="text-gray-500 text-sm">
+                          <TableCell className="text-muted-foreground text-sm">
                             {new Date(contact.createdAt).toLocaleDateString("es-CO")}
                           </TableCell>
                           <TableCell className="w-20">
@@ -523,7 +520,7 @@ export default function Contacts() {
                                   target="_blank"
                                   rel="noopener noreferrer"
                                   onClick={(e) => e.stopPropagation()}
-                                  className="text-gray-300 hover:text-green-600 transition-colors"
+                                  className="text-muted-foreground/50 hover:text-green-600 transition-colors"
                                   title="WhatsApp"
                                 >
                                   <MessageCircle className="w-4 h-4" />
@@ -534,7 +531,7 @@ export default function Contacts() {
                                   e.stopPropagation();
                                   setDeleteTarget(contact);
                                 }}
-                                className="text-gray-300 hover:text-red-600 transition-colors"
+                                className="text-muted-foreground/50 hover:text-red-600 transition-colors"
                                 title="Eliminar contacto"
                               >
                                 <Trash2 className="w-4 h-4" />
@@ -553,7 +550,7 @@ export default function Contacts() {
           {/* Pagination */}
           {data && (
             <div className="flex items-center justify-between">
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-muted-foreground">
                 Mostrando {paginationStart}-{paginationEnd} de {data.pagination.total} contactos
               </p>
               {data.pagination.totalPages > 1 && (
@@ -563,11 +560,11 @@ export default function Contacts() {
                     size="sm"
                     disabled={page <= 1}
                     onClick={() => setPage(page - 1)}
-                    className="border-gray-200 text-gray-600"
+                    className="border-border text-muted-foreground"
                   >
                     Anterior
                   </Button>
-                  <span className="text-sm text-gray-500 flex items-center px-2">
+                  <span className="text-sm text-muted-foreground flex items-center px-2">
                     {page} / {data.pagination.totalPages}
                   </span>
                   <Button
@@ -575,7 +572,7 @@ export default function Contacts() {
                     size="sm"
                     disabled={page >= data.pagination.totalPages}
                     onClick={() => setPage(page + 1)}
-                    className="border-gray-200 text-gray-600"
+                    className="border-border text-muted-foreground"
                   >
                     Siguiente
                   </Button>
@@ -585,16 +582,16 @@ export default function Contacts() {
           )}
 
           {selectedIds.size > 0 && (
-            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-white rounded-xl shadow-2xl border border-gray-200 px-6 py-3 flex items-center gap-4">
-              <span className="text-sm font-medium text-gray-700">
+            <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 bg-card rounded-xl shadow-2xl border border-border px-6 py-3 flex items-center gap-4">
+              <span className="text-sm font-medium text-foreground">
                 {selectedIds.size} seleccionado{selectedIds.size > 1 ? "s" : ""}
               </span>
-              <div className="h-6 w-px bg-gray-200" />
+              <div className="h-6 w-px bg-border" />
               <Select value={bulkStatus} onValueChange={setBulkStatus}>
-                <SelectTrigger className="w-36 h-8 text-xs bg-white border-gray-200">
+                <SelectTrigger className="w-36 h-8 text-xs bg-card border-border">
                   <SelectValue placeholder="Cambiar status" />
                 </SelectTrigger>
-                <SelectContent className="bg-white border-gray-200">
+                <SelectContent className="bg-card border-border">
                   <SelectItem value="lead">Lead</SelectItem>
                   <SelectItem value="contacted">Contactado</SelectItem>
                   <SelectItem value="scheduled">Agendado</SelectItem>
@@ -605,30 +602,30 @@ export default function Contacts() {
                 size="sm"
                 onClick={() => bulkMutation.mutate({ ids: Array.from(selectedIds), action: "change_status", payload: { status: bulkStatus } })}
                 disabled={bulkMutation.isPending}
-                className="bg-[#2FA4A9] hover:bg-[#238b8f] text-white text-xs h-8"
+                className="bg-primary hover:bg-primary/90 text-white text-xs h-8"
               >
                 Aplicar
               </Button>
-              <div className="h-6 w-px bg-gray-200" />
+              <div className="h-6 w-px bg-border" />
               <div className="flex items-center gap-1.5">
                 <Input
                   placeholder="Tag..."
                   value={bulkTag}
                   onChange={(e) => setBulkTag(e.target.value)}
-                  className="w-24 h-8 text-xs bg-white border-gray-200"
+                  className="w-24 h-8 text-xs bg-card border-border"
                 />
                 <Button
                   variant="outline"
                   size="sm"
                   onClick={() => bulkTag.trim() && bulkMutation.mutate({ ids: Array.from(selectedIds), action: "add_tag", payload: { tag: bulkTag } })}
                   disabled={!bulkTag.trim() || bulkMutation.isPending}
-                  className="h-8 text-xs border-gray-200 gap-1"
+                  className="h-8 text-xs border-border gap-1"
                 >
                   <Tag className="w-3 h-3" />
                   Tag
                 </Button>
               </div>
-              <div className="h-6 w-px bg-gray-200" />
+              <div className="h-6 w-px bg-border" />
               <Button
                 variant="outline"
                 size="sm"
@@ -641,7 +638,7 @@ export default function Contacts() {
               </Button>
               <button
                 onClick={() => setSelectedIds(new Set())}
-                className="text-gray-400 hover:text-gray-700 ml-2"
+                className="text-muted-foreground hover:text-foreground ml-2"
               >
                 <X className="w-4 h-4" />
               </button>
@@ -659,9 +656,9 @@ export default function Contacts() {
               <div key={status} className="flex flex-col min-h-[400px]">
                 {/* Column header */}
                 <div
-                  className={`border-t-[3px] ${pipelineBorderColors[status]} bg-white border border-gray-200 rounded-t-lg px-4 py-3 flex items-center justify-between shadow-sm`}
+                  className={`border-t-[3px] ${pipelineBorderColors[status]} bg-card border border-border rounded-t-lg px-4 py-3 flex items-center justify-between shadow-sm`}
                 >
-                  <span className="text-sm font-medium text-gray-700">
+                  <span className="text-sm font-medium text-foreground">
                     {statusLabels[status]}
                   </span>
                   <span
@@ -672,19 +669,19 @@ export default function Contacts() {
                 </div>
 
                 {/* Cards container */}
-                <div className="flex-1 bg-gray-50 border border-t-0 border-gray-200 rounded-b-lg p-2 space-y-2 overflow-y-auto max-h-[600px]">
+                <div className="flex-1 bg-surface-hover border border-t-0 border-border rounded-b-lg p-2 space-y-2 overflow-y-auto max-h-[600px]">
                   {pipelineLoading ? (
                     [...Array(3)].map((_, i) => (
                       <div
                         key={i}
-                        className="bg-white border border-gray-200 rounded-lg p-3 animate-pulse space-y-2"
+                        className="bg-card border border-border rounded-lg p-3 animate-pulse space-y-2"
                       >
-                        <div className="h-4 bg-gray-100 rounded w-3/4" />
-                        <div className="h-3 bg-gray-100 rounded w-1/2" />
+                        <div className="h-4 bg-muted rounded w-3/4" />
+                        <div className="h-3 bg-muted rounded w-1/2" />
                       </div>
                     ))
                   ) : contacts.length === 0 ? (
-                    <p className="text-xs text-gray-400 text-center py-4">
+                    <p className="text-xs text-muted-foreground text-center py-4">
                       Sin contactos
                     </p>
                   ) : (
@@ -692,35 +689,35 @@ export default function Contacts() {
                       <div
                         key={contact.id}
                         onClick={() => navigate(`/admin/contacts/${contact.id}`)}
-                        className="bg-white border border-gray-200 rounded-lg p-3 cursor-pointer transition-all duration-200 hover:shadow-md hover:border-[#2FA4A9]/40 hover:-translate-y-0.5"
+                        className="bg-card border border-border rounded-lg p-3 cursor-pointer transition-all duration-200 hover:shadow-md hover:border-primary/40 hover:-translate-y-0.5"
                       >
                         <div className="flex items-center gap-2.5 mb-1.5">
-                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#2FA4A9]/20 to-[#2FA4A9]/5 text-[#2FA4A9] flex items-center justify-center text-[10px] font-semibold shrink-0">
+                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary/20 to-primary/5 text-primary flex items-center justify-center text-[10px] font-semibold shrink-0">
                             {getInitials(fullName(contact))}
                           </div>
-                          <p className="text-sm font-medium text-gray-900 truncate">
+                          <p className="text-sm font-medium text-foreground truncate">
                             {fullName(contact)}
                           </p>
                         </div>
-                        <p className="text-xs text-gray-500 truncate">
+                        <p className="text-xs text-muted-foreground truncate">
                           {contact.empresa}
                         </p>
-                        <p className="text-xs text-gray-400 truncate mt-0.5">
+                        <p className="text-xs text-muted-foreground truncate mt-0.5">
                           {contact.email}
                         </p>
                         <div className="mt-2 flex items-center gap-1.5">
                           <Badge
                             variant="outline"
-                            className="text-[10px] px-1.5 py-0 border-gray-200 text-gray-500 gap-1"
+                            className="text-[10px] px-1.5 py-0 border-border text-muted-foreground gap-1"
                           >
                             <Mail className="w-2.5 h-2.5" />
                             {contact.emailsSent}
                           </Badge>
                           {contact.leadScore > 0 && (
                             <span className={`text-[10px] font-semibold px-1.5 py-0 rounded-full ${
-                              contact.leadScore > 60 ? "bg-red-50 text-red-600" :
-                              contact.leadScore > 30 ? "bg-amber-50 text-amber-600" :
-                              "bg-gray-50 text-gray-500"
+                              contact.leadScore > 60 ? "bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-300" :
+                              contact.leadScore > 30 ? "bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300" :
+                              "bg-surface-hover text-muted-foreground"
                             }`}>
                               {contact.leadScore}
                             </span>
@@ -735,6 +732,13 @@ export default function Contacts() {
           })}
         </div>
       )}
+      <RecordPeek
+        contact={peek as PeekContact | null}
+        open={!!peek}
+        onOpenChange={(o) => { if (!o) setPeek(null); }}
+        onOpenFull={(id) => { setPeek(null); navigate(`/admin/contacts/${id}`); }}
+      />
+
       <AlertDialog
         open={!!deleteTarget}
         onOpenChange={(open) => {
@@ -744,7 +748,7 @@ export default function Contacts() {
           }
         }}
       >
-        <AlertDialogContent className="bg-white">
+        <AlertDialogContent className="bg-card">
           <AlertDialogHeader>
             <AlertDialogTitle>¿Eliminar este contacto?</AlertDialogTitle>
             <AlertDialogDescription>
@@ -752,18 +756,18 @@ export default function Contacts() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <div className="py-2">
-            <label className="text-sm text-gray-600 mb-1.5 block">
+            <label className="text-sm text-muted-foreground mb-1.5 block">
               Escribe <strong>{deleteTarget ? fullName(deleteTarget) : ""}</strong> para confirmar:
             </label>
             <Input
               value={deleteConfirmName}
               onChange={(e) => setDeleteConfirmName(e.target.value)}
               placeholder={deleteTarget ? fullName(deleteTarget) : ""}
-              className="border-gray-300"
+              className="border-border"
             />
           </div>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-gray-200">Cancelar</AlertDialogCancel>
+            <AlertDialogCancel className="border-border">Cancelar</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => {
                 if (deleteTarget) deleteContactMutation.mutate(deleteTarget.id);
@@ -823,7 +827,7 @@ export default function Contacts() {
               </Select>
             </div>
             <div className="space-y-1.5">
-              <Label>Notas iniciales <span className="text-gray-400 font-normal">(cómo llegó, contexto)</span></Label>
+              <Label>Notas iniciales <span className="text-muted-foreground font-normal">(cómo llegó, contexto)</span></Label>
               <Textarea value={newContactForm.nota} onChange={e => setNewContactForm(f => ({ ...f, nota: e.target.value }))} rows={3} placeholder="Referido por Sebastián. Ya tuvimos una llamada exploratoria..." />
             </div>
             <DriveFolderField
@@ -843,7 +847,7 @@ export default function Contacts() {
               })()}
             />
             <Button
-              className="w-full bg-[#2FA4A9] hover:bg-[#238b8f]"
+              className="w-full bg-primary hover:bg-primary/90"
               disabled={!newContactForm.nombre || !newContactForm.empresa || !newContactForm.email || createContactMut.isPending}
               onClick={() => createContactMut.mutate({
                 nombre: newContactForm.nombre,

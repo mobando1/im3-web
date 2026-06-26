@@ -141,7 +141,7 @@ const connectionStyles: Record<AgentConnectionType, { icon: typeof Database; lab
   db: { icon: Database, label: "Base de datos", bg: "bg-blue-50", text: "text-blue-700", iconColor: "text-blue-500" },
   api: { icon: Globe, label: "API externa", bg: "bg-emerald-50", text: "text-emerald-700", iconColor: "text-emerald-500" },
   llm: { icon: Sparkles, label: "Modelo IA", bg: "bg-purple-50", text: "text-purple-700", iconColor: "text-purple-500" },
-  internal: { icon: Cog, label: "Servicio interno", bg: "bg-gray-50", text: "text-gray-700", iconColor: "text-gray-500" },
+  internal: { icon: Cog, label: "Servicio interno", bg: "bg-surface-hover", text: "text-foreground", iconColor: "text-muted-foreground" },
   webhook: { icon: Webhook, label: "Webhook", bg: "bg-amber-50", text: "text-amber-700", iconColor: "text-amber-500" },
 };
 
@@ -161,13 +161,13 @@ const healthStyles: Record<AgentHealth, { bg: string; text: string; label: strin
   healthy: { bg: "bg-emerald-50", text: "text-emerald-700", label: "Saludable", dot: "bg-emerald-500", ring: "ring-emerald-200" },
   warning: { bg: "bg-amber-50", text: "text-amber-700", label: "Avisos", dot: "bg-amber-500", ring: "ring-amber-200" },
   error: { bg: "bg-red-50", text: "text-red-700", label: "Errores", dot: "bg-red-500", ring: "ring-red-200" },
-  idle: { bg: "bg-gray-50", text: "text-gray-500", label: "Sin datos", dot: "bg-gray-300", ring: "ring-gray-200" },
+  idle: { bg: "bg-surface-hover", text: "text-muted-foreground", label: "Sin datos", dot: "bg-gray-300", ring: "ring-gray-200" },
 };
 
 const criticalityStyles = {
   critical: { dot: "bg-red-500", label: "Crítico", text: "text-red-600" },
   normal: { dot: "bg-blue-400", label: "Normal", text: "text-blue-600" },
-  low: { dot: "bg-gray-300", label: "Bajo", text: "text-gray-500" },
+  low: { dot: "bg-gray-300", label: "Bajo", text: "text-muted-foreground" },
 } as const;
 
 function relativeTime(iso: string | null): string {
@@ -271,7 +271,7 @@ export default function AgentsPage() {
 
   if (isLoading || !data) {
     return (
-      <div className="py-16 text-center text-gray-400">
+      <div className="py-16 text-center text-muted-foreground">
         <Activity className="w-8 h-8 mx-auto mb-3 animate-pulse" />
         <p className="text-sm">Cargando sistema…</p>
       </div>
@@ -283,8 +283,8 @@ export default function AgentsPage() {
       {/* Header */}
       <div className="flex items-start justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Sistema</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <h1 className="text-2xl font-semibold text-foreground">Sistema</h1>
+          <p className="text-sm text-muted-foreground mt-1">
             Agentes IA, automatizaciones, integraciones y webhooks. {data.summary.total} en total.
           </p>
         </div>
@@ -343,25 +343,25 @@ export default function AgentsPage() {
       {/* Search + filters */}
       <div className="flex flex-col md:flex-row gap-2">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar agente por nombre o descripción…"
-            className="pl-9 bg-white border-gray-200"
+            className="pl-9 bg-card border-border"
           />
           {search && (
             <button
               onClick={() => setSearch("")}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-gray-100"
+              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded hover:bg-muted"
             >
-              <X className="w-3.5 h-3.5 text-gray-400" />
+              <X className="w-3.5 h-3.5 text-muted-foreground" />
             </button>
           )}
         </div>
         <div className="flex gap-2 flex-wrap">
           <Select value={filterKind} onValueChange={(v) => setFilterKind(v as typeof filterKind)}>
-            <SelectTrigger className="w-36 bg-white border-gray-200">
+            <SelectTrigger className="w-36 bg-card border-border">
               <SelectValue placeholder="Tipo" />
             </SelectTrigger>
             <SelectContent>
@@ -373,7 +373,7 @@ export default function AgentsPage() {
             </SelectContent>
           </Select>
           <Select value={filterTrigger} onValueChange={(v) => setFilterTrigger(v as typeof filterTrigger)}>
-            <SelectTrigger className="w-36 bg-white border-gray-200">
+            <SelectTrigger className="w-36 bg-card border-border">
               <SelectValue placeholder="Disparador" />
             </SelectTrigger>
             <SelectContent>
@@ -384,7 +384,7 @@ export default function AgentsPage() {
             </SelectContent>
           </Select>
           <Select value={filterCriticality} onValueChange={(v) => setFilterCriticality(v as typeof filterCriticality)}>
-            <SelectTrigger className="w-32 bg-white border-gray-200">
+            <SelectTrigger className="w-32 bg-card border-border">
               <SelectValue placeholder="Criticidad" />
             </SelectTrigger>
             <SelectContent>
@@ -405,17 +405,17 @@ export default function AgentsPage() {
 
       {/* Result count + view toggle */}
       <div className="flex items-center justify-between gap-3">
-        <div className="text-xs text-gray-500">
-          Mostrando <span className="font-semibold text-gray-700">{filtered.length}</span> de{" "}
-          <span className="font-semibold text-gray-700">{data.summary.total}</span> agentes
+        <div className="text-xs text-muted-foreground">
+          Mostrando <span className="font-semibold text-foreground">{filtered.length}</span> de{" "}
+          <span className="font-semibold text-foreground">{data.summary.total}</span> agentes
         </div>
-        <div className="flex bg-gray-100 rounded-lg p-0.5">
+        <div className="flex bg-muted rounded-lg p-0.5">
           {([["grouped", LayoutGrid, "Agrupado por tipo"], ["list", List, "Lista"]] as const).map(([mode, Icon, label]) => (
             <button
               key={mode}
               onClick={() => setView(mode)}
               className={`p-1.5 rounded-md transition-colors ${
-                viewMode === mode ? "bg-white text-[#2FA4A9] shadow-sm" : "text-gray-400 hover:text-gray-600"
+                viewMode === mode ? "bg-card text-primary shadow-sm" : "text-muted-foreground hover:text-muted-foreground"
               }`}
               title={label}
             >
@@ -429,15 +429,15 @@ export default function AgentsPage() {
       {filtered.length === 0 ? (
         <Card>
           <CardContent className="py-12 text-center">
-            <Search className="w-8 h-8 text-gray-300 mx-auto mb-3" />
-            <p className="text-sm text-gray-500">No hay agentes que coincidan con los filtros</p>
+            <Search className="w-8 h-8 text-muted-foreground/50 mx-auto mb-3" />
+            <p className="text-sm text-muted-foreground">No hay agentes que coincidan con los filtros</p>
             <Button variant="ghost" size="sm" onClick={clearFilters} className="mt-3">
               Limpiar filtros
             </Button>
           </CardContent>
         </Card>
       ) : viewMode === "list" ? (
-        <div className="bg-white rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-100">
+        <div className="bg-card rounded-xl border border-border overflow-hidden divide-y divide-border">
           {filtered.map((agent) => (
             <AgentRow
               key={agent.name}
@@ -461,13 +461,13 @@ export default function AgentsPage() {
                   </div>
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <h2 className="text-sm font-semibold text-gray-900">{data.kinds[kind].label}</h2>
+                      <h2 className="text-sm font-semibold text-foreground">{data.kinds[kind].label}</h2>
                       <span className={`text-[11px] font-medium px-1.5 py-0.5 rounded-full ${c.bg} ${c.text}`}>{agents.length}</span>
                     </div>
-                    <p className="text-[11px] text-gray-400 truncate">{data.kinds[kind].description}</p>
+                    <p className="text-[11px] text-muted-foreground truncate">{data.kinds[kind].description}</p>
                   </div>
                 </div>
-                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden divide-y divide-gray-100">
+                <div className="bg-card rounded-xl border border-border overflow-hidden divide-y divide-border">
                   {agents.map((agent) => (
                     <AgentRow
                       key={agent.name}
@@ -516,26 +516,26 @@ function SummaryTile({
     emerald: { ring: "ring-emerald-500", text: "text-emerald-600", iconBg: "bg-emerald-50 text-emerald-500" },
     amber: { ring: "ring-amber-500", text: "text-amber-600", iconBg: "bg-amber-50 text-amber-500" },
     red: { ring: "ring-red-500", text: "text-red-600", iconBg: "bg-red-50 text-red-500" },
-    gray: { ring: "ring-gray-400", text: "text-gray-600", iconBg: "bg-gray-50 text-gray-400" },
+    gray: { ring: "ring-gray-400", text: "text-muted-foreground", iconBg: "bg-surface-hover text-muted-foreground" },
   };
   const p = palettes[color];
   const pct = total > 0 ? Math.round((value / total) * 100) : 0;
   return (
     <button
       onClick={onClick}
-      className={`text-left bg-white border rounded-xl p-4 transition-all hover:shadow-sm ${
-        active ? `border-transparent ring-2 ${p.ring}` : "border-gray-200"
+      className={`text-left bg-card border rounded-xl p-4 transition-all hover:shadow-sm ${
+        active ? `border-transparent ring-2 ${p.ring}` : "border-border"
       }`}
     >
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium text-gray-500">{label}</span>
+        <span className="text-xs font-medium text-muted-foreground">{label}</span>
         <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${p.iconBg}`}>{icon}</div>
       </div>
       <div className="flex items-baseline gap-2 mt-2">
         <p className={`text-2xl font-bold ${p.text}`}>{value}</p>
-        <p className="text-xs text-gray-400">/ {total}</p>
+        <p className="text-xs text-muted-foreground">/ {total}</p>
       </div>
-      <div className="mt-2 h-1 bg-gray-100 rounded-full overflow-hidden">
+      <div className="mt-2 h-1 bg-muted rounded-full overflow-hidden">
         <div
           className={`h-full ${color === "emerald" ? "bg-emerald-500" : color === "amber" ? "bg-amber-500" : color === "red" ? "bg-red-500" : "bg-gray-400"} transition-all`}
           style={{ width: `${pct}%` }}
@@ -567,7 +567,7 @@ function AgentRow({
 
   return (
     <div
-      className="group flex items-center gap-3 px-4 py-3 hover:bg-gray-50/70 cursor-pointer transition-colors"
+      className="group flex items-center gap-3 px-4 py-3 hover:bg-surface-hover/70 cursor-pointer transition-colors"
       onClick={onClick}
     >
       {/* Avatar */}
@@ -578,7 +578,7 @@ function AgentRow({
           <KindIcon className="w-5 h-5" />
         </div>
         <span
-          className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-white ${health.dot}`}
+          className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-card ${health.dot}`}
           title={health.label}
         />
       </div>
@@ -586,7 +586,7 @@ function AgentRow({
       {/* Info */}
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <h3 className="text-sm font-semibold text-gray-900 truncate">
+          <h3 className="text-sm font-semibold text-foreground truncate">
             {agent.displayName}
           </h3>
           {agent.criticality === "critical" && (
@@ -595,19 +595,19 @@ function AgentRow({
             </Badge>
           )}
         </div>
-        <div className="flex items-center gap-3 mt-0.5 text-[11px] text-gray-500 flex-wrap">
+        <div className="flex items-center gap-3 mt-0.5 text-[11px] text-muted-foreground flex-wrap">
           <span className="flex items-center gap-1">
             <TriggerIcon className="w-3 h-3" />
             {agent.trigger === "cron" ? agent.scheduleHuman ?? "programado" : triggerLabels[agent.trigger]}
           </span>
-          <span className="text-gray-300">·</span>
+          <span className="text-muted-foreground/50">·</span>
           <span className="flex items-center gap-1">
             <Clock className="w-3 h-3" />
             {agent.lastRun ? relativeTime(agent.lastRun.startedAt) : "sin corridas"}
           </span>
           {successRate != null && (
             <>
-              <span className="text-gray-300">·</span>
+              <span className="text-muted-foreground/50">·</span>
               <span
                 className={`flex items-center gap-1 font-medium ${
                   successRate >= 90
@@ -642,7 +642,7 @@ function AgentRow({
           <Button
             size="sm"
             variant="ghost"
-            className="h-8 px-2.5 text-[11px] text-[#2FA4A9] hover:bg-[#2FA4A9]/10 opacity-0 group-hover:opacity-100 transition-opacity"
+            className="h-8 px-2.5 text-[11px] text-primary hover:bg-primary/10 opacity-0 group-hover:opacity-100 transition-opacity"
             onClick={(e) => {
               e.stopPropagation();
               onRun();
@@ -659,7 +659,7 @@ function AgentRow({
             )}
           </Button>
         )}
-        <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-gray-500 transition-colors" />
+        <ChevronRight className="w-4 h-4 text-muted-foreground/50 group-hover:text-muted-foreground transition-colors" />
       </div>
     </div>
   );
@@ -690,7 +690,7 @@ function AgentSheet({
       >
         {isLoading || !data ? (
           <div className="flex-1 flex items-center justify-center">
-            <Loader2 className="w-6 h-6 text-gray-300 animate-spin" />
+            <Loader2 className="w-6 h-6 text-muted-foreground/50 animate-spin" />
           </div>
         ) : (
           <SheetBody data={data} onRun={onRun} isRunning={isRunning(data.agent.name)} />
@@ -732,7 +732,7 @@ function SheetBody({
   return (
     <>
       {/* Header */}
-      <SheetHeader className="px-6 py-5 border-b border-gray-100 space-y-0">
+      <SheetHeader className="px-6 py-5 border-b border-border space-y-0">
         <div className="flex items-start gap-3 pr-8">
           <div
             className={`w-12 h-12 rounded-xl flex items-center justify-center ${kindColor.bg} ${kindColor.text} ring-1 ${kindColor.ring} shrink-0`}
@@ -749,19 +749,19 @@ function SheetBody({
                 </Badge>
               )}
             </div>
-            <p className="text-xs font-mono text-gray-400 mt-0.5">{agent.name}</p>
+            <p className="text-xs font-mono text-muted-foreground mt-0.5">{agent.name}</p>
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               <Badge variant="outline" className={`${health.bg} ${health.text} border-0 text-[10px] gap-1`}>
                 <span className={`w-1.5 h-1.5 rounded-full ${health.dot}`} />
                 {health.label}
               </Badge>
-              <Badge variant="outline" className="text-[10px] border-gray-200 text-gray-600 gap-1">
+              <Badge variant="outline" className="text-[10px] border-border text-muted-foreground gap-1">
                 <TriggerIcon className="w-2.5 h-2.5" />
                 {agent.trigger === "cron" ? agent.scheduleHuman ?? "programado" : triggerLabels[agent.trigger]}
               </Badge>
               <Badge
                 variant="outline"
-                className={`text-[10px] border-gray-200 gap-1 ${criticalityStyles[agent.criticality].text}`}
+                className={`text-[10px] border-border gap-1 ${criticalityStyles[agent.criticality].text}`}
               >
                 <span className={`w-1.5 h-1.5 rounded-full ${criticalityStyles[agent.criticality].dot}`} />
                 {criticalityStyles[agent.criticality].label}
@@ -769,14 +769,14 @@ function SheetBody({
             </div>
           </div>
         </div>
-        <p className="text-sm text-gray-600 mt-3 leading-relaxed">{agent.description}</p>
+        <p className="text-sm text-muted-foreground mt-3 leading-relaxed">{agent.description}</p>
         {agent.hasRunnable && (
           <div className="pt-3">
             <Button
               size="sm"
               onClick={() => onRun(agent.name)}
               disabled={isRunning}
-              className="bg-[#2FA4A9] hover:bg-[#2FA4A9]/90 text-white gap-1.5"
+              className="bg-primary hover:bg-primary/90 text-white gap-1.5"
             >
               {isRunning ? (
                 <>
@@ -796,29 +796,29 @@ function SheetBody({
 
       {/* Tabs */}
       <Tabs defaultValue="overview" className="flex-1 flex flex-col overflow-hidden">
-        <TabsList className="px-6 mt-1 bg-transparent border-b border-gray-100 rounded-none h-auto justify-start gap-4 shrink-0">
+        <TabsList className="px-6 mt-1 bg-transparent border-b border-border rounded-none h-auto justify-start gap-4 shrink-0">
           <TabsTrigger
             value="overview"
-            className="data-[state=active]:border-b-2 data-[state=active]:border-[#2FA4A9] data-[state=active]:text-[#2FA4A9] data-[state=active]:shadow-none rounded-none px-0 pb-2.5 text-xs font-medium"
+            className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none px-0 pb-2.5 text-xs font-medium"
           >
             Resumen
           </TabsTrigger>
           <TabsTrigger
             value="runs"
-            className="data-[state=active]:border-b-2 data-[state=active]:border-[#2FA4A9] data-[state=active]:text-[#2FA4A9] data-[state=active]:shadow-none rounded-none px-0 pb-2.5 text-xs font-medium"
+            className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none px-0 pb-2.5 text-xs font-medium"
           >
             Historial ({data.runs.length})
           </TabsTrigger>
           <TabsTrigger
             value="stats"
-            className="data-[state=active]:border-b-2 data-[state=active]:border-[#2FA4A9] data-[state=active]:text-[#2FA4A9] data-[state=active]:shadow-none rounded-none px-0 pb-2.5 text-xs font-medium"
+            className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none px-0 pb-2.5 text-xs font-medium"
           >
             Métricas
           </TabsTrigger>
           {showLearnings && (
             <TabsTrigger
               value="learnings"
-              className="data-[state=active]:border-b-2 data-[state=active]:border-[#2FA4A9] data-[state=active]:text-[#2FA4A9] data-[state=active]:shadow-none rounded-none px-0 pb-2.5 text-xs font-medium"
+              className="data-[state=active]:border-b-2 data-[state=active]:border-primary data-[state=active]:text-primary data-[state=active]:shadow-none rounded-none px-0 pb-2.5 text-xs font-medium"
             >
               Aprendizajes
             </TabsTrigger>
@@ -853,7 +853,7 @@ function SheetBody({
             {/* How it works */}
             {agent.longDescription && (
               <Section title="Cómo funciona">
-                <p className="text-sm text-gray-700 leading-relaxed whitespace-pre-line">
+                <p className="text-sm text-foreground leading-relaxed whitespace-pre-line">
                   {agent.longDescription}
                 </p>
               </Section>
@@ -869,7 +869,7 @@ function SheetBody({
                     return (
                       <div
                         key={i}
-                        className="flex items-start gap-3 p-3 rounded-lg border border-gray-100 bg-white hover:border-gray-200 transition-colors"
+                        className="flex items-start gap-3 p-3 rounded-lg border border-border bg-card hover:border-border transition-colors"
                       >
                         <div
                           className={`w-9 h-9 rounded-lg flex items-center justify-center ${style.bg} ${style.iconColor} shrink-0`}
@@ -878,13 +878,13 @@ function SheetBody({
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <p className="text-sm font-medium text-gray-900">{conn.label}</p>
+                            <p className="text-sm font-medium text-foreground">{conn.label}</p>
                             <span className={`text-[10px] font-medium ${style.text} uppercase tracking-wide`}>
                               {style.label}
                             </span>
                           </div>
                           {conn.detail && (
-                            <p className="text-xs text-gray-500 mt-1 leading-relaxed">{conn.detail}</p>
+                            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{conn.detail}</p>
                           )}
                         </div>
                       </div>
@@ -897,8 +897,8 @@ function SheetBody({
             {/* Source */}
             {agent.sourceFile && (
               <Section title="Código fuente">
-                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-gray-50 border border-gray-100 text-xs font-mono text-gray-700">
-                  <FileCode className="w-3.5 h-3.5 text-gray-400 shrink-0" />
+                <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-surface-hover border border-border text-xs font-mono text-foreground">
+                  <FileCode className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                   <span className="truncate">{agent.sourceFile}</span>
                 </div>
               </Section>
@@ -907,8 +907,8 @@ function SheetBody({
 
           <TabsContent value="runs" className="px-6 py-5 mt-0">
             {data.runs.length === 0 ? (
-              <div className="text-center py-12 text-gray-400">
-                <Clock className="w-8 h-8 mx-auto mb-3 text-gray-300" />
+              <div className="text-center py-12 text-muted-foreground">
+                <Clock className="w-8 h-8 mx-auto mb-3 text-muted-foreground/50" />
                 <p className="text-sm">Sin ejecuciones registradas</p>
               </div>
             ) : (
@@ -1029,17 +1029,17 @@ function LearningsTab({ enabled }: { enabled: boolean }) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <Loader2 className="w-5 h-5 text-gray-300 animate-spin" />
+        <Loader2 className="w-5 h-5 text-muted-foreground/50 animate-spin" />
       </div>
     );
   }
 
   if (!facts || facts.length === 0) {
     return (
-      <div className="text-center py-12 text-gray-400">
-        <Lightbulb className="w-8 h-8 mx-auto mb-3 text-gray-300" />
+      <div className="text-center py-12 text-muted-foreground">
+        <Lightbulb className="w-8 h-8 mx-auto mb-3 text-muted-foreground/50" />
         <p className="text-sm">Aún no hay aprendizajes</p>
-        <p className="text-xs text-gray-400 mt-1 max-w-xs mx-auto leading-relaxed">
+        <p className="text-xs text-muted-foreground mt-1 max-w-xs mx-auto leading-relaxed">
           Cuando edites y envíes propuestas, el agente aprenderá tus cambios de redacción,
           estructura y números, y los aplicará en las próximas.
         </p>
@@ -1058,7 +1058,7 @@ function LearningsTab({ enabled }: { enabled: boolean }) {
 
   return (
     <div className="space-y-5">
-      <p className="text-xs text-gray-500 leading-relaxed">
+      <p className="text-xs text-muted-foreground leading-relaxed">
         Lecciones que el sistema aprendió de propuestas anteriores. Alimentan al generador
         automáticamente. Puedes editarlas, desactivarlas (dejan de aplicarse sin borrarse) o eliminarlas.
       </p>
@@ -1074,7 +1074,7 @@ function LearningsTab({ enabled }: { enabled: boolean }) {
                 return (
                   <div
                     key={f.id}
-                    className={`rounded-lg border p-3 ${inactive ? "border-gray-100 bg-gray-50/60 opacity-70" : "border-gray-200 bg-white"}`}
+                    className={`rounded-lg border p-3 ${inactive ? "border-border bg-surface-hover/60 opacity-70" : "border-border bg-card"}`}
                   >
                     {isEditing ? (
                       <div className="space-y-2">
@@ -1082,12 +1082,12 @@ function LearningsTab({ enabled }: { enabled: boolean }) {
                           value={draft}
                           onChange={(e) => setDraft(e.target.value)}
                           rows={3}
-                          className="w-full text-sm border border-gray-200 rounded-md p-2 focus:outline-none focus:ring-1 focus:ring-[#2FA4A9]"
+                          className="w-full text-sm border border-border rounded-md p-2 focus:outline-none focus:ring-1 focus:ring-primary"
                         />
                         <div className="flex items-center gap-2">
                           <Button
                             size="sm"
-                            className="h-7 px-2.5 text-[11px] bg-[#2FA4A9] hover:bg-[#2FA4A9]/90 text-white gap-1"
+                            className="h-7 px-2.5 text-[11px] bg-primary hover:bg-primary/90 text-white gap-1"
                             disabled={patchMut.isPending || draft.trim().length < 5}
                             onClick={() => patchMut.mutate({ id: f.id, body: { fact: draft } })}
                           >
@@ -1097,7 +1097,7 @@ function LearningsTab({ enabled }: { enabled: boolean }) {
                           <Button
                             size="sm"
                             variant="ghost"
-                            className="h-7 px-2.5 text-[11px] text-gray-500"
+                            className="h-7 px-2.5 text-[11px] text-muted-foreground"
                             onClick={() => setEditingId(null)}
                           >
                             Cancelar
@@ -1106,7 +1106,7 @@ function LearningsTab({ enabled }: { enabled: boolean }) {
                       </div>
                     ) : (
                       <>
-                        <p className="text-sm text-gray-800 leading-relaxed">{f.fact}</p>
+                        <p className="text-sm text-foreground leading-relaxed">{f.fact}</p>
                         <div className="flex items-center gap-2 mt-2 flex-wrap">
                           <span
                             className={`text-[10px] font-medium px-1.5 py-0.5 rounded-full ${
@@ -1114,13 +1114,13 @@ function LearningsTab({ enabled }: { enabled: boolean }) {
                                 ? "bg-emerald-50 text-emerald-700"
                                 : f.confidence >= 30
                                   ? "bg-amber-50 text-amber-700"
-                                  : "bg-gray-100 text-gray-500"
+                                  : "bg-muted text-muted-foreground"
                             }`}
                           >
                             {inactive ? "desactivada" : `${f.confidence}% confianza`}
                           </span>
                           {f.reinforcedCount > 1 && (
-                            <span className="text-[10px] text-gray-400">{f.reinforcedCount}× reforzada</span>
+                            <span className="text-[10px] text-muted-foreground">{f.reinforcedCount}× reforzada</span>
                           )}
                           <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${origin.cls}`}>
                             {origin.label}
@@ -1128,7 +1128,7 @@ function LearningsTab({ enabled }: { enabled: boolean }) {
                           <div className="ml-auto flex items-center gap-1">
                             <button
                               title="Editar"
-                              className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-muted-foreground"
                               onClick={() => {
                                 setEditingId(f.id);
                                 setDraft(f.fact);
@@ -1138,7 +1138,7 @@ function LearningsTab({ enabled }: { enabled: boolean }) {
                             </button>
                             <button
                               title={inactive ? "Reactivar" : "Desactivar"}
-                              className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-gray-600"
+                              className="p-1 rounded hover:bg-muted text-muted-foreground hover:text-muted-foreground"
                               disabled={patchMut.isPending}
                               onClick={() => patchMut.mutate({ id: f.id, body: { enabled: inactive } })}
                             >
@@ -1146,7 +1146,7 @@ function LearningsTab({ enabled }: { enabled: boolean }) {
                             </button>
                             <button
                               title="Eliminar"
-                              className="p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-600"
+                              className="p-1 rounded hover:bg-red-50 text-muted-foreground hover:text-red-600"
                               disabled={deleteMut.isPending}
                               onClick={() => deleteMut.mutate(f.id)}
                             >
@@ -1170,7 +1170,7 @@ function LearningsTab({ enabled }: { enabled: boolean }) {
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
-      <h4 className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-2.5">
+      <h4 className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide mb-2.5">
         {title}
       </h4>
       {children}
@@ -1180,10 +1180,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 function StatCell({ label, value, sub }: { label: string; value: string; sub: string }) {
   return (
-    <div className="bg-gray-50 rounded-lg p-2.5">
-      <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">{label}</p>
-      <p className="text-sm font-semibold text-gray-900 mt-1 truncate">{value}</p>
-      <p className="text-[10px] text-gray-500 truncate">{sub}</p>
+    <div className="bg-surface-hover rounded-lg p-2.5">
+      <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">{label}</p>
+      <p className="text-sm font-semibold text-foreground mt-1 truncate">{value}</p>
+      <p className="text-[10px] text-muted-foreground truncate">{sub}</p>
     </div>
   );
 }
@@ -1203,13 +1203,13 @@ function BigStatCard({
     emerald: "text-emerald-600",
     amber: "text-amber-600",
     red: "text-red-600",
-    gray: "text-gray-700",
+    gray: "text-foreground",
   };
   return (
-    <div className="bg-white border border-gray-100 rounded-xl p-4">
-      <p className="text-[10px] text-gray-400 uppercase tracking-wide font-medium">{label}</p>
+    <div className="bg-card border border-border rounded-xl p-4">
+      <p className="text-[10px] text-muted-foreground uppercase tracking-wide font-medium">{label}</p>
       <p className={`text-xl font-bold mt-1.5 ${colors[color]}`}>{value}</p>
-      <p className="text-[11px] text-gray-500 mt-1">{sub}</p>
+      <p className="text-[11px] text-muted-foreground mt-1">{sub}</p>
     </div>
   );
 }
@@ -1217,7 +1217,7 @@ function BigStatCard({
 function SuccessPattern({ runs }: { runs: FullRun[] }) {
   const reversed = [...runs].reverse();
   return (
-    <div className="flex items-end gap-1 h-12 bg-gray-50 rounded-lg p-2">
+    <div className="flex items-end gap-1 h-12 bg-surface-hover rounded-lg p-2">
       {reversed.map((r) => {
         const color =
           r.status === "success"
@@ -1244,7 +1244,7 @@ function RunTimeline({ runs }: { runs: FullRun[] }) {
   return (
     <div className="relative">
       {/* vertical rail */}
-      <div className="absolute left-[7px] top-2 bottom-2 w-px bg-gray-100" />
+      <div className="absolute left-[7px] top-2 bottom-2 w-px bg-muted" />
       <div className="space-y-2">
         {runs.map((run) => (
           <RunTimelineItem key={run.id} run={run} />
@@ -1273,9 +1273,9 @@ function RunTimelineItem({ run }: { run: FullRun }) {
         className={`absolute left-0 top-3 w-3.5 h-3.5 rounded-full ring-4 ${statusDot}`}
       />
       <div
-        className={`bg-white border rounded-lg transition-colors ${
-          run.status === "error" ? "border-red-100" : "border-gray-100"
-        } ${hasDetails ? "cursor-pointer hover:border-gray-200" : ""}`}
+        className={`bg-card border rounded-lg transition-colors ${
+          run.status === "error" ? "border-red-100" : "border-border"
+        } ${hasDetails ? "cursor-pointer hover:border-border" : ""}`}
         onClick={() => hasDetails && setExpanded((v) => !v)}
       >
         <div className="flex items-center gap-3 px-3 py-2.5 text-xs">
@@ -1292,24 +1292,24 @@ function RunTimelineItem({ run }: { run: FullRun }) {
           >
             {run.status}
           </span>
-          <span className="text-gray-700 font-medium">{relativeTime(run.startedAt)}</span>
-          <span className="text-gray-300">·</span>
-          <span className="text-gray-500">{formatDuration(run.durationMs)}</span>
+          <span className="text-foreground font-medium">{relativeTime(run.startedAt)}</span>
+          <span className="text-muted-foreground/50">·</span>
+          <span className="text-muted-foreground">{formatDuration(run.durationMs)}</span>
           {run.recordsProcessed != null && run.recordsProcessed > 0 && (
             <>
-              <span className="text-gray-300">·</span>
-              <span className="text-gray-500">{run.recordsProcessed} reg</span>
+              <span className="text-muted-foreground/50">·</span>
+              <span className="text-muted-foreground">{run.recordsProcessed} reg</span>
             </>
           )}
-          <span className="text-[10px] text-gray-400 ml-auto">{run.triggeredBy}</span>
+          <span className="text-[10px] text-muted-foreground ml-auto">{run.triggeredBy}</span>
           {hasDetails && (
             <ChevronDown
-              className={`w-3.5 h-3.5 text-gray-400 transition-transform ${expanded ? "rotate-180" : ""}`}
+              className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${expanded ? "rotate-180" : ""}`}
             />
           )}
         </div>
         {expanded && (
-          <div className="border-t border-gray-100 px-3 py-3 space-y-3 bg-gray-50/50">
+          <div className="border-t border-border px-3 py-3 space-y-3 bg-surface-hover/50">
             {run.errorMessage && (
               <div className="space-y-1">
                 <p className="text-[10px] font-semibold text-red-700 uppercase tracking-wide">
@@ -1325,21 +1325,21 @@ function RunTimelineItem({ run }: { run: FullRun }) {
             )}
             {run.metadata && Object.keys(run.metadata).length > 0 && (
               <div className="space-y-1">
-                <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-wide">
+                <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">
                   Metadata
                 </p>
-                <div className="bg-white border border-gray-200 rounded p-2.5">
+                <div className="bg-card border border-border rounded p-2.5">
                   <JsonTree value={run.metadata} />
                 </div>
               </div>
             )}
-            <div className="grid grid-cols-2 gap-2 text-[11px] text-gray-500">
+            <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground">
               <div>
-                <span className="text-gray-400">Inicio:</span>{" "}
+                <span className="text-muted-foreground">Inicio:</span>{" "}
                 <span className="font-mono">{formatDateTime(run.startedAt)}</span>
               </div>
               <div>
-                <span className="text-gray-400">Fin:</span>{" "}
+                <span className="text-muted-foreground">Fin:</span>{" "}
                 <span className="font-mono">{formatDateTime(run.completedAt)}</span>
               </div>
             </div>
@@ -1351,8 +1351,8 @@ function RunTimelineItem({ run }: { run: FullRun }) {
 }
 
 function JsonTree({ value, depth = 0 }: { value: unknown; depth?: number }) {
-  if (value === null) return <span className="text-gray-400">null</span>;
-  if (value === undefined) return <span className="text-gray-400">undefined</span>;
+  if (value === null) return <span className="text-muted-foreground">null</span>;
+  if (value === undefined) return <span className="text-muted-foreground">undefined</span>;
   if (typeof value === "boolean")
     return <span className="text-purple-600 font-mono">{String(value)}</span>;
   if (typeof value === "number")
@@ -1361,12 +1361,12 @@ function JsonTree({ value, depth = 0 }: { value: unknown; depth?: number }) {
     return <span className="text-emerald-700 font-mono break-all">"{value}"</span>;
 
   if (Array.isArray(value)) {
-    if (value.length === 0) return <span className="text-gray-400 font-mono">[]</span>;
+    if (value.length === 0) return <span className="text-muted-foreground font-mono">[]</span>;
     return (
       <div className={depth > 0 ? "ml-3" : ""}>
         {value.map((item, i) => (
           <div key={i} className="flex gap-1.5 text-[11px]">
-            <span className="text-gray-400 font-mono shrink-0">{i}:</span>
+            <span className="text-muted-foreground font-mono shrink-0">{i}:</span>
             <JsonTree value={item} depth={depth + 1} />
           </div>
         ))}
@@ -1376,12 +1376,12 @@ function JsonTree({ value, depth = 0 }: { value: unknown; depth?: number }) {
 
   if (typeof value === "object") {
     const entries = Object.entries(value as Record<string, unknown>);
-    if (entries.length === 0) return <span className="text-gray-400 font-mono">{"{}"}</span>;
+    if (entries.length === 0) return <span className="text-muted-foreground font-mono">{"{}"}</span>;
     return (
       <div className={depth > 0 ? "ml-3" : ""}>
         {entries.map(([k, v]) => (
           <div key={k} className="flex gap-1.5 text-[11px]">
-            <span className="text-gray-700 font-mono font-medium shrink-0">{k}:</span>
+            <span className="text-foreground font-mono font-medium shrink-0">{k}:</span>
             <JsonTree value={v} depth={depth + 1} />
           </div>
         ))}
@@ -1389,5 +1389,5 @@ function JsonTree({ value, depth = 0 }: { value: unknown; depth?: number }) {
     );
   }
 
-  return <span className="text-gray-500 font-mono">{String(value)}</span>;
+  return <span className="text-muted-foreground font-mono">{String(value)}</span>;
 }
