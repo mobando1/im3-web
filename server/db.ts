@@ -1337,6 +1337,108 @@ ___________________________________
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_vault_access_log_item" ON "vault_access_log" ("item_id", "created_at" DESC);`).catch(() => {});
     await pool.query(`CREATE INDEX IF NOT EXISTS "idx_vault_access_log_created" ON "vault_access_log" ("created_at" DESC);`).catch(() => {});
 
+    // ── CMS — sitios editables (content-as-data) ──
+    // El landing se renderiza de un deep-merge: published_content (DB) sobre los
+    // defaults de shared/landing-defaults.ts. Nada en vivo hasta "publicar".
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "cms_sites" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "domain" text NOT NULL,
+        "name" text DEFAULT 'IM3 Systems' NOT NULL,
+        "contact_id" varchar,
+        "client_project_id" varchar,
+        "default_language" varchar(5) DEFAULT 'es' NOT NULL,
+        "status" text DEFAULT 'active' NOT NULL,
+        "access_token" varchar DEFAULT gen_random_uuid() NOT NULL,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "updated_at" timestamp DEFAULT now() NOT NULL,
+        CONSTRAINT "cms_sites_access_token_unique" UNIQUE("access_token")
+      );
+    `).catch(() => {});
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "cms_pages" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "site_id" varchar NOT NULL,
+        "slug" text DEFAULT '' NOT NULL,
+        "title" text DEFAULT 'Landing' NOT NULL,
+        "status" text DEFAULT 'draft' NOT NULL,
+        "keyphrase" text,
+        "meta_title" text,
+        "meta_description" text,
+        "og_image_url" text,
+        "draft_content" json DEFAULT '{}'::json,
+        "published_content" json DEFAULT '{}'::json,
+        "seo" json DEFAULT '{}'::json,
+        "published_at" timestamp,
+        "deleted_at" timestamp,
+        "created_at" timestamp DEFAULT now() NOT NULL,
+        "updated_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    // Una sola página por (sitio, slug) viva a la vez.
+    await pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS "cms_pages_site_slug_idx" ON "cms_pages" ("site_id", "slug") WHERE "deleted_at" IS NULL;`).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_cms_pages_site" ON "cms_pages" ("site_id");`).catch(() => {});
+
+    // Snapshot-before-publish para rollback. Espeja proposal_snapshots.
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "cms_snapshots" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "page_id" varchar NOT NULL,
+        "content" json NOT NULL,
+        "seo" json DEFAULT '{}'::json NOT NULL,
+        "change_summary" text,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_cms_snapshots_page" ON "cms_snapshots" ("page_id", "created_at" DESC);`).catch(() => {});
+
+    // Imágenes del CMS (bytea) servidas por /api/cms/media/:id
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "cms_media" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "site_id" varchar,
+        "bytes" bytea NOT NULL,
+        "content_type" text NOT NULL,
+        "size_bytes" integer NOT NULL,
+        "sha256" text NOT NULL,
+        "file_name" text,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+
+    // Historial del chat IA del editor CMS (una conversación por página)
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS "cms_chat_messages" (
+        "id" varchar PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
+        "page_id" varchar NOT NULL,
+        "role" text NOT NULL,
+        "content" text NOT NULL,
+        "tool_calls" json,
+        "created_at" timestamp DEFAULT now() NOT NULL
+      );
+    `).catch(() => {});
+    await pool.query(`CREATE INDEX IF NOT EXISTS "idx_cms_chat_page" ON "cms_chat_messages" ("page_id", "created_at");`).catch(() => {});
+
+    // Seed idempotente: el sitio propio + su página landing publicada con contenido
+    // vacío. published_content '{}' ⇒ el merge da exactamente el sitio actual (cero
+    // cambio de comportamiento al deployar). Self-healing: recrea la página si falta.
+    await pool.query(`
+      INSERT INTO "cms_sites" ("domain", "name")
+      SELECT 'im3systems.com', 'IM3 Systems'
+      WHERE NOT EXISTS (SELECT 1 FROM "cms_sites" WHERE "domain" = 'im3systems.com');
+    `).catch(() => {});
+    await pool.query(`
+      INSERT INTO "cms_pages" ("site_id", "slug", "title", "status", "published_content", "draft_content")
+      SELECT s."id", '', 'Landing', 'published', '{}'::json, '{}'::json
+      FROM "cms_sites" s
+      WHERE s."domain" = 'im3systems.com'
+        AND NOT EXISTS (
+          SELECT 1 FROM "cms_pages" p
+          WHERE p."site_id" = s."id" AND p."slug" = '' AND p."deleted_at" IS NULL
+        );
+    `).catch(() => {});
+
     console.log("✓ Database tables and indexes ensured");
 
     // Ensure admin user exists with correct password

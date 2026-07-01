@@ -83,6 +83,8 @@ const AdminMeetingCopilot = lazy(() => import("@/pages/admin/meeting-copilot"));
 const AdminEngineering = lazy(() => import("@/pages/admin/engineering"));
 const AdminSettings = lazy(() => import("@/pages/admin/settings"));
 const AdminVault = lazy(() => import("@/pages/admin/vault"));
+const AdminCms = lazy(() => import("@/pages/admin/cms"));
+const AdminCmsEditor = lazy(() => import("@/pages/admin/cms-editor"));
 const ProposalView = lazy(() => import("@/pages/proposal"));
 const Blog = lazy(() => import("@/pages/blog"));
 const BlogPost = lazy(() => import("@/pages/blog-post"));
@@ -93,6 +95,7 @@ const PortalResetPassword = lazy(() => import("@/pages/portal/reset-password"));
 const PortalAcceptInvite = lazy(() => import("@/pages/portal/accept-invite"));
 const PortalProjects = lazy(() => import("@/pages/portal/projects"));
 const PortalAnalytics = lazy(() => import("@/pages/portal/analytics"));
+const PortalCms = lazy(() => import("@/pages/portal/cms"));
 const AdminLayout = lazy(() => import("@/pages/admin/layout"));
 
 function ProtectedAdmin({ children }: { children: React.ReactNode }) {
@@ -132,6 +135,7 @@ function Router() {
         <Route path="/portal/projects/:projectId/analytics" component={PortalAnalytics} />
         <Route path="/portal/projects/:projectId" component={Portal} />
         <Route path="/portal/projects" component={PortalProjects} />
+        <Route path="/portal/cms" component={PortalCms} />
         {/* Portal del cliente — link mágico legacy (sin auth) */}
         <Route path="/portal/:token" component={Portal} />
         <Route path="/blog/:slug" component={BlogPost} />
@@ -284,6 +288,18 @@ function Router() {
         <Route path="/admin/vault">
           <ProtectedAdmin>
             <AdminVault />
+          </ProtectedAdmin>
+        </Route>
+        <Route path="/admin/cms/:id">
+          {() => (
+            <ProtectedAdmin>
+              <AdminCmsEditor />
+            </ProtectedAdmin>
+          )}
+        </Route>
+        <Route path="/admin/cms">
+          <ProtectedAdmin>
+            <AdminCms />
           </ProtectedAdmin>
         </Route>
         <Route path="/admin/contacts">

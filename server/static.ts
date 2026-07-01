@@ -4,6 +4,7 @@ import path from "path";
 import { db } from "./db";
 import { blogPosts, blogCategories } from "@shared/schema";
 import { eq, desc } from "drizzle-orm";
+import { getLandingBotHtml, pickBotLang } from "./cms-bot-render";
 
 /**
  * Detect known bots/crawlers by user-agent.
@@ -297,6 +298,15 @@ export function serveStatic(app: Express) {
 
     // For bots/crawlers: serve clean standalone HTML — no SPA template, no React scripts
     if (isBot(userAgent)) {
+      // Landing: HTML DB-driven (refleja el contenido publicado en el CMS).
+      // Si la DB falla, cae al HTML hardcodeado — nunca rompe el home.
+      if (req.path === '/') {
+        try {
+          const html = await getLandingBotHtml(pickBotLang(req.headers['accept-language'] as string | undefined));
+          res.status(200).set({ 'Content-Type': 'text/html' }).end(html);
+          return;
+        } catch (_) { /* fall through al HTML hardcodeado */ }
+      }
       if (req.path === '/' || req.path === '/booking') {
         const html = getBotHtml(
           getCrawlerContent(),
